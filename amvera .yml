@@ -1,0 +1,27 @@
+meta:
+  environment: python
+  toolchain:
+    name: pip
+    version: "3.11"
+
+build:
+  requirementsPath: requirements.txt
+  useCache: true
+
+run:
+  command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 4 --timeout 300
+  persistenceMount: /app/data
+  env:
+    - name: DJANGO_SETTINGS_MODULE
+      value: config.settings
+    - name: PYTHONUNBUFFERED
+      value: "1"
+    - name: AMVERA
+      value: "1"
+
+services:
+  redis:
+    image: redis:alpine
+    resources:
+      memory: 128M
+      cpu: 0.25

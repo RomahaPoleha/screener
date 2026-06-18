@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="ru" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalp Screener + NATR</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background-color: #0b0f19;
+            font-family: 'Inter', system-ui, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            color: #d1d5db;
+        }
+
+        .top-bar {
+            background: #151b2b;
+            border-bottom: 1px solid #2d3748;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .top-bar .logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f0b90b;
+            margin-right: 8px;
+        }
+
+        .market-btn {
+            padding: 4px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            border: 1px solid #2d3748;
+            background: transparent;
+            color: #d1d5db;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .market-btn:hover { background: #2d3748; }
+        .market-btn.active {
+            background: #f0b90b;
+            color: #000;
+            border-color: #f0b90b;
+        }
+
+        .status-badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .sound-toggle {
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            border: 1px solid #3d4558;
+            background: #2d3748;
+            color: #9ca3af;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-left: auto;
+        }
+        .sound-toggle:hover {
+            background: #3d4558;
+            color: #fff;
+        }
+        .sound-toggle.muted {
+            background: #ef4444;
+            color: #fff;
+            border-color: #ef4444;
+        }
+
+        .tf-bar {
+            background: #151b2b;
+            border-bottom: 1px solid #2d3748;
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .tf-btn {
+            padding: 3px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: 1px solid #2d3748;
+            background: transparent;
+            color: #9ca3af;
+            cursor: pointer;
+        }
+        .tf-btn:hover { color: #fff; background: #2d3748; }
+        .tf-btn.active {
+            background: #f0b90b;
+            color: #000;
+            border-color: #f0b90b;
+            font-weight: 700;
+        }
+
+        .main-layout {
+            display: flex;
+            height: calc(100vh - 110px);
+        }
+
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            border-right: 1px solid #2d3748;
+        }
+
+        .chart-area {
+            flex: 1;
+            position: relative;
+            background: #0b0f19;
+            min-height: 400px;
+        }
+        #chart-container {
+            width: 100%;
+            height: 100%;
+            visibility: hidden;
+        }
+        #chart-container.active {
+            visibility: visible;
+        }
+        #chart-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .chart-title-bar {
+            position: absolute;
+            top: 8px;
+            left: 12px;
+            z-index: 10;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(11, 15, 25, 0.7);
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+        .chart-reset-btn {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            z-index: 10;
+            background: rgba(11, 15, 25, 0.7);
+            border: 1px solid #2d3748;
+            color: #9ca3af;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .chart-reset-btn:hover { color: #fff; }
+
+        .trades-panel {
+            height: 140px;
+            background: #151b2b;
+            border-top: 1px solid #2d3748;
+            padding: 8px 12px;
+            overflow: hidden;
+        }
+        .trades-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .trades-header h6 {
+            margin: 0;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .trades-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #9ca3af;
+        }
+        .trades-controls input[type=range] {
+            width: 80px;
+            accent-color: #f0b90b;
+        }
+        #tradesList {
+            height: 100px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        #tradesList::-webkit-scrollbar { width: 4px; }
+        #tradesList::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+
+        .right-panel {
+            width: 380px;
+            background: #151b2b;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-left: 1px solid #2d3748;
+        }
+
+        .filters-panel {
+            padding: 12px;
+            background: #1e2538;
+            border-bottom: 1px solid #2d3748;
+        }
+
+        .filter-section {
+            margin-bottom: 12px;
+        }
+        .filter-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .filter-label {
+            display: block;
+            font-size: 11px;
+            color: #9ca3af;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .filter-value {
+            color: #f0b90b;
+            font-weight: 600;
+        }
+
+        .search-wrapper {
+            position: relative;
+        }
+
+        .search-box {
+            width: 100%;
+            background: #0b0f19;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+        .search-box:focus {
+            outline: none;
+            border-color: #f0b90b;
+        }
+
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #0b0f19;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            margin-top: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .search-dropdown.active {
+            display: block;
+        }
+        .search-dropdown-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #d1d5db;
+            border-bottom: 1px solid #1e2538;
+        }
+        .search-dropdown-item:last-child {
+            border-bottom: none;
+        }
+        .search-dropdown-item:hover {
+            background: #1e2538;
+            color: #fff;
+        }
+        .search-dropdown-item .symbol {
+            font-weight: 700;
+            color: #f0b90b;
+        }
+        .search-dropdown-item .name {
+            color: #6b7280;
+            font-size: 11px;
+            margin-left: 6px;
+        }
+
+        .filter-slider {
+            width: 100%;
+            height: 4px;
+            background: #2d3748;
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .filter-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #f0b90b;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .filter-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: #f0b90b;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .reset-filters-btn {
+            width: 100%;
+            padding: 6px;
+            background: #2d3748;
+            border: 1px solid #3d4558;
+            border-radius: 4px;
+            color: #9ca3af;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .reset-filters-btn:hover {
+            background: #3d4558;
+            color: #fff;
+        }
+
+        .right-panel-header {
+            padding: 8px 12px;
+            border-bottom: 1px solid #2d3748;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            background: #0b0f19;
+        }
+
+        .coins-table-wrap {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .coins-table-wrap::-webkit-scrollbar { width: 4px; }
+        .coins-table-wrap::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+
+        .coin-row {
+            display: grid;
+            grid-template-columns: 70px 1fr 1fr 50px 50px;
+            gap: 4px;
+            padding: 6px 12px;
+            border-bottom: 1px solid #1e2538;
+            cursor: pointer;
+            font-size: 11px;
+            align-items: center;
+        }
+        .coin-row:hover { background: rgba(255,255,255,0.05); }
+        .coin-symbol { font-weight: 700; color: #fff; }
+        .coin-change { text-align: right; font-weight: 600; }
+        .coin-volume { text-align: right; color: #9ca3af; }
+        .coin-natr { text-align: right; font-weight: 600; }
+        .coin-natr.empty { color: #4b5563; }
+
+        .text-up { color: #22c55e; }
+        .text-down { color: #ef4444; }
+        .natr-low { color: #22c55e; }
+        .natr-mid { color: #f59e0b; }
+        .natr-high { color: #ef4444; }
+
+        .coins-header {
+            display: grid;
+            grid-template-columns: 70px 1fr 1fr 50px 50px;
+            gap: 4px;
+            padding: 6px 12px;
+            background: #0b0f19;
+            font-size: 10px;
+            color: #6b7280;
+            border-bottom: 1px solid #2d3748;
+            position: sticky;
+            top: 0;
+        }
+        .coins-header > div { cursor: pointer; user-select: none; }
+        .coins-header > div:hover { color: #f0b90b; }
+        .coins-header .text-end { text-align: right; }
+
+        .loader {
+            display: none;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #333;
+            border-top: 2px solid #f0b90b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .hour-toast {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10000;
+            opacity: 0;
+            transform: translateX(400px);
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            pointer-events: none;
+        }
+        .hour-toast.show {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: auto;
+        }
+        .toast-icon {
+            font-size: 32px;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .toast-content {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .toast-title {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        @media (max-width: 900px) {
+            .main-layout { flex-direction: column; height: auto; }
+            .right-panel { width: 100%; height: 400px; border-left: none; border-top: 1px solid #2d3748; }
+            .chart-area { height: 400px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <span class="logo">⚡ Screener</span>
+    <div class="d-flex gap-1">
+        <button class="market-btn active" data-market="spot" onclick="switchMarket('spot')">Spot</button>
+        <button class="market-btn" data-market="future" onclick="switchMarket('future')">Futures</button>
+    </div>
+    <div class="loader" id="loader"></div>
+    <span class="status-badge badge bg-secondary" id="status">Загрузка...</span>
+    <button id="btnNat" class="btn btn-sm btn-outline-warning" style="font-size:11px; padding:2px 8px;" onclick="loadNatrData()">NATR</button>
+    <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
+</div>
+
+<div class="tf-bar" id="tfButtons">
+    <button class="tf-btn active" data-tf="1m">1м</button>
+    <button class="tf-btn" data-tf="5m">5м</button>
+    <button class="tf-btn" data-tf="15m">15м</button>
+    <button class="tf-btn" data-tf="30m">30м</button>
+    <button class="tf-btn" data-tf="1h">1ч</button>
+    <button class="tf-btn" data-tf="4h">4ч</button>
+</div>
+
+<div class="main-layout">
+    <div class="left-panel">
+        <div class="chart-area">
+            <div class="chart-title-bar" id="chart-title">График</div>
+            <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
+            <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
+            <div id="chart-container"></div>
+        </div>
+        <div class="trades-panel">
+            <div class="trades-header">
+                <h6>Крупные сделки</h6>
+                <div class="trades-controls">
+                    <span>Мин. $:</span>
+                    <input type="range" id="tradeThresholdSlider" min="1000" max="100000" step="1000" value="10000">
+                    <span id="tradeThresholdValue" style="color:#fff; font-weight:600;">$10K</span>
+                </div>
+            </div>
+            <div id="tradesList">
+                <div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="right-panel">
+        <div class="filters-panel">
+            <div class="filter-section">
+                <label class="filter-label">Поиск монеты</label>
+                <div class="search-wrapper">
+                    <input type="text" id="searchInput" class="search-box" placeholder="Например: BTC, ETH..." autocomplete="off">
+                    <div id="searchDropdown" class="search-dropdown"></div>
+                </div>
+            </div>
+            <div class="filter-section">
+                <label class="filter-label">
+                    Мин. объём: <span id="volVal" class="filter-value">$0</span>
+                </label>
+                <input type="range" id="volRange" class="filter-slider" min="0" max="500000000" step="1000000" value="0">
+            </div>
+            <div class="filter-section">
+                <label class="filter-label">
+                    Мин. изменение: <span id="changeVal" class="filter-value">-100%</span>
+                </label>
+                <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
+            </div>
+            <div class="filter-section">
+                <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
+            </div>
+        </div>
+        <div class="right-panel-header">Монеты (<span id="coinsCount">0</span>)</div>
+        <div class="coins-header">
+            <div>Пара</div>
+            <div class="text-end" onclick="sortBy('change')">Изм. 24ч <span id="sort-change"></span></div>
+            <div class="text-end" onclick="sortBy('volume')">Объём <span id="sort-volume"></span></div>
+            <div class="text-end">NATR 5m</div>
+            <div class="text-end">NATR 1m</div>
+        </div>
+        <div class="coins-table-wrap" id="tableBody">
+            <div style="color:#6b7280; text-align:center; padding:20px;">Загрузка...</div>
+        </div>
+    </div>
+</div>
+
+<div id="hourToast" class="hour-toast">
+    <div class="toast-icon">🕐</div>
+    <div class="toast-content">
+        <div class="toast-title" id="toastTitle">Новый час!</div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const els = {
+        search: document.getElementById('searchInput'),
+        vol: document.getElementById('volRange'),
+        change: document.getElementById('changeRange'),
+        volVal: document.getElementById('volVal'),
+        changeVal: document.getElementById('changeVal'),
+        table: document.getElementById('tableBody'),
+        loader: document.getElementById('loader'),
+        status: document.getElementById('status'),
+        btnNat: document.getElementById('btnNat'),
+        chartWrapper: document.getElementById('chart-container'),
+        chartHint: document.getElementById('chart-hint'),
+        chartTitle: document.getElementById('chart-title'),
+        tradesList: document.getElementById('tradesList'),
+        thresholdSlider: document.getElementById('tradeThresholdSlider'),
+        thresholdValue: document.getElementById('tradeThresholdValue'),
+        coinsCount: document.getElementById('coinsCount')
+    };
+
+    let allCoins = [];
+    let natrData = {};
+    let chart = null;
+    let candleSeries = null;
+    let ws = null;
+    let wsTrades = null;
+    let pollTimer = null;
+
+    let currentPrecision = 2;
+    let tradeBuffer = [];
+    let tradeFlushTimer = null;
+    let currentThreshold = 10000;
+    let currentTF = '1m';
+    let currentSymbol = '';
+    let currentMarket = 'spot';
+
+    const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
+    const fmt = (num) => {
+        if (!num) return '0';
+        if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
+        if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+        if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+        return Number(num).toFixed(2);
+    };
+    const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
+    const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
+
+    if (els.thresholdSlider) {
+        els.thresholdValue.textContent = fmtThreshold(currentThreshold);
+        els.thresholdSlider.addEventListener('input', (e) => {
+            currentThreshold = parseInt(e.target.value);
+            els.thresholdValue.textContent = fmtThreshold(currentThreshold);
+        });
+    }
+
+    document.querySelectorAll('.tf-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const newTF = e.target.dataset.tf;
+            if (newTF === currentTF) return;
+            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentTF = newTF;
+            if (currentSymbol && chart) loadChartData(currentSymbol, currentTF);
+        });
+    });
+
+    function switchMarket(market) {
+        currentMarket = market;
+        natrData = {};
+        stopNatrAutoUpdate();
+        setTimeout(startNatrAutoUpdate, 1000);
+        document.querySelectorAll('.market-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.market === market) btn.classList.add('active');
+        });
+        if (chart) closeChart();
+        loadAllData();
+    }
+
+    async function loadAllData() {
+        els.loader.style.display = 'block';
+        try {
+            const res = await fetch(`/api/data/?market=${currentMarket}`);
+            if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
+            allCoins = await res.json();
+            const marketName = currentMarket === 'future' ? 'Futures' : 'Spot';
+            els.status.textContent = `${allCoins.length} монет (${marketName})`;
+            els.status.className = 'status-badge badge bg-success';
+            applyLocalFilters();
+        } catch (err) {
+            console.error(err);
+            els.status.textContent = `Ошибка: ${err.message}`;
+            els.status.className = 'status-badge badge bg-danger';
+            els.table.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;"> ${err.message}</div>`;
+        } finally {
+            els.loader.style.display = 'none';
+        }
+    }
+
+    let natrAutoUpdateTimer = null;
+
+    async function loadNatrData() {
+        try {
+            const res = await fetch(`/api/natr/?market=${currentMarket}`);
+            if (!res.ok) throw new Error('Ошибка NATR');
+            const response = await res.json();
+            natrData = response.natr || {};
+            const progress = response.progress || {};
+            if (progress.total > 0) {
+                els.status.textContent = `NATR: ${progress.current}/${progress.total}`;
+                els.status.className = 'status-badge badge bg-info';
+            } else {
+                els.status.textContent = 'NATR: ожидание...';
+                els.status.className = 'status-badge badge bg-secondary';
+            }
+            applyLocalFilters();
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function startNatrAutoUpdate() {
+        if (natrAutoUpdateTimer) return;
+        loadNatrData();
+        natrAutoUpdateTimer = setInterval(loadNatrData, 15000);
+    }
+
+    function stopNatrAutoUpdate() {
+        if (natrAutoUpdateTimer) {
+            clearInterval(natrAutoUpdateTimer);
+            natrAutoUpdateTimer = null;
+        }
+    }
+
+    function showSearchDropdown(query) {
+        if (!query || query.length === 0) { hideSearchDropdown(); return; }
+        const filtered = allCoins.filter(coin => coin.symbol.toUpperCase().includes(query.toUpperCase())).slice(0, 10);
+        const dropdown = document.getElementById('searchDropdown');
+        if (filtered.length === 0) { hideSearchDropdown(); return; }
+        dropdown.innerHTML = filtered.map(coin => `
+            <div class="search-dropdown-item" onclick="selectCoinFromSearch('${coin.symbol}')">
+                <span class="symbol">${coin.symbol}</span>
+                <span class="name">Vol: $${fmt(coin.volume)}</span>
+            </div>
+        `).join('');
+        dropdown.classList.add('active');
+    }
+
+    function hideSearchDropdown() {
+        document.getElementById('searchDropdown').classList.remove('active');
+    }
+
+    function selectCoinFromSearch(symbol) {
+        document.getElementById('searchInput').value = symbol;
+        hideSearchDropdown();
+        applyLocalFilters();
+        openChart(symbol);
+    }
+
+    function resetFilters() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('volRange').value = 0;
+        document.getElementById('changeRange').value = -100;
+        document.getElementById('volVal').textContent = '$0';
+        document.getElementById('changeVal').textContent = '-100%';
+        applyLocalFilters();
+    }
+
+    function renderTable(data) {
+        if (els.coinsCount) els.coinsCount.textContent = data.length;
+        if (!data.length) {
+            els.table.innerHTML = '<div style="color:#6b7280; text-align:center; padding:20px;">Нет данных</div>';
+            return;
+        }
+        els.table.innerHTML = data.map(coin => {
+            const isUp = coin.change >= 0;
+            const natr = natrData[coin.symbol] || {};
+            const n5 = natr.natr_5m14, n1 = natr.natr_1m30;
+            const n5Txt = (n5 !== undefined && n5 !== null) ? n5.toFixed(1): '-';
+            const n1Txt = (n1 !== undefined && n1 !== null) ? n1.toFixed(1) : '-';
+            return `
+                <div class="coin-row" onclick="openChart('${coin.symbol}')">
+                    <div class="coin-symbol">${coin.symbol}</div>
+                    <div class="coin-change ${isUp ? 'text-up' : 'text-down'}">${isUp ? '+' : ''}${coin.change}%</div>
+                    <div class="coin-volume">$${fmt(coin.volume)}</div>
+                    <div class="coin-natr ${n5 ? getNatrClass(n5) : 'empty'}">${n5Txt}</div>
+                    <div class="coin-natr ${n1 ? getNatrClass(n1) : 'empty'}">${n1Txt}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function closeChart() {
+        if (ws) { ws.onclose = null; ws.close(); ws = null; }
+        if (wsTrades) { wsTrades.onclose = null; wsTrades.close(); wsTrades = null; }
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (chart) { chart.remove(); chart = null; candleSeries = null; }
+        tradeBuffer = [];
+        if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
+        els.chartTitle.textContent = 'График';
+        els.chartWrapper.classList.remove('active');
+        els.chartHint.style.display = 'block';
+        if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
+        currentSymbol = '';
+    }
+
+    async function openChart(symbol) {
+        currentSymbol = symbol;
+        els.chartHint.style.display = 'none';
+        els.chartWrapper.classList.add('active');
+        await new Promise(resolve => setTimeout(resolve, 50));
+        if (ws) { ws.onclose = null; ws.close(); ws = null; }
+        if (wsTrades) { wsTrades.onclose = null; wsTrades.close(); wsTrades = null; }
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        tradeBuffer = [];
+        if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
+        if (!chart) {
+            try {
+                chart = LightweightCharts.createChart(els.chartWrapper, {
+                    width: els.chartWrapper.clientWidth,
+                    height: els.chartWrapper.clientHeight,
+                    layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
+                    grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
+                    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#2d3748' },
+                    rightPriceScale: { borderColor: '#2d3748' },
+                    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                });
+                candleSeries = chart.addCandlestickSeries({
+                    upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
+                    wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+                });
+            } catch (e) { console.error('Chart init error:', e); return; }
+        } else {
+            chart.applyOptions({
+                width: els.chartWrapper.clientWidth,
+                height: els.chartWrapper.clientHeight
+            });
+        }
+        loadChartData(symbol, currentTF);
+        startTradesStream(symbol);
+    }
+
+    async function loadChartData(symbol, tf) {
+        if (!chart || !candleSeries) { console.error('График не инициализирован'); return; }
+        els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
+        if (ws) { ws.onclose = null; ws.onmessage = null; ws.onerror = null; ws.close(); ws = null; }
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        try {
+            const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const history = await res.json();
+            if (!history || history.length === 0) throw new Error('Пустая история');
+            const limitedHistory = history.slice(-500);
+            const firstPrice = limitedHistory[0].close;
+            currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
+            const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
+            candleSeries.applyOptions({
+                priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
+            });
+            candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
+            chart.timeScale().fitContent();
+            chart.priceScale('right').applyOptions({
+                autoScale: true,
+                scaleMargins: {
+                    top: 0.1,
+                    bottom: 0.1
+                }
+            });
+            if (currentMarket === 'spot') {
+                const streamSymbol = symbol.toLowerCase() + 'usdt';
+                const wsUrl = `wss://stream.binance.com:9443/ws/${streamSymbol}@kline_${tf}`;
+                ws = new WebSocket(wsUrl);
+                ws.onopen = () => console.log(`✅ Spot WS подключен`);
+                ws.onmessage = (e) => {
+                    try {
+                        const k = JSON.parse(e.data).k;
+                        candleSeries.update({
+                            time: safeTime(k.t),
+                            open: +k.o, high: +k.h, low: +k.l, close: +k.c
+                        });
+                    } catch (err) { console.error('Spot WS error:', err); }
+                };
+                ws.onclose = () => {
+                    console.log('🔌 Spot WS закрыт');
+                    setTimeout(() => { if (currentSymbol === symbol) loadChartData(symbol, tf); }, 3000);
+                };
+            } else {
+                let lastCandleTime = safeTime(history[history.length - 1].time);
+                pollTimer = setInterval(async () => {
+                    if (currentSymbol !== symbol) { clearInterval(pollTimer); pollTimer = null; return; }
+                    try {
+                        const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=future`);
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        if (!data || data.length === 0) return;
+                        const lastCandle = data[data.length - 1];
+                        const candleTime = safeTime(lastCandle.time);
+                        candleSeries.update({
+                            time: candleTime,
+                            open: lastCandle.open,
+                            high: lastCandle.high,
+                            low: lastCandle.low,
+                            close: lastCandle.close
+                        });
+                        lastCandleTime = candleTime;
+                    } catch (e) { console.warn('Futures polling error:', e); }
+                }, 500);
+            }
+        } catch (err) {
+            els.chartTitle.textContent = `Ошибка: ${err.message}`;
+            console.error('loadChartData error:', err);
+        }
+    }
+
+    function startTradesStream(symbol) {
+        if (wsTrades) { wsTrades.onclose = null; wsTrades.close(); wsTrades = null; }
+        const tradesUrl = currentMarket === 'future'
+            ? `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@trade`
+            : `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@trade`;
+        wsTrades = new WebSocket(tradesUrl);
+        wsTrades.onopen = () => console.log(`Trades WS: ${symbol}`);
+        wsTrades.onmessage = (e) => {
+            try {
+                const trade = JSON.parse(e.data);
+                const price = parseFloat(trade.p);
+                const qty = parseFloat(trade.q);
+                const value = price * qty;
+                if (value < currentThreshold) return;
+                const isBuyerMaker = trade.m;
+                const time = new Date(trade.T).toLocaleTimeString('ru-RU', { hour12: false });
+                tradeBuffer.push({ time, price, qty, value, isBuyerMaker });
+                if (!tradeFlushTimer) {
+                    tradeFlushTimer = setTimeout(() => {
+                        if (!els.tradesList || tradeBuffer.length === 0) { tradeFlushTimer = null; return; }
+                        const fragment = document.createDocumentFragment();
+                        tradeBuffer.forEach(t => {
+                            const div = document.createElement('div');
+                            div.style.cssText = 'display:flex; justify-content:space-between; padding:2px 4px; border-bottom:1px solid #1e2538; font-size:11px;';
+                            div.style.color = t.isBuyerMaker ? '#ef4444' : '#22c55e';
+                            div.innerHTML = `
+                                <span>${t.time}</span>
+                                <span>${t.price.toFixed(currentPrecision)}</span>
+                                <span>${t.qty.toFixed(4)}</span>
+                                <span>$${fmt(t.value)}</span>
+                                <span style="font-weight:700;">${t.isBuyerMaker ? 'SELL' : 'BUY'}</span>
+                            `;
+                            fragment.appendChild(div);
+                        });
+                        els.tradesList.insertBefore(fragment, els.tradesList.firstChild);
+                        while (els.tradesList.children.length > 50) els.tradesList.removeChild(els.tradesList.lastChild);
+                        tradeBuffer = [];
+                        tradeFlushTimer = null;
+                    }, 500);
+                }
+            } catch (err) { console.warn('Trade parse error:', err); }
+        };
+        wsTrades.onerror = () => {
+            if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#ef4444; text-align:center;">⚠️ Разрыв связи</div>';
+        };
+        wsTrades.onclose = () => {
+            setTimeout(() => { if (currentSymbol === symbol) startTradesStream(symbol); }, 3000);
+        };
+    }
+
+    let sortState = { field: null, direction: 'asc' };
+    function sortBy(field) {
+        if (sortState.field === field) {
+            sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortState.field = field;
+            sortState.direction = 'asc';
+        }
+        document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
+        const arrow = document.getElementById(`sort-${field}`);
+        if (arrow) arrow.textContent = sortState.direction === 'asc' ? '↑' : '↓';
+        applyLocalFilters();
+    }
+
+    function applyLocalFilters() {
+        const searchVal = els.search.value.toUpperCase();
+        const minVol = parseFloat(els.vol.value);
+        const minChange = parseFloat(els.change.value);
+        let filtered = allCoins.filter(coin => {
+            if (coin.volume < minVol) return false;
+            if (coin.change < minChange) return false;
+            if (searchVal && !coin.symbol.includes(searchVal)) return false;
+            return true;
+        });
+        if (sortState.field) {
+            filtered.sort((a, b) => {
+                const valA = a[sortState.field];
+                const valB = b[sortState.field];
+                return sortState.direction === 'asc' ? valA - valB : valB - valA;
+            });
+        } else {
+            filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+        }
+        renderTable(filtered);
+    }
+
+    els.vol.addEventListener('input', (e) => { els.volVal.innerText = '$' + fmt(e.target.value); applyLocalFilters(); });
+    els.change.addEventListener('input', (e) => { els.changeVal.innerText = e.target.value + '%'; applyLocalFilters(); });
+    els.search.addEventListener('input', (e) => { showSearchDropdown(e.target.value); applyLocalFilters(); });
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-wrapper')) hideSearchDropdown();
+    });
+    window.addEventListener('resize', () => {
+        if (chart && els.chartWrapper.classList.contains('active')) {
+            chart.applyOptions({
+                width: els.chartWrapper.clientWidth,
+                height: els.chartWrapper.clientHeight
+            });
+        }
+    });
+
+    // === ГОЛОСОВЫЕ ОПОВЕЩЕНИЯ ===
+    let soundEnabled = true;
+    let lastNotifiedMinute = -1;
+    let russianVoice = null;
+
+    function toggleSound() {
+        soundEnabled = !soundEnabled;
+        const btn = document.getElementById('soundToggle');
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.classList.toggle('muted', !soundEnabled);
+        localStorage.setItem('soundEnabled', soundEnabled);
+        if (soundEnabled) speak('Оповещения включены');
+    }
+
+    soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+    const soundBtn = document.getElementById('soundToggle');
+    if (soundBtn) {
+        soundBtn.textContent = soundEnabled ? ' 🔊Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtn.classList.toggle('muted', !soundEnabled);
+    }
+
+    function initVoices() {
+        const voices = speechSynthesis.getVoices();
+        russianVoice = voices.find(v => v.lang.startsWith('ru')) ||
+                       voices.find(v => v.lang.includes('ru')) || null;
+        if (russianVoice) console.log(` Найден русский голос: ${russianVoice.name}`);
+    }
+
+    if ('speechSynthesis' in window) {
+        initVoices();
+        speechSynthesis.onvoiceschanged = initVoices;
+    }
+
+    function speak(text) {
+        if (!soundEnabled) return;
+        if (!('speechSynthesis' in window)) return;
+        try {
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ru-RU';
+            utterance.rate = 0.9;
+            utterance.pitch = 0.7;
+            utterance.volume = 0.8;
+            if (russianVoice) utterance.voice = russianVoice;
+            speechSynthesis.speak(utterance);
+        } catch (e) { console.warn('Ошибка озвучки:', e); }
+    }
+
+    function showHourToast(title) {
+        document.getElementById('toastTitle').textContent = title;
+        const toast = document.getElementById('hourToast');
+        toast.classList.add('show');
+        setTimeout(() => { toast.classList.remove('show'); }, 5000);
+    }
+
+    function checkHourTransition() {
+        const now = new Date();
+        const minutes = now.getMinutes();
+        const seconds = now.getSeconds();
+        const currentMinuteKey = now.getHours() * 60 + minutes;
+
+        if (minutes === 55 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
+            lastNotifiedMinute = currentMinuteKey;
+            showHourToast('⏰ До нового часа 5 минут');
+            speak('До перехода на новый час осталось 5 минут');
+        }
+
+        if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
+            lastNotifiedMinute = currentMinuteKey;
+            showHourToast('⏰ До нового часа 1 минута');
+            speak('Внимание, до перехода на новый час осталась 1 минута');
+        }
+    }
+
+    setInterval(checkHourTransition, 1000);
+
+    document.addEventListener('click', function initSpeech() {
+        if ('speechSynthesis' in window) {
+            const test = new SpeechSynthesisUtterance('');
+            speechSynthesis.speak(test);
+        }
+        document.removeEventListener('click', initSpeech);
+    }, { once: true });
+
+    loadAllData();
+    startNatrAutoUpdate();
+</script>
+</body>
+</html>

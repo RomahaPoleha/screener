@@ -1,0 +1,7 @@
+Django>=4.0
+ccxt>=4.0
+gunicorn>=21.0
+apscheduler>=3.10
+django-redis>=5.4.0
+redis>=5.0.0
+python-dotenv>=1.0.0
