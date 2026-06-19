@@ -143,7 +143,7 @@ def get_symbols_from_tickers(market_type='future'):
         return []
 
 
-ddef update_natr_for_timeframe(symbols, natr_key, config, current_time):
+def update_natr_for_timeframe(symbols, natr_key, config, current_time):
     log(f"🔄 [{natr_key}] Начало расчёта для {len(symbols)} монет...")
 
     try:
@@ -158,7 +158,7 @@ ddef update_natr_for_timeframe(symbols, natr_key, config, current_time):
         total = len(symbols)
 
         for idx, symbol in enumerate(symbols, 1):
-            # ... расчет NATR (без изменений) ...
+        # ... расчет NATR (без изменений) ...
 
         # ← ПЕРЕНЕСЛИ В САМЫЙ КОНЕЦ, ПОСЛЕ ВСЕХ ВЫЧИСЛЕНИЙ
         log(f"✅ [{natr_key}] Завершено: {success_count}/{total} успешно, {error_count} ошибок")
@@ -170,8 +170,10 @@ ddef update_natr_for_timeframe(symbols, natr_key, config, current_time):
         cache.set(
             f"natr_last_update_times_future",
             {
-                '1m30': datetime.fromtimestamp(last_update_times.get('1m30', 0)).isoformat() if last_update_times.get('1m30') else None,
-                '5m14': datetime.fromtimestamp(last_update_times.get('5m14', 0)).isoformat() if last_update_times.get('5m14') else None,
+                '1m30': datetime.fromtimestamp(last_update_times.get('1m30', 0)).isoformat() if last_update_times.get(
+                    '1m30') else None,
+                '5m14': datetime.fromtimestamp(last_update_times.get('5m14', 0)).isoformat() if last_update_times.get(
+                    '5m14') else None,
             },
             CACHE_TTL
         )
@@ -179,6 +181,7 @@ ddef update_natr_for_timeframe(symbols, natr_key, config, current_time):
     except Exception as e:
         log(f"❌ [{natr_key}] Критическая ошибка: {e}")
         log(traceback.format_exc())
+
 
 def update_natr_futures():
     """Запускает параллельное обновление для всех таймфреймов"""
