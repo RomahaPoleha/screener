@@ -6,7 +6,6 @@ from django.core.cache import cache
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 
-
 logger = logging.getLogger(__name__)
 
 EXCHANGE_NAME = 'binance'
@@ -190,10 +189,9 @@ def api_candles(request, symbol: str):
         return JsonResponse({'error': 'Ошибка биржи'}, status=500)
 
 
-
 @require_http_methods(["GET"])
 def api_natr(request):
-    """Просто читает NATR из кэша (фоновый процесс уже всё посчитал)"""
+    """Возвращает NATR данные + время обновления для каждого таймфрейма отдельно"""
     market_type = request.GET.get('market', 'spot')
 
     # Берём метаданные
@@ -202,7 +200,8 @@ def api_natr(request):
         return JsonResponse({
             'natr': {},
             'progress': {'current': 0, 'total': 0},
-            'status': 'initializing'
+            'status': 'initializing',
+            'last_update_times': {}
         }, safe=False)
 
     # Собираем NATR из кэша
@@ -215,6 +214,23 @@ def api_natr(request):
     total = len(queue_data['symbols'])
     current = len(results)
 
+    # Получаем время обновления для каждого таймфрейма
+    last_update_times = {}
+    last_update_key = f"natr_last_update_times_{market_type}"
+    saved_times = cache.get(last_update_key)
+
+    if saved_times:
+        last_update_times = saved_times
+    else:
+        # Если нет данных, используем старое поле для обратной совместимости
+        if queue_data.get('last_update'):
+            last_update_times = {
+                '1m30': queue_data['last_update'],
+                '5m14': queue_data['last_update']
+            }
+        else:
+            last_update_times = {}
+
     return JsonResponse({
         'natr': results,
         'progress': {
@@ -222,7 +238,7 @@ def api_natr(request):
             'total': total
         },
         'status': 'ready' if current == total else 'updating',
-        'last_update': queue_data.get('last_update')
+        'last_update_times': last_update_times
     }, safe=False)
 
 

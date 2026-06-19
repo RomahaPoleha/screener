@@ -57,6 +57,15 @@
             border-radius: 4px;
         }
 
+        .natr-time {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: transparent;
+            border: 1px solid #2d3748;
+            color: #9ca3af;
+        }
+
         .sound-toggle {
             padding: 4px 12px;
             font-size: 12px;
@@ -475,6 +484,8 @@
     </div>
     <div class="loader" id="loader"></div>
     <span class="status-badge badge bg-secondary" id="status">Загрузка...</span>
+    <span class="natr-time" id="natrTime1m" style="display:none;">NATR 1m: --:--:--</span>
+    <span class="natr-time" id="natrTime5m" style="display:none;">NATR 5m: --:--:--</span>
     <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
 </div>
 
@@ -567,6 +578,8 @@
         table: document.getElementById('tableBody'),
         loader: document.getElementById('loader'),
         status: document.getElementById('status'),
+        natrTime1m: document.getElementById('natrTime1m'),
+        natrTime5m: document.getElementById('natrTime5m'),
         chartWrapper: document.getElementById('chart-container'),
         chartHint: document.getElementById('chart-hint'),
         chartTitle: document.getElementById('chart-title'),
@@ -584,6 +597,10 @@
     let ws = null;
     let wsTrades = null;
     let pollTimer = null;
+    let natrUpdateTimes = {
+        '1m30': null,
+        '5m14': null
+    };
 
     let currentPrecision = 2;
     let tradeBuffer = [];
@@ -626,6 +643,8 @@
     function switchMarket(market) {
         currentMarket = market;
         natrData = {};
+        natrUpdateTimes = {'1m30': null, '5m14': null};
+        updateNatrTimeDisplay();
         stopNatrAutoUpdate();
         setTimeout(startNatrAutoUpdate, 1000);
         document.querySelectorAll('.market-btn').forEach(btn => {
@@ -636,12 +655,34 @@
         // Управление видимостью NATR колонок
         if (market === 'spot') {
             els.rightPanel.classList.add('market-spot');
+            els.natrTime1m.style.display = 'none';
+            els.natrTime5m.style.display = 'none';
         } else {
             els.rightPanel.classList.remove('market-spot');
+            els.natrTime1m.style.display = 'inline';
+            els.natrTime5m.style.display = 'inline';
         }
 
         if (chart) closeChart();
         loadAllData();
+    }
+
+    function updateNatrTimeDisplay() {
+        if (currentMarket === 'future') {
+            if (natrUpdateTimes['1m30']) {
+                const time1m = new Date(natrUpdateTimes['1m30']);
+                els.natrTime1m.textContent = `NATR 1m: ${time1m.toLocaleTimeString('ru-RU')}`;
+            } else {
+                els.natrTime1m.textContent = 'NATR 1m: --:--:--';
+            }
+
+            if (natrUpdateTimes['5m14']) {
+                const time5m = new Date(natrUpdateTimes['5m14']);
+                els.natrTime5m.textContent = `NATR 5m: ${time5m.toLocaleTimeString('ru-RU')}`;
+            } else {
+                els.natrTime5m.textContent = 'NATR 5m: --:--:--';
+            }
+        }
     }
 
     async function loadAllData() {
@@ -657,6 +698,8 @@
             } else {
                 els.status.textContent = 'NATR: загрузка...';
                 els.status.className = 'status-badge badge bg-info';
+                els.natrTime1m.style.display = 'inline';
+                els.natrTime5m.style.display = 'inline';
             }
             applyLocalFilters();
         } catch (err) {
@@ -678,19 +721,10 @@
             const response = await res.json();
             natrData = response.natr || {};
 
-            // Показываем время последнего обновления (только для Futures)
-            if (currentMarket === 'future' && response.last_update) {
-                const updateTime = new Date(response.last_update);
-                const timeStr = updateTime.toLocaleTimeString('ru-RU', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
-                els.status.textContent = `NATR: ${timeStr}`;
-                els.status.className = 'status-badge badge bg-info';
-            } else if (currentMarket === 'future') {
-                els.status.textContent = 'NATR: обновление...';
-                els.status.className = 'status-badge badge bg-info';
+            // Сохраняем время обновления для каждого таймфрейма
+            if (currentMarket === 'future' && response.last_update_times) {
+                natrUpdateTimes = response.last_update_times;
+                updateNatrTimeDisplay();
             }
 
             applyLocalFilters();
@@ -1114,6 +1148,11 @@
     // Инициализация класса market-spot при загрузке
     if (currentMarket === 'spot') {
         els.rightPanel.classList.add('market-spot');
+        els.natrTime1m.style.display = 'none';
+        els.natrTime5m.style.display = 'none';
+    } else {
+        els.natrTime1m.style.display = 'inline';
+        els.natrTime5m.style.display = 'inline';
     }
 
     loadAllData();

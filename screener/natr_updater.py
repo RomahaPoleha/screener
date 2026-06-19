@@ -200,6 +200,18 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
 
         # Обновляем время последнего обновления
         last_update_times[natr_key] = current_time
+        # Сохраняем в кэш для фронтенда
+        from datetime import datetime
+        cache.set(
+            f"natr_last_update_times_future",
+            {
+                '1m30': datetime.fromtimestamp(last_update_times.get('1m30', 0)).isoformat() if last_update_times.get(
+                    '1m30') else None,
+                '5m14': datetime.fromtimestamp(last_update_times.get('5m14', 0)).isoformat() if last_update_times.get(
+                    '5m14') else None,
+            },
+            CACHE_TTL
+        )
 
         log(f"✅ [{natr_key}] Завершено: {success_count}/{total} успешно, {error_count} ошибок")
 
