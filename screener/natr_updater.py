@@ -300,9 +300,9 @@ def natr_updater_loop():
             if shutdown_event.is_set():
                 break
 
-            log(f"💤 NATR Updater: сон 60 секунд...")
+            log(f"💤 NATR Updater: сон 10 секунд...")
 
-            if shutdown_event.wait(timeout=60):
+            if shutdown_event.wait(timeout=10):
                 log("🛑 Получен сигнал остановки, завершаем цикл...")
                 break
 
