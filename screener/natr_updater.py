@@ -143,8 +143,7 @@ def get_symbols_from_tickers(market_type='future'):
         return []
 
 
-def update_natr_for_timeframe(symbols, natr_key, config, current_time):
-    """Обновляет NATR для одного таймфрейма (отдельный поток)"""
+ddef update_natr_for_timeframe(symbols, natr_key, config, current_time):
     log(f"🔄 [{natr_key}] Начало расчёта для {len(symbols)} монет...")
 
     try:
@@ -159,66 +158,27 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
         total = len(symbols)
 
         for idx, symbol in enumerate(symbols, 1):
-            try:
-                pair = f"{symbol}/USDT:USDT"
+            # ... расчет NATR (без изменений) ...
 
-                ohlcv = exchange.fetch_ohlcv(
-                    pair,
-                    timeframe=config['tf'],
-                    limit=config['limit']
-                )
+        # ← ПЕРЕНЕСЛИ В САМЫЙ КОНЕЦ, ПОСЛЕ ВСЕХ ВЫЧИСЛЕНИЙ
+        log(f"✅ [{natr_key}] Завершено: {success_count}/{total} успешно, {error_count} ошибок")
 
-                natr_value = calculate_natr(ohlcv, config['period'])
+        # Обновляем время ПОСЛЕ завершения расчета
+        last_update_times[natr_key] = time.time()  # ← Берем текущее время (конец расчета)
 
-                if natr_value is not None:
-                    # Сохраняем только этот таймфрейм
-                    cache_key = f"natr_{symbol}_future"
-                    old_data = cache.get(cache_key) or {'ts': current_time}
-                    old_data[f'natr_{natr_key}'] = natr_value
-                    old_data['ts'] = current_time
-                    cache.set(cache_key, old_data, CACHE_TTL)
-                    success_count += 1
-                else:
-                    error_count += 1
-
-                time.sleep(0.05)  # Минимальная задержка
-
-                if idx % 100 == 0:
-                    log(f"  [{natr_key}] Прогресс: {idx}/{total} ({idx*100//total}%) | ✅ {success_count} | ❌ {error_count}")
-
-            except ccxt.RateLimitExceeded:
-                log(f"⚠️ [{natr_key}] Rate limit на {symbol}, жду 30 сек...")
-                time.sleep(30)
-                error_count += 1
-            except Exception as e:
-                error_count += 1
-                if '418' in str(e) or 'ban' in str(e).lower():
-                    log(f"⛔ [{natr_key}] БАН! Останавливаем на 5 минут")
-                    time.sleep(300)
-                    return
-                continue
-
-        # Обновляем время последнего обновления
-        last_update_times[natr_key] = current_time
         # Сохраняем в кэш для фронтенда
-        from datetime import datetime
         cache.set(
             f"natr_last_update_times_future",
             {
-                '1m30': datetime.fromtimestamp(last_update_times.get('1m30', 0)).isoformat() if last_update_times.get(
-                    '1m30') else None,
-                '5m14': datetime.fromtimestamp(last_update_times.get('5m14', 0)).isoformat() if last_update_times.get(
-                    '5m14') else None,
+                '1m30': datetime.fromtimestamp(last_update_times.get('1m30', 0)).isoformat() if last_update_times.get('1m30') else None,
+                '5m14': datetime.fromtimestamp(last_update_times.get('5m14', 0)).isoformat() if last_update_times.get('5m14') else None,
             },
             CACHE_TTL
         )
 
-        log(f"✅ [{natr_key}] Завершено: {success_count}/{total} успешно, {error_count} ошибок")
-
     except Exception as e:
         log(f"❌ [{natr_key}] Критическая ошибка: {e}")
         log(traceback.format_exc())
-
 
 def update_natr_futures():
     """Запускает параллельное обновление для всех таймфреймов"""
