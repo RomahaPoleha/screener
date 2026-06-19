@@ -778,7 +778,6 @@
         currentSymbol = symbol;
         els.chartHint.style.display = 'none';
         els.chartWrapper.classList.add('active');
-        await new Promise(resolve => setTimeout(resolve, 50));
         if (ws) { ws.onclose = null; ws.close(); ws = null; }
         if (wsTrades) { wsTrades.onclose = null; wsTrades.close(); wsTrades = null; }
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -886,7 +885,7 @@
                         });
                         lastCandleTime = candleTime;
                     } catch (e) { console.warn('Futures polling error:', e); }
-                }, 500);
+                }, 200);
             }
         } catch (err) {
             els.chartTitle.textContent = `Ошибка: ${err.message}`;

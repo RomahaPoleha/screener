@@ -166,7 +166,7 @@ def api_candles(request, symbol: str):
             exchange_config['options'] = {'defaultType': 'future'}
 
         exchange = ccxt.binance(exchange_config)
-        ohlcv = exchange.fetch_ohlcv(pair_symbol, timeframe=tf, limit=150)
+        ohlcv = exchange.fetch_ohlcv(pair_symbol, timeframe=tf, limit=100)
 
         candles = [
             {

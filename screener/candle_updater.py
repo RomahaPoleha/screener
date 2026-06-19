@@ -13,8 +13,8 @@ active_symbols = {}
 # TTL для активной монеты (10 минут бездействия)
 SYMBOL_TTL = 600
 
-# Интервал обновления свечей (2 секунды)
-UPDATE_INTERVAL = 2
+# Интервал обновления свечей (1 секунда)
+UPDATE_INTERVAL = 1
 
 # Очистка старых символов (раз в 60 секунд)
 CLEANUP_INTERVAL = 60
@@ -88,9 +88,9 @@ def update_active_candles():
 
                     # Сохраняем в кэш на 10 секунд
                     cache_key = f"candles_{symbol}_1m_future"
-                    cache.set(cache_key, candles, 10)
+                    cache.set(cache_key, candles, 3)
 
-                    time.sleep(0.1)  # Пауза между запросами
+                    time.sleep(0.05)  # Пауза между запросами
 
                 except Exception as e:
                     print(f"❌ Ошибка {symbol}: {e}")
