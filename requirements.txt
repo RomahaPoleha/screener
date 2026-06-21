@@ -5,3 +5,6 @@ apscheduler>=3.10
 django-redis>=5.4.0
 redis>=5.0.0
 python-dotenv>=1.0.0
+channels>=4.0.0
+channels-redis>=4.2.0
+daphne>=4.0.0

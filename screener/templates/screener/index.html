@@ -815,6 +815,10 @@
         els.chartHint.style.display = 'block';
         if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
         currentSymbol = '';
+        if (wsCandles) {
+    wsCandles.close();
+    wsCandles = null;
+        }
     }
 
     async function openChart(symbol) {
@@ -862,128 +866,76 @@
     }
 
     async function loadChartData(symbol, tf) {
-        if (!chart || !candleSeries) { console.error('График не инициализирован'); return; }
-        els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
-        if (ws) { ws.onclose = null; ws.onmessage = null; ws.onerror = null; ws.close(); ws = null; }
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        try {
-            const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const history = await res.json();
-            if (!history || history.length === 0) throw new Error('Пустая история');
-            const limitedHistory = history.slice(-500);
-            const firstPrice = limitedHistory[0].close;
-            currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
-            const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
-            candleSeries.applyOptions({
-                priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
-            });
-            candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
+    if (!chart || !candleSeries) { console.error('График не инициализирован'); return; }
+    els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
 
-            // Автоподстройка масштаба
-            chart.timeScale().fitContent();
-            chart.priceScale('right').applyOptions({
-                autoScale: true,
-                scaleMargins: { top: 0.1, bottom: 0.1 }
-            });
-
-            // Сдвигаем последние свечи ближе к центру (правый отступ 12 баров)
-            chart.timeScale().scrollToPosition(12, false);
-
-            if (currentMarket === 'spot') {
-                const streamSymbol = symbol.toLowerCase() + 'usdt';
-                const wsUrl = `wss://stream.binance.com:9443/ws/${streamSymbol}@kline_${tf}`;
-                ws = new WebSocket(wsUrl);
-                ws.onopen = () => console.log(`✅ Spot WS подключен`);
-                ws.onmessage = (e) => {
-                    try {
-                        const k = JSON.parse(e.data).k;
-                        candleSeries.update({
-                            time: safeTime(k.t),
-                            open: +k.o, high: +k.h, low: +k.l, close: +k.c
-                        });
-                    } catch (err) { console.error('Spot WS error:', err); }
-                };
-                ws.onclose = () => {
-                    console.log('🔌 Spot WS закрыт');
-                    setTimeout(() => { if (currentSymbol === symbol) loadChartData(symbol, tf); }, 3000);
-                };
-            } else {
-            let lastCandleTime = safeTime(history[history.length - 1].time);
-            let lastClose = history[history.length - 1].close;
-            let animationFrame = null;
-
-            // Функция плавной анимации перехода цены
-            function animatePrice(targetClose, duration = 100) {
-                if (animationFrame) cancelAnimationFrame(animationFrame);
-
-                const startClose = lastClose;
-                const startTime = performance.now();
-
-                function animate(currentTime) {
-                    const elapsed = currentTime - startTime;
-                    const progress = Math.min(elapsed / duration, 1);
-
-                    // Плавная интерполяция (ease-out)
-                    const eased = 1 - Math.pow(1 - progress, 3);
-                    const currentClose = startClose + (targetClose - startClose) * eased;
-
-                    candleSeries.update({
-                        time: lastCandleTime,
-                        open: history[history.length - 1].open,
-                        high: Math.max(history[history.length - 1].high, currentClose),
-                        low: Math.min(history[history.length - 1].low, currentClose),
-                        close: currentClose
-                    });
-
-                    lastClose = currentClose;
-
-                    if (progress < 1) {
-                        animationFrame = requestAnimationFrame(animate);
-                    }
-                }
-
-                animationFrame = requestAnimationFrame(animate);
-            }
-
-            pollTimer = setInterval(async () => {
-                if (currentSymbol !== symbol) {
-                    clearInterval(pollTimer);
-                    pollTimer = null;
-                    if (animationFrame) cancelAnimationFrame(animationFrame);
-                    return;
-                }
-                try {
-                    const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=future`);
-                    if (!res.ok) return;
-                    const data = await res.json();
-                    if (!data || data.length === 0) return;
-                    const lastCandle = data[data.length - 1];
-                    const candleTime = safeTime(lastCandle.time);
-
-                    // Если новая свеча - обновляем сразу
-                    if (candleTime !== lastCandleTime) {
-                        lastCandleTime = candleTime;
-                        lastClose = lastCandle.close;
-                        candleSeries.update({
-                            time: candleTime,
-                            open: lastCandle.open,
-                            high: lastCandle.high,
-                            low: lastCandle.low,
-                            close: lastCandle.close
-                        });
-                    } else {
-                        // Если та же свеча - анимируем переход цены
-                        animatePrice(lastCandle.close, 80);
-                    }
-                } catch (e) { console.warn('Futures polling error:', e); }
-            }, 100);  // Было 200, стало 100 - опрашиваем чаще
-        }
-        } catch (err) {
-            els.chartTitle.textContent = `Ошибка: ${err.message}`;
-            console.error('loadChartData error:', err);
-        }
+    // Закрываем старое соединение
+    if (wsCandles) {
+        wsCandles.close();
+        wsCandles = null;
     }
+
+    try {
+        // 1. Загружаем историю
+        const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const history = await res.json();
+        if (!history || history.length === 0) throw new Error('Пустая история');
+
+        const limitedHistory = history.slice(-500);
+        const firstPrice = limitedHistory[0].close;
+        currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
+        const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
+
+        candleSeries.applyOptions({
+            priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
+        });
+        candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
+
+        chart.timeScale().fitContent();
+        chart.priceScale('right').applyOptions({
+            autoScale: true,
+            scaleMargins: { top: 0.1, bottom: 0.1 }
+        });
+        chart.timeScale().scrollToPosition(12, false);
+
+        // 2. Подключаемся к WebSocket
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
+
+        wsCandles = new WebSocket(wsUrl);
+
+        wsCandles.onopen = () => {
+            console.log('✅ WebSocket подключен');
+            wsCandles.send(JSON.stringify({
+                symbol: symbol,
+                tf: tf,
+                market: currentMarket
+            }));
+        };
+
+        wsCandles.onmessage = (e) => {
+            const candle = JSON.parse(e.data);
+            if (candle.error) {
+                console.error('WS ошибка:', candle.error);
+                return;
+            }
+            candleSeries.update(candle);
+        };
+
+        wsCandles.onerror = (e) => {
+            console.error('WebSocket error:', e);
+        };
+
+        wsCandles.onclose = () => {
+            console.log('🔌 WebSocket закрыт');
+        };
+
+    } catch (err) {
+        els.chartTitle.textContent = `Ошибка: ${err.message}`;
+        console.error('loadChartData error:', err);
+    }
+}
 
     function startTradesStream(symbol) {
         if (wsTrades) { wsTrades.onclose = null; wsTrades.close(); wsTrades = null; }
