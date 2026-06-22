@@ -46,7 +46,7 @@ async def binance_polling_task(symbol, tf, market, queue):
                         await queue.put(candle)
                         last_candle = candle
 
-                await asyncio.sleep(1)  # Опрос каждую секунду
+                await asyncio.sleep(0.5)  # Опрос каждую секунду
 
             except asyncio.CancelledError:
                 print(f"🛑 [POLL] Отменен: {symbol}")
