@@ -1,10 +1,8 @@
 import json
 import asyncio
+import ccxt.async_support as ccxt_async
+import websockets
 from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-import ccxt
-import time
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
@@ -12,91 +10,127 @@ class CandleConsumer(AsyncWebsocketConsumer):
         self.symbol = None
         self.tf = None
         self.market_type = None
-        self.exchange = None
-        self.ws = None
+        self.ws_binance = None
         self.poll_task = None
+        self.exchange = None
+        self.is_active = True
 
         await self.accept()
-        print("✅ WebSocket подключен")
+        print(f"✅ WebSocket подключен: {self.channel_name}")
 
     async def disconnect(self, close_code):
+        self.is_active = False
         if self.poll_task:
             self.poll_task.cancel()
-        if self.ws:
-            await self.ws.close()
-        print("🔌 WebSocket отключен")
+            try:
+                await self.poll_task
+            except asyncio.CancelledError:
+                pass
+        if self.ws_binance:
+            await self.ws_binance.close()
+        if self.exchange:
+            await self.exchange.close()
+        print(f"🔌 WebSocket отключен: {self.channel_name}")
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
-        self.symbol = data.get('symbol')
-        self.tf = data.get('tf', '1m')
-        self.market_type = data.get('market', 'future')
+        try:
+            data = json.loads(text_data)
+            self.symbol = data.get('symbol')
+            self.tf = data.get('tf', '1m')
+            self.market_type = data.get('market', 'future')
 
-        print(f"📊 Запрос: {self.symbol} {self.tf} {self.market_type}")
+            print(f"📊 Запрос: {self.symbol} {self.tf} {self.market_type}")
 
-        if self.symbol:
-            await self.start_candle_stream()
+            # Останавливаем старый поток
+            if self.poll_task:
+                self.poll_task.cancel()
+                try:
+                    await self.poll_task
+                except asyncio.CancelledError:
+                    pass
+            if self.ws_binance:
+                await self.ws_binance.close()
+                self.ws_binance = None
+
+            if self.symbol:
+                await self.start_candle_stream()
+        except Exception as e:
+            print(f"❌ Ошибка receive: {e}")
+            await self.send(text_data=json.dumps({'error': str(e)}))
 
     async def start_candle_stream(self):
-        """Запускает поток свечей (WebSocket или polling)"""
+        """Запускает поток свечей"""
         if self.market_type == 'spot':
-            # Spot: используем WebSocket Binance
             await self.start_spot_websocket()
         else:
-            # Futures: polling с отправкой в WebSocket
             await self.start_futures_polling()
 
     async def start_spot_websocket(self):
-        """WebSocket для Spot"""
+        """WebSocket для Spot напрямую к Binance"""
         stream_name = f"{self.symbol.lower()}usdt@kline_{self.tf}"
         ws_url = f"wss://stream.binance.com:9443/ws/{stream_name}"
 
-        import websockets
         try:
-            async with websockets.connect(ws_url) as websocket:
-                self.ws = websocket
+            async with websockets.connect(ws_url, ping_interval=20) as websocket:
+                self.ws_binance = websocket
+                print(f"✅ Spot WS подключен: {self.symbol}")
                 async for message in websocket:
-                    data = json.loads(message)
-                    k = data['k']
-                    candle = {
-                        'time': int(k['t']) // 1000,
-                        'open': float(k['o']),
-                        'high': float(k['h']),
-                        'low': float(k['l']),
-                        'close': float(k['c'])
-                    }
-                    await self.send(text_data=json.dumps(candle))
+                    if not self.is_active:
+                        break
+                    try:
+                        data = json.loads(message)
+                        k = data['k']
+                        candle = {
+                            'time': int(k['t']) // 1000,
+                            'open': float(k['o']),
+                            'high': float(k['h']),
+                            'low': float(k['l']),
+                            'close': float(k['c'])
+                        }
+                        await self.send(text_data=json.dumps(candle))
+                    except Exception as e:
+                        print(f"⚠️ Ошибка парсинга Spot: {e}")
         except Exception as e:
             print(f"❌ Spot WS ошибка: {e}")
-            await self.send(text_data=json.dumps({'error': str(e)}))
+            if self.is_active:
+                await self.send(text_data=json.dumps({'error': f'Spot WS: {str(e)}'}))
 
     async def start_futures_polling(self):
-        """Polling для Futures (быстрый)"""
+        """Polling для Futures через АСИНХРОННЫЙ ccxt"""
         pair = f"{self.symbol}/USDT:USDT"
 
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'options': {'defaultType': 'future'}
-        })
-
         try:
-            while True:
-                ohlcv = exchange.fetch_ohlcv(pair, timeframe=self.tf, limit=1)
-                if ohlcv:
-                    ts, o, h, l, c, v = ohlcv[0]
-                    candle = {
-                        'time': int(ts / 1000),
-                        'open': float(o),
-                        'high': float(h),
-                        'low': float(l),
-                        'close': float(c)
-                    }
-                    await self.send(text_data=json.dumps(candle))
+            # Используем асинхронную версию ccxt!
+            self.exchange = ccxt_async.binance({
+                'enableRateLimit': True,
+                'options': {'defaultType': 'future'}
+            })
+
+            print(f"🚀 Futures polling запущен: {self.symbol} {self.tf}")
+
+            while self.is_active:
+                try:
+                    ohlcv = await self.exchange.fetch_ohlcv(pair, timeframe=self.tf, limit=1)
+                    if ohlcv:
+                        ts, o, h, l, c, v = ohlcv[0]
+                        candle = {
+                            'time': int(ts / 1000),
+                            'open': float(o),
+                            'high': float(h),
+                            'low': float(l),
+                            'close': float(c)
+                        }
+                        await self.send(text_data=json.dumps(candle))
+                except Exception as e:
+                    print(f"⚠️ Futures polling ошибка: {e}")
+                    await asyncio.sleep(2)
+                    continue
 
                 await asyncio.sleep(0.5)  # 500мс
 
         except asyncio.CancelledError:
-            print("🛑 Futures polling остановлен")
+            print(f"🛑 Futures polling остановлен: {self.symbol}")
         except Exception as e:
-            print(f"❌ Futures polling ошибка: {e}")
-            await self.send(text_data=json.dumps({'error': str(e)}))
+            print(f"❌ Futures polling критическая ошибка: {e}")
+            if self.is_active:
+                await self.send(text_data=json.dumps({'error': f'Futures: {str(e)}'}))
