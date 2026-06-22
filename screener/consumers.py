@@ -1,6 +1,6 @@
 import json
 import asyncio
-import websockets
+import ccxt.async_support as ccxt_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 # Глобальное хранилище активных потоков
@@ -8,86 +8,112 @@ active_streams = {}
 streams_lock = asyncio.Lock()
 
 
-async def binance_ws_task(symbol, tf, market, queue):
-    """WebSocket к Binance"""
-    stream_name = f"{symbol.lower()}usdt@kline_{tf}"
+async def binance_polling_task(symbol, tf, market, queue):
+    """Polling к Binance с кэшированием"""
+    print(f"🚀 [POLL] Запуск: {symbol} {tf} {market}")
 
-    if market == 'spot':
-        ws_url = f"wss://stream.binance.com:9443/ws/{stream_name}"
+    if market == 'future':
+        pair = f"{symbol}/USDT:USDT"
+        exchange = ccxt_async.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'}
+        })
     else:
-        ws_url = f"wss://fstream.binance.com/ws/{stream_name}"
+        pair = f"{symbol}/USDT"
+        exchange = ccxt_async.binance({
+            'enableRateLimit': True
+        })
 
-    print(f"🚀 [WS] Запуск: {symbol} {tf} {market}")
-    print(f"🔗 [WS] URL: {ws_url}")
+    try:
+        print(f"✅ [POLL] Подключен к Binance API: {symbol}")
+        last_candle = None
 
-    retry_count = 0
-    max_retries = 5
-    message_count = 0
+        while True:
+            try:
+                ohlcv = await exchange.fetch_ohlcv(pair, timeframe=tf, limit=1)
+                if ohlcv:
+                    ts, o, h, l, c, v = ohlcv[0]
+                    candle = {
+                        'time': int(ts / 1000),
+                        'open': float(o),
+                        'high': float(h),
+                        'low': float(l),
+                        'close': float(c)
+                    }
 
-    while retry_count < max_retries:
-        try:
-            print(f"🔄 [WS] Попытка подключения {retry_count + 1}/{max_retries}...")
-
-            async with websockets.connect(
-                    ws_url,
-                    open_timeout=10,
-                    ping_interval=20,
-                    ping_timeout=10,
-                    close_timeout=5
-            ) as ws:
-                print(f"✅ [WS] УСПЕШНО подключен: {symbol} ({market})")
-                retry_count = 0
-
-                async for message in ws:
-                    message_count += 1
-                    if message_count <= 3:  # Логируем первые 3 сообщения
-                        print(f"📨 [WS] Сообщение #{message_count} от {symbol}: {message[:200]}...")
-
-                    try:
-                        data = json.loads(message)
-                        k = data.get('k')
-
-                        if not k:
-                            print(f"⚠️ [WS] Нет ключа 'k' в сообщении")
-                            continue
-
-                        candle = {
-                            'time': int(k['t']) // 1000,
-                            'open': float(k['o']),
-                            'high': float(k['h']),
-                            'low': float(k['l']),
-                            'close': float(k['c'])
-                        }
-
-                        if message_count <= 3:  # Логируем первые 3 свечи
-                            print(f"📊 [WS] Свеча #{message_count} для {symbol}: {candle}")
-
+                    # Отправляем только если свеча изменилась
+                    if last_candle != candle:
                         await queue.put(candle)
+                        last_candle = candle
 
-                        if message_count <= 3:
-                            print(f"✅ [WS] Свеча #{message_count} отправлена в queue")
+                await asyncio.sleep(1)  # Опрос каждую секунду
 
-                    except Exception as e:
-                        print(f"⚠️ [WS] Ошибка парсинга: {e}")
-                        print(f"⚠️ [WS] Сообщение: {message[:300]}")
+            except asyncio.CancelledError:
+                print(f"🛑 [POLL] Отменен: {symbol}")
+                break
+            except Exception as e:
+                print(f"⚠️ [POLL] Ошибка: {e}")
+                await asyncio.sleep(2)
+    finally:
+        await exchange.close()
 
-        except asyncio.CancelledError:
-            print(f"🛑 [WS] Отменен: {symbol} (получено {message_count} сообщений)")
-            break
-        except asyncio.TimeoutError:
-            print(f"⏰ [WS] ТАЙМАУТ подключения: {symbol}")
-            retry_count += 1
-            if retry_count < max_retries:
-                await asyncio.sleep(3)
-        except Exception as e:
-            print(f"❌ [WS] Ошибка: {type(e).__name__}: {e}")
-            retry_count += 1
-            if retry_count < max_retries:
-                await asyncio.sleep(3)
 
-    if retry_count >= max_retries:
-        print(f"❌ [WS] Превышено число попыток для {symbol}")
-        await queue.put({'error': f'WebSocket connection failed after {max_retries} retries'})
+async def binance_ws_task(symbol, tf, market, queue):
+    """WebSocket к Binance (работает только для Spot)"""
+    if market == 'spot':
+        # Для Spot используем WebSocket
+        import websockets
+        stream_name = f"{symbol.lower()}usdt@kline_{tf}"
+        ws_url = f"wss://stream.binance.com:9443/ws/{stream_name}"
+
+        print(f"🚀 [WS] Запуск: {symbol} {tf} {market}")
+        print(f"🔗 [WS] URL: {ws_url}")
+
+        retry_count = 0
+        max_retries = 5
+
+        while retry_count < max_retries:
+            try:
+                async with websockets.connect(
+                        ws_url,
+                        open_timeout=10,
+                        ping_interval=20,
+                        ping_timeout=10,
+                        close_timeout=5
+                ) as ws:
+                    print(f"✅ [WS] УСПЕШНО подключен: {symbol} ({market})")
+                    retry_count = 0
+
+                    async for message in ws:
+                        try:
+                            data = json.loads(message)
+                            k = data.get('k')
+                            if not k:
+                                continue
+
+                            candle = {
+                                'time': int(k['t']) // 1000,
+                                'open': float(k['o']),
+                                'high': float(k['h']),
+                                'low': float(k['l']),
+                                'close': float(k['c'])
+                            }
+                            await queue.put(candle)
+                        except Exception as e:
+                            print(f"⚠️ [WS] Ошибка парсинга: {e}")
+
+            except asyncio.CancelledError:
+                print(f"🛑 [WS] Отменен: {symbol}")
+                break
+            except Exception as e:
+                print(f"❌ [WS] Ошибка: {e}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    await asyncio.sleep(3)
+    else:
+        # Для Futures используем polling (WebSocket не работает)
+        print(f"⚠️ [TASK] Futures WebSocket не работает, используем polling")
+        await binance_polling_task(symbol, tf, market, queue)
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
@@ -113,7 +139,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
                 pass
 
         if self.stream_key:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
             await self.unsubscribe_stream()
 
     async def receive(self, text_data):
@@ -172,9 +198,6 @@ class CandleConsumer(AsyncWebsocketConsumer):
         if not self.stream_key or self.stream_key not in active_streams:
             return
 
-        # Ждем 1 секунду - даем время новому клиенту подключиться
-        await asyncio.sleep(1.0)
-
         async with streams_lock:
             if self.stream_key not in active_streams:
                 return
@@ -198,15 +221,11 @@ class CandleConsumer(AsyncWebsocketConsumer):
         self.queue = None
 
     async def read_from_queue(self):
-        candle_count = 0
         try:
             while True:
                 candle = await self.queue.get()
-                candle_count += 1
-                if candle_count <= 3:  # Логируем первые 3 отправки
-                    print(f"📤 [READ] Отправка клиенту #{candle_count}: {candle}")
                 await self.send(text_data=json.dumps(candle))
         except asyncio.CancelledError:
-            print(f"🛑 [READ] Отменен (отправлено {candle_count} свечей)")
+            pass
         except Exception as e:
             print(f"❌ Ошибка чтения queue: {e}")
