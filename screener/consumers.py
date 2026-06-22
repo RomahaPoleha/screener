@@ -5,42 +5,35 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    async def connect(self):
         self.symbol = None
         self.tf = None
         self.market_type = None
         self.ws_binance = None
-        self.is_active = False
-        self.receive_task = None
+        self.stream_task = None
+        self.is_running = False
 
-    async def connect(self):
         await self.accept()
-        self.is_active = True
         print(f"✅ WebSocket подключен: {self.channel_name}")
 
     async def disconnect(self, close_code):
-        print(f" WebSocket отключен: {self.channel_name}, код: {close_code}")
-        self.is_active = False
+        print(f"🔌 WebSocket отключен: {self.channel_name}")
+        self.is_running = False
 
-        # Отменяем задачу receive
-        if self.receive_task:
-            self.receive_task.cancel()
+        if self.stream_task and not self.stream_task.done():
+            self.stream_task.cancel()
             try:
-                await self.receive_task
+                await self.stream_task
             except asyncio.CancelledError:
                 pass
 
-        # Закрываем соединение с Binance
         if self.ws_binance:
             try:
                 await self.ws_binance.close()
             except:
                 pass
-            self.ws_binance = None
 
     async def receive(self, text_data):
-        """Получаем запрос от клиента"""
         try:
             data = json.loads(text_data)
             new_symbol = data.get('symbol')
@@ -49,30 +42,38 @@ class CandleConsumer(AsyncWebsocketConsumer):
 
             print(f"📩 Запрос: {new_symbol} {new_tf} {new_market}")
 
-            # Если символ изменился — закрываем старое соединение
-            if self.symbol != new_symbol or self.tf != new_tf or self.market_type != new_market:
+            if (new_symbol != self.symbol or
+                    new_tf != self.tf or
+                    new_market != self.market_type):
+
+                self.is_running = False
+                if self.stream_task and not self.stream_task.done():
+                    self.stream_task.cancel()
+                    try:
+                        await self.stream_task
+                    except asyncio.CancelledError:
+                        pass
+
                 if self.ws_binance:
-                    print(f"🔄 Закрываем старое соединение: {self.symbol}")
                     try:
                         await self.ws_binance.close()
                     except:
                         pass
-                    self.ws_binance = None
 
                 self.symbol = new_symbol
                 self.tf = new_tf
                 self.market_type = new_market
+                self.is_running = True
 
-                # Запускаем новое соединение
                 if self.symbol:
-                    await self.start_candle_stream()
+                    self.stream_task = asyncio.create_task(
+                        self.start_candle_stream()
+                    )
         except Exception as e:
             print(f"❌ Ошибка receive: {e}")
-            await self.send(text_data=json.dumps({'error': str(e)}))
 
     async def start_candle_stream(self):
-        """Запускает WebSocket поток свечей"""
-        if not self.symbol or not self.is_active:
+        if not self.symbol or not self.is_running:
             return
 
         print(f"🚀 Запуск WebSocket для {self.symbol} {self.tf} {self.market_type}")
@@ -84,31 +85,44 @@ class CandleConsumer(AsyncWebsocketConsumer):
             stream_name = f"{self.symbol.lower()}usdt@kline_{self.tf}"
             ws_url = f"wss://fstream.binance.com/ws/{stream_name}"
 
-        print(f" WebSocket URL: {ws_url}")
+        retry_count = 0
+        max_retries = 3
 
-        try:
-            async with websockets.connect(ws_url, ping_interval=20, ping_timeout=10) as websocket:
-                self.ws_binance = websocket
-                print(f"✅ WebSocket подключен: {self.symbol} ({self.market_type})")
+        while retry_count < max_retries and self.is_running:
+            try:
+                print(f"🔗 Подключение к: {ws_url}")
+                async with websockets.connect(
+                        ws_url,
+                        ping_interval=20,
+                        ping_timeout=10,
+                        close_timeout=5
+                ) as websocket:
+                    self.ws_binance = websocket
+                    print(f"✅ WebSocket подключен: {self.symbol}")
+                    retry_count = 0
 
-                async for message in websocket:
-                    if not self.is_active:
-                        print(f"🛑 Остановка потока: {self.symbol}")
-                        break
-                    try:
-                        data = json.loads(message)
-                        k = data['k']
-                        candle = {
-                            'time': int(k['t']) // 1000,
-                            'open': float(k['o']),
-                            'high': float(k['h']),
-                            'low': float(k['l']),
-                            'close': float(k['c'])
-                        }
-                        await self.send(text_data=json.dumps(candle))
-                    except Exception as e:
-                        print(f"⚠️ Ошибка парсинга: {e}")
-        except Exception as e:
-            print(f"❌ WebSocket ошибка: {e}")
-            if self.is_active:
-                await self.send(text_data=json.dumps({'error': f'WebSocket: {str(e)}'}))
+                    async for message in websocket:
+                        if not self.is_running:
+                            break
+                        try:
+                            data = json.loads(message)
+                            k = data['k']
+                            candle = {
+                                'time': int(k['t']) // 1000,
+                                'open': float(k['o']),
+                                'high': float(k['h']),
+                                'low': float(k['l']),
+                                'close': float(k['c'])
+                            }
+                            await self.send(text_data=json.dumps(candle))
+                        except Exception as e:
+                            print(f"⚠️ Ошибка парсинга: {e}")
+
+            except asyncio.CancelledError:
+                print(f"🛑 Стрим отменен: {self.symbol}")
+                break
+            except Exception as e:
+                print(f"❌ WebSocket ошибка: {e}")
+                retry_count += 1
+                if retry_count < max_retries and self.is_running:
+                    await asyncio.sleep(2)
