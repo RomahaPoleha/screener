@@ -804,46 +804,60 @@
     }
 
     function closeChart() {
-    if (wsCandles) {
-        wsCandles.onclose = null;
-        wsCandles.close();
-        wsCandles = null;
-    }
-    if (wsTrades) {
-        wsTrades.onclose = null;
-        wsTrades.close();
-        wsTrades = null;
-    }
-    if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-    }
-    if (chart) {
-        chart.remove();
-        chart = null;
-        candleSeries = null;
-    }
-    tradeBuffer = [];
-    if (tradeFlushTimer) {
-        clearTimeout(tradeFlushTimer);
-        tradeFlushTimer = null;
-    }
-    els.chartTitle.textContent = 'График';
-    els.chartWrapper.classList.remove('active');
-    els.chartHint.style.display = 'block';
-    if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
-    currentSymbol = '';
-}
+        console.log('❌ Закрытие графика');
 
-    async function openChart(symbol) {
-        // Закрываем ВСЕ старые соединения
         if (wsCandles) {
             wsCandles.onclose = null;
+            wsCandles.onmessage = null;
+            wsCandles.onerror = null;
             wsCandles.close();
             wsCandles = null;
         }
         if (wsTrades) {
             wsTrades.onclose = null;
+            wsTrades.onmessage = null;
+            wsTrades.onerror = null;
+            wsTrades.close();
+            wsTrades = null;
+        }
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        if (chart) {
+            chart.remove();
+            chart = null;
+            candleSeries = null;
+        }
+        tradeBuffer = [];
+        if (tradeFlushTimer) {
+            clearTimeout(tradeFlushTimer);
+            tradeFlushTimer = null;
+        }
+        els.chartTitle.textContent = 'График';
+        els.chartWrapper.classList.remove('active');
+        els.chartHint.style.display = 'block';
+        if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
+        currentSymbol = '';
+    }
+
+    async function openChart(symbol) {
+        console.log(`📊 Открытие графика: ${symbol}`);
+
+        // 1. СРАЗУ закрываем ВСЕ старые соединения
+        if (wsCandles) {
+            console.log('🔚 Закрываю старый candles WebSocket');
+            wsCandles.onclose = null;
+            wsCandles.onmessage = null;
+            wsCandles.onerror = null;
+            wsCandles.close();
+            wsCandles = null;
+        }
+        if (wsTrades) {
+            console.log('🔚 Закрываю старый trades WebSocket');
+            wsTrades.onclose = null;
+            wsTrades.onmessage = null;
+            wsTrades.onerror = null;
             wsTrades.close();
             wsTrades = null;
         }
@@ -852,8 +866,8 @@
             pollTimer = null;
         }
 
-        // Ждём 100мс чтобы соединения закрылись
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // 2. Ждём чтобы соединения точно закрылись
+        await new Promise(resolve => setTimeout(resolve, 150));
 
         currentSymbol = symbol;
         els.chartHint.style.display = 'none';
@@ -865,124 +879,134 @@
             tradeFlushTimer = null;
         }
 
-        if (!chart) {
-            try {
-                chart = LightweightCharts.createChart(els.chartWrapper, {
-                    width: els.chartWrapper.clientWidth,
-                    height: els.chartWrapper.clientHeight,
-                    layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
-                    grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
-                    timeScale: {
-                        timeVisible: true,
-                        secondsVisible: false,
-                        borderColor: '#2d3748',
-                        rightOffset: 12,
-                        barSpacing: 10
-                    },
-                    rightPriceScale: {
-                        borderColor: '#2d3748',
-                        scaleMargins: { top: 0.1, bottom: 0.1 }
-                    },
-                    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-                });
-                candleSeries = chart.addCandlestickSeries({
-                    upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
-                    wickUpColor: '#22c55e', wickDownColor: '#ef4444',
-                });
-            } catch (e) {
-                console.error('Chart init error:', e);
-                return;
-            }
-        } else {
-            chart.applyOptions({
-                width: els.chartWrapper.clientWidth,
-                height: els.chartWrapper.clientHeight
-            });
+        // 3. Очищаем график ПЕРЕД созданием нового
+        if (chart) {
+            console.log('️ Удаляю старый график');
+            chart.remove();
+            chart = null;
+            candleSeries = null;
         }
 
-        loadChartData(symbol, currentTF);
+        // 4. Создаём новый график
+        try {
+            chart = LightweightCharts.createChart(els.chartWrapper, {
+                width: els.chartWrapper.clientWidth,
+                height: els.chartWrapper.clientHeight,
+                layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
+                grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
+                timeScale: {
+                    timeVisible: true,
+                    secondsVisible: false,
+                    borderColor: '#2d3748',
+                    rightOffset: 12,
+                    barSpacing: 10
+                },
+                rightPriceScale: {
+                    borderColor: '#2d3748',
+                    scaleMargins: { top: 0.1, bottom: 0.1 },
+                    autoScale: true
+                },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            });
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
+                wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+            });
+            console.log('✅ Новый график создан');
+        } catch (e) {
+            console.error('Chart init error:', e);
+            return;
+        }
+
+        // 5. Загружаем историю и подключаем WebSocket
+        await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
     }
 
     async function loadChartData(symbol, tf) {
-    if (!chart || !candleSeries) {
-        console.error('График не инициализирован');
-        return;
+        if (!chart || !candleSeries) {
+            console.error('❌ График не инициализирован');
+            return;
+        }
+
+        console.log(` Загрузка данных: ${symbol} ${tf}`);
+        els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
+
+        try {
+            // 1. Загружаем историю
+            const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const history = await res.json();
+            if (!history || history.length === 0) throw new Error('Пустая история');
+
+            console.log(`📊 Получено ${history.length} свечей`);
+
+            const limitedHistory = history.slice(-500);
+            const firstPrice = limitedHistory[0].close;
+            currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
+            const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
+
+            candleSeries.applyOptions({
+                priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
+            });
+            candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
+
+            chart.timeScale().fitContent();
+            chart.priceScale('right').applyOptions({
+                autoScale: true,
+                scaleMargins: { top: 0.1, bottom: 0.1 }
+            });
+            chart.timeScale().scrollToPosition(12, false);
+
+            // 2. Подключаемся к WebSocket
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
+
+            console.log(`🔗 WebSocket: ${wsUrl}`);
+            wsCandles = new WebSocket(wsUrl);
+
+            wsCandles.onopen = () => {
+                console.log('✅ WebSocket подключен');
+                wsCandles.send(JSON.stringify({
+                    symbol: symbol,
+                    tf: tf,
+                    market: currentMarket
+                }));
+            };
+
+            wsCandles.onmessage = (e) => {
+                const candle = JSON.parse(e.data);
+                if (candle.error) {
+                    console.error('WS ошибка:', candle.error);
+                    return;
+                }
+                // Проверяем что свеча для текущей монеты
+                if (currentSymbol === symbol) {
+                    candleSeries.update(candle);
+                }
+            };
+
+            wsCandles.onerror = (e) => {
+                console.error('WebSocket error:', e);
+            };
+
+            wsCandles.onclose = () => {
+                console.log('🔌 WebSocket закрыт');
+            };
+
+        } catch (err) {
+            els.chartTitle.textContent = `Ошибка: ${err.message}`;
+            console.error('loadChartData error:', err);
+        }
     }
-    els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
-
-    // Закрываем старое WebSocket соединение
-    if (wsCandles) {
-        wsCandles.onclose = null;
-        wsCandles.close();
-        wsCandles = null;
-    }
-
-    try {
-        // 1. Загружаем историю
-        const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const history = await res.json();
-        if (!history || history.length === 0) throw new Error('Пустая история');
-
-        const limitedHistory = history.slice(-500);
-        const firstPrice = limitedHistory[0].close;
-        currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
-        const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
-
-        candleSeries.applyOptions({
-            priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
-        });
-        candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
-
-        chart.timeScale().fitContent();
-        chart.priceScale('right').applyOptions({
-            autoScale: true,
-            scaleMargins: { top: 0.1, bottom: 0.1 }
-        });
-        chart.timeScale().scrollToPosition(12, false);
-
-        // 2. Подключаемся к WebSocket через Django Channels
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
-
-        console.log('🔗 Подключение к WebSocket:', wsUrl);
-        wsCandles = new WebSocket(wsUrl);
-
-        wsCandles.onopen = () => {
-            console.log('✅ WebSocket подключен');
-            wsCandles.send(JSON.stringify({
-                symbol: symbol,
-                tf: tf,
-                market: currentMarket
-            }));
-        };
-
-        wsCandles.onmessage = (e) => {
-            const candle = JSON.parse(e.data);
-            if (candle.error) {
-                console.error('WS ошибка:', candle.error);
-                return;
-            }
-            candleSeries.update(candle);
-        };
-
-        wsCandles.onerror = (e) => {
-            console.error('WebSocket error:', e);
-        };
-
-        wsCandles.onclose = () => {
-            console.log('🔌 WebSocket закрыт');
-        };
-
-    } catch (err) {
-        els.chartTitle.textContent = `Ошибка: ${err.message}`;
-        console.error('loadChartData error:', err);
-    }
-}
 
     function startTradesStream(symbol) {
-        if (wsTrades) { wsTrades.onclose = null; wsTrades.close(); wsTrades = null; }
+        if (wsTrades) {
+            wsTrades.onclose = null;
+            wsTrades.onmessage = null;
+            wsTrades.close();
+            wsTrades = null;
+        }
         const tradesUrl = currentMarket === 'future'
             ? `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@trade`
             : `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@trade`;
@@ -1170,7 +1194,7 @@
 
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast('⏰ До нового часа 1 минута');
+            showHourToast(' До нового часа 1 минута');
             speak('Внимание, до перехода на новый час осталась 1 минута');
         }
     }
