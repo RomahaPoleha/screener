@@ -172,7 +172,13 @@ class CandleConsumer(AsyncWebsocketConsumer):
         if not self.stream_key or self.stream_key not in active_streams:
             return
 
+        # Ждем 1 секунду - даем время новому клиенту подключиться
+        await asyncio.sleep(1.0)
+
         async with streams_lock:
+            if self.stream_key not in active_streams:
+                return
+
             stream = active_streams[self.stream_key]
             stream['subscribers'].discard(self.channel_name)
 
