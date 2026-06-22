@@ -9,7 +9,7 @@ build:
   useCache: true
 
 run:
-  command: daphne -b 0.0.0.0 -p $PORT config.asgi:application
+  command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
   persistenceMount: /app/data
   env:
     - name: DJANGO_SETTINGS_MODULE
