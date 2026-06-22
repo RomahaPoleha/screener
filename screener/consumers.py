@@ -40,11 +40,8 @@ async def binance_ws_task(symbol, tf, market, queue):
                 async for message in ws:
                     try:
                         data = json.loads(message)
-                        print(f"📨 [WS] Получено сообщение от {symbol}: {data}")
-
                         k = data.get('k')
                         if not k:
-                            print(f"⚠️ [WS] Нет ключа 'k' в сообщении")
                             continue
 
                         candle = {
@@ -54,12 +51,10 @@ async def binance_ws_task(symbol, tf, market, queue):
                             'low': float(k['l']),
                             'close': float(k['c'])
                         }
-                        print(f"📊 [WS] Свеча для {symbol}: {candle}")
                         await queue.put(candle)
 
                     except Exception as e:
                         print(f"⚠️ [WS] Ошибка парсинга: {e}")
-                        print(f"⚠️ [WS] Сообщение: {message}")
 
         except asyncio.CancelledError:
             print(f"🛑 [WS] Отменен: {symbol}")
@@ -68,13 +63,11 @@ async def binance_ws_task(symbol, tf, market, queue):
             print(f"⏰ [WS] ТАЙМАУТ подключения: {symbol}")
             retry_count += 1
             if retry_count < max_retries:
-                print(f"⏳ [WS] Ждем 3 сек перед повторной попыткой...")
                 await asyncio.sleep(3)
         except Exception as e:
             print(f"❌ [WS] Ошибка: {type(e).__name__}: {e}")
             retry_count += 1
             if retry_count < max_retries:
-                print(f"⏳ [WS] Ждем 3 сек перед повторной попыткой...")
                 await asyncio.sleep(3)
 
     if retry_count >= max_retries:
@@ -105,6 +98,8 @@ class CandleConsumer(AsyncWebsocketConsumer):
                 pass
 
         if self.stream_key:
+            # Задержка перед отпиской - даём время новому клиенту подключиться
+            await asyncio.sleep(0.5)
             await self.unsubscribe_stream()
 
     async def receive(self, text_data):
@@ -167,7 +162,10 @@ class CandleConsumer(AsyncWebsocketConsumer):
             stream = active_streams[self.stream_key]
             stream['subscribers'].discard(self.channel_name)
 
-            if len(stream['subscribers']) == 0:
+            subscribers_count = len(stream['subscribers'])
+            print(f"📊 Отписка от {self.stream_key}, осталось подписчиков: {subscribers_count}")
+
+            if subscribers_count == 0:
                 stream['task'].cancel()
                 try:
                     await stream['task']
@@ -183,7 +181,6 @@ class CandleConsumer(AsyncWebsocketConsumer):
         try:
             while True:
                 candle = await self.queue.get()
-                print(f"📤 [READ] Отправка клиенту: {candle}")
                 await self.send(text_data=json.dumps(candle))
         except asyncio.CancelledError:
             pass
