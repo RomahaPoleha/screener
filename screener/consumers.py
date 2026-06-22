@@ -9,7 +9,7 @@ streams_lock = asyncio.Lock()
 
 
 async def binance_polling_task(symbol, tf, market, queue):
-    """Polling к Binance с кэшированием"""
+    """Polling к Binance"""
     print(f"🚀 [POLL] Запуск: {symbol} {tf} {market}")
 
     if market == 'future':
@@ -25,7 +25,7 @@ async def binance_polling_task(symbol, tf, market, queue):
         })
 
     try:
-        print(f"✅ [POLL] Подключен к Binance API: {symbol}")
+        print(f"✅ [POLL] Подключен: {symbol}")
         last_candle = None
 
         while True:
@@ -41,12 +41,11 @@ async def binance_polling_task(symbol, tf, market, queue):
                         'close': float(c)
                     }
 
-                    # Отправляем только если свеча изменилась
                     if last_candle != candle:
                         await queue.put(candle)
                         last_candle = candle
 
-                await asyncio.sleep(0.5)  # Опрос каждую секунду
+                await asyncio.sleep(0.5)
 
             except asyncio.CancelledError:
                 print(f"🛑 [POLL] Отменен: {symbol}")
@@ -59,15 +58,13 @@ async def binance_polling_task(symbol, tf, market, queue):
 
 
 async def binance_ws_task(symbol, tf, market, queue):
-    """WebSocket к Binance (работает только для Spot)"""
+    """WebSocket для Spot, polling для Futures"""
     if market == 'spot':
-        # Для Spot используем WebSocket
         import websockets
         stream_name = f"{symbol.lower()}usdt@kline_{tf}"
         ws_url = f"wss://stream.binance.com:9443/ws/{stream_name}"
 
         print(f"🚀 [WS] Запуск: {symbol} {tf} {market}")
-        print(f"🔗 [WS] URL: {ws_url}")
 
         retry_count = 0
         max_retries = 5
@@ -76,12 +73,12 @@ async def binance_ws_task(symbol, tf, market, queue):
             try:
                 async with websockets.connect(
                         ws_url,
-                        open_timeout=10,
+                        open_timeout=5,
                         ping_interval=20,
                         ping_timeout=10,
                         close_timeout=5
                 ) as ws:
-                    print(f"✅ [WS] УСПЕШНО подключен: {symbol} ({market})")
+                    print(f"✅ [WS] Подключен: {symbol}")
                     retry_count = 0
 
                     async for message in ws:
@@ -109,10 +106,9 @@ async def binance_ws_task(symbol, tf, market, queue):
                 print(f"❌ [WS] Ошибка: {e}")
                 retry_count += 1
                 if retry_count < max_retries:
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(2)
     else:
-        # Для Futures используем polling (WebSocket не работает)
-        print(f"⚠️ [TASK] Futures WebSocket не работает, используем polling")
+        print(f"⚠️ [TASK] Futures → polling")
         await binance_polling_task(symbol, tf, market, queue)
 
 
@@ -131,15 +127,11 @@ class CandleConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         print(f"🔌 Клиент отключен: {self.channel_name}")
 
+        # Быстрая отмена без задержек
         if self.read_task and not self.read_task.done():
             self.read_task.cancel()
-            try:
-                await self.read_task
-            except asyncio.CancelledError:
-                pass
 
         if self.stream_key:
-            await asyncio.sleep(1.0)
             await self.unsubscribe_stream()
 
     async def receive(self, text_data):
@@ -155,6 +147,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
                     new_tf != self.tf or
                     new_market != self.market_type):
 
+                # Быстрая отписка от старого
                 if self.stream_key:
                     await self.unsubscribe_stream()
 
@@ -206,14 +199,10 @@ class CandleConsumer(AsyncWebsocketConsumer):
             stream['subscribers'].discard(self.channel_name)
 
             subscribers_count = len(stream['subscribers'])
-            print(f"📊 Отписка от {self.stream_key}, осталось подписчиков: {subscribers_count}")
+            print(f"📊 Отписка от {self.stream_key}, осталось: {subscribers_count}")
 
             if subscribers_count == 0:
                 stream['task'].cancel()
-                try:
-                    await stream['task']
-                except asyncio.CancelledError:
-                    pass
                 del active_streams[self.stream_key]
                 print(f"🗑️ Удален поток: {self.stream_key}")
 
