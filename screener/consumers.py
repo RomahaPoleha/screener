@@ -19,6 +19,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
         print(f"✅ WebSocket подключен: {self.channel_name}")
 
     async def disconnect(self, close_code):
+        print(f"🔌 WebSocket отключен: {self.channel_name}, код: {close_code}")
         self.is_active = False
         if self.poll_task:
             self.poll_task.cancel()
@@ -30,9 +31,9 @@ class CandleConsumer(AsyncWebsocketConsumer):
             await self.ws_binance.close()
         if self.exchange:
             await self.exchange.close()
-        print(f"🔌 WebSocket отключен: {self.channel_name}")
 
     async def receive(self, text_data):
+        print(f"📩 Получено сообщение: {text_data}")
         try:
             data = json.loads(text_data)
             self.symbol = data.get('symbol')
@@ -60,6 +61,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
 
     async def start_candle_stream(self):
         """Запускает поток свечей"""
+        print(f"🚀 Запуск потока для {self.symbol} {self.tf} {self.market_type}")
         if self.market_type == 'spot':
             await self.start_spot_websocket()
         else:
@@ -69,6 +71,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
         """WebSocket для Spot напрямую к Binance"""
         stream_name = f"{self.symbol.lower()}usdt@kline_{self.tf}"
         ws_url = f"wss://stream.binance.com:9443/ws/{stream_name}"
+        print(f"🔗 Spot WS URL: {ws_url}")
 
         try:
             async with websockets.connect(ws_url, ping_interval=20) as websocket:
@@ -87,6 +90,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
                             'low': float(k['l']),
                             'close': float(k['c'])
                         }
+                        print(f"📊 Spot свеча: {candle}")
                         await self.send(text_data=json.dumps(candle))
                     except Exception as e:
                         print(f"⚠️ Ошибка парсинга Spot: {e}")
@@ -98,6 +102,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
     async def start_futures_polling(self):
         """Polling для Futures через АСИНХРОННЫЙ ccxt"""
         pair = f"{self.symbol}/USDT:USDT"
+        print(f"🔗 Futures polling для: {pair}")
 
         try:
             # Используем асинхронную версию ccxt!
@@ -120,6 +125,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
                             'low': float(l),
                             'close': float(c)
                         }
+                        print(f"📊 Futures свеча: {candle}")
                         await self.send(text_data=json.dumps(candle))
                 except Exception as e:
                     print(f"⚠️ Futures polling ошибка: {e}")
