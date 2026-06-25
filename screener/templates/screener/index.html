@@ -73,16 +73,121 @@
             color: #9ca3af; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
         }
         .chart-reset-btn:hover { color: #fff; }
+
+        /* Тепловая карта - ВАЖНО: всегда имеет размеры */
         #heatmap-wrapper {
-            display: none; height: 150px; background: #0b0f19;
-            border-top: 1px solid #2d3748; border-bottom: 1px solid #2d3748;
-            position: relative; overflow: hidden; flex-shrink: 0;
+            height: 150px;
+            background: #0b0f19;
+            border-top: 1px solid #2d3748;
+            border-bottom: 1px solid #2d3748;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+            display: none; /* Скрыта по умолчанию */
         }
-        #heatmap-canvas { width: 100%; height: 100%; display: block; }
+        #heatmap-wrapper.visible {
+            display: block;
+        }
+        #heatmap-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .heatmap-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            z-index: 2;
+            background: rgba(11, 15, 25, 0.8);
+            border-bottom: 1px solid #1e2538;
+        }
         .heatmap-label {
-            position: absolute; top: 5px; left: 10px;
-            font-size: 11px; color: #6b7280; z-index: 2; pointer-events: none;
+            font-size: 11px;
+            color: #6b7280;
         }
+        .heatmap-toggle {
+            margin-left: auto;
+            background: none;
+            border: 1px solid #2d3748;
+            color: #9ca3af;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
+        }
+        .heatmap-toggle:hover { color: #fff; border-color: #f0b90b; }
+        .heatmap-toggle.off { color: #ef4444; border-color: #ef4444; }
+
+        /* Tooltip */
+        .heatmap-help {
+            position: relative;
+            display: inline-block;
+            margin-left: 6px;
+            cursor: help;
+        }
+        .heatmap-help-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #2d3748;
+            color: #9ca3af;
+            font-size: 10px;
+            font-weight: 700;
+            font-style: italic;
+        }
+        .heatmap-help-icon:hover { background: #f0b90b; color: #000; }
+        .heatmap-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e2538;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            padding: 10px 12px;
+            width: 320px;
+            font-size: 11px;
+            color: #d1d5db;
+            z-index: 100;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .heatmap-help:hover .heatmap-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .heatmap-tooltip .legend {
+            display: flex;
+            gap: 12px;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #2d3748;
+        }
+        .heatmap-tooltip .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .heatmap-tooltip .color-box {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .heatmap-tooltip .color-box.bid { background: #22c55e; }
+        .heatmap-tooltip .color-box.ask { background: #ef4444; }
+        .heatmap-tooltip .color-box.price { background: #f0b90b; }
+
         .trades-panel {
             height: 140px; background: #151b2b; padding: 8px 12px;
             overflow: hidden; flex-shrink: 0;
@@ -217,7 +322,7 @@
     <span class="status-badge badge bg-secondary" id="status">Загрузка...</span>
     <span class="natr-time" id="natrTime1m" style="display:none;">NATR 1m: --:--:--</span>
     <span class="natr-time" id="natrTime5m" style="display:none;">NATR 5m: --:--:--</span>
-    <button class="sound-toggle" id="soundToggle" onclick="toggleSound()"> Голосовое оповещение</button>
+    <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
 </div>
 
 <div class="tf-bar" id="tfButtons">
@@ -239,7 +344,37 @@
         </div>
 
         <div id="heatmap-wrapper">
-            <div class="heatmap-label"> Тепловая карта стакана</div>
+            <div class="heatmap-header">
+                <span class="heatmap-label">🔥 Тепловая карта стакана</span>
+                <div class="heatmap-help">
+                    <span class="heatmap-help-icon">?</span>
+                    <div class="heatmap-tooltip">
+                        <strong>Тепловая карта стакана (Order Book Heatmap)</strong>
+                        <p style="margin:6px 0 0; color:#9ca3af;">
+                            Показывает <b>лимитные ордера</b> в стакане Binance в реальном времени.
+                            Чем ярче цвет — тем крупнее заявка на этом уровне цены.
+                        </p>
+                        <div class="legend">
+                            <div class="legend-item">
+                                <div class="color-box bid"></div>
+                                <span><b>Зелёный</b> — заявки на ПОКУПКУ (bids/поддержка)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="color-box ask"></div>
+                                <span><b>Красный</b> — заявки на ПРОДАЖУ (asks/сопротивление)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="color-box price"></div>
+                                <span><b>Жёлтая линия</b> — текущая цена</span>
+                            </div>
+                        </div>
+                        <p style="margin:6px 0 0; color:#9ca3af; font-size:10px;">
+                            Помогает видеть где стоят крупные игроки и где цена может развернуться.
+                        </p>
+                    </div>
+                </div>
+                <button class="heatmap-toggle" id="heatmapToggle" onclick="toggleHeatmap()">Выкл</button>
+            </div>
             <canvas id="heatmap-canvas"></canvas>
         </div>
 
@@ -332,7 +467,6 @@
     let chart = null;
     let candleSeries = null;
     let wsTrades = null;
-    let wsCandles = null;
     let wsCandlesBinance = null;
 
     let currentPrecision = 2;
@@ -345,12 +479,14 @@
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
+    // === ТЕПЛОВАЯ КАРТА ===
     let heatmapWs = null;
     let heatmapPollTimer = null;
     let heatmapHistory = [];
     const maxHistoryLength = 300;
     let heatmapCurrentPrice = 0;
-    let heatmapDebug = { messages: 0, lastUpdate: 0, useWebSocket: false };
+    let heatmapEnabled = true; // Включена по умолчанию
+    let heatmapResizeObserver = null;
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -540,10 +676,6 @@
     }
 
     function closeChart() {
-        if (wsCandles) {
-            wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
-            wsCandles.close(); wsCandles = null;
-        }
         if (wsCandlesBinance) {
             wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
             wsCandlesBinance.close(); wsCandlesBinance = null;
@@ -565,16 +697,12 @@
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
         const heatmapWrapper = document.getElementById('heatmap-wrapper');
-        if (heatmapWrapper) heatmapWrapper.style.display = 'none';
+        if (heatmapWrapper) heatmapWrapper.classList.remove('visible');
         if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
         currentSymbol = '';
     }
 
     async function openChart(symbol) {
-        if (wsCandles) {
-            wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
-            wsCandles.close(); wsCandles = null;
-        }
         if (wsCandlesBinance) {
             wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
             wsCandlesBinance.close(); wsCandlesBinance = null;
@@ -626,7 +754,21 @@
 
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
-        startHeatmap(symbol);
+
+        // Показываем тепловую карту если включена
+        if (heatmapEnabled) {
+            const wrapper = document.getElementById('heatmap-wrapper');
+            if (wrapper) {
+                wrapper.classList.add('visible');
+                // ВАЖНО: ждем пока DOM отрендерит блок
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        resizeHeatmapCanvas();
+                        startHeatmap(symbol);
+                    });
+                });
+            }
+        }
     }
 
     async function loadChartData(symbol, tf) {
@@ -634,7 +776,6 @@
         els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
 
         try {
-            // 1. Загружаем историю с сервера
             const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const history = await res.json();
@@ -656,7 +797,6 @@
             });
             chart.timeScale().scrollToPosition(12, false);
 
-            // 2. Подключаемся к Binance WebSocket НАПРЯМУЮ из браузера
             connectBinanceCandleWebSocket(symbol, tf);
 
         } catch (err) {
@@ -666,19 +806,15 @@
     }
 
     function connectBinanceCandleWebSocket(symbol, tf) {
-        // Закрываем старое соединение
         if (wsCandlesBinance) {
             wsCandlesBinance.close();
             wsCandlesBinance = null;
         }
 
-        // Определяем URL в зависимости от рынка
         const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
         const wsUrl = currentMarket === 'future'
             ? `wss://fstream.binance.com/ws/${streamName}`
             : `wss://stream.binance.com:9443/ws/${streamName}`;
-
-        console.log(`🔗 [ГРАФИК] Подключение к Binance WebSocket: ${wsUrl}`);
 
         try {
             wsCandlesBinance = new WebSocket(wsUrl);
@@ -690,8 +826,6 @@
             wsCandlesBinance.onmessage = (e) => {
                 try {
                     const message = JSON.parse(e.data);
-
-                    // Binance kline stream формат
                     if (message.e === 'kline') {
                         const k = message.k;
                         const candle = {
@@ -701,11 +835,7 @@
                             low: parseFloat(k.l),
                             close: parseFloat(k.c)
                         };
-
-                        // Обновляем только если свеча закрыта или это последняя
-                        if (k.x || currentSymbol === symbol.toUpperCase().replace('USDT', '')) {
-                            candleSeries.update(candle);
-                        }
+                        candleSeries.update(candle);
                     }
                 } catch (err) {
                     console.error('❌ [ГРАФИК] Ошибка парсинга:', err);
@@ -717,8 +847,6 @@
             };
 
             wsCandlesBinance.onclose = () => {
-                console.log('🔌 [ГРАФИК] WebSocket закрыт');
-                // Переподключение через 3 секунды
                 setTimeout(() => {
                     if (currentSymbol) {
                         connectBinanceCandleWebSocket(currentSymbol, currentTF);
@@ -783,42 +911,89 @@
         };
     }
 
-    // === ТЕПЛОВАЯ КАРТА СТАКАНА ===
+    // === ТЕПЛОВАЯ КАРТА ===
+    function toggleHeatmap() {
+        heatmapEnabled = !heatmapEnabled;
+        const btn = document.getElementById('heatmapToggle');
+        const wrapper = document.getElementById('heatmap-wrapper');
+
+        if (heatmapEnabled) {
+            btn.textContent = 'Выкл';
+            btn.classList.remove('off');
+            wrapper.classList.add('visible');
+            // Перезапускаем
+            setTimeout(() => {
+                resizeHeatmapCanvas();
+                if (currentSymbol) startHeatmap(currentSymbol);
+            }, 50);
+        } else {
+            btn.textContent = 'Вкл';
+            btn.classList.add('off');
+            wrapper.classList.remove('visible');
+            // Останавливаем
+            if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
+            if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
+            heatmapHistory = [];
+        }
+
+        localStorage.setItem('heatmapEnabled', heatmapEnabled);
+    }
+
     function startHeatmap(symbol) {
+        if (!heatmapEnabled) return;
+
         if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
         if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
 
         heatmapHistory = [];
         heatmapCurrentPrice = 0;
-        heatmapDebug = { messages: 0, lastUpdate: 0, useWebSocket: false };
 
-        const wrapper = document.getElementById('heatmap-wrapper');
         const canvas = document.getElementById('heatmap-canvas');
+        if (!canvas) return;
 
-        if (!wrapper || !canvas) return;
+        // Принудительно задаем размеры canvas
+        const wrapper = document.getElementById('heatmap-wrapper');
+        if (!wrapper) return;
 
-        wrapper.style.display = 'block';
-        wrapper.style.height = '150px';
-        wrapper.style.position = 'relative';
+        const w = wrapper.clientWidth;
+        const h = wrapper.clientHeight - 24; // минус высота header
 
-        setTimeout(() => {
-            const rect = wrapper.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-
-            if (canvas.width === 0 || canvas.height === 0) return;
+        if (w > 0 && h > 0) {
+            canvas.width = w;
+            canvas.height = h;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
 
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#6b7280';
             ctx.font = '12px Inter';
             ctx.textAlign = 'center';
-            ctx.fillText('Подключение...', canvas.width / 2, canvas.height / 2);
+            ctx.fillText('Подключение...', w / 2, h / 2);
+        }
 
-            connectHeatmapWebSocket(symbol);
-        }, 200);
+        connectHeatmapWebSocket(symbol);
+    }
+
+    function resizeHeatmapCanvas() {
+        const wrapper = document.getElementById('heatmap-wrapper');
+        const canvas = document.getElementById('heatmap-canvas');
+        if (!wrapper || !canvas) return;
+        if (!wrapper.classList.contains('visible')) return;
+
+        const w = wrapper.clientWidth;
+        const h = wrapper.clientHeight - 24;
+
+        if (w > 0 && h > 0) {
+            canvas.width = w;
+            canvas.height = h;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+        }
     }
 
     function connectHeatmapWebSocket(symbol) {
+        if (!heatmapEnabled) return;
+
         const streamName = `${symbol.toLowerCase()}usdt@depth20@100ms`;
         const wsUrl = currentMarket === 'future'
             ? `wss://fstream.binance.com/ws/${streamName}`
@@ -827,16 +1002,9 @@
         try {
             heatmapWs = new WebSocket(wsUrl);
 
-            heatmapWs.onopen = () => {
-                heatmapDebug.useWebSocket = true;
-            };
-
             heatmapWs.onmessage = (e) => {
                 try {
                     const data = JSON.parse(e.data);
-                    heatmapDebug.messages++;
-                    heatmapDebug.lastUpdate = Date.now();
-
                     processHeatmapData(data);
                     drawHeatmap();
                 } catch (err) {
@@ -844,13 +1012,13 @@
                 }
             };
 
-            heatmapWs.onerror = (e) => {
+            heatmapWs.onerror = () => {
                 if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
                 connectHeatmapPolling(symbol);
             };
 
             heatmapWs.onclose = () => {
-                if (heatmapDebug.useWebSocket && heatmapDebug.messages < 10) {
+                if (heatmapHistory.length < 10) {
                     connectHeatmapPolling(symbol);
                 }
             };
@@ -861,7 +1029,7 @@
     }
 
     function connectHeatmapPolling(symbol) {
-        heatmapDebug.useWebSocket = false;
+        if (!heatmapEnabled) return;
 
         const fetchOrderBook = async () => {
             try {
@@ -871,9 +1039,6 @@
 
                 const res = await fetch(url);
                 const data = await res.json();
-
-                heatmapDebug.messages++;
-                heatmapDebug.lastUpdate = Date.now();
 
                 processHeatmapData(data);
                 drawHeatmap();
@@ -892,14 +1057,11 @@
 
         if (!bids || !asks) return;
 
-        const timestamp = Date.now();
-
         if (bids.length > 0 && asks.length > 0) {
             heatmapCurrentPrice = (parseFloat(bids[0][0]) + parseFloat(asks[0][0])) / 2;
         }
 
         heatmapHistory.push({
-            time: timestamp,
             bids: bids.slice(0, 20),
             asks: asks.slice(0, 20)
         });
@@ -921,13 +1083,7 @@
 
         ctx.clearRect(0, 0, width, height);
 
-        if (heatmapHistory.length === 0) {
-            ctx.fillStyle = '#6b7280';
-            ctx.font = '12px Inter';
-            ctx.textAlign = 'center';
-            ctx.fillText('Ожидание данных...', width / 2, height / 2);
-            return;
-        }
+        if (heatmapHistory.length === 0) return;
 
         const priceMap = new Map();
         heatmapHistory.forEach((snapshot, timeIndex) => {
@@ -1010,18 +1166,6 @@
         }
     }
 
-    function resizeHeatmap() {
-        const wrapper = document.getElementById('heatmap-wrapper');
-        const canvas = document.getElementById('heatmap-canvas');
-        if (!wrapper || !canvas) return;
-        if (wrapper.style.display === 'none') return;
-
-        const rect = wrapper.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-        drawHeatmap();
-    }
-
     let sortState = { field: null, direction: 'asc' };
     function sortBy(field) {
         if (sortState.field === field) {
@@ -1083,7 +1227,8 @@
                 height: els.chartWrapper.clientHeight
             });
         }
-        resizeHeatmap();
+        resizeHeatmapCanvas();
+        drawHeatmap();
     });
 
     let soundEnabled = true;
@@ -1165,6 +1310,14 @@
         }
         document.removeEventListener('click', initSpeech);
     }, { once: true });
+
+    // Восстанавливаем настройку тепловой карты
+    heatmapEnabled = localStorage.getItem('heatmapEnabled') !== 'false';
+    const heatmapToggleBtn = document.getElementById('heatmapToggle');
+    if (heatmapToggleBtn) {
+        heatmapToggleBtn.textContent = heatmapEnabled ? 'Выкл' : 'Вкл';
+        if (!heatmapEnabled) heatmapToggleBtn.classList.add('off');
+    }
 
     if (currentMarket === 'spot') {
         els.rightPanel.classList.add('market-spot');

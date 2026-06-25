@@ -1,3 +1,9 @@
+"""
+DEPRECATED: Этот consumer больше не используется.
+График теперь работает через прямой WebSocket из браузера к Binance.
+Оставлено на случай если понадобится вернуть серверный WebSocket.
+"""
+
 import json
 import asyncio
 import ccxt.async_support as ccxt_async
