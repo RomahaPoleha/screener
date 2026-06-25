@@ -82,7 +82,7 @@ def api_candles(request, symbol):
     market = request.GET.get('market', 'future')
 
     # Регистрируем символ как активный (для candle_updater)
-    add_active_symbol(symbol)
+    add_active_symbol(symbol, tf)  # ← Передаём tf!
 
     # Проверяем кэш
     cache_key = f"candles_{symbol}_{tf}_{market}"
@@ -118,7 +118,6 @@ def api_candles(request, symbol):
             for ts, o, h, l, c, v in ohlcv
         ]
 
-        # Кэш на 30 секунд
         cache.set(cache_key, candles, 30)
 
         return JsonResponse(candles, safe=False)
