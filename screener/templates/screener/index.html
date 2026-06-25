@@ -175,7 +175,6 @@
         }
         .chart-reset-btn:hover { color: #fff; }
 
-        /* Тепловая карта снизу */
         #heatmap-wrapper {
             display: none;
             height: 150px;
@@ -527,12 +526,11 @@
     <div class="left-panel">
         <div class="chart-area">
             <div class="chart-title-bar" id="chart-title">График</div>
-            <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
+            <button class="chart-reset-btn" onclick="closeChart()"> Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
         </div>
 
-        <!-- Тепловая карта стакана снизу -->
         <div id="heatmap-wrapper">
             <div class="heatmap-label">🔥 Тепловая карта стакана</div>
             <canvas id="heatmap-canvas"></canvas>
@@ -643,7 +641,6 @@
         '5m14': null
     };
 
-    // === ТЕПЛОВАЯ КАРТА ===
     let heatmapWs = null;
     let heatmapHistory = [];
     const maxHistoryLength = 300;
@@ -842,7 +839,7 @@
     }
 
     function closeChart() {
-        console.log('❌ Закрытие графика');
+        console.log(' Закрытие графика');
 
         if (wsCandles) {
             wsCandles.onclose = null;
@@ -893,7 +890,6 @@
         console.log(`📊 Открытие графика: ${symbol}`);
 
         if (wsCandles) {
-            console.log(' Закрываю старый candles WebSocket');
             wsCandles.onclose = null;
             wsCandles.onmessage = null;
             wsCandles.onerror = null;
@@ -901,7 +897,6 @@
             wsCandles = null;
         }
         if (wsTrades) {
-            console.log(' Закрываю старый trades WebSocket');
             wsTrades.onclose = null;
             wsTrades.onmessage = null;
             wsTrades.onerror = null;
@@ -933,7 +928,6 @@
         }
 
         if (chart) {
-            console.log('🗑️ Удаляю старый график');
             chart.remove();
             chart = null;
             candleSeries = null;
@@ -963,7 +957,6 @@
                 upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
                 wickUpColor: '#22c55e', wickDownColor: '#ef4444',
             });
-            console.log('✅ Новый график создан');
         } catch (e) {
             console.error('Chart init error:', e);
             return;
@@ -972,7 +965,6 @@
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
 
-        // Запускаем тепловую карту для Futures
         if (currentMarket === 'future') {
             startHeatmap(symbol);
         } else {
@@ -987,7 +979,6 @@
             return;
         }
 
-        console.log(`📈 Загрузка данных: ${symbol} ${tf}`);
         els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
 
         try {
@@ -995,8 +986,6 @@
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const history = await res.json();
             if (!history || history.length === 0) throw new Error('Пустая история');
-
-            console.log(`📊 Получено ${history.length} свечей`);
 
             const limitedHistory = history.slice(-500);
             const firstPrice = limitedHistory[0].close;
@@ -1018,11 +1007,9 @@
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
 
-            console.log(`🔗 WebSocket: ${wsUrl}`);
             wsCandles = new WebSocket(wsUrl);
 
             wsCandles.onopen = () => {
-                console.log('✅ WebSocket подключен');
                 wsCandles.send(JSON.stringify({
                     symbol: symbol,
                     tf: tf,
@@ -1032,10 +1019,7 @@
 
             wsCandles.onmessage = (e) => {
                 const candle = JSON.parse(e.data);
-                if (candle.error) {
-                    console.error('WS ошибка:', candle.error);
-                    return;
-                }
+                if (candle.error) return;
                 if (currentSymbol === symbol) {
                     candleSeries.update(candle);
                 }
@@ -1045,9 +1029,7 @@
                 console.error('WebSocket error:', e);
             };
 
-            wsCandles.onclose = () => {
-                console.log('🔌 WebSocket закрыт');
-            };
+            wsCandles.onclose = () => {};
 
         } catch (err) {
             els.chartTitle.textContent = `Ошибка: ${err.message}`;
@@ -1066,7 +1048,7 @@
             ? `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@trade`
             : `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@trade`;
         wsTrades = new WebSocket(tradesUrl);
-        wsTrades.onopen = () => console.log(`Trades WS: ${symbol}`);
+        wsTrades.onopen = () => {};
         wsTrades.onmessage = (e) => {
             try {
                 const trade = JSON.parse(e.data);
@@ -1121,7 +1103,12 @@
         heatmapCurrentPrice = 0;
 
         const wrapper = document.getElementById('heatmap-wrapper');
-        if (wrapper) wrapper.style.display = 'block';
+        if (wrapper) {
+            wrapper.style.display = 'block';
+            setTimeout(() => {
+                resizeHeatmap();
+            }, 100);
+        }
 
         const streamName = `${symbol.toLowerCase()}usdt@depth@100ms`;
         const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
@@ -1131,7 +1118,6 @@
 
         heatmapWs.onopen = () => {
             console.log('✅ Тепловая карта подключена');
-            resizeHeatmap();
         };
 
         heatmapWs.onmessage = (e) => {
@@ -1175,11 +1161,20 @@
         const width = canvas.width;
         const height = canvas.height;
 
+        if (width === 0 || height === 0) {
+            return;
+        }
+
         ctx.clearRect(0, 0, width, height);
 
-        if (heatmapHistory.length === 0) return;
+        if (heatmapHistory.length === 0) {
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '12px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText('Ожидание данных стакана...', width / 2, height / 2);
+            return;
+        }
 
-        // Собираем все уникальные цены
         const priceMap = new Map();
         heatmapHistory.forEach(snapshot => {
             snapshot.bids.forEach(([price, qty]) => {
@@ -1199,7 +1194,6 @@
         const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
         if (sortedPrices.length === 0) return;
 
-        // Находим максимальный объем
         let maxVolume = 0;
         priceMap.forEach(entries => {
             entries.forEach(e => {
@@ -1212,7 +1206,6 @@
 
         sortedPrices.forEach((price, priceIndex) => {
             const y = priceIndex * priceStep;
-            const entries = priceMap.get(price);
 
             for (let t = 0; t < heatmapHistory.length; t++) {
                 const snapshot = heatmapHistory[t];
@@ -1246,7 +1239,6 @@
             }
         });
 
-        // Рисуем текущую цену
         if (heatmapCurrentPrice > 0) {
             const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
             if (priceIndex >= 0) {
@@ -1266,10 +1258,17 @@
     function resizeHeatmap() {
         const wrapper = document.getElementById('heatmap-wrapper');
         const canvas = document.getElementById('heatmap-canvas');
-        if (!wrapper || !canvas) return;
+        if (!wrapper || !canvas) {
+            console.log('⚠️ Canvas или wrapper не найден');
+            return;
+        }
 
-        canvas.width = wrapper.clientWidth;
-        canvas.height = wrapper.clientHeight;
+        const rect = wrapper.getBoundingClientRect();
+        console.log(` Resize heatmap: width=${rect.width}, height=${rect.height}`);
+
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
         drawHeatmap();
     }
 
@@ -1344,7 +1343,6 @@
         resizeHeatmap();
     });
 
-    // === ГОЛОСОВЫЕ ОПОВЕЩЕНИЯ ===
     let soundEnabled = true;
     let lastNotifiedMinute = -1;
     let russianVoice = null;
@@ -1352,7 +1350,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
@@ -1361,7 +1359,7 @@
     soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
     const soundBtn = document.getElementById('soundToggle');
     if (soundBtn) {
-        soundBtn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
         soundBtn.classList.toggle('muted', !soundEnabled);
     }
 
