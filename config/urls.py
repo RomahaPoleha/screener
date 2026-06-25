@@ -22,6 +22,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.index, name='index'),
     path('api/data/', views.api_data, name='api_data'),
-    path('api/candles/<str:symbol>/', views.api_candles, name='api_candles'),
+    path('api/candles/<str:symbol>/', views.api_candles, name='api_candles'),  # ← ИСПРАВЛЕНО
     path('api/natr/', views.api_natr, name='api_natr'),
 ]
