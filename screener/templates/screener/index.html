@@ -73,56 +73,121 @@
             color: #9ca3af; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
         }
         .chart-reset-btn:hover { color: #fff; }
+
+        /* Тепловая карта - ВАЖНО: всегда имеет размеры */
         #heatmap-wrapper {
-            height: 150px; background: #0b0f19;
-            border-top: 1px solid #2d3748; border-bottom: 1px solid #2d3748;
-            position: relative; overflow: hidden; flex-shrink: 0;
-            display: none;
+            height: 150px;
+            background: #0b0f19;
+            border-top: 1px solid #2d3748;
+            border-bottom: 1px solid #2d3748;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+            display: none; /* Скрыта по умолчанию */
         }
-        #heatmap-wrapper.visible { display: block; }
-        #heatmap-canvas { width: 100%; height: 100%; display: block; }
+        #heatmap-wrapper.visible {
+            display: block;
+        }
+        #heatmap-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
         .heatmap-header {
-            position: absolute; top: 0; left: 0; right: 0; height: 24px;
-            display: flex; align-items: center; padding: 0 10px;
-            z-index: 2; background: rgba(11, 15, 25, 0.8);
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            z-index: 2;
+            background: rgba(11, 15, 25, 0.8);
             border-bottom: 1px solid #1e2538;
         }
-        .heatmap-label { font-size: 11px; color: #6b7280; }
+        .heatmap-label {
+            font-size: 11px;
+            color: #6b7280;
+        }
         .heatmap-toggle {
-            margin-left: auto; background: none;
-            border: 1px solid #2d3748; color: #9ca3af;
-            padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 10px;
+            margin-left: auto;
+            background: none;
+            border: 1px solid #2d3748;
+            color: #9ca3af;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
         }
         .heatmap-toggle:hover { color: #fff; border-color: #f0b90b; }
         .heatmap-toggle.off { color: #ef4444; border-color: #ef4444; }
-        .heatmap-help { position: relative; display: inline-block; margin-left: 6px; cursor: help; }
+
+        /* Tooltip */
+        .heatmap-help {
+            position: relative;
+            display: inline-block;
+            margin-left: 6px;
+            cursor: help;
+        }
         .heatmap-help-icon {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 14px; height: 14px; border-radius: 50%;
-            background: #2d3748; color: #9ca3af;
-            font-size: 10px; font-weight: 700; font-style: italic;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #2d3748;
+            color: #9ca3af;
+            font-size: 10px;
+            font-weight: 700;
+            font-style: italic;
         }
         .heatmap-help-icon:hover { background: #f0b90b; color: #000; }
         .heatmap-tooltip {
-            visibility: hidden; opacity: 0;
-            position: absolute; bottom: 100%; left: 50%;
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
             transform: translateX(-50%);
-            background: #1e2538; border: 1px solid #2d3748;
-            border-radius: 6px; padding: 10px 12px;
-            width: 320px; font-size: 11px; color: #d1d5db;
-            z-index: 100; transition: opacity 0.2s;
-            pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            background: #1e2538;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            padding: 10px 12px;
+            width: 320px;
+            font-size: 11px;
+            color: #d1d5db;
+            z-index: 100;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
-        .heatmap-help:hover .heatmap-tooltip { visibility: visible; opacity: 1; }
+        .heatmap-help:hover .heatmap-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
         .heatmap-tooltip .legend {
-            display: flex; gap: 12px; margin-top: 6px;
-            padding-top: 6px; border-top: 1px solid #2d3748;
+            display: flex;
+            gap: 12px;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #2d3748;
         }
-        .heatmap-tooltip .legend-item { display: flex; align-items: center; gap: 4px; }
-        .heatmap-tooltip .color-box { width: 12px; height: 12px; border-radius: 2px; }
+        .heatmap-tooltip .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .heatmap-tooltip .color-box {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
         .heatmap-tooltip .color-box.bid { background: #22c55e; }
         .heatmap-tooltip .color-box.ask { background: #ef4444; }
         .heatmap-tooltip .color-box.price { background: #f0b90b; }
+
         .trades-panel {
             height: 140px; background: #151b2b; padding: 8px 12px;
             overflow: hidden; flex-shrink: 0;
@@ -403,7 +468,6 @@
     let candleSeries = null;
     let wsTrades = null;
     let wsCandlesBinance = null;
-    let candleTradesWs = null;
 
     let currentPrecision = 2;
     let tradeBuffer = [];
@@ -421,11 +485,8 @@
     let heatmapHistory = [];
     const maxHistoryLength = 300;
     let heatmapCurrentPrice = 0;
-    let heatmapEnabled = true;
-
-    // === СВЕЧИ ИЗ TRADES ===
-    let currentCandle = null;
-    let currentCandleTime = 0;
+    let heatmapEnabled = true; // Включена по умолчанию
+    let heatmapResizeObserver = null;
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -437,14 +498,6 @@
     };
     const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
-
-    function getIntervalMs(tf) {
-        const intervals = {
-            '1m': 60000, '5m': 300000, '15m': 900000,
-            '30m': 1800000, '1h': 3600000, '4h': 14400000
-        };
-        return intervals[tf] || 60000;
-    }
 
     if (els.thresholdSlider) {
         els.thresholdValue.textContent = fmtThreshold(currentThreshold);
@@ -627,10 +680,6 @@
             wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
             wsCandlesBinance.close(); wsCandlesBinance = null;
         }
-        if (candleTradesWs) {
-            candleTradesWs.onclose = null; candleTradesWs.onmessage = null; candleTradesWs.onerror = null;
-            candleTradesWs.close(); candleTradesWs = null;
-        }
         if (wsTrades) {
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
             wsTrades.close(); wsTrades = null;
@@ -644,8 +693,6 @@
         tradeBuffer = [];
         if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
         heatmapHistory = [];
-        currentCandle = null;
-        currentCandleTime = 0;
         els.chartTitle.textContent = 'График';
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
@@ -659,10 +706,6 @@
         if (wsCandlesBinance) {
             wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
             wsCandlesBinance.close(); wsCandlesBinance = null;
-        }
-        if (candleTradesWs) {
-            candleTradesWs.onclose = null; candleTradesWs.onmessage = null; candleTradesWs.onerror = null;
-            candleTradesWs.close(); candleTradesWs = null;
         }
         if (wsTrades) {
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
@@ -712,10 +755,12 @@
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
 
+        // Показываем тепловую карту если включена
         if (heatmapEnabled) {
             const wrapper = document.getElementById('heatmap-wrapper');
             if (wrapper) {
                 wrapper.classList.add('visible');
+                // ВАЖНО: ждем пока DOM отрендерит блок
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                         resizeHeatmapCanvas();
@@ -752,11 +797,6 @@
             });
             chart.timeScale().scrollToPosition(12, false);
 
-            // Сбрасываем текущую свечу
-            currentCandle = null;
-            currentCandleTime = 0;
-
-            // Подключаем WebSocket для real-time
             connectBinanceCandleWebSocket(symbol, tf);
 
         } catch (err) {
@@ -766,29 +806,21 @@
     }
 
     function connectBinanceCandleWebSocket(symbol, tf) {
-        // Закрываем старые соединения
         if (wsCandlesBinance) {
-            wsCandlesBinance.onclose = null;
             wsCandlesBinance.close();
             wsCandlesBinance = null;
         }
-        if (candleTradesWs) {
-            candleTradesWs.onclose = null;
-            candleTradesWs.close();
-            candleTradesWs = null;
-        }
 
-        if (currentMarket === 'spot') {
-            // Spot: используем обычный kline WebSocket
-            const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
-            const wsUrl = `wss://stream.binance.com:9443/ws/${streamName}`;
+        const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
+        const wsUrl = currentMarket === 'future'
+            ? `wss://fstream.binance.com/ws/${streamName}`
+            : `wss://stream.binance.com:9443/ws/${streamName}`;
 
-            console.log(`🔗 [ГРАФИК] Spot kline: ${wsUrl}`);
-
+        try {
             wsCandlesBinance = new WebSocket(wsUrl);
 
             wsCandlesBinance.onopen = () => {
-                console.log(`✅ [ГРАФИК] Spot WebSocket подключен`);
+                console.log(`✅ [ГРАФИК] WebSocket подключен (${currentMarket})`);
             };
 
             wsCandlesBinance.onmessage = (e) => {
@@ -810,77 +842,20 @@
                 }
             };
 
+            wsCandlesBinance.onerror = (e) => {
+                console.error('❌ [ГРАФИК] WebSocket ошибка');
+            };
+
             wsCandlesBinance.onclose = () => {
                 setTimeout(() => {
-                    if (currentSymbol && currentMarket === 'spot') {
+                    if (currentSymbol) {
                         connectBinanceCandleWebSocket(currentSymbol, currentTF);
                     }
                 }, 3000);
             };
 
-        } else {
-            // Futures: используем aggTrade и формируем свечи на клиенте
-            const streamName = `${symbol.toLowerCase()}usdt@aggTrade`;
-            const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
-
-            console.log(` [ГРАФИК] Futures aggTrade: ${wsUrl}`);
-
-            candleTradesWs = new WebSocket(wsUrl);
-
-            candleTradesWs.onopen = () => {
-                console.log(`✅ [ГРАФИК] Futures aggTrade подключен`);
-            };
-
-            candleTradesWs.onmessage = (e) => {
-                try {
-                    const trade = JSON.parse(e.data);
-                    const price = parseFloat(trade.p);
-                    const timestamp = parseInt(trade.T);
-
-                    // Определяем начало текущей свечи
-                    const intervalMs = getIntervalMs(tf);
-                    const candleTime = Math.floor(timestamp / intervalMs) * intervalMs;
-                    const candleTimeSec = candleTime / 1000;
-
-                    // Если это новая свеча
-                    if (candleTimeSec !== currentCandleTime) {
-                        // Сохраняем предыдущую свечу (если есть)
-                        if (currentCandle) {
-                            candleSeries.update(currentCandle);
-                        }
-
-                        // Создаём новую свечу
-                        currentCandle = {
-                            time: candleTimeSec,
-                            open: price,
-                            high: price,
-                            low: price,
-                            close: price
-                        };
-                        currentCandleTime = candleTimeSec;
-                    } else {
-                        // Обновляем текущую свечу
-                        currentCandle.high = Math.max(currentCandle.high, price);
-                        currentCandle.low = Math.min(currentCandle.low, price);
-                        currentCandle.close = price;
-                    }
-
-                    // Обновляем график
-                    candleSeries.update(currentCandle);
-
-                } catch (err) {
-                    console.error('❌ [ГРАФИК] Ошибка парсинга trade:', err);
-                }
-            };
-
-            candleTradesWs.onclose = () => {
-                console.log(`🔌 [ГРАФИК] Futures aggTrade закрыт`);
-                setTimeout(() => {
-                    if (currentSymbol && currentMarket === 'future') {
-                        connectBinanceCandleWebSocket(currentSymbol, currentTF);
-                    }
-                }, 3000);
-            };
+        } catch (err) {
+            console.error('❌ [ГРАФИК] Не удалось создать WebSocket:', err);
         }
     }
 
@@ -946,6 +921,7 @@
             btn.textContent = 'Выкл';
             btn.classList.remove('off');
             wrapper.classList.add('visible');
+            // Перезапускаем
             setTimeout(() => {
                 resizeHeatmapCanvas();
                 if (currentSymbol) startHeatmap(currentSymbol);
@@ -954,6 +930,7 @@
             btn.textContent = 'Вкл';
             btn.classList.add('off');
             wrapper.classList.remove('visible');
+            // Останавливаем
             if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
             if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
             heatmapHistory = [];
@@ -974,11 +951,12 @@
         const canvas = document.getElementById('heatmap-canvas');
         if (!canvas) return;
 
+        // Принудительно задаем размеры canvas
         const wrapper = document.getElementById('heatmap-wrapper');
         if (!wrapper) return;
 
         const w = wrapper.clientWidth;
-        const h = wrapper.clientHeight - 24;
+        const h = wrapper.clientHeight - 24; // минус высота header
 
         if (w > 0 && h > 0) {
             canvas.width = w;
@@ -1260,7 +1238,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
@@ -1333,6 +1311,7 @@
         document.removeEventListener('click', initSpeech);
     }, { once: true });
 
+    // Восстанавливаем настройку тепловой карты
     heatmapEnabled = localStorage.getItem('heatmapEnabled') !== 'false';
     const heatmapToggleBtn = document.getElementById('heatmapToggle');
     if (heatmapToggleBtn) {

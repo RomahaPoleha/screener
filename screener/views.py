@@ -5,6 +5,7 @@ from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.shortcuts import render
 from datetime import datetime
+from .candle_updater import add_active_symbol
 
 # Минимальный объём для фильтрации
 MIN_VOLUME = 200000
@@ -79,6 +80,9 @@ def api_candles(request, symbol):
     """API: история свечей для графика"""
     tf = request.GET.get('tf', '1m')
     market = request.GET.get('market', 'future')
+
+    # Регистрируем символ как активный (для candle_updater)
+    add_active_symbol(symbol)
 
     # Проверяем кэш
     cache_key = f"candles_{symbol}_{tf}_{market}"
@@ -155,4 +159,5 @@ def api_natr(request):
 
 
 def index(request):
-    return render(request, 'screener/index.html')  # ← Добавь префикс
+    """Главная страница"""
+    return render(request, 'screener/index.html')

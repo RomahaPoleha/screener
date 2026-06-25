@@ -149,3 +149,11 @@ else:
     }
     print("⚠️ Redis не найден, используем FileCache")
 
+# Django Channels
+ASGI_APPLICATION = 'config.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
