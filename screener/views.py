@@ -1,171 +1,107 @@
 import ccxt
-import logging
-from django.shortcuts import render
-from django.http import JsonResponse
-from django.core.cache import cache
+import time
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
-from django.conf import settings
+from django.core.cache import cache
+from django.shortcuts import render
+from datetime import datetime
 
-logger = logging.getLogger(__name__)
-
-EXCHANGE_NAME = 'binance'
-CACHE_TTL = 120
+# Минимальный объём для фильтрации
+MIN_VOLUME = 200000
 
 
-def get_raw_tickers(market_type='spot'):
-    cache_key = f"{EXCHANGE_NAME}_{market_type}_raw_tickers"
-    raw_data = cache.get(cache_key)
-    if raw_data is not None:
-        logger.info(f"[{market_type}] Взял из кэша: {len(raw_data)} пар")
-        return raw_data
-
+def get_symbols_from_tickers(market_type='future'):
+    """Получает список монет с Binance"""
     try:
         exchange_config = {
             'enableRateLimit': True,
-            'timeout': 10000
+            'timeout': 10000,
+            'options': {'defaultType': market_type}
         }
-        if market_type == 'future':
-            exchange_config['options'] = {'defaultType': 'future'}
-            logger.info("Подключаюсь к Binance Futures...")
-        else:
-            logger.info("Подключаюсь к Binance Spot...")
-
-        exchange = getattr(ccxt, EXCHANGE_NAME)(exchange_config)
-        logger.info(f"Запрашиваю тикеры ({market_type})...")
-        raw_data = exchange.fetch_tickers()
-        logger.info(f"Binance вернул: {len(raw_data)} пар")
-
-        cache.set(cache_key, raw_data, CACHE_TTL)
-        return raw_data
-    except Exception as e:
-        logger.error(f"Ошибка API {EXCHANGE_NAME} ({market_type}): {e}")
-        return {}
-
-
-def filter_data(raw_data, filters, market_type='spot'):
-    results = []
-
-    if market_type == 'future':
-        usdt_pairs = {k: v for k, v in raw_data.items() if ':USDT' in k or k.endswith('/USDT')}
-    else:
-        usdt_pairs = {k: v for k, v in raw_data.items() if k.endswith('/USDT') and ':USDT' not in k}
-
-    for symbol, data in usdt_pairs.items():
-        if not data or data.get('last') is None:
-            continue
-
-        price = data.get('last')
-        change = data.get('percentage') or 0
-        volume = data.get('quoteVolume') or 0
-        trades = int(data.get('info', {}).get('count', 0))
-
-        if market_type == 'spot':
-            if not data.get('bid') or not data.get('ask'):
-                continue
-            if volume is None or volume < 10000:
-                continue
-            if trades is None or trades < 50:
-                continue
-        else:
-            if volume is not None and volume < 1000:
-                continue
-            if trades is not None and trades < 5:
-                continue
-
-        if 'min_change' in filters and change < filters['min_change']:
-            continue
-        if 'max_change' in filters and change > filters['max_change']:
-            continue
-        if 'min_volume' in filters and volume < filters['min_volume']:
-            continue
-        if 'search' in filters and filters['search']:
-            if filters['search'].upper() not in symbol:
-                continue
-
-        clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-        results.append({
-            'symbol': clean_symbol,
-            'price': price,
-            'change': round(change, 2),
-            'volume': round(volume, 2)
-        })
-
-    results.sort(key=lambda x: abs(x['change']), reverse=True)
-    return results
-
-
-@require_http_methods(["GET"])
-def api_screener(request):
-    logger.info("=== ЗАПРОС /api/data/ ===")
-    market_type = request.GET.get('market', 'spot')
-    if market_type not in ['spot', 'future']:
-        market_type = 'spot'
-
-    filters = {}
-    if request.GET.get('search'):
-        filters['search'] = request.GET['search']
-    if request.GET.get('min_change'):
-        try:
-            filters['min_change'] = float(request.GET['min_change'])
-        except:
-            pass
-    if request.GET.get('min_volume'):
-        try:
-            filters['min_volume'] = float(request.GET['min_volume'])
-        except:
-            pass
-
-    raw = get_raw_tickers(market_type)
-    if not raw:
-        logger.error("RAW ДАННЫЕ ПУСТЫЕ!")
-        return JsonResponse([], safe=False)
-
-    data = filter_data(raw, filters, market_type)
-    return JsonResponse(data, safe=False)
-
-
-def index(request):
-    return render(request, 'screener/index.html')
-
-
-@require_http_methods(["GET"])
-def api_candles(request, symbol: str):
-    tf = request.GET.get('tf', '1m')
-    market_type = request.GET.get('market', 'spot')
-
-    valid_tfs = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']
-    if tf not in valid_tfs:
-        tf = '1m'
-
-    if market_type == 'future':
-        pair_symbol = f"{symbol}/USDT:USDT"
-    else:
-        pair_symbol = f"{symbol}/USDT"
-
-    cache_key = f"candles_{symbol}_{tf}_{market_type}"
-
-    # 1. Добавляем монету в список активных (для фонового обновления)
-    if market_type == 'future' and tf == '1m':
-        from .candle_updater import add_active_symbol
-        add_active_symbol(symbol)
-
-    # 2. Пытаемся взять из кэша
-    candles = cache.get(cache_key)
-    if candles is not None:
-        return JsonResponse(candles, safe=False)
-
-    # 3. Если нет в кэше — запрашиваем напрямую (первый запуск)
-    try:
-        exchange_config = {
-            'enableRateLimit': True,
-            'timeout': 5000,
-            'rateLimit': 100
-        }
-        if market_type == 'future':
-            exchange_config['options'] = {'defaultType': 'future'}
 
         exchange = ccxt.binance(exchange_config)
-        ohlcv = exchange.fetch_ohlcv(pair_symbol, timeframe=tf, limit=100)
+        tickers = exchange.fetch_tickers()
+
+        symbols_with_volume = []
+        for symbol, data in tickers.items():
+            if ':USDT' not in symbol and not symbol.endswith('/USDT'):
+                continue
+
+            volume = data.get('quoteVolume') or 0
+            if volume < MIN_VOLUME:
+                continue
+
+            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
+
+            # Фильтр невалидных символов
+            if '-' in clean_symbol:
+                continue
+            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+                continue
+            if not clean_symbol.replace('_', '').isalnum():
+                continue
+
+            symbols_with_volume.append({
+                'symbol': clean_symbol,
+                'volume': volume,
+                'change': round(data.get('percentage') or 0, 2)
+            })
+
+        # Сортировка по объёму
+        symbols_with_volume.sort(key=lambda x: x['volume'], reverse=True)
+
+        return symbols_with_volume
+
+    except Exception as e:
+        print(f"❌ Ошибка get_symbols_from_tickers: {e}")
+        return []
+
+
+@require_http_methods(["GET"])
+def api_data(request):
+    """API: список монет"""
+    market = request.GET.get('market', 'future')
+
+    # Кэш на 60 секунд
+    cache_key = f"coins_{market}"
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse(cached, safe=False)
+
+    coins = get_symbols_from_tickers(market)
+    cache.set(cache_key, coins, 60)
+
+    return JsonResponse(coins, safe=False)
+
+
+@require_http_methods(["GET"])
+def api_candles(request, symbol):
+    """API: история свечей для графика"""
+    tf = request.GET.get('tf', '1m')
+    market = request.GET.get('market', 'future')
+
+    # Проверяем кэш
+    cache_key = f"candles_{symbol}_{tf}_{market}"
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse(cached, safe=False)
+
+    try:
+        if market == 'future':
+            exchange = ccxt.binance({
+                'enableRateLimit': True,
+                'options': {'defaultType': 'future'},
+                'timeout': 10000
+            })
+            pair = f"{symbol}/USDT:USDT"
+        else:
+            exchange = ccxt.binance({
+                'enableRateLimit': True,
+                'timeout': 10000
+            })
+            pair = f"{symbol}/USDT"
+
+        ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
 
         candles = [
             {
@@ -178,86 +114,46 @@ def api_candles(request, symbol: str):
             for ts, o, h, l, c, v in ohlcv
         ]
 
-        cache.set(cache_key, candles, 10)
+        # Кэш на 30 секунд
+        cache.set(cache_key, candles, 30)
+
         return JsonResponse(candles, safe=False)
 
-    except ccxt.RateLimitExceeded:
-        logger.warning(f"⚠️ Rate limit для {pair_symbol}")
-        return JsonResponse({'error': 'Слишком много запросов'}, status=429)
     except Exception as e:
-        logger.error(f"Ошибка {pair_symbol}: {e}")
-        return JsonResponse({'error': 'Ошибка биржи'}, status=500)
+        print(f"❌ Ошибка api_candles {symbol}: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
 def api_natr(request):
-    """Возвращает NATR данные + время обновления для каждого таймфрейма отдельно"""
-    market_type = request.GET.get('market', 'spot')
+    """API: NATR данные"""
+    market = request.GET.get('market', 'future')
 
-    # Берём метаданные
-    queue_data = cache.get(f"natr_queue_{market_type}")
-    if not queue_data:
-        return JsonResponse({
-            'natr': {},
-            'progress': {'current': 0, 'total': 0},
-            'status': 'initializing',
-            'last_update_times': {}
-        }, safe=False)
+    # Получаем список монет
+    cache_key = f"coins_{market}"
+    coins = cache.get(cache_key)
+    if not coins:
+        coins = get_symbols_from_tickers(market)
+        cache.set(cache_key, coins, 60)
 
-    # Собираем NATR из кэша
-    results = {}
-    for symbol in queue_data['symbols']:
-        data = cache.get(f"natr_{symbol}_{market_type}")
+    # Собираем NATR для каждой монеты
+    natr_data = {}
+    for coin in coins:
+        symbol = coin['symbol']
+        cache_key = f"natr_{symbol}_{market}"
+        data = cache.get(cache_key)
         if data:
-            results[symbol] = data
+            natr_data[symbol] = data
 
-    total = len(queue_data['symbols'])
-    current = len(results)
-
-    # Получаем время обновления для каждого таймфрейма
-    last_update_times = {}
-    last_update_key = f"natr_last_update_times_{market_type}"
-    saved_times = cache.get(last_update_key)
-
-    if saved_times:
-        last_update_times = saved_times
-    else:
-        # Если нет данных, используем старое поле для обратной совместимости
-        if queue_data.get('last_update'):
-            last_update_times = {
-                '1m30': queue_data['last_update'],
-                '5m14': queue_data['last_update']
-            }
-        else:
-            last_update_times = {}
+    # Время последнего обновления
+    last_update_times = cache.get(f"natr_last_update_times_{market}", {})
 
     return JsonResponse({
-        'natr': results,
-        'progress': {
-            'current': current,
-            'total': total
-        },
-        'status': 'ready' if current == total else 'updating',
+        'natr': natr_data,
         'last_update_times': last_update_times
-    }, safe=False)
-
-
-@require_http_methods(["GET"])
-def debug_cache(request):
-    """Проверка кэша"""
-    from django.core.cache import cache
-
-    # Проверка записи/чтения
-    cache.set('test_key', 'test_value', 60)
-    value = cache.get('test_key')
-
-    # Проверка NATR
-    natr_spot = cache.get('natr_queue_spot')
-    natr_future = cache.get('natr_queue_future')
-
-    return JsonResponse({
-        'test_write_read': value,
-        'natr_spot_exists': natr_spot is not None,
-        'natr_future_exists': natr_future is not None,
-        'cache_backend': settings.CACHES['default']['BACKEND'],
     })
+
+
+def index(request):
+    """Главная страница"""
+    return render(request, 'index.html')
