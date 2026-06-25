@@ -345,7 +345,7 @@
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
-    // === ТЕПЛОВАЯ КАРТА (единственное объявление) ===
+    // === ТЕПЛОВАЯ КАРТА ===
     let heatmapWs = null;
     let heatmapPollTimer = null;
     let heatmapHistory = [];
@@ -541,7 +541,6 @@
     }
 
     function closeChart() {
-        console.log('❌ Закрытие графика');
         if (wsCandles) {
             wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
             wsCandles.close(); wsCandles = null;
@@ -550,10 +549,7 @@
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
             wsTrades.close(); wsTrades = null;
         }
-        if (heatmapPollTimer) {
-            clearInterval(heatmapPollTimer);
-            heatmapPollTimer = null;
-        }
+        if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
         if (heatmapWs) {
             heatmapWs.onclose = null; heatmapWs.onmessage = null; heatmapWs.onerror = null;
             heatmapWs.close(); heatmapWs = null;
@@ -573,7 +569,6 @@
     }
 
     async function openChart(symbol) {
-        console.log(` Открытие графика: ${symbol}`);
         if (wsCandles) {
             wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
             wsCandles.close(); wsCandles = null;
@@ -626,16 +621,11 @@
 
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
-
-        // Запускаем тепловую карту для любого рынка
         startHeatmap(symbol);
     }
 
     async function loadChartData(symbol, tf) {
-        if (!chart || !candleSeries) {
-            console.error('❌ График не инициализирован');
-            return;
-        }
+        if (!chart || !candleSeries) return;
         els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
         try {
             const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
@@ -731,10 +721,8 @@
         };
     }
 
-    // === ТЕПЛОВАЯ КАРТА СТАКАНА (WebSocket из браузера + fallback polling) ===
+    // === ТЕПЛОВАЯ КАРТА СТАКАНА ===
     function startHeatmap(symbol) {
-        console.log(`🔥 [HEATMAP] Запуск для ${symbol} (рынок: ${currentMarket})`);
-
         if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
         if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
 
@@ -745,10 +733,7 @@
         const wrapper = document.getElementById('heatmap-wrapper');
         const canvas = document.getElementById('heatmap-canvas');
 
-        if (!wrapper || !canvas) {
-            console.error('❌ [HEATMAP] Не найден wrapper или canvas');
-            return;
-        }
+        if (!wrapper || !canvas) return;
 
         wrapper.style.display = 'block';
         wrapper.style.height = '150px';
@@ -758,12 +743,8 @@
             const rect = wrapper.getBoundingClientRect();
             canvas.width = rect.width;
             canvas.height = rect.height;
-            console.log(`📐 [HEATMAP] Размеры: ${canvas.width}x${canvas.height}`);
 
-            if (canvas.width === 0 || canvas.height === 0) {
-                console.error('❌ [HEATMAP] Canvas нулевого размера!');
-                return;
-            }
+            if (canvas.width === 0 || canvas.height === 0) return;
 
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#6b7280';
@@ -776,18 +757,16 @@
     }
 
     function connectHeatmapWebSocket(symbol) {
-        const streamName = `${symbol.toLowerCase()}usdt@depth@100ms`;
+        // ВАЖНО: depth20@100ms = полный срез топ-20 уровней
+        const streamName = `${symbol.toLowerCase()}usdt@depth20@100ms`;
         const wsUrl = currentMarket === 'future'
             ? `wss://fstream.binance.com/ws/${streamName}`
             : `wss://stream.binance.com:9443/ws/${streamName}`;
-
-        console.log(`🔌 [HEATMAP] Подключение к WebSocket: ${wsUrl}`);
 
         try {
             heatmapWs = new WebSocket(wsUrl);
 
             heatmapWs.onopen = () => {
-                console.log(`✅ [HEATMAP] WebSocket ПОДКЛЮЧЕН (${currentMarket})`);
                 heatmapDebug.useWebSocket = true;
             };
 
@@ -799,38 +778,28 @@
 
                     processHeatmapData(data);
                     drawHeatmap();
-
-                    if (heatmapDebug.messages % 20 === 0) {
-                        console.log(`📊 [HEATMAP] WS: ${heatmapDebug.messages} сообщений, история: ${heatmapHistory.length}`);
-                    }
                 } catch (err) {
                     console.error('❌ [HEATMAP] Ошибка парсинга:', err);
                 }
             };
 
             heatmapWs.onerror = (e) => {
-                console.error(`❌ [HEATMAP] WebSocket ОШИБКА (${currentMarket})`);
-                console.log('⚠️ [HEATMAP] Переключаюсь на polling...');
                 if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
                 connectHeatmapPolling(symbol);
             };
 
             heatmapWs.onclose = () => {
-                console.log(`🔌 [HEATMAP] WebSocket закрыт`);
                 if (heatmapDebug.useWebSocket && heatmapDebug.messages < 10) {
-                    console.log('⚠️ [HEATMAP] WebSocket закрылся рано, пробую polling');
                     connectHeatmapPolling(symbol);
                 }
             };
 
         } catch (err) {
-            console.error('❌ [HEATMAP] Не удалось создать WebSocket:', err);
             connectHeatmapPolling(symbol);
         }
     }
 
     function connectHeatmapPolling(symbol) {
-        console.log(`📡 [HEATMAP] Запуск polling (${currentMarket})`);
         heatmapDebug.useWebSocket = false;
 
         const fetchOrderBook = async () => {
@@ -847,10 +816,6 @@
 
                 processHeatmapData(data);
                 drawHeatmap();
-
-                if (heatmapDebug.messages % 10 === 0) {
-                    console.log(`📊 [HEATMAP] Polling: ${heatmapDebug.messages} обновлений`);
-                }
             } catch (err) {
                 console.error('❌ [HEATMAP] Ошибка polling:', err);
             }
@@ -860,192 +825,130 @@
         heatmapPollTimer = setInterval(fetchOrderBook, 1000);
     }
 
-  function processHeatmapData(data) {
-    // Binance WebSocket использует 'b' и 'a', REST API использует 'bids' и 'asks'
-    const bids = data.b || data.bids;
-    const asks = data.a || data.asks;
+    function processHeatmapData(data) {
+        // Binance WebSocket: 'b' и 'a', REST API: 'bids' и 'asks'
+        const bids = data.b || data.bids;
+        const asks = data.a || data.asks;
 
-    if (!bids || !asks) {
-        console.warn('⚠️ [PROCESS] Нет bids/asks в данных:', Object.keys(data));
-        return;
+        if (!bids || !asks) return;
+
+        const timestamp = Date.now();
+
+        if (bids.length > 0 && asks.length > 0) {
+            heatmapCurrentPrice = (parseFloat(bids[0][0]) + parseFloat(asks[0][0])) / 2;
+        }
+
+        heatmapHistory.push({
+            time: timestamp,
+            bids: bids.slice(0, 20),
+            asks: asks.slice(0, 20)
+        });
+
+        if (heatmapHistory.length > maxHistoryLength) {
+            heatmapHistory.shift();
+        }
     }
-
-    const timestamp = Date.now();
-
-    // Обновляем текущую цену
-    if (bids.length > 0 && asks.length > 0) {
-        heatmapCurrentPrice = (parseFloat(bids[0][0]) + parseFloat(asks[0][0])) / 2;
-    }
-
-    // Добавляем в историю
-    heatmapHistory.push({
-        time: timestamp,
-        bids: bids.slice(0, 20),
-        asks: asks.slice(0, 20)
-    });
-
-    // Ограничиваем историю
-    if (heatmapHistory.length > maxHistoryLength) {
-        heatmapHistory.shift();
-    }
-}
 
     function drawHeatmap() {
-    const canvas = document.getElementById('heatmap-canvas');
-    if (!canvas) {
-        console.error('❌ [HEATMAP DRAW] Canvas не найден');
-        return;
-    }
+        const canvas = document.getElementById('heatmap-canvas');
+        if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
 
-    console.log(`📐 [HEATMAP DRAW] Canvas: ${width}x${height}, история: ${heatmapHistory.length}`);
+        if (width === 0 || height === 0) return;
 
-    if (width === 0 || height === 0) {
-        console.error('❌ [HEATMAP DRAW] Canvas нулевого размера');
-        return;
-    }
+        ctx.clearRect(0, 0, width, height);
 
-    ctx.clearRect(0, 0, width, height);
-
-    if (heatmapHistory.length === 0) {
-        console.log('⚠️ [HEATMAP DRAW] История пуста');
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '12px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText('Ожидание данных...', width / 2, height / 2);
-        return;
-    }
-
-    // Собираем все цены
-    const priceMap = new Map();
-    heatmapHistory.forEach((snapshot, timeIndex) => {
-        snapshot.bids.forEach(([price, qty]) => {
-            const p = parseFloat(price);
-            const v = p * parseFloat(qty);
-            if (!priceMap.has(p)) {
-                priceMap.set(p, {
-                    bids: new Array(maxHistoryLength).fill(0),
-                    asks: new Array(maxHistoryLength).fill(0)
-                });
-            }
-            priceMap.get(p).bids[timeIndex] = v;
-        });
-        snapshot.asks.forEach(([price, qty]) => {
-            const p = parseFloat(price);
-            const v = p * parseFloat(qty);
-            if (!priceMap.has(p)) {
-                priceMap.set(p, {
-                    bids: new Array(maxHistoryLength).fill(0),
-                    asks: new Array(maxHistoryLength).fill(0)
-                });
-            }
-            priceMap.get(p).asks[timeIndex] = v;
-        });
-    });
-
-    const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
-
-    console.log(`📊 [HEATMAP DRAW] Уровней цен: ${sortedPrices.length}, priceMap size: ${priceMap.size}`);
-
-    if (sortedPrices.length === 0) {
-        console.error('❌ [HEATMAP DRAW] sortedPrices пуст!');
-        ctx.fillStyle = '#ef4444';
-        ctx.font = '12px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText('Ошибка: нет данных', width / 2, height / 2);
-        return;
-    }
-
-    // Находим максимальный объем
-    let maxVolume = 0;
-    priceMap.forEach(data => {
-        data.bids.forEach(v => { if (v > maxVolume) maxVolume = v; });
-        data.asks.forEach(v => { if (v > maxVolume) maxVolume = v; });
-    });
-
-    console.log(`💰 [HEATMAP DRAW] Max volume: ${maxVolume}`);
-
-    if (maxVolume === 0) {
-        console.error('❌ [HEATMAP DRAW] maxVolume = 0!');
-        ctx.fillStyle = '#ef4444';
-        ctx.font = '12px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText('Ошибка: объемы = 0', width / 2, height / 2);
-        return;
-    }
-
-    const timeStep = width / maxHistoryLength;
-    const priceStep = height / sortedPrices.length;
-
-    console.log(`📏 [HEATMAP DRAW] timeStep: ${timeStep}, priceStep: ${priceStep}`);
-
-    let pixelsDrawn = 0;
-
-    // Рисуем
-    sortedPrices.forEach((price, priceIndex) => {
-        const y = priceIndex * priceStep;
-        const priceData = priceMap.get(price);
-
-        for (let t = 0; t < heatmapHistory.length; t++) {
-            const x = t * timeStep;
-
-            // BID (зеленый)
-            let volume = priceData.bids[t];
-            if (volume > 0) {
-                const intensity = volume / maxVolume;
-                const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
-                ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
-                ctx.fillRect(x, y, timeStep + 1, priceStep);
-                pixelsDrawn++;
-            }
-
-            // ASK (красный)
-            volume = priceData.asks[t];
-            if (volume > 0) {
-                const intensity = volume / maxVolume;
-                const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
-                ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
-                ctx.fillRect(x, y, timeStep + 1, priceStep);
-                pixelsDrawn++;
-            }
+        if (heatmapHistory.length === 0) {
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '12px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText('Ожидание данных...', width / 2, height / 2);
+            return;
         }
-    });
 
-    console.log(`🎨 [HEATMAP DRAW] Нарисовано пикселей: ${pixelsDrawn}`);
+        const priceMap = new Map();
+        heatmapHistory.forEach((snapshot, timeIndex) => {
+            snapshot.bids.forEach(([price, qty]) => {
+                const p = parseFloat(price);
+                const v = parseFloat(qty);
+                if (!priceMap.has(p)) {
+                    priceMap.set(p, {
+                        bids: new Array(maxHistoryLength).fill(0),
+                        asks: new Array(maxHistoryLength).fill(0)
+                    });
+                }
+                priceMap.get(p).bids[timeIndex] = v;
+            });
+            snapshot.asks.forEach(([price, qty]) => {
+                const p = parseFloat(price);
+                const v = parseFloat(qty);
+                if (!priceMap.has(p)) {
+                    priceMap.set(p, {
+                        bids: new Array(maxHistoryLength).fill(0),
+                        asks: new Array(maxHistoryLength).fill(0)
+                    });
+                }
+                priceMap.get(p).asks[timeIndex] = v;
+            });
+        });
 
-    // Рисуем линию текущей цены
-    if (heatmapCurrentPrice > 0) {
-        const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
-        if (priceIndex >= 0) {
+        const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
+        if (sortedPrices.length === 0) return;
+
+        let maxQty = 0;
+        priceMap.forEach(data => {
+            data.bids.forEach(v => { if (v > maxQty) maxQty = v; });
+            data.asks.forEach(v => { if (v > maxQty) maxQty = v; });
+        });
+
+        if (maxQty === 0) return;
+
+        const timeStep = width / maxHistoryLength;
+        const priceStep = height / sortedPrices.length;
+
+        sortedPrices.forEach((price, priceIndex) => {
             const y = priceIndex * priceStep;
-            ctx.strokeStyle = '#f0b90b';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(width, y);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            console.log(`📍 [HEATMAP DRAW] Линия цены на Y: ${y}`);
-        } else {
-            console.log(`⚠️ [HEATMAP DRAW] Не нашел индекс для цены ${heatmapCurrentPrice}`);
+            const priceData = priceMap.get(price);
+
+            for (let t = 0; t < heatmapHistory.length; t++) {
+                const x = t * timeStep;
+
+                let qty = priceData.bids[t];
+                if (qty > 0) {
+                    const intensity = qty / maxQty;
+                    const alpha = Math.pow(intensity, 0.5);
+                    ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
+                    ctx.fillRect(x, y, Math.ceil(timeStep) + 1, Math.ceil(priceStep));
+                }
+
+                qty = priceData.asks[t];
+                if (qty > 0) {
+                    const intensity = qty / maxQty;
+                    const alpha = Math.pow(intensity, 0.5);
+                    ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
+                    ctx.fillRect(x, y, Math.ceil(timeStep) + 1, Math.ceil(priceStep));
+                }
+            }
+        });
+
+        if (heatmapCurrentPrice > 0) {
+            const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
+            if (priceIndex >= 0) {
+                const y = priceIndex * priceStep;
+                ctx.strokeStyle = '#f0b90b';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
         }
     }
-
-    // Рисуем тестовый прямоугольник для проверки
-    if (pixelsDrawn === 0) {
-        console.warn('⚠️ [HEATMAP DRAW] НИЧЕГО НЕ НАРИСОВАНО! Рисуем тестовый квадрат...');
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
-        ctx.fillRect(width/2 - 50, height/2 - 25, 100, 50);
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText('TEST', width/2, height/2 + 5);
-    }
-}
 
     function resizeHeatmap() {
         const wrapper = document.getElementById('heatmap-wrapper');
@@ -1056,7 +959,6 @@
         const rect = wrapper.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
-        console.log(`📐 [HEATMAP] Resize: ${canvas.width}x${canvas.height}`);
         drawHeatmap();
     }
 
@@ -1140,7 +1042,7 @@
     soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
     const soundBtn = document.getElementById('soundToggle');
     if (soundBtn) {
-        soundBtn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         soundBtn.classList.toggle('muted', !soundEnabled);
     }
 
@@ -1148,7 +1050,6 @@
         const voices = speechSynthesis.getVoices();
         russianVoice = voices.find(v => v.lang.startsWith('ru')) ||
                        voices.find(v => v.lang.includes('ru')) || null;
-        if (russianVoice) console.log(`✅ Найден русский голос: ${russianVoice.name}`);
     }
 
     if ('speechSynthesis' in window) {
@@ -1190,7 +1091,7 @@
         }
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast(' До нового часа 1 минута');
+            showHourToast('⏰ До нового часа 1 минута');
             speak('Внимание, до перехода на новый час осталась 1 минута');
         }
     }
