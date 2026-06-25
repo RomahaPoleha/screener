@@ -860,23 +860,39 @@
         heatmapPollTimer = setInterval(fetchOrderBook, 1000);
     }
 
-    function processHeatmapData(data) {
-        const timestamp = Date.now();
+   function processHeatmapData(data) {
+    console.log('📥 [PROCESS] Получены данные:', data);
+    console.log('📥 [PROCESS] bids:', data.bids?.length, 'asks:', data.asks?.length);
 
-        if (data.bids && data.bids.length > 0 && data.asks && data.asks.length > 0) {
-            heatmapCurrentPrice = (parseFloat(data.bids[0][0]) + parseFloat(data.asks[0][0])) / 2;
-        }
-
-        heatmapHistory.push({
-            time: timestamp,
-            bids: data.bids ? data.bids.slice(0, 20) : [],
-            asks: data.asks ? data.asks.slice(0, 20) : []
-        });
-
-        if (heatmapHistory.length > maxHistoryLength) {
-            heatmapHistory.shift();
-        }
+    if (data.bids && data.bids.length > 0) {
+        console.log('📥 [PROCESS] Первый bid:', data.bids[0]);
     }
+    if (data.asks && data.asks.length > 0) {
+        console.log('📥 [PROCESS] Первый ask:', data.asks[0]);
+    }
+
+    const timestamp = Date.now();
+
+    // Обновляем текущую цену
+    if (data.bids && data.bids.length > 0 && data.asks && data.asks.length > 0) {
+        heatmapCurrentPrice = (parseFloat(data.bids[0][0]) + parseFloat(data.asks[0][0])) / 2;
+        console.log('💰 [PROCESS] Текущая цена:', heatmapCurrentPrice);
+    }
+
+    // Добавляем в историю
+    heatmapHistory.push({
+        time: timestamp,
+        bids: data.bids ? data.bids.slice(0, 20) : [],
+        asks: data.asks ? data.asks.slice(0, 20) : []
+    });
+
+    // Ограничиваем историю
+    if (heatmapHistory.length > maxHistoryLength) {
+        heatmapHistory.shift();
+    }
+
+    console.log('📚 [PROCESS] История:', heatmapHistory.length, 'записей');
+}
 
     function drawHeatmap() {
     const canvas = document.getElementById('heatmap-canvas');
