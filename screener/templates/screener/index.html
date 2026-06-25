@@ -333,7 +333,7 @@
     let candleSeries = null;
     let wsTrades = null;
     let wsCandles = null;
-    let pollTimer = null;
+    let wsCandlesBinance = null;
 
     let currentPrecision = 2;
     let tradeBuffer = [];
@@ -345,7 +345,6 @@
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
-    // === ТЕПЛОВАЯ КАРТА ===
     let heatmapWs = null;
     let heatmapPollTimer = null;
     let heatmapHistory = [];
@@ -545,6 +544,10 @@
             wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
             wsCandles.close(); wsCandles = null;
         }
+        if (wsCandlesBinance) {
+            wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
+            wsCandlesBinance.close(); wsCandlesBinance = null;
+        }
         if (wsTrades) {
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
             wsTrades.close(); wsTrades = null;
@@ -554,7 +557,6 @@
             heatmapWs.onclose = null; heatmapWs.onmessage = null; heatmapWs.onerror = null;
             heatmapWs.close(); heatmapWs = null;
         }
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         if (chart) { chart.remove(); chart = null; candleSeries = null; }
         tradeBuffer = [];
         if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
@@ -573,6 +575,10 @@
             wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
             wsCandles.close(); wsCandles = null;
         }
+        if (wsCandlesBinance) {
+            wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
+            wsCandlesBinance.close(); wsCandlesBinance = null;
+        }
         if (wsTrades) {
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
             wsTrades.close(); wsTrades = null;
@@ -582,7 +588,6 @@
             heatmapWs.onclose = null; heatmapWs.onmessage = null; heatmapWs.onerror = null;
             heatmapWs.close(); heatmapWs = null;
         }
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 
         await new Promise(resolve => setTimeout(resolve, 150));
 
@@ -627,7 +632,9 @@
     async function loadChartData(symbol, tf) {
         if (!chart || !candleSeries) return;
         els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
+
         try {
+            // 1. Загружаем историю с сервера
             const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const history = await res.json();
@@ -649,23 +656,78 @@
             });
             chart.timeScale().scrollToPosition(12, false);
 
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
+            // 2. Подключаемся к Binance WebSocket НАПРЯМУЮ из браузера
+            connectBinanceCandleWebSocket(symbol, tf);
 
-            wsCandles = new WebSocket(wsUrl);
-            wsCandles.onopen = () => {
-                wsCandles.send(JSON.stringify({ symbol: symbol, tf: tf, market: currentMarket }));
-            };
-            wsCandles.onmessage = (e) => {
-                const candle = JSON.parse(e.data);
-                if (candle.error) return;
-                if (currentSymbol === symbol) { candleSeries.update(candle); }
-            };
-            wsCandles.onerror = (e) => { console.error('WebSocket error:', e); };
-            wsCandles.onclose = () => {};
         } catch (err) {
             els.chartTitle.textContent = `Ошибка: ${err.message}`;
             console.error('loadChartData error:', err);
+        }
+    }
+
+    function connectBinanceCandleWebSocket(symbol, tf) {
+        // Закрываем старое соединение
+        if (wsCandlesBinance) {
+            wsCandlesBinance.close();
+            wsCandlesBinance = null;
+        }
+
+        // Определяем URL в зависимости от рынка
+        const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
+        const wsUrl = currentMarket === 'future'
+            ? `wss://fstream.binance.com/ws/${streamName}`
+            : `wss://stream.binance.com:9443/ws/${streamName}`;
+
+        console.log(`🔗 [ГРАФИК] Подключение к Binance WebSocket: ${wsUrl}`);
+
+        try {
+            wsCandlesBinance = new WebSocket(wsUrl);
+
+            wsCandlesBinance.onopen = () => {
+                console.log(`✅ [ГРАФИК] WebSocket подключен (${currentMarket})`);
+            };
+
+            wsCandlesBinance.onmessage = (e) => {
+                try {
+                    const message = JSON.parse(e.data);
+
+                    // Binance kline stream формат
+                    if (message.e === 'kline') {
+                        const k = message.k;
+                        const candle = {
+                            time: parseInt(k.t) / 1000,
+                            open: parseFloat(k.o),
+                            high: parseFloat(k.h),
+                            low: parseFloat(k.l),
+                            close: parseFloat(k.c)
+                        };
+
+                        // Обновляем только если свеча закрыта или это последняя
+                        if (k.x || currentSymbol === symbol.toUpperCase().replace('USDT', '')) {
+                            candleSeries.update(candle);
+                        }
+                    }
+                } catch (err) {
+                    console.error('❌ [ГРАФИК] Ошибка парсинга:', err);
+                }
+            };
+
+            wsCandlesBinance.onerror = (e) => {
+                console.error('❌ [ГРАФИК] WebSocket ошибка');
+            };
+
+            wsCandlesBinance.onclose = () => {
+                console.log('🔌 [ГРАФИК] WebSocket закрыт');
+                // Переподключение через 3 секунды
+                setTimeout(() => {
+                    if (currentSymbol) {
+                        connectBinanceCandleWebSocket(currentSymbol, currentTF);
+                    }
+                }, 3000);
+            };
+
+        } catch (err) {
+            console.error('❌ [ГРАФИК] Не удалось создать WebSocket:', err);
         }
     }
 
@@ -757,7 +819,6 @@
     }
 
     function connectHeatmapWebSocket(symbol) {
-        // ВАЖНО: depth20@100ms = полный срез топ-20 уровней
         const streamName = `${symbol.toLowerCase()}usdt@depth20@100ms`;
         const wsUrl = currentMarket === 'future'
             ? `wss://fstream.binance.com/ws/${streamName}`
@@ -826,7 +887,6 @@
     }
 
     function processHeatmapData(data) {
-        // Binance WebSocket: 'b' и 'a', REST API: 'bids' и 'asks'
         const bids = data.b || data.bids;
         const asks = data.a || data.asks;
 
