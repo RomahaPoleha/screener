@@ -155,5 +155,4 @@ def api_natr(request):
 
 
 def index(request):
-    """Главная страница"""
-    return render(request, 'index.html')
+    return render(request, 'screener/index.html')  # ← Добавь префикс
