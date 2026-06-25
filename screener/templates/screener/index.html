@@ -1092,185 +1092,219 @@
         };
     }
 
-    // === ТЕПЛОВАЯ КАРТА СТАКАНА ===
-    function startHeatmap(symbol) {
-        if (heatmapWs) {
-            heatmapWs.close();
-            heatmapWs = null;
-        }
+// === ТЕПЛОВАЯ КАРТА СТАКАНА ===
+let heatmapWs = null;
+let heatmapHistory = [];
+const maxHistoryLength = 300;
+let heatmapCurrentPrice = 0;
+let heatmapDebug = { messages: 0, lastUpdate: 0 };
 
-        heatmapHistory = [];
-        heatmapCurrentPrice = 0;
+function startHeatmap(symbol) {
+    console.log(`🔥 [HEATMAP] Запуск для ${symbol}`);
 
-        const wrapper = document.getElementById('heatmap-wrapper');
-        if (wrapper) {
-            wrapper.style.display = 'block';
-            setTimeout(() => {
-                resizeHeatmap();
-            }, 100);
-        }
+    if (heatmapWs) {
+        heatmapWs.close();
+        heatmapWs = null;
+    }
 
-        const streamName = `${symbol.toLowerCase()}usdt@depth@100ms`;
-        const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
+    heatmapHistory = [];
+    heatmapCurrentPrice = 0;
+    heatmapDebug = { messages: 0, lastUpdate: 0 };
 
-        console.log(`🔥 Тепловая карта: ${wsUrl}`);
-        heatmapWs = new WebSocket(wsUrl);
+    const wrapper = document.getElementById('heatmap-wrapper');
+    const canvas = document.getElementById('heatmap-canvas');
 
-        heatmapWs.onopen = () => {
-            console.log('✅ Тепловая карта подключена');
-        };
+    if (!wrapper || !canvas) {
+        console.error('❌ [HEATMAP] Не найден wrapper или canvas');
+        return;
+    }
 
-        heatmapWs.onmessage = (e) => {
+    // Показываем wrapper
+    wrapper.style.display = 'block';
+    wrapper.style.position = 'relative';
+    wrapper.style.height = '150px';
+
+    // Устанавливаем размеры canvas
+    setTimeout(() => {
+        const rect = wrapper.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        console.log(`📐 [HEATMAP] Размеры canvas: ${canvas.width}x${canvas.height}`);
+
+        // Рисуем начальное сообщение
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '12px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('Подключение к стакану...', canvas.width / 2, canvas.height / 2);
+    }, 100);
+
+    // Подключаемся к Binance
+    const streamName = `${symbol.toLowerCase()}usdt@depth@100ms`;
+    const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
+
+    console.log(`🔗 [HEATMAP] URL: ${wsUrl}`);
+    heatmapWs = new WebSocket(wsUrl);
+
+    heatmapWs.onopen = () => {
+        console.log('✅ [HEATMAP] WebSocket подключен');
+    };
+
+    heatmapWs.onmessage = (e) => {
+        heatmapDebug.messages++;
+        heatmapDebug.lastUpdate = Date.now();
+
+        try {
             const data = JSON.parse(e.data);
             processHeatmapData(data);
             drawHeatmap();
-        };
 
-        heatmapWs.onerror = (e) => {
-            console.error('❌ Ошибка тепловой карты:', e);
-        };
+            // Логируем каждые 10 сообщений
+            if (heatmapDebug.messages % 10 === 0) {
+                console.log(`📊 [HEATMAP] Получено сообщений: ${heatmapDebug.messages}, история: ${heatmapHistory.length}`);
+            }
+        } catch (err) {
+            console.error('❌ [HEATMAP] Ошибка обработки:', err);
+        }
+    };
 
-        heatmapWs.onclose = () => {
-            console.log('🔌 Тепловая карта закрыта');
-        };
+    heatmapWs.onerror = (e) => {
+        console.error('❌ [HEATMAP] WebSocket ошибка:', e);
+    };
+
+    heatmapWs.onclose = () => {
+        console.log('🔌 [HEATMAP] WebSocket закрыт');
+    };
+}
+
+function processHeatmapData(data) {
+    const timestamp = Date.now();
+
+    if (data.bids && data.bids.length > 0 && data.asks && data.asks.length > 0) {
+        heatmapCurrentPrice = (parseFloat(data.bids[0][0]) + parseFloat(data.asks[0][0])) / 2;
     }
 
-    function processHeatmapData(data) {
-        const timestamp = Date.now();
+    heatmapHistory.push({
+        time: timestamp,
+        bids: data.bids ? data.bids.slice(0, 20) : [],
+        asks: data.asks ? data.asks.slice(0, 20) : []
+    });
 
-        if (data.bids && data.bids.length > 0 && data.asks && data.asks.length > 0) {
-            heatmapCurrentPrice = (parseFloat(data.bids[0][0]) + parseFloat(data.asks[0][0])) / 2;
-        }
+    if (heatmapHistory.length > maxHistoryLength) {
+        heatmapHistory.shift();
+    }
+}
 
-        heatmapHistory.push({
-            time: timestamp,
-            bids: data.bids ? data.bids.slice(0, 20) : [],
-            asks: data.asks ? data.asks.slice(0, 20) : []
-        });
+function drawHeatmap() {
+    const canvas = document.getElementById('heatmap-canvas');
+    if (!canvas) return;
 
-        if (heatmapHistory.length > maxHistoryLength) {
-            heatmapHistory.shift();
-        }
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    if (width === 0 || height === 0) {
+        return;
     }
 
-    function drawHeatmap() {
-        const canvas = document.getElementById('heatmap-canvas');
-        if (!canvas) return;
+    // Очищаем canvas
+    ctx.clearRect(0, 0, width, height);
 
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
+    // Если нет данных - рисуем текст
+    if (heatmapHistory.length === 0) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '12px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('Ожидание данных стакана...', width / 2, height / 2);
+        return;
+    }
 
-        if (width === 0 || height === 0) {
-            return;
-        }
-
-        ctx.clearRect(0, 0, width, height);
-
-        if (heatmapHistory.length === 0) {
-            ctx.fillStyle = '#6b7280';
-            ctx.font = '12px Inter';
-            ctx.textAlign = 'center';
-            ctx.fillText('Ожидание данных стакана...', width / 2, height / 2);
-            return;
-        }
-
-        const priceMap = new Map();
-        heatmapHistory.forEach(snapshot => {
-            snapshot.bids.forEach(([price, qty]) => {
-                const p = parseFloat(price);
-                const v = p * parseFloat(qty);
-                if (!priceMap.has(p)) priceMap.set(p, []);
-                priceMap.get(p).push({ time: snapshot.time, volume: v, side: 'bid' });
-            });
-            snapshot.asks.forEach(([price, qty]) => {
-                const p = parseFloat(price);
-                const v = p * parseFloat(qty);
-                if (!priceMap.has(p)) priceMap.set(p, []);
-                priceMap.get(p).push({ time: snapshot.time, volume: v, side: 'ask' });
-            });
+    // Собираем все цены
+    const priceMap = new Map();
+    heatmapHistory.forEach((snapshot, timeIndex) => {
+        snapshot.bids.forEach(([price, qty]) => {
+            const p = parseFloat(price);
+            const v = p * parseFloat(qty);
+            if (!priceMap.has(p)) priceMap.set(p, { bids: new Array(maxHistoryLength).fill(0), asks: new Array(maxHistoryLength).fill(0) });
+            priceMap.get(p).bids[timeIndex] = v;
         });
-
-        const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
-        if (sortedPrices.length === 0) return;
-
-        let maxVolume = 0;
-        priceMap.forEach(entries => {
-            entries.forEach(e => {
-                if (e.volume > maxVolume) maxVolume = e.volume;
-            });
+        snapshot.asks.forEach(([price, qty]) => {
+            const p = parseFloat(price);
+            const v = p * parseFloat(qty);
+            if (!priceMap.has(p)) priceMap.set(p, { bids: new Array(maxHistoryLength).fill(0), asks: new Array(maxHistoryLength).fill(0) });
+            priceMap.get(p).asks[timeIndex] = v;
         });
+    });
 
-        const timeStep = width / maxHistoryLength;
-        const priceStep = height / sortedPrices.length;
+    const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
+    if (sortedPrices.length === 0) return;
 
-        sortedPrices.forEach((price, priceIndex) => {
+    // Находим максимальный объем
+    let maxVolume = 0;
+    priceMap.forEach(data => {
+        data.bids.forEach(v => { if (v > maxVolume) maxVolume = v; });
+        data.asks.forEach(v => { if (v > maxVolume) maxVolume = v; });
+    });
+
+    const timeStep = width / maxHistoryLength;
+    const priceStep = height / sortedPrices.length;
+
+    // Рисуем heatmap
+    sortedPrices.forEach((price, priceIndex) => {
+        const y = priceIndex * priceStep;
+        const priceData = priceMap.get(price);
+
+        for (let t = 0; t < heatmapHistory.length; t++) {
+            const x = t * timeStep;
+
+            // Проверяем bid
+            let volume = priceData.bids[t];
+            if (volume > 0) {
+                const intensity = volume / maxVolume;
+                const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
+                ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
+                ctx.fillRect(x, y, timeStep + 1, priceStep);
+            }
+
+            // Проверяем ask
+            volume = priceData.asks[t];
+            if (volume > 0) {
+                const intensity = volume / maxVolume;
+                const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
+                ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
+                ctx.fillRect(x, y, timeStep + 1, priceStep);
+            }
+        }
+    });
+
+    // Рисуем линию текущей цены
+    if (heatmapCurrentPrice > 0) {
+        const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
+        if (priceIndex >= 0) {
             const y = priceIndex * priceStep;
-
-            for (let t = 0; t < heatmapHistory.length; t++) {
-                const snapshot = heatmapHistory[t];
-                const x = t * timeStep;
-
-                let volume = 0;
-                let isBid = false;
-
-                const bid = snapshot.bids.find(([p]) => parseFloat(p) === price);
-                if (bid) {
-                    volume = parseFloat(bid[0]) * parseFloat(bid[1]);
-                    isBid = true;
-                } else {
-                    const ask = snapshot.asks.find(([p]) => parseFloat(p) === price);
-                    if (ask) {
-                        volume = parseFloat(ask[0]) * parseFloat(ask[1]);
-                        isBid = false;
-                    }
-                }
-
-                if (volume > 0) {
-                    const intensity = volume / maxVolume;
-                    const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
-
-                    ctx.fillStyle = isBid
-                        ? `rgba(34, 197, 94, ${alpha})`
-                        : `rgba(239, 68, 68, ${alpha})`;
-
-                    ctx.fillRect(x, y, timeStep + 1, priceStep);
-                }
-            }
-        });
-
-        if (heatmapCurrentPrice > 0) {
-            const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
-            if (priceIndex >= 0) {
-                const y = priceIndex * priceStep;
-                ctx.strokeStyle = '#f0b90b';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
+            ctx.strokeStyle = '#f0b90b';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
         }
     }
+}
 
-    function resizeHeatmap() {
-        const wrapper = document.getElementById('heatmap-wrapper');
-        const canvas = document.getElementById('heatmap-canvas');
-        if (!wrapper || !canvas) {
-            console.log('⚠️ Canvas или wrapper не найден');
-            return;
-        }
+function resizeHeatmap() {
+    const wrapper = document.getElementById('heatmap-wrapper');
+    const canvas = document.getElementById('heatmap-canvas');
+    if (!wrapper || !canvas) return;
 
-        const rect = wrapper.getBoundingClientRect();
-        console.log(` Resize heatmap: width=${rect.width}, height=${rect.height}`);
-
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-
-        drawHeatmap();
-    }
+    const rect = wrapper.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    console.log(`📐 [HEATMAP] Resize: ${canvas.width}x${canvas.height}`);
+    drawHeatmap();
+}
 
     let sortState = { field: null, direction: 'asc' };
     function sortBy(field) {
