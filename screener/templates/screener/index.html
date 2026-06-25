@@ -130,7 +130,7 @@
             flex: 1;
             position: relative;
             background: #0b0f19;
-            min-height: 400px;
+            min-height: 300px;
         }
         #chart-container {
             width: 100%;
@@ -175,12 +175,38 @@
         }
         .chart-reset-btn:hover { color: #fff; }
 
+        /* Тепловая карта снизу */
+        #heatmap-wrapper {
+            display: none;
+            height: 150px;
+            background: #0b0f19;
+            border-top: 1px solid #2d3748;
+            border-bottom: 1px solid #2d3748;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        #heatmap-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .heatmap-label {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            font-size: 11px;
+            color: #6b7280;
+            z-index: 2;
+            pointer-events: none;
+        }
+
         .trades-panel {
             height: 140px;
             background: #151b2b;
-            border-top: 1px solid #2d3748;
             padding: 8px 12px;
             overflow: hidden;
+            flex-shrink: 0;
         }
         .trades-header {
             display: flex;
@@ -406,7 +432,6 @@
         .coins-header > div:hover { color: #f0b90b; }
         .coins-header .text-end { text-align: right; }
 
-        /* Скрытие NATR для Spot */
         .market-spot .natr-col {
             display: none !important;
         }
@@ -506,6 +531,13 @@
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
         </div>
+
+        <!-- Тепловая карта стакана снизу -->
+        <div id="heatmap-wrapper">
+            <div class="heatmap-label">🔥 Тепловая карта стакана</div>
+            <canvas id="heatmap-canvas"></canvas>
+        </div>
+
         <div class="trades-panel">
             <div class="trades-header">
                 <h6>Крупные сделки</h6>
@@ -610,6 +642,12 @@
         '1m30': null,
         '5m14': null
     };
+
+    // === ТЕПЛОВАЯ КАРТА ===
+    let heatmapWs = null;
+    let heatmapHistory = [];
+    const maxHistoryLength = 300;
+    let heatmapCurrentPrice = 0;
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -820,6 +858,13 @@
             wsTrades.close();
             wsTrades = null;
         }
+        if (heatmapWs) {
+            heatmapWs.onclose = null;
+            heatmapWs.onmessage = null;
+            heatmapWs.onerror = null;
+            heatmapWs.close();
+            heatmapWs = null;
+        }
         if (pollTimer) {
             clearInterval(pollTimer);
             pollTimer = null;
@@ -834,9 +879,12 @@
             clearTimeout(tradeFlushTimer);
             tradeFlushTimer = null;
         }
+        heatmapHistory = [];
         els.chartTitle.textContent = 'График';
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
+        const heatmapWrapper = document.getElementById('heatmap-wrapper');
+        if (heatmapWrapper) heatmapWrapper.style.display = 'none';
         if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
         currentSymbol = '';
     }
@@ -844,9 +892,8 @@
     async function openChart(symbol) {
         console.log(`📊 Открытие графика: ${symbol}`);
 
-        // 1. СРАЗУ закрываем ВСЕ старые соединения
         if (wsCandles) {
-            console.log('🔚 Закрываю старый candles WebSocket');
+            console.log(' Закрываю старый candles WebSocket');
             wsCandles.onclose = null;
             wsCandles.onmessage = null;
             wsCandles.onerror = null;
@@ -854,19 +901,25 @@
             wsCandles = null;
         }
         if (wsTrades) {
-            console.log('🔚 Закрываю старый trades WebSocket');
+            console.log(' Закрываю старый trades WebSocket');
             wsTrades.onclose = null;
             wsTrades.onmessage = null;
             wsTrades.onerror = null;
             wsTrades.close();
             wsTrades = null;
         }
+        if (heatmapWs) {
+            heatmapWs.onclose = null;
+            heatmapWs.onmessage = null;
+            heatmapWs.onerror = null;
+            heatmapWs.close();
+            heatmapWs = null;
+        }
         if (pollTimer) {
             clearInterval(pollTimer);
             pollTimer = null;
         }
 
-        // 2. Ждём чтобы соединения точно закрылись
         await new Promise(resolve => setTimeout(resolve, 150));
 
         currentSymbol = symbol;
@@ -879,15 +932,13 @@
             tradeFlushTimer = null;
         }
 
-        // 3. Очищаем график ПЕРЕД созданием нового
         if (chart) {
-            console.log('️ Удаляю старый график');
+            console.log('🗑️ Удаляю старый график');
             chart.remove();
             chart = null;
             candleSeries = null;
         }
 
-        // 4. Создаём новый график
         try {
             chart = LightweightCharts.createChart(els.chartWrapper, {
                 width: els.chartWrapper.clientWidth,
@@ -918,9 +969,16 @@
             return;
         }
 
-        // 5. Загружаем историю и подключаем WebSocket
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
+
+        // Запускаем тепловую карту для Futures
+        if (currentMarket === 'future') {
+            startHeatmap(symbol);
+        } else {
+            const heatmapWrapper = document.getElementById('heatmap-wrapper');
+            if (heatmapWrapper) heatmapWrapper.style.display = 'none';
+        }
     }
 
     async function loadChartData(symbol, tf) {
@@ -929,11 +987,10 @@
             return;
         }
 
-        console.log(` Загрузка данных: ${symbol} ${tf}`);
+        console.log(`📈 Загрузка данных: ${symbol} ${tf}`);
         els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
 
         try {
-            // 1. Загружаем историю
             const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const history = await res.json();
@@ -958,7 +1015,6 @@
             });
             chart.timeScale().scrollToPosition(12, false);
 
-            // 2. Подключаемся к WebSocket
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
 
@@ -980,7 +1036,6 @@
                     console.error('WS ошибка:', candle.error);
                     return;
                 }
-                // Проверяем что свеча для текущей монеты
                 if (currentSymbol === symbol) {
                     candleSeries.update(candle);
                 }
@@ -1055,6 +1110,169 @@
         };
     }
 
+    // === ТЕПЛОВАЯ КАРТА СТАКАНА ===
+    function startHeatmap(symbol) {
+        if (heatmapWs) {
+            heatmapWs.close();
+            heatmapWs = null;
+        }
+
+        heatmapHistory = [];
+        heatmapCurrentPrice = 0;
+
+        const wrapper = document.getElementById('heatmap-wrapper');
+        if (wrapper) wrapper.style.display = 'block';
+
+        const streamName = `${symbol.toLowerCase()}usdt@depth@100ms`;
+        const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
+
+        console.log(`🔥 Тепловая карта: ${wsUrl}`);
+        heatmapWs = new WebSocket(wsUrl);
+
+        heatmapWs.onopen = () => {
+            console.log('✅ Тепловая карта подключена');
+            resizeHeatmap();
+        };
+
+        heatmapWs.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            processHeatmapData(data);
+            drawHeatmap();
+        };
+
+        heatmapWs.onerror = (e) => {
+            console.error('❌ Ошибка тепловой карты:', e);
+        };
+
+        heatmapWs.onclose = () => {
+            console.log('🔌 Тепловая карта закрыта');
+        };
+    }
+
+    function processHeatmapData(data) {
+        const timestamp = Date.now();
+
+        if (data.bids && data.bids.length > 0 && data.asks && data.asks.length > 0) {
+            heatmapCurrentPrice = (parseFloat(data.bids[0][0]) + parseFloat(data.asks[0][0])) / 2;
+        }
+
+        heatmapHistory.push({
+            time: timestamp,
+            bids: data.bids ? data.bids.slice(0, 20) : [],
+            asks: data.asks ? data.asks.slice(0, 20) : []
+        });
+
+        if (heatmapHistory.length > maxHistoryLength) {
+            heatmapHistory.shift();
+        }
+    }
+
+    function drawHeatmap() {
+        const canvas = document.getElementById('heatmap-canvas');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        ctx.clearRect(0, 0, width, height);
+
+        if (heatmapHistory.length === 0) return;
+
+        // Собираем все уникальные цены
+        const priceMap = new Map();
+        heatmapHistory.forEach(snapshot => {
+            snapshot.bids.forEach(([price, qty]) => {
+                const p = parseFloat(price);
+                const v = p * parseFloat(qty);
+                if (!priceMap.has(p)) priceMap.set(p, []);
+                priceMap.get(p).push({ time: snapshot.time, volume: v, side: 'bid' });
+            });
+            snapshot.asks.forEach(([price, qty]) => {
+                const p = parseFloat(price);
+                const v = p * parseFloat(qty);
+                if (!priceMap.has(p)) priceMap.set(p, []);
+                priceMap.get(p).push({ time: snapshot.time, volume: v, side: 'ask' });
+            });
+        });
+
+        const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
+        if (sortedPrices.length === 0) return;
+
+        // Находим максимальный объем
+        let maxVolume = 0;
+        priceMap.forEach(entries => {
+            entries.forEach(e => {
+                if (e.volume > maxVolume) maxVolume = e.volume;
+            });
+        });
+
+        const timeStep = width / maxHistoryLength;
+        const priceStep = height / sortedPrices.length;
+
+        sortedPrices.forEach((price, priceIndex) => {
+            const y = priceIndex * priceStep;
+            const entries = priceMap.get(price);
+
+            for (let t = 0; t < heatmapHistory.length; t++) {
+                const snapshot = heatmapHistory[t];
+                const x = t * timeStep;
+
+                let volume = 0;
+                let isBid = false;
+
+                const bid = snapshot.bids.find(([p]) => parseFloat(p) === price);
+                if (bid) {
+                    volume = parseFloat(bid[0]) * parseFloat(bid[1]);
+                    isBid = true;
+                } else {
+                    const ask = snapshot.asks.find(([p]) => parseFloat(p) === price);
+                    if (ask) {
+                        volume = parseFloat(ask[0]) * parseFloat(ask[1]);
+                        isBid = false;
+                    }
+                }
+
+                if (volume > 0) {
+                    const intensity = volume / maxVolume;
+                    const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
+
+                    ctx.fillStyle = isBid
+                        ? `rgba(34, 197, 94, ${alpha})`
+                        : `rgba(239, 68, 68, ${alpha})`;
+
+                    ctx.fillRect(x, y, timeStep + 1, priceStep);
+                }
+            }
+        });
+
+        // Рисуем текущую цену
+        if (heatmapCurrentPrice > 0) {
+            const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
+            if (priceIndex >= 0) {
+                const y = priceIndex * priceStep;
+                ctx.strokeStyle = '#f0b90b';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+    }
+
+    function resizeHeatmap() {
+        const wrapper = document.getElementById('heatmap-wrapper');
+        const canvas = document.getElementById('heatmap-canvas');
+        if (!wrapper || !canvas) return;
+
+        canvas.width = wrapper.clientWidth;
+        canvas.height = wrapper.clientHeight;
+        drawHeatmap();
+    }
+
     let sortState = { field: null, direction: 'asc' };
     function sortBy(field) {
         if (sortState.field === field) {
@@ -1123,6 +1341,7 @@
                 height: els.chartWrapper.clientHeight
             });
         }
+        resizeHeatmap();
     });
 
     // === ГОЛОСОВЫЕ ОПОВЕЩЕНИЯ ===
@@ -1133,7 +1352,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
@@ -1194,7 +1413,7 @@
 
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast(' До нового часа 1 минута');
+            showHourToast('⏰ До нового часа 1 минута');
             speak('Внимание, до перехода на новый час осталась 1 минута');
         }
     }
@@ -1209,7 +1428,6 @@
         document.removeEventListener('click', initSpeech);
     }, { once: true });
 
-    // Инициализация класса market-spot при загрузке
     if (currentMarket === 'spot') {
         els.rightPanel.classList.add('market-spot');
         els.natrTime1m.style.display = 'none';
