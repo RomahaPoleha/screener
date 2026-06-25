@@ -879,97 +879,161 @@
     }
 
     function drawHeatmap() {
-        const canvas = document.getElementById('heatmap-canvas');
-        if (!canvas) return;
+    const canvas = document.getElementById('heatmap-canvas');
+    if (!canvas) {
+        console.error('❌ [HEATMAP DRAW] Canvas не найден');
+        return;
+    }
 
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
 
-        if (width === 0 || height === 0) return;
+    console.log(`📐 [HEATMAP DRAW] Canvas: ${width}x${height}, история: ${heatmapHistory.length}`);
 
-        ctx.clearRect(0, 0, width, height);
+    if (width === 0 || height === 0) {
+        console.error('❌ [HEATMAP DRAW] Canvas нулевого размера');
+        return;
+    }
 
-        if (heatmapHistory.length === 0) {
-            ctx.fillStyle = '#6b7280';
-            ctx.font = '12px Inter';
-            ctx.textAlign = 'center';
-            ctx.fillText('Ожидание данных...', width / 2, height / 2);
-            return;
+    ctx.clearRect(0, 0, width, height);
+
+    if (heatmapHistory.length === 0) {
+        console.log('⚠️ [HEATMAP DRAW] История пуста');
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '12px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('Ожидание данных...', width / 2, height / 2);
+        return;
+    }
+
+    // Собираем все цены
+    const priceMap = new Map();
+    heatmapHistory.forEach((snapshot, timeIndex) => {
+        snapshot.bids.forEach(([price, qty]) => {
+            const p = parseFloat(price);
+            const v = p * parseFloat(qty);
+            if (!priceMap.has(p)) {
+                priceMap.set(p, {
+                    bids: new Array(maxHistoryLength).fill(0),
+                    asks: new Array(maxHistoryLength).fill(0)
+                });
+            }
+            priceMap.get(p).bids[timeIndex] = v;
+        });
+        snapshot.asks.forEach(([price, qty]) => {
+            const p = parseFloat(price);
+            const v = p * parseFloat(qty);
+            if (!priceMap.has(p)) {
+                priceMap.set(p, {
+                    bids: new Array(maxHistoryLength).fill(0),
+                    asks: new Array(maxHistoryLength).fill(0)
+                });
+            }
+            priceMap.get(p).asks[timeIndex] = v;
+        });
+    });
+
+    const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
+
+    console.log(`📊 [HEATMAP DRAW] Уровней цен: ${sortedPrices.length}, priceMap size: ${priceMap.size}`);
+
+    if (sortedPrices.length === 0) {
+        console.error('❌ [HEATMAP DRAW] sortedPrices пуст!');
+        ctx.fillStyle = '#ef4444';
+        ctx.font = '12px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('Ошибка: нет данных', width / 2, height / 2);
+        return;
+    }
+
+    // Находим максимальный объем
+    let maxVolume = 0;
+    priceMap.forEach(data => {
+        data.bids.forEach(v => { if (v > maxVolume) maxVolume = v; });
+        data.asks.forEach(v => { if (v > maxVolume) maxVolume = v; });
+    });
+
+    console.log(`💰 [HEATMAP DRAW] Max volume: ${maxVolume}`);
+
+    if (maxVolume === 0) {
+        console.error('❌ [HEATMAP DRAW] maxVolume = 0!');
+        ctx.fillStyle = '#ef4444';
+        ctx.font = '12px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('Ошибка: объемы = 0', width / 2, height / 2);
+        return;
+    }
+
+    const timeStep = width / maxHistoryLength;
+    const priceStep = height / sortedPrices.length;
+
+    console.log(`📏 [HEATMAP DRAW] timeStep: ${timeStep}, priceStep: ${priceStep}`);
+
+    let pixelsDrawn = 0;
+
+    // Рисуем
+    sortedPrices.forEach((price, priceIndex) => {
+        const y = priceIndex * priceStep;
+        const priceData = priceMap.get(price);
+
+        for (let t = 0; t < heatmapHistory.length; t++) {
+            const x = t * timeStep;
+
+            // BID (зеленый)
+            let volume = priceData.bids[t];
+            if (volume > 0) {
+                const intensity = volume / maxVolume;
+                const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
+                ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
+                ctx.fillRect(x, y, timeStep + 1, priceStep);
+                pixelsDrawn++;
+            }
+
+            // ASK (красный)
+            volume = priceData.asks[t];
+            if (volume > 0) {
+                const intensity = volume / maxVolume;
+                const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
+                ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
+                ctx.fillRect(x, y, timeStep + 1, priceStep);
+                pixelsDrawn++;
+            }
         }
+    });
 
-        const priceMap = new Map();
-        heatmapHistory.forEach((snapshot, timeIndex) => {
-            snapshot.bids.forEach(([price, qty]) => {
-                const p = parseFloat(price);
-                const v = p * parseFloat(qty);
-                if (!priceMap.has(p)) {
-                    priceMap.set(p, { bids: new Array(maxHistoryLength).fill(0), asks: new Array(maxHistoryLength).fill(0) });
-                }
-                priceMap.get(p).bids[timeIndex] = v;
-            });
-            snapshot.asks.forEach(([price, qty]) => {
-                const p = parseFloat(price);
-                const v = p * parseFloat(qty);
-                if (!priceMap.has(p)) {
-                    priceMap.set(p, { bids: new Array(maxHistoryLength).fill(0), asks: new Array(maxHistoryLength).fill(0) });
-                }
-                priceMap.get(p).asks[timeIndex] = v;
-            });
-        });
+    console.log(`🎨 [HEATMAP DRAW] Нарисовано пикселей: ${pixelsDrawn}`);
 
-        const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
-        if (sortedPrices.length === 0) return;
-
-        let maxVolume = 0;
-        priceMap.forEach(data => {
-            data.bids.forEach(v => { if (v > maxVolume) maxVolume = v; });
-            data.asks.forEach(v => { if (v > maxVolume) maxVolume = v; });
-        });
-
-        const timeStep = width / maxHistoryLength;
-        const priceStep = height / sortedPrices.length;
-
-        sortedPrices.forEach((price, priceIndex) => {
+    // Рисуем линию текущей цены
+    if (heatmapCurrentPrice > 0) {
+        const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
+        if (priceIndex >= 0) {
             const y = priceIndex * priceStep;
-            const priceData = priceMap.get(price);
-
-            for (let t = 0; t < heatmapHistory.length; t++) {
-                const x = t * timeStep;
-
-                let volume = priceData.bids[t];
-                if (volume > 0) {
-                    const intensity = volume / maxVolume;
-                    const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
-                    ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
-                    ctx.fillRect(x, y, timeStep + 1, priceStep);
-                }
-
-                volume = priceData.asks[t];
-                if (volume > 0) {
-                    const intensity = volume / maxVolume;
-                    const alpha = Math.min(0.3 + (intensity * 0.7), 1.0);
-                    ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
-                    ctx.fillRect(x, y, timeStep + 1, priceStep);
-                }
-            }
-        });
-
-        if (heatmapCurrentPrice > 0) {
-            const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
-            if (priceIndex >= 0) {
-                const y = priceIndex * priceStep;
-                ctx.strokeStyle = '#f0b90b';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
+            ctx.strokeStyle = '#f0b90b';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            console.log(`📍 [HEATMAP DRAW] Линия цены на Y: ${y}`);
+        } else {
+            console.log(`⚠️ [HEATMAP DRAW] Не нашел индекс для цены ${heatmapCurrentPrice}`);
         }
     }
+
+    // Рисуем тестовый прямоугольник для проверки
+    if (pixelsDrawn === 0) {
+        console.warn('⚠️ [HEATMAP DRAW] НИЧЕГО НЕ НАРИСОВАНО! Рисуем тестовый квадрат...');
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+        ctx.fillRect(width/2 - 50, height/2 - 25, 100, 50);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('TEST', width/2, height/2 + 5);
+    }
+}
 
     function resizeHeatmap() {
         const wrapper = document.getElementById('heatmap-wrapper');
