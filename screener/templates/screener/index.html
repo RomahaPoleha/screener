@@ -860,38 +860,34 @@
         heatmapPollTimer = setInterval(fetchOrderBook, 1000);
     }
 
-   function processHeatmapData(data) {
-    console.log('📥 [PROCESS] Получены данные:', data);
-    console.log('📥 [PROCESS] bids:', data.bids?.length, 'asks:', data.asks?.length);
+  function processHeatmapData(data) {
+    // Binance WebSocket использует 'b' и 'a', REST API использует 'bids' и 'asks'
+    const bids = data.b || data.bids;
+    const asks = data.a || data.asks;
 
-    if (data.bids && data.bids.length > 0) {
-        console.log('📥 [PROCESS] Первый bid:', data.bids[0]);
-    }
-    if (data.asks && data.asks.length > 0) {
-        console.log('📥 [PROCESS] Первый ask:', data.asks[0]);
+    if (!bids || !asks) {
+        console.warn('⚠️ [PROCESS] Нет bids/asks в данных:', Object.keys(data));
+        return;
     }
 
     const timestamp = Date.now();
 
     // Обновляем текущую цену
-    if (data.bids && data.bids.length > 0 && data.asks && data.asks.length > 0) {
-        heatmapCurrentPrice = (parseFloat(data.bids[0][0]) + parseFloat(data.asks[0][0])) / 2;
-        console.log('💰 [PROCESS] Текущая цена:', heatmapCurrentPrice);
+    if (bids.length > 0 && asks.length > 0) {
+        heatmapCurrentPrice = (parseFloat(bids[0][0]) + parseFloat(asks[0][0])) / 2;
     }
 
     // Добавляем в историю
     heatmapHistory.push({
         time: timestamp,
-        bids: data.bids ? data.bids.slice(0, 20) : [],
-        asks: data.asks ? data.asks.slice(0, 20) : []
+        bids: bids.slice(0, 20),
+        asks: asks.slice(0, 20)
     });
 
     // Ограничиваем историю
     if (heatmapHistory.length > maxHistoryLength) {
         heatmapHistory.shift();
     }
-
-    console.log('📚 [PROCESS] История:', heatmapHistory.length, 'записей');
 }
 
     function drawHeatmap() {
