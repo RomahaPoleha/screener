@@ -74,21 +74,21 @@
         }
         .chart-reset-btn:hover { color: #fff; }
 
-        /* Уровни поддержки/сопротивления */
-        .reversal-bar {
+        /* Плотности */
+        .density-bar {
             background: #151b2b; border-bottom: 1px solid #2d3748;
             padding: 4px 16px; display: flex; align-items: center; gap: 8px;
             font-size: 11px; color: #9ca3af;
         }
-        .reversal-bar label { margin: 0; white-space: nowrap; }
-        .reversal-bar input[type=range] { width: 100px; accent-color: #f0b90b; }
-        .reversal-bar .reversal-count { color: #f0b90b; font-weight: 600; }
-        .reversal-toggle {
+        .density-bar label { margin: 0; white-space: nowrap; }
+        .density-bar input[type=range] { width: 100px; accent-color: #f0b90b; }
+        .density-bar .density-count { color: #f0b90b; font-weight: 600; }
+        .density-toggle {
             padding: 2px 10px; font-size: 11px; border-radius: 4px;
             border: 1px solid #2d3748; background: transparent; color: #9ca3af; cursor: pointer;
         }
-        .reversal-toggle:hover { color: #fff; border-color: #f0b90b; }
-        .reversal-toggle.active { background: #f0b90b; color: #000; border-color: #f0b90b; font-weight: 700; }
+        .density-toggle:hover { color: #fff; border-color: #f0b90b; }
+        .density-toggle.active { background: #f0b90b; color: #000; border-color: #f0b90b; font-weight: 700; }
 
         .trades-panel {
             height: 140px; background: #151b2b; border-top: 1px solid #2d3748;
@@ -245,13 +245,13 @@
             <div id="chart-container"></div>
         </div>
 
-        <!-- Уровни поддержки/сопротивления -->
-        <div class="reversal-bar" id="reversalBar" style="display:none;">
-            <button class="reversal-toggle active" id="reversalToggle" onclick="toggleReversal()">📈 Уровни</button>
-            <label>Чувств.:</label>
-            <input type="range" id="reversalSensitivity" min="3" max="10" step="1" value="5">
-            <span id="reversalSensitivityVal" style="color:#fff; font-weight:600;">5</span>
-            <span style="margin-left:8px;">Найдено: <span class="reversal-count" id="reversalCount">0</span></span>
+        <!-- Панель плотностей -->
+        <div class="density-bar" id="densityBar" style="display:none;">
+            <button class="density-toggle active" id="densityToggle" onclick="toggleDensity()"> Плотности</button>
+            <label>Мин. $:</label>
+            <input type="range" id="densityThreshold" min="50000" max="2000000" step="50000" value="500000">
+            <span id="densityThresholdVal" style="color:#fff; font-weight:600;">$500K</span>
+            <span style="margin-left:8px;">Найдено: <span class="density-count" id="densityCount">0</span></span>
         </div>
 
         <div class="trades-panel">
@@ -291,7 +291,7 @@
                 <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
             </div>
             <div class="filter-section">
-                <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
+                <button class="reset-filters-btn" onclick="resetFilters()"> Сбросить фильтры</button>
             </div>
         </div>
         <div class="right-panel-header">Монеты (<span id="coinsCount">0</span>)</div>
@@ -356,10 +356,13 @@
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
-    // === УРОВНИ ПОДДЕРЖКИ/СОПРОТИВЛЕНИЯ ===
-    let reversalLines = [];
-    let reversalEnabled = true;
-    let reversalSensitivity = 5;
+    // === ПЛОТНОСТИ ИЗ СТАКАНА ===
+    let densityLines = [];
+    let densityWs = null;
+    let densityEnabled = true;
+    let densityThresholdValue = 500000;
+    let orderBook = { bids: {}, asks: {} };
+    let densityUpdateTimer = null;
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -380,14 +383,14 @@
         });
     }
 
-    // Чувствительность уровней
-    const reversalSensitivitySlider = document.getElementById('reversalSensitivity');
-    const reversalSensitivityVal = document.getElementById('reversalSensitivityVal');
-    if (reversalSensitivitySlider) {
-        reversalSensitivitySlider.addEventListener('input', (e) => {
-            reversalSensitivity = parseInt(e.target.value);
-            reversalSensitivityVal.textContent = reversalSensitivity;
-            if (currentSymbol) findAndDrawReversals(currentSymbol);
+    // Порог плотностей
+    const densityThresholdSlider = document.getElementById('densityThreshold');
+    const densityThresholdVal = document.getElementById('densityThresholdVal');
+    if (densityThresholdSlider) {
+        densityThresholdSlider.addEventListener('input', (e) => {
+            densityThresholdValue = parseInt(e.target.value);
+            densityThresholdVal.textContent = fmtThreshold(densityThresholdValue);
+            if (currentSymbol && densityEnabled) updateDensityLines();
         });
     }
 
@@ -559,97 +562,143 @@
         }).join('');
     }
 
-    // === УРОВНИ ПОДДЕРЖКИ/СОПРОТИВЛЕНИЯ ===
-    function toggleReversal() {
-        reversalEnabled = !reversalEnabled;
-        const btn = document.getElementById('reversalToggle');
-        btn.classList.toggle('active', reversalEnabled);
+    // === ПЛОТНОСТИ ИЗ СТАКАНА ===
+    function toggleDensity() {
+        densityEnabled = !densityEnabled;
+        const btn = document.getElementById('densityToggle');
+        btn.classList.toggle('active', densityEnabled);
 
-        if (reversalEnabled) {
-            if (currentSymbol) findAndDrawReversals(currentSymbol);
+        if (densityEnabled) {
+            if (currentSymbol) connectDensityWebSocket(currentSymbol);
         } else {
-            clearReversalLines();
+            clearDensityLines();
+            if (densityWs) { densityWs.close(); densityWs = null; }
         }
     }
 
-    async function findAndDrawReversals(symbol) {
-        if (!reversalEnabled || !candleSeries) return;
+    function connectDensityWebSocket(symbol) {
+        if (!densityEnabled) return;
+        if (densityWs) { densityWs.close(); densityWs = null; }
 
-        try {
-            const res = await fetch(`/api/candles/${symbol}/?tf=${currentTF}&market=${currentMarket}`);
-            if (!res.ok) return;
-            const candles = await res.json();
+        orderBook = { bids: {}, asks: {} };
+        clearDensityLines();
 
-            clearReversalLines();
+        const streamName = `${symbol.toLowerCase()}usdt@depth20@100ms`;
+        const wsUrl = currentMarket === 'future'
+            ? `wss://fstream.binance.com/ws/${streamName}`
+            : `wss://stream.binance.com:9443/ws/${streamName}`;
 
-            const reversals = findReversalLevels(candles, reversalSensitivity);
+        densityWs = new WebSocket(wsUrl);
 
-            reversals.forEach(level => {
-                const line = candleSeries.createPriceLine({
-                    price: level.price,
-                    color: level.type === 'resistance' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(34, 197, 94, 0.6)',
-                    lineWidth: 2,
-                    lineStyle: LightweightCharts.LineStyle.Dashed,
-                    axisLabelVisible: true,
-                    title: level.type === 'resistance' ? 'R' : 'S'
+        densityWs.onopen = () => {
+            console.log(`📊 Стакан WebSocket подключен: ${symbol}`);
+        };
+
+        densityWs.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+
+                // Обновляем стакан
+                if (data.bids) {
+                    data.bids.forEach(([price, qty]) => {
+                        if (parseFloat(qty) === 0) {
+                            delete orderBook.bids[price];
+                        } else {
+                            orderBook.bids[price] = parseFloat(qty);
+                        }
+                    });
+                }
+
+                if (data.asks) {
+                    data.asks.forEach(([price, qty]) => {
+                        if (parseFloat(qty) === 0) {
+                            delete orderBook.asks[price];
+                        } else {
+                            orderBook.asks[price] = parseFloat(qty);
+                        }
+                    });
+                }
+
+                // Обновляем линии
+                updateDensityLines();
+            } catch (err) {
+                console.error('Ошибка парсинга стакана:', err);
+            }
+        };
+
+        densityWs.onerror = (err) => {
+            console.error('Стакан WebSocket ошибка:', err);
+        };
+
+        densityWs.onclose = () => {
+            console.log(' Стакан WebSocket закрыт');
+            if (currentSymbol === symbol && densityEnabled) {
+                setTimeout(() => connectDensityWebSocket(symbol), 3000);
+            }
+        };
+    }
+
+    function updateDensityLines() {
+        if (!densityEnabled || !candleSeries) return;
+
+        clearDensityLines();
+
+        const densities = [];
+
+        // Сканируем покупки (bids)
+        for (const [price, qty] of Object.entries(orderBook.bids)) {
+            const totalValue = parseFloat(price) * qty;
+            if (totalValue >= densityThresholdValue) {
+                densities.push({
+                    price: parseFloat(price),
+                    volume: totalValue,
+                    side: 'buy'
                 });
-                reversalLines.push(line);
+            }
+        }
+
+        // Сканируем продажи (asks)
+        for (const [price, qty] of Object.entries(orderBook.asks)) {
+            const totalValue = parseFloat(price) * qty;
+            if (totalValue >= densityThresholdValue) {
+                densities.push({
+                    price: parseFloat(price),
+                    volume: totalValue,
+                    side: 'sell'
+                });
+            }
+        }
+
+        // Сортируем по объёму
+        densities.sort((a, b) => b.volume - a.volume);
+
+        // Берём топ-20
+        densities.slice(0, 20).forEach(d => {
+            const line = candleSeries.createPriceLine({
+                price: d.price,
+                color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                title: `$${fmt(d.volume)}`
             });
+            densityLines.push(line);
+        });
 
-            document.getElementById('reversalCount').textContent = reversals.length;
-        } catch (err) {
-            console.error('Ошибка поиска разворотов:', err);
-        }
+        document.getElementById('densityCount').textContent = densities.length;
     }
 
-    function findReversalLevels(candles, sensitivity) {
-        if (candles.length < sensitivity * 2) return [];
-
-        const levels = [];
-        const priceThreshold = 0.002; // 0.2% для кластеризации
-
-        for (let i = sensitivity; i < candles.length - sensitivity; i++) {
-            const candle = candles[i];
-            let isMax = true;
-            let isMin = true;
-
-            for (let j = 1; j <= sensitivity; j++) {
-                if (candles[i - j].high >= candle.high || candles[i + j].high >= candle.high) {
-                    isMax = false;
-                }
-                if (candles[i - j].low <= candle.low || candles[i + j].low <= candle.low) {
-                    isMin = false;
-                }
-            }
-
-            if (isMax) {
-                const price = candle.high;
-                if (!levels.some(l => Math.abs(l.price - price) / price < priceThreshold)) {
-                    levels.push({ price: price, type: 'resistance' });
-                }
-            }
-
-            if (isMin) {
-                const price = candle.low;
-                if (!levels.some(l => Math.abs(l.price - price) / price < priceThreshold)) {
-                    levels.push({ price: price, type: 'support' });
-                }
-            }
-        }
-
-        return levels.slice(0, 15);
-    }
-
-    function clearReversalLines() {
-        reversalLines.forEach(line => {
+    function clearDensityLines() {
+        densityLines.forEach(line => {
             try { candleSeries.removePriceLine(line); } catch (e) {}
         });
-        reversalLines = [];
-        document.getElementById('reversalCount').textContent = '0';
+        densityLines = [];
+        document.getElementById('densityCount').textContent = '0';
     }
 
     function closeChart() {
-        clearReversalLines();
+        clearDensityLines();
+        if (densityWs) { densityWs.close(); densityWs = null; }
 
         if (wsCandles) {
             wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
@@ -666,7 +715,7 @@
         els.chartTitle.textContent = 'График';
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
-        document.getElementById('reversalBar').style.display = 'none';
+        document.getElementById('densityBar').style.display = 'none';
         if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
         currentSymbol = '';
     }
@@ -681,8 +730,9 @@
             wsTrades.close(); wsTrades = null;
         }
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (densityWs) { densityWs.close(); densityWs = null; }
 
-        clearReversalLines();
+        clearDensityLines();
 
         await new Promise(resolve => setTimeout(resolve, 150));
 
@@ -722,9 +772,10 @@
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
 
-        document.getElementById('reversalBar').style.display = 'flex';
-        if (reversalEnabled) {
-            findAndDrawReversals(symbol);
+        // Показываем панель плотностей и подключаем WebSocket стакана
+        document.getElementById('densityBar').style.display = 'flex';
+        if (densityEnabled) {
+            connectDensityWebSocket(symbol);
         }
     }
 
@@ -909,7 +960,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
