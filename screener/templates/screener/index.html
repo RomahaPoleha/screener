@@ -240,17 +240,17 @@
     <div class="left-panel">
         <div class="chart-area">
             <div class="chart-title-bar" id="chart-title">График</div>
-            <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
+            <button class="chart-reset-btn" onclick="closeChart()"> Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
         </div>
 
         <!-- Панель плотностей -->
         <div class="density-bar" id="densityBar" style="display:none;">
-            <button class="density-toggle active" id="densityToggle" onclick="toggleDensity()"> Плотности</button>
+            <button class="density-toggle active" id="densityToggle" onclick="toggleDensity()">📊 Плотности</button>
             <label>Мин. $:</label>
-            <input type="range" id="densityThreshold" min="50000" max="2000000" step="50000" value="500000">
-            <span id="densityThresholdVal" style="color:#fff; font-weight:600;">$500K</span>
+            <input type="range" id="densityThreshold" min="5000" max="2000000" step="5000" value="50000">
+            <span id="densityThresholdVal" style="color:#fff; font-weight:600;">$50K</span>
             <span style="margin-left:8px;">Найдено: <span class="density-count" id="densityCount">0</span></span>
         </div>
 
@@ -291,7 +291,7 @@
                 <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
             </div>
             <div class="filter-section">
-                <button class="reset-filters-btn" onclick="resetFilters()"> Сбросить фильтры</button>
+                <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
             </div>
         </div>
         <div class="right-panel-header">Монеты (<span id="coinsCount">0</span>)</div>
@@ -356,13 +356,11 @@
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
-    // === ПЛОТНОСТИ ИЗ СТАКАНА ===
+    // === ПЛОТНОСТИ ИЗ СТАКАНА (REST API) ===
     let densityLines = [];
-    let densityWs = null;
     let densityEnabled = true;
-    let densityThresholdValue = 500000;
-    let orderBook = { bids: {}, asks: {} };
-    let densityUpdateTimer = null;
+    let densityThresholdValue = 50000;
+    let densityPollTimer = null;
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -390,7 +388,7 @@
         densityThresholdSlider.addEventListener('input', (e) => {
             densityThresholdValue = parseInt(e.target.value);
             densityThresholdVal.textContent = fmtThreshold(densityThresholdValue);
-            if (currentSymbol && densityEnabled) updateDensityLines();
+            if (currentSymbol && densityEnabled) fetchAndDrawDensities(currentSymbol);
         });
     }
 
@@ -562,130 +560,113 @@
         }).join('');
     }
 
-    // === ПЛОТНОСТИ ИЗ СТАКАНА ===
+    // === ПЛОТНОСТИ ИЗ СТАКАНА (REST API POLLING) ===
     function toggleDensity() {
         densityEnabled = !densityEnabled;
         const btn = document.getElementById('densityToggle');
         btn.classList.toggle('active', densityEnabled);
 
         if (densityEnabled) {
-            if (currentSymbol) connectDensityWebSocket(currentSymbol);
+            if (currentSymbol) startDensityPolling(currentSymbol);
         } else {
             clearDensityLines();
-            if (densityWs) { densityWs.close(); densityWs = null; }
+            if (densityPollTimer) {
+                clearInterval(densityPollTimer);
+                densityPollTimer = null;
+            }
         }
     }
 
-    function connectDensityWebSocket(symbol) {
-        if (!densityEnabled) return;
-        if (densityWs) { densityWs.close(); densityWs = null; }
-
-        orderBook = { bids: {}, asks: {} };
-        clearDensityLines();
-
-        const streamName = `${symbol.toLowerCase()}usdt@depth20@100ms`;
-        const wsUrl = currentMarket === 'future'
-            ? `wss://fstream.binance.com/ws/${streamName}`
-            : `wss://stream.binance.com:9443/ws/${streamName}`;
-
-        densityWs = new WebSocket(wsUrl);
-
-        densityWs.onopen = () => {
-            console.log(`📊 Стакан WebSocket подключен: ${symbol}`);
-        };
-
-        densityWs.onmessage = (e) => {
-            try {
-                const data = JSON.parse(e.data);
-
-                // Обновляем стакан
-                if (data.bids) {
-                    data.bids.forEach(([price, qty]) => {
-                        if (parseFloat(qty) === 0) {
-                            delete orderBook.bids[price];
-                        } else {
-                            orderBook.bids[price] = parseFloat(qty);
-                        }
-                    });
-                }
-
-                if (data.asks) {
-                    data.asks.forEach(([price, qty]) => {
-                        if (parseFloat(qty) === 0) {
-                            delete orderBook.asks[price];
-                        } else {
-                            orderBook.asks[price] = parseFloat(qty);
-                        }
-                    });
-                }
-
-                // Обновляем линии
-                updateDensityLines();
-            } catch (err) {
-                console.error('Ошибка парсинга стакана:', err);
-            }
-        };
-
-        densityWs.onerror = (err) => {
-            console.error('Стакан WebSocket ошибка:', err);
-        };
-
-        densityWs.onclose = () => {
-            console.log(' Стакан WebSocket закрыт');
-            if (currentSymbol === symbol && densityEnabled) {
-                setTimeout(() => connectDensityWebSocket(symbol), 3000);
-            }
-        };
-    }
-
-    function updateDensityLines() {
+    async function fetchAndDrawDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
 
-        clearDensityLines();
+        try {
+            // Получаем стакан через REST API (глубина 1000 уровней)
+            const apiUrl = currentMarket === 'future'
+                ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol.toUpperCase()}USDT&limit=1000`
+                : `https://api.binance.com/api/v3/depth?symbol=${symbol.toUpperCase()}USDT&limit=1000`;
 
-        const densities = [];
+            const res = await fetch(apiUrl);
+            if (!res.ok) return;
+            const data = await res.json();
 
-        // Сканируем покупки (bids)
-        for (const [price, qty] of Object.entries(orderBook.bids)) {
-            const totalValue = parseFloat(price) * qty;
-            if (totalValue >= densityThresholdValue) {
-                densities.push({
-                    price: parseFloat(price),
-                    volume: totalValue,
-                    side: 'buy'
+            clearDensityLines();
+
+            const densities = [];
+
+            // Сканируем bids (покупки)
+            if (data.bids) {
+                data.bids.forEach(([price, qty]) => {
+                    const priceNum = parseFloat(price);
+                    const qtyNum = parseFloat(qty);
+                    const totalValue = priceNum * qtyNum;
+                    if (totalValue >= densityThresholdValue) {
+                        densities.push({
+                            price: priceNum,
+                            volume: totalValue,
+                            side: 'buy'
+                        });
+                    }
                 });
             }
-        }
 
-        // Сканируем продажи (asks)
-        for (const [price, qty] of Object.entries(orderBook.asks)) {
-            const totalValue = parseFloat(price) * qty;
-            if (totalValue >= densityThresholdValue) {
-                densities.push({
-                    price: parseFloat(price),
-                    volume: totalValue,
-                    side: 'sell'
+            // Сканируем asks (продажи)
+            if (data.asks) {
+                data.asks.forEach(([price, qty]) => {
+                    const priceNum = parseFloat(price);
+                    const qtyNum = parseFloat(qty);
+                    const totalValue = priceNum * qtyNum;
+                    if (totalValue >= densityThresholdValue) {
+                        densities.push({
+                            price: priceNum,
+                            volume: totalValue,
+                            side: 'sell'
+                        });
+                    }
                 });
             }
-        }
 
-        // Сортируем по объёму
-        densities.sort((a, b) => b.volume - a.volume);
+            // Сортируем по объёму
+            densities.sort((a, b) => b.volume - a.volume);
 
-        // Берём топ-20
-        densities.slice(0, 20).forEach(d => {
-            const line = candleSeries.createPriceLine({
-                price: d.price,
-                color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-                lineWidth: 2,
-                lineStyle: LightweightCharts.LineStyle.Solid,
-                axisLabelVisible: true,
-                title: `$${fmt(d.volume)}`
+            // Берём топ-20
+            const topDensities = densities.slice(0, 20);
+
+            console.log(`📊 Плотности ${symbol}: найдено ${densities.length}, показываем ${topDensities.length}`);
+
+            topDensities.forEach(d => {
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                    lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    title: `$${fmt(d.volume)}`
+                });
+                densityLines.push(line);
             });
-            densityLines.push(line);
-        });
 
-        document.getElementById('densityCount').textContent = densities.length;
+            document.getElementById('densityCount').textContent = topDensities.length;
+
+        } catch (err) {
+            console.error('❌ Ошибка загрузки плотностей:', err);
+        }
+    }
+
+    function startDensityPolling(symbol) {
+        if (densityPollTimer) {
+            clearInterval(densityPollTimer);
+        }
+
+        // Сразу загружаем
+        fetchAndDrawDensities(symbol);
+
+        // Обновляем каждые 2 секунды
+        densityPollTimer = setInterval(() => {
+            if (currentSymbol === symbol && densityEnabled) {
+                fetchAndDrawDensities(symbol);
+            }
+        }, 2000);
     }
 
     function clearDensityLines() {
@@ -698,7 +679,10 @@
 
     function closeChart() {
         clearDensityLines();
-        if (densityWs) { densityWs.close(); densityWs = null; }
+        if (densityPollTimer) {
+            clearInterval(densityPollTimer);
+            densityPollTimer = null;
+        }
 
         if (wsCandles) {
             wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
@@ -730,7 +714,7 @@
             wsTrades.close(); wsTrades = null;
         }
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        if (densityWs) { densityWs.close(); densityWs = null; }
+        if (densityPollTimer) { clearInterval(densityPollTimer); densityPollTimer = null; }
 
         clearDensityLines();
 
@@ -772,10 +756,10 @@
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
 
-        // Показываем панель плотностей и подключаем WebSocket стакана
+        // Показываем панель плотностей и запускаем polling
         document.getElementById('densityBar').style.display = 'flex';
         if (densityEnabled) {
-            connectDensityWebSocket(symbol);
+            startDensityPolling(symbol);
         }
     }
 
@@ -960,7 +944,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
@@ -969,7 +953,7 @@
     soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
     const soundBtn = document.getElementById('soundToggle');
     if (soundBtn) {
-        soundBtn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
         soundBtn.classList.toggle('muted', !soundEnabled);
     }
 
@@ -1013,7 +997,7 @@
         const currentMinuteKey = now.getHours() * 60 + minutes;
         if (minutes === 55 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast('⏰ До нового часа 5 минут');
+            showHourToast(' До нового часа 5 минут');
             speak('До перехода на новый час осталось 5 минут');
         }
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
