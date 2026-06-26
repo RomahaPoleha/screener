@@ -11,189 +11,371 @@
         body {
             background-color: #0b0f19;
             font-family: 'Inter', system-ui, sans-serif;
-            margin: 0; padding: 0; overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
             color: #d1d5db;
         }
+
         .top-bar {
-            background: #151b2b; border-bottom: 1px solid #2d3748;
-            padding: 8px 16px; display: flex; align-items: center;
-            gap: 16px; flex-wrap: wrap;
+            background: #151b2b;
+            border-bottom: 1px solid #2d3748;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
         }
-        .top-bar .logo { font-size: 18px; font-weight: 700; color: #f0b90b; margin-right: 8px; }
+        .top-bar .logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f0b90b;
+            margin-right: 8px;
+        }
+
         .market-btn {
-            padding: 4px 14px; font-size: 13px; font-weight: 600;
-            border-radius: 6px; border: 1px solid #2d3748;
-            background: transparent; color: #d1d5db; cursor: pointer; transition: all 0.2s;
+            padding: 4px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            border: 1px solid #2d3748;
+            background: transparent;
+            color: #d1d5db;
+            cursor: pointer;
+            transition: all 0.2s;
         }
         .market-btn:hover { background: #2d3748; }
-        .market-btn.active { background: #f0b90b; color: #000; border-color: #f0b90b; }
-        .status-badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+        .market-btn.active {
+            background: #f0b90b;
+            color: #000;
+            border-color: #f0b90b;
+        }
+
+        .status-badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
         .natr-time {
-            font-size: 11px; padding: 3px 8px; border-radius: 4px;
-            background: transparent; border: 1px solid #2d3748; color: #9ca3af;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: transparent;
+            border: 1px solid #2d3748;
+            color: #9ca3af;
         }
+
         .sound-toggle {
-            padding: 4px 12px; font-size: 12px; font-weight: 600;
-            border-radius: 6px; border: 1px solid #3d4558;
-            background: #2d3748; color: #9ca3af; cursor: pointer;
-            transition: all 0.2s; margin-left: auto;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            border: 1px solid #3d4558;
+            background: #2d3748;
+            color: #9ca3af;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-left: auto;
         }
-        .sound-toggle:hover { background: #3d4558; color: #fff; }
-        .sound-toggle.muted { background: #ef4444; color: #fff; border-color: #ef4444; }
+        .sound-toggle:hover {
+            background: #3d4558;
+            color: #fff;
+        }
+        .sound-toggle.muted {
+            background: #ef4444;
+            color: #fff;
+            border-color: #ef4444;
+        }
+
         .tf-bar {
-            background: #151b2b; border-bottom: 1px solid #2d3748;
-            padding: 6px 16px; display: flex; align-items: center; gap: 4px;
+            background: #151b2b;
+            border-bottom: 1px solid #2d3748;
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
         .tf-btn {
-            padding: 3px 10px; font-size: 12px; border-radius: 4px;
-            border: 1px solid #2d3748; background: transparent; color: #9ca3af; cursor: pointer;
+            padding: 3px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: 1px solid #2d3748;
+            background: transparent;
+            color: #9ca3af;
+            cursor: pointer;
         }
         .tf-btn:hover { color: #fff; background: #2d3748; }
-        .tf-btn.active { background: #f0b90b; color: #000; border-color: #f0b90b; font-weight: 700; }
-        .main-layout { display: flex; height: calc(100vh - 110px); }
-        .left-panel {
-            flex: 1; display: flex; flex-direction: column;
-            min-width: 0; border-right: 1px solid #2d3748;
+        .tf-btn.active {
+            background: #f0b90b;
+            color: #000;
+            border-color: #f0b90b;
+            font-weight: 700;
         }
-        .chart-area { flex: 1; position: relative; background: #0b0f19; min-height: 300px; }
-        #chart-container { width: 100%; height: 100%; visibility: hidden; }
-        #chart-container.active { visibility: visible; }
+
+        .main-layout {
+            display: flex;
+            height: calc(100vh - 110px);
+        }
+
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            border-right: 1px solid #2d3748;
+        }
+
+        .chart-area {
+            flex: 1;
+            position: relative;
+            background: #0b0f19;
+            min-height: 400px;
+        }
+        #chart-container {
+            width: 100%;
+            height: 100%;
+            visibility: hidden;
+        }
+        #chart-container.active {
+            visibility: visible;
+        }
         #chart-hint {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%); color: #6b7280; font-size: 14px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #6b7280;
+            font-size: 14px;
         }
         .chart-title-bar {
-            position: absolute; top: 8px; left: 12px; z-index: 10;
-            color: #fff; font-size: 14px; font-weight: 600;
-            background: rgba(11, 15, 25, 0.7); padding: 4px 10px; border-radius: 4px;
+            position: absolute;
+            top: 8px;
+            left: 12px;
+            z-index: 10;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(11, 15, 25, 0.7);
+            padding: 4px 10px;
+            border-radius: 4px;
         }
         .chart-reset-btn {
-            position: absolute; top: 8px; right: 12px; z-index: 10;
-            background: rgba(11, 15, 25, 0.7); border: 1px solid #2d3748;
-            color: #9ca3af; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            z-index: 10;
+            background: rgba(11, 15, 25, 0.7);
+            border: 1px solid #2d3748;
+            color: #9ca3af;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
         }
         .chart-reset-btn:hover { color: #fff; }
-        #heatmap-wrapper {
-            height: 150px; background: #0b0f19;
-            border-top: 1px solid #2d3748; border-bottom: 1px solid #2d3748;
-            position: relative; overflow: hidden; flex-shrink: 0;
-            display: none;
-        }
-        #heatmap-wrapper.visible { display: block; }
-        #heatmap-canvas { width: 100%; height: 100%; display: block; }
-        .heatmap-header {
-            position: absolute; top: 0; left: 0; right: 0; height: 24px;
-            display: flex; align-items: center; padding: 0 10px;
-            z-index: 2; background: rgba(11, 15, 25, 0.8);
-            border-bottom: 1px solid #1e2538;
-        }
-        .heatmap-label { font-size: 11px; color: #6b7280; }
-        .heatmap-toggle {
-            margin-left: auto; background: none;
-            border: 1px solid #2d3748; color: #9ca3af;
-            padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 10px;
-        }
-        .heatmap-toggle:hover { color: #fff; border-color: #f0b90b; }
-        .heatmap-toggle.off { color: #ef4444; border-color: #ef4444; }
-        .heatmap-help { position: relative; display: inline-block; margin-left: 6px; cursor: help; }
-        .heatmap-help-icon {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 14px; height: 14px; border-radius: 50%;
-            background: #2d3748; color: #9ca3af;
-            font-size: 10px; font-weight: 700; font-style: italic;
-        }
-        .heatmap-help-icon:hover { background: #f0b90b; color: #000; }
-        .heatmap-tooltip {
-            visibility: hidden; opacity: 0;
-            position: absolute; bottom: 100%; left: 50%;
-            transform: translateX(-50%);
-            background: #1e2538; border: 1px solid #2d3748;
-            border-radius: 6px; padding: 10px 12px;
-            width: 320px; font-size: 11px; color: #d1d5db;
-            z-index: 100; transition: opacity 0.2s;
-            pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
-        .heatmap-help:hover .heatmap-tooltip { visibility: visible; opacity: 1; }
-        .heatmap-tooltip .legend {
-            display: flex; gap: 12px; margin-top: 6px;
-            padding-top: 6px; border-top: 1px solid #2d3748;
-        }
-        .heatmap-tooltip .legend-item { display: flex; align-items: center; gap: 4px; }
-        .heatmap-tooltip .color-box { width: 12px; height: 12px; border-radius: 2px; }
-        .heatmap-tooltip .color-box.bid { background: #22c55e; }
-        .heatmap-tooltip .color-box.ask { background: #ef4444; }
-        .heatmap-tooltip .color-box.price { background: #f0b90b; }
+
         .trades-panel {
-            height: 140px; background: #151b2b; padding: 8px 12px;
-            overflow: hidden; flex-shrink: 0;
+            height: 140px;
+            background: #151b2b;
+            border-top: 1px solid #2d3748;
+            padding: 8px 12px;
+            overflow: hidden;
         }
-        .trades-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-        .trades-header h6 { margin: 0; font-size: 12px; color: #9ca3af; }
-        .trades-controls { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9ca3af; }
-        .trades-controls input[type=range] { width: 80px; accent-color: #f0b90b; }
-        #tradesList { height: 100px; overflow-y: auto; font-family: monospace; font-size: 11px; }
+        .trades-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .trades-header h6 {
+            margin: 0;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .trades-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #9ca3af;
+        }
+        .trades-controls input[type=range] {
+            width: 80px;
+            accent-color: #f0b90b;
+        }
+        #tradesList {
+            height: 100px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 11px;
+        }
         #tradesList::-webkit-scrollbar { width: 4px; }
         #tradesList::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+
         .right-panel {
-            width: 380px; background: #151b2b; display: flex; flex-direction: column;
-            overflow: hidden; border-left: 1px solid #2d3748;
+            width: 380px;
+            background: #151b2b;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-left: 1px solid #2d3748;
         }
-        .filters-panel { padding: 12px; background: #1e2538; border-bottom: 1px solid #2d3748; }
-        .filter-section { margin-bottom: 12px; }
-        .filter-section:last-child { margin-bottom: 0; }
-        .filter-label { display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px; font-weight: 500; }
-        .filter-value { color: #f0b90b; font-weight: 600; }
-        .search-wrapper { position: relative; }
+
+        .filters-panel {
+            padding: 12px;
+            background: #1e2538;
+            border-bottom: 1px solid #2d3748;
+        }
+
+        .filter-section {
+            margin-bottom: 12px;
+        }
+        .filter-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .filter-label {
+            display: block;
+            font-size: 11px;
+            color: #9ca3af;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .filter-value {
+            color: #f0b90b;
+            font-weight: 600;
+        }
+
+        .search-wrapper {
+            position: relative;
+        }
+
         .search-box {
-            width: 100%; background: #0b0f19; border: 1px solid #2d3748;
-            border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 13px; box-sizing: border-box;
+            width: 100%;
+            background: #0b0f19;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 13px;
+            box-sizing: border-box;
         }
-        .search-box:focus { outline: none; border-color: #f0b90b; }
+        .search-box:focus {
+            outline: none;
+            border-color: #f0b90b;
+        }
+
         .search-dropdown {
-            position: absolute; top: 100%; left: 0; right: 0;
-            background: #0b0f19; border: 1px solid #2d3748; border-radius: 6px;
-            margin-top: 4px; max-height: 200px; overflow-y: auto;
-            z-index: 1000; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #0b0f19;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            margin-top: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-        .search-dropdown.active { display: block; }
+        .search-dropdown.active {
+            display: block;
+        }
         .search-dropdown-item {
-            padding: 8px 12px; cursor: pointer; font-size: 12px;
-            color: #d1d5db; border-bottom: 1px solid #1e2538;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #d1d5db;
+            border-bottom: 1px solid #1e2538;
         }
-        .search-dropdown-item:last-child { border-bottom: none; }
-        .search-dropdown-item:hover { background: #1e2538; color: #fff; }
-        .search-dropdown-item .symbol { font-weight: 700; color: #f0b90b; }
-        .search-dropdown-item .name { color: #6b7280; font-size: 11px; margin-left: 6px; }
+        .search-dropdown-item:last-child {
+            border-bottom: none;
+        }
+        .search-dropdown-item:hover {
+            background: #1e2538;
+            color: #fff;
+        }
+        .search-dropdown-item .symbol {
+            font-weight: 700;
+            color: #f0b90b;
+        }
+        .search-dropdown-item .name {
+            color: #6b7280;
+            font-size: 11px;
+            margin-left: 6px;
+        }
+
         .filter-slider {
-            width: 100%; height: 4px; background: #2d3748;
-            border-radius: 2px; outline: none;
-            -webkit-appearance: none; appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #2d3748;
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
         }
         .filter-slider::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 14px; height: 14px;
-            background: #f0b90b; border-radius: 50%; cursor: pointer;
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #f0b90b;
+            border-radius: 50%;
+            cursor: pointer;
         }
         .filter-slider::-moz-range-thumb {
-            width: 14px; height: 14px; background: #f0b90b;
-            border-radius: 50%; cursor: pointer; border: none;
+            width: 14px;
+            height: 14px;
+            background: #f0b90b;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
         }
+
         .reset-filters-btn {
-            width: 100%; padding: 6px; background: #2d3748;
-            border: 1px solid #3d4558; border-radius: 4px;
-            color: #9ca3af; font-size: 11px; cursor: pointer; transition: all 0.2s;
+            width: 100%;
+            padding: 6px;
+            background: #2d3748;
+            border: 1px solid #3d4558;
+            border-radius: 4px;
+            color: #9ca3af;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        .reset-filters-btn:hover { background: #3d4558; color: #fff; }
+        .reset-filters-btn:hover {
+            background: #3d4558;
+            color: #fff;
+        }
+
         .right-panel-header {
-            padding: 8px 12px; border-bottom: 1px solid #2d3748;
-            font-size: 12px; font-weight: 600; color: #fff; background: #0b0f19;
+            padding: 8px 12px;
+            border-bottom: 1px solid #2d3748;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            background: #0b0f19;
         }
-        .coins-table-wrap { flex: 1; overflow-y: auto; }
+
+        .coins-table-wrap {
+            flex: 1;
+            overflow-y: auto;
+        }
         .coins-table-wrap::-webkit-scrollbar { width: 4px; }
         .coins-table-wrap::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+
         .coin-row {
-            display: grid; grid-template-columns: 70px 1fr 1fr 50px 50px;
-            gap: 4px; padding: 6px 12px; border-bottom: 1px solid #1e2538;
-            cursor: pointer; font-size: 11px; align-items: center;
+            display: grid;
+            grid-template-columns: 70px 1fr 1fr 50px 50px;
+            gap: 4px;
+            padding: 6px 12px;
+            border-bottom: 1px solid #1e2538;
+            cursor: pointer;
+            font-size: 11px;
+            align-items: center;
         }
         .coin-row:hover { background: rgba(255,255,255,0.05); }
         .coin-symbol { font-weight: 700; color: #fff; }
@@ -201,43 +383,90 @@
         .coin-volume { text-align: right; color: #9ca3af; }
         .coin-natr { text-align: right; font-weight: 600; }
         .coin-natr.empty { color: #4b5563; }
+
         .text-up { color: #22c55e; }
         .text-down { color: #ef4444; }
         .natr-low { color: #22c55e; }
         .natr-mid { color: #f59e0b; }
         .natr-high { color: #ef4444; }
+
         .coins-header {
-            display: grid; grid-template-columns: 70px 1fr 1fr 50px 50px;
-            gap: 4px; padding: 6px 12px; background: #0b0f19;
-            font-size: 10px; color: #6b7280; border-bottom: 1px solid #2d3748;
-            position: sticky; top: 0;
+            display: grid;
+            grid-template-columns: 70px 1fr 1fr 50px 50px;
+            gap: 4px;
+            padding: 6px 12px;
+            background: #0b0f19;
+            font-size: 10px;
+            color: #6b7280;
+            border-bottom: 1px solid #2d3748;
+            position: sticky;
+            top: 0;
         }
         .coins-header > div { cursor: pointer; user-select: none; }
         .coins-header > div:hover { color: #f0b90b; }
         .coins-header .text-end { text-align: right; }
-        .market-spot .natr-col { display: none !important; }
-        .market-spot .coins-header, .market-spot .coin-row { grid-template-columns: 70px 1fr 1fr !important; }
+
+        /* Скрытие NATR для Spot */
+        .market-spot .natr-col {
+            display: none !important;
+        }
+        .market-spot .coins-header,
+        .market-spot .coin-row {
+            grid-template-columns: 70px 1fr 1fr !important;
+        }
+
         .loader {
-            display: none; width: 14px; height: 14px;
-            border: 2px solid #333; border-top: 2px solid #f0b90b;
-            border-radius: 50%; animation: spin 1s linear infinite;
+            display: none;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #333;
+            border-top: 2px solid #f0b90b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+
         .hour-toast {
-            position: fixed; top: 80px; right: 20px;
+            position: fixed;
+            top: 80px;
+            right: 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff; padding: 16px 20px; border-radius: 12px;
+            color: #fff;
+            padding: 16px 20px;
+            border-radius: 12px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            display: flex; align-items: center; gap: 12px;
-            z-index: 10000; opacity: 0; transform: translateX(400px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10000;
+            opacity: 0;
+            transform: translateX(400px);
             transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
             pointer-events: none;
         }
-        .hour-toast.show { opacity: 1; transform: translateX(0); pointer-events: auto; }
-        .toast-icon { font-size: 32px; animation: pulse 1s ease-in-out infinite; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-        .toast-content { display: flex; flex-direction: column; gap: 4px; }
-        .toast-title { font-size: 14px; font-weight: 700; }
+        .hour-toast.show {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: auto;
+        }
+        .toast-icon {
+            font-size: 32px;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .toast-content {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .toast-title {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
         @media (max-width: 900px) {
             .main-layout { flex-direction: column; height: auto; }
             .right-panel { width: 100%; height: 400px; border-left: none; border-top: 1px solid #2d3748; }
@@ -273,46 +502,10 @@
     <div class="left-panel">
         <div class="chart-area">
             <div class="chart-title-bar" id="chart-title">График</div>
-            <button class="chart-reset-btn" onclick="closeChart()"> Сброс</button>
+            <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
         </div>
-
-        <div id="heatmap-wrapper">
-            <div class="heatmap-header">
-                <span class="heatmap-label">🔥 Тепловая карта стакана</span>
-                <div class="heatmap-help">
-                    <span class="heatmap-help-icon">?</span>
-                    <div class="heatmap-tooltip">
-                        <strong>Тепловая карта стакана (Order Book Heatmap)</strong>
-                        <p style="margin:6px 0 0; color:#9ca3af;">
-                            Показывает <b>лимитные ордера</b> в стакане Binance в реальном времени.
-                            Чем ярче цвет — тем крупнее заявка на этом уровне цены.
-                        </p>
-                        <div class="legend">
-                            <div class="legend-item">
-                                <div class="color-box bid"></div>
-                                <span><b>Зелёный</b> — заявки на ПОКУПКУ (bids/поддержка)</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="color-box ask"></div>
-                                <span><b>Красный</b> — заявки на ПРОДАЖУ (asks/сопротивление)</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="color-box price"></div>
-                                <span><b>Жёлтая линия</b> — текущая цена</span>
-                            </div>
-                        </div>
-                        <p style="margin:6px 0 0; color:#9ca3af; font-size:10px;">
-                            Помогает видеть где стоят крупные игроки и где цена может развернуться.
-                        </p>
-                    </div>
-                </div>
-                <button class="heatmap-toggle" id="heatmapToggle" onclick="toggleHeatmap()">Выкл</button>
-            </div>
-            <canvas id="heatmap-canvas"></canvas>
-        </div>
-
         <div class="trades-panel">
             <div class="trades-header">
                 <h6>Крупные сделки</h6>
@@ -402,7 +595,8 @@
     let chart = null;
     let candleSeries = null;
     let wsTrades = null;
-    let wsCandlesBinance = null;
+    let wsCandles = null;
+    let pollTimer = null;
 
     let currentPrecision = 2;
     let tradeBuffer = [];
@@ -412,20 +606,10 @@
     let currentSymbol = '';
     let currentMarket = 'spot';
 
-    let natrUpdateTimes = { '1m30': null, '5m14': null };
-
-    // === ТЕПЛОВАЯ КАРТА ===
-    let heatmapWs = null;
-    let heatmapPollTimer = null;
-    let heatmapHistory = [];
-    const maxHistoryLength = 300;
-    let heatmapCurrentPrice = 0;
-    let heatmapEnabled = true;
-
-    // === СВЕЧИ ИЗ aggTrade (для Futures) ===
-    let wsAggTrade = null;
-    let currentCandle = null;
-    let currentCandleTime = 0;
+    let natrUpdateTimes = {
+        '1m30': null,
+        '5m14': null
+    };
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -437,16 +621,6 @@
     };
     const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
-
-    // Интервалы в миллисекундах для формирования свечей из trades
-    const TF_INTERVALS_MS = {
-        '1m': 60000,
-        '5m': 300000,
-        '15m': 900000,
-        '30m': 1800000,
-        '1h': 3600000,
-        '4h': 14400000
-    };
 
     if (els.thresholdSlider) {
         els.thresholdValue.textContent = fmtThreshold(currentThreshold);
@@ -478,6 +652,7 @@
             btn.classList.remove('active');
             if (btn.dataset.market === market) btn.classList.add('active');
         });
+
         if (market === 'spot') {
             els.rightPanel.classList.add('market-spot');
             els.natrTime1m.style.display = 'none';
@@ -487,6 +662,7 @@
             els.natrTime1m.style.display = 'inline';
             els.natrTime5m.style.display = 'inline';
         }
+
         if (chart) closeChart();
         loadAllData();
     }
@@ -499,6 +675,7 @@
             } else {
                 els.natrTime1m.textContent = 'NATR 1m: --:--:--';
             }
+
             if (natrUpdateTimes['5m14']) {
                 const time5m = new Date(natrUpdateTimes['5m14']);
                 els.natrTime5m.textContent = `NATR 5m: ${time5m.toLocaleTimeString('ru-RU')}`;
@@ -543,10 +720,12 @@
             if (!res.ok) throw new Error('Ошибка NATR');
             const response = await res.json();
             natrData = response.natr || {};
+
             if (currentMarket === 'future' && response.last_update_times) {
                 natrUpdateTimes = response.last_update_times;
                 updateNatrTimeDisplay();
             }
+
             applyLocalFilters();
         } catch (err) {
             console.error(err);
@@ -625,57 +804,69 @@
     }
 
     function closeChart() {
-        if (wsCandlesBinance) {
-            wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
-            wsCandlesBinance.close(); wsCandlesBinance = null;
-        }
-        if (wsAggTrade) {
-            wsAggTrade.onclose = null; wsAggTrade.onmessage = null; wsAggTrade.onerror = null;
-            wsAggTrade.close(); wsAggTrade = null;
+        console.log('❌ Закрытие графика');
+
+        if (wsCandles) {
+            wsCandles.onclose = null;
+            wsCandles.onmessage = null;
+            wsCandles.onerror = null;
+            wsCandles.close();
+            wsCandles = null;
         }
         if (wsTrades) {
-            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
-            wsTrades.close(); wsTrades = null;
+            wsTrades.onclose = null;
+            wsTrades.onmessage = null;
+            wsTrades.onerror = null;
+            wsTrades.close();
+            wsTrades = null;
         }
-        if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
-        if (heatmapWs) {
-            heatmapWs.onclose = null; heatmapWs.onmessage = null; heatmapWs.onerror = null;
-            heatmapWs.close(); heatmapWs = null;
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
         }
-        if (chart) { chart.remove(); chart = null; candleSeries = null; }
+        if (chart) {
+            chart.remove();
+            chart = null;
+            candleSeries = null;
+        }
         tradeBuffer = [];
-        if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
-        heatmapHistory = [];
-        currentCandle = null;
-        currentCandleTime = 0;
+        if (tradeFlushTimer) {
+            clearTimeout(tradeFlushTimer);
+            tradeFlushTimer = null;
+        }
         els.chartTitle.textContent = 'График';
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
-        const heatmapWrapper = document.getElementById('heatmap-wrapper');
-        if (heatmapWrapper) heatmapWrapper.classList.remove('visible');
         if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Ожидание сделок...</div>';
         currentSymbol = '';
     }
 
     async function openChart(symbol) {
-        if (wsCandlesBinance) {
-            wsCandlesBinance.onclose = null; wsCandlesBinance.onmessage = null; wsCandlesBinance.onerror = null;
-            wsCandlesBinance.close(); wsCandlesBinance = null;
-        }
-        if (wsAggTrade) {
-            wsAggTrade.onclose = null; wsAggTrade.onmessage = null; wsAggTrade.onerror = null;
-            wsAggTrade.close(); wsAggTrade = null;
+        console.log(`📊 Открытие графика: ${symbol}`);
+
+        // 1. СРАЗУ закрываем ВСЕ старые соединения
+        if (wsCandles) {
+            console.log('🔚 Закрываю старый candles WebSocket');
+            wsCandles.onclose = null;
+            wsCandles.onmessage = null;
+            wsCandles.onerror = null;
+            wsCandles.close();
+            wsCandles = null;
         }
         if (wsTrades) {
-            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
-            wsTrades.close(); wsTrades = null;
+            console.log('🔚 Закрываю старый trades WebSocket');
+            wsTrades.onclose = null;
+            wsTrades.onmessage = null;
+            wsTrades.onerror = null;
+            wsTrades.close();
+            wsTrades = null;
         }
-        if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
-        if (heatmapWs) {
-            heatmapWs.onclose = null; heatmapWs.onmessage = null; heatmapWs.onerror = null;
-            heatmapWs.close(); heatmapWs = null;
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
         }
 
+        // 2. Ждём чтобы соединения точно закрылись
         await new Promise(resolve => setTimeout(resolve, 150));
 
         currentSymbol = symbol;
@@ -683,10 +874,20 @@
         els.chartWrapper.classList.add('active');
 
         tradeBuffer = [];
-        if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
+        if (tradeFlushTimer) {
+            clearTimeout(tradeFlushTimer);
+            tradeFlushTimer = null;
+        }
 
-        if (chart) { chart.remove(); chart = null; candleSeries = null; }
+        // 3. Очищаем график ПЕРЕД созданием нового
+        if (chart) {
+            console.log('️ Удаляю старый график');
+            chart.remove();
+            chart = null;
+            candleSeries = null;
+        }
 
+        // 4. Создаём новый график
         try {
             chart = LightweightCharts.createChart(els.chartWrapper, {
                 width: els.chartWrapper.clientWidth,
@@ -694,11 +895,16 @@
                 layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
                 grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
                 timeScale: {
-                    timeVisible: true, secondsVisible: false, borderColor: '#2d3748',
-                    rightOffset: 12, barSpacing: 10
+                    timeVisible: true,
+                    secondsVisible: false,
+                    borderColor: '#2d3748',
+                    rightOffset: 12,
+                    barSpacing: 10
                 },
                 rightPriceScale: {
-                    borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.1 }, autoScale: true
+                    borderColor: '#2d3748',
+                    scaleMargins: { top: 0.1, bottom: 0.1 },
+                    autoScale: true
                 },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             });
@@ -706,41 +912,34 @@
                 upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
                 wickUpColor: '#22c55e', wickDownColor: '#ef4444',
             });
+            console.log('✅ Новый график создан');
         } catch (e) {
             console.error('Chart init error:', e);
             return;
         }
 
+        // 5. Загружаем историю и подключаем WebSocket
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
-
-        if (heatmapEnabled) {
-            const wrapper = document.getElementById('heatmap-wrapper');
-            if (wrapper) {
-                wrapper.classList.add('visible');
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        resizeHeatmapCanvas();
-                        startHeatmap(symbol);
-                    });
-                });
-            }
-        }
     }
 
     async function loadChartData(symbol, tf) {
-        if (!chart || !candleSeries) return;
+        if (!chart || !candleSeries) {
+            console.error('❌ График не инициализирован');
+            return;
+        }
+
+        console.log(` Загрузка данных: ${symbol} ${tf}`);
         els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
 
-        // Сбрасываем текущую формируемую свечу
-        currentCandle = null;
-        currentCandleTime = 0;
-
         try {
+            // 1. Загружаем историю
             const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const history = await res.json();
             if (!history || history.length === 0) throw new Error('Пустая история');
+
+            console.log(`📊 Получено ${history.length} свечей`);
 
             const limitedHistory = history.slice(-500);
             const firstPrice = limitedHistory[0].close;
@@ -754,12 +953,46 @@
 
             chart.timeScale().fitContent();
             chart.priceScale('right').applyOptions({
-                autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 }
+                autoScale: true,
+                scaleMargins: { top: 0.1, bottom: 0.1 }
             });
             chart.timeScale().scrollToPosition(12, false);
 
-            // Подключаем real-time источник
-            connectRealtimeStream(symbol, tf);
+            // 2. Подключаемся к WebSocket
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
+
+            console.log(`🔗 WebSocket: ${wsUrl}`);
+            wsCandles = new WebSocket(wsUrl);
+
+            wsCandles.onopen = () => {
+                console.log('✅ WebSocket подключен');
+                wsCandles.send(JSON.stringify({
+                    symbol: symbol,
+                    tf: tf,
+                    market: currentMarket
+                }));
+            };
+
+            wsCandles.onmessage = (e) => {
+                const candle = JSON.parse(e.data);
+                if (candle.error) {
+                    console.error('WS ошибка:', candle.error);
+                    return;
+                }
+                // Проверяем что свеча для текущей монеты
+                if (currentSymbol === symbol) {
+                    candleSeries.update(candle);
+                }
+            };
+
+            wsCandles.onerror = (e) => {
+                console.error('WebSocket error:', e);
+            };
+
+            wsCandles.onclose = () => {
+                console.log('🔌 WebSocket закрыт');
+            };
 
         } catch (err) {
             els.chartTitle.textContent = `Ошибка: ${err.message}`;
@@ -767,169 +1000,18 @@
         }
     }
 
-    /**
-     * Подключает правильный real-time источник в зависимости от рынка:
-     * - Spot: @kline WebSocket (готовые свечи от Binance)
-     * - Futures: @aggTrade WebSocket + формирование свечей на клиенте
-     */
-    function connectRealtimeStream(symbol, tf) {
-        if (currentMarket === 'spot') {
-            connectKlineWebSocket(symbol, tf);
-        } else {
-            connectAggTradeWebSocket(symbol, tf);
-        }
-    }
-
-    /**
-     * Spot: обычный kline WebSocket
-     */
-    function connectKlineWebSocket(symbol, tf) {
-        if (wsCandlesBinance) {
-            wsCandlesBinance.onclose = null;
-            wsCandlesBinance.close();
-            wsCandlesBinance = null;
-        }
-
-        const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
-        const wsUrl = `wss://stream.binance.com:9443/ws/${streamName}`;
-
-        console.log(`🔗 [SPOT kline] ${wsUrl}`);
-
-        try {
-            wsCandlesBinance = new WebSocket(wsUrl);
-
-            wsCandlesBinance.onopen = () => {
-                console.log(`✅ [SPOT kline] Подключен`);
-            };
-
-            wsCandlesBinance.onmessage = (e) => {
-                try {
-                    const message = JSON.parse(e.data);
-                    if (message.e === 'kline') {
-                        const k = message.k;
-                        const candle = {
-                            time: parseInt(k.t) / 1000,
-                            open: parseFloat(k.o),
-                            high: parseFloat(k.h),
-                            low: parseFloat(k.l),
-                            close: parseFloat(k.c)
-                        };
-                        candleSeries.update(candle);
-                    }
-                } catch (err) {
-                    console.error('❌ [SPOT kline] Ошибка парсинга:', err);
-                }
-            };
-
-            wsCandlesBinance.onerror = () => {
-                console.error(' [SPOT kline] Ошибка');
-            };
-
-            wsCandlesBinance.onclose = () => {
-                console.log(`🔌 [SPOT kline] Закрыт, переподключение через 3с`);
-                setTimeout(() => {
-                    if (currentSymbol && currentMarket === 'spot') {
-                        connectKlineWebSocket(currentSymbol, currentTF);
-                    }
-                }, 3000);
-            };
-
-        } catch (err) {
-            console.error('❌ [SPOT kline] Не удалось создать WebSocket:', err);
-        }
-    }
-
-    /**
-     * Futures: @aggTrade WebSocket + формирование свечей на клиенте
-     * Каждая сделка обновляет текущую свечу. Когда время свечи истекает —
-     * сохраняем её и начинаем новую.
-     */
-    function connectAggTradeWebSocket(symbol, tf) {
-        if (wsAggTrade) {
-            wsAggTrade.onclose = null;
-            wsAggTrade.close();
-            wsAggTrade = null;
-        }
-
-        const streamName = `${symbol.toLowerCase()}usdt@aggTrade`;
-        const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
-        const intervalMs = TF_INTERVALS_MS[tf] || 60000;
-
-        console.log(`🔗 [FUTURES aggTrade] ${wsUrl} (tf=${tf}, interval=${intervalMs}ms)`);
-
-        try {
-            wsAggTrade = new WebSocket(wsUrl);
-
-            wsAggTrade.onopen = () => {
-                console.log(`✅ [FUTURES aggTrade] Подключен, формируем свечи из trades`);
-            };
-
-            wsAggTrade.onmessage = (e) => {
-                try {
-                    const trade = JSON.parse(e.data);
-                    // aggTrade формат: {e: "aggTrade", p: "цена", q: "количество", T: timestamp, m: isBuyerMaker}
-                    const price = parseFloat(trade.p);
-                    const timestamp = parseInt(trade.T);
-
-                    // Определяем к какой свече относится эта сделка
-                    const candleTimeMs = Math.floor(timestamp / intervalMs) * intervalMs;
-                    const candleTimeSec = candleTimeMs / 1000;
-
-                    if (candleTimeSec !== currentCandleTime) {
-                        // Новая свеча — сохраняем предыдущую (если есть) и начинаем новую
-                        if (currentCandle) {
-                            candleSeries.update(currentCandle);
-                        }
-                        currentCandle = {
-                            time: candleTimeSec,
-                            open: price,
-                            high: price,
-                            low: price,
-                            close: price
-                        };
-                        currentCandleTime = candleTimeSec;
-                    } else {
-                        // Та же свеча — обновляем high/low/close
-                        currentCandle.high = Math.max(currentCandle.high, price);
-                        currentCandle.low = Math.min(currentCandle.low, price);
-                        currentCandle.close = price;
-                    }
-
-                    // Обновляем график
-                    candleSeries.update(currentCandle);
-
-                } catch (err) {
-                    console.error('❌ [FUTURES aggTrade] Ошибка парсинга:', err);
-                }
-            };
-
-            wsAggTrade.onerror = () => {
-                console.error('❌ [FUTURES aggTrade] Ошибка');
-            };
-
-            wsAggTrade.onclose = () => {
-                console.log(`🔌 [FUTURES aggTrade] Закрыт, переподключение через 3с`);
-                setTimeout(() => {
-                    if (currentSymbol && currentMarket === 'future') {
-                        connectAggTradeWebSocket(currentSymbol, currentTF);
-                    }
-                }, 3000);
-            };
-
-        } catch (err) {
-            console.error('❌ [FUTURES aggTrade] Не удалось создать WebSocket:', err);
-        }
-    }
-
     function startTradesStream(symbol) {
         if (wsTrades) {
-            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.close(); wsTrades = null;
+            wsTrades.onclose = null;
+            wsTrades.onmessage = null;
+            wsTrades.close();
+            wsTrades = null;
         }
         const tradesUrl = currentMarket === 'future'
             ? `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@trade`
             : `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@trade`;
         wsTrades = new WebSocket(tradesUrl);
-        wsTrades.onopen = () => {};
+        wsTrades.onopen = () => console.log(`Trades WS: ${symbol}`);
         wsTrades.onmessage = (e) => {
             try {
                 const trade = JSON.parse(e.data);
@@ -973,258 +1055,6 @@
         };
     }
 
-    // === ТЕПЛОВАЯ КАРТА ===
-    function toggleHeatmap() {
-        heatmapEnabled = !heatmapEnabled;
-        const btn = document.getElementById('heatmapToggle');
-        const wrapper = document.getElementById('heatmap-wrapper');
-
-        if (heatmapEnabled) {
-            btn.textContent = 'Выкл';
-            btn.classList.remove('off');
-            wrapper.classList.add('visible');
-            setTimeout(() => {
-                resizeHeatmapCanvas();
-                if (currentSymbol) startHeatmap(currentSymbol);
-            }, 50);
-        } else {
-            btn.textContent = 'Вкл';
-            btn.classList.add('off');
-            wrapper.classList.remove('visible');
-            if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
-            if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
-            heatmapHistory = [];
-        }
-
-        localStorage.setItem('heatmapEnabled', heatmapEnabled);
-    }
-
-    function startHeatmap(symbol) {
-        if (!heatmapEnabled) return;
-
-        if (heatmapPollTimer) { clearInterval(heatmapPollTimer); heatmapPollTimer = null; }
-        if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
-
-        heatmapHistory = [];
-        heatmapCurrentPrice = 0;
-
-        const canvas = document.getElementById('heatmap-canvas');
-        if (!canvas) return;
-
-        const wrapper = document.getElementById('heatmap-wrapper');
-        if (!wrapper) return;
-
-        const w = wrapper.clientWidth;
-        const h = wrapper.clientHeight - 24;
-
-        if (w > 0 && h > 0) {
-            canvas.width = w;
-            canvas.height = h;
-            canvas.style.width = w + 'px';
-            canvas.style.height = h + 'px';
-
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#6b7280';
-            ctx.font = '12px Inter';
-            ctx.textAlign = 'center';
-            ctx.fillText('Подключение...', w / 2, h / 2);
-        }
-
-        connectHeatmapWebSocket(symbol);
-    }
-
-    function resizeHeatmapCanvas() {
-        const wrapper = document.getElementById('heatmap-wrapper');
-        const canvas = document.getElementById('heatmap-canvas');
-        if (!wrapper || !canvas) return;
-        if (!wrapper.classList.contains('visible')) return;
-
-        const w = wrapper.clientWidth;
-        const h = wrapper.clientHeight - 24;
-
-        if (w > 0 && h > 0) {
-            canvas.width = w;
-            canvas.height = h;
-            canvas.style.width = w + 'px';
-            canvas.style.height = h + 'px';
-        }
-    }
-
-    function connectHeatmapWebSocket(symbol) {
-        if (!heatmapEnabled) return;
-
-        const streamName = `${symbol.toLowerCase()}usdt@depth20@100ms`;
-        const wsUrl = currentMarket === 'future'
-            ? `wss://fstream.binance.com/ws/${streamName}`
-            : `wss://stream.binance.com:9443/ws/${streamName}`;
-
-        try {
-            heatmapWs = new WebSocket(wsUrl);
-
-            heatmapWs.onmessage = (e) => {
-                try {
-                    const data = JSON.parse(e.data);
-                    processHeatmapData(data);
-                    drawHeatmap();
-                } catch (err) {
-                    console.error(' [HEATMAP] Ошибка парсинга:', err);
-                }
-            };
-
-            heatmapWs.onerror = () => {
-                if (heatmapWs) { heatmapWs.close(); heatmapWs = null; }
-                connectHeatmapPolling(symbol);
-            };
-
-            heatmapWs.onclose = () => {
-                if (heatmapHistory.length < 10) {
-                    connectHeatmapPolling(symbol);
-                }
-            };
-
-        } catch (err) {
-            connectHeatmapPolling(symbol);
-        }
-    }
-
-    function connectHeatmapPolling(symbol) {
-        if (!heatmapEnabled) return;
-
-        const fetchOrderBook = async () => {
-            try {
-                const url = currentMarket === 'future'
-                    ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol.toUpperCase()}USDT&limit=20`
-                    : `https://api.binance.com/api/v3/depth?symbol=${symbol.toUpperCase()}USDT&limit=20`;
-
-                const res = await fetch(url);
-                const data = await res.json();
-
-                processHeatmapData(data);
-                drawHeatmap();
-            } catch (err) {
-                console.error('❌ [HEATMAP] Ошибка polling:', err);
-            }
-        };
-
-        fetchOrderBook();
-        heatmapPollTimer = setInterval(fetchOrderBook, 1000);
-    }
-
-    function processHeatmapData(data) {
-        const bids = data.b || data.bids;
-        const asks = data.a || data.asks;
-
-        if (!bids || !asks) return;
-
-        if (bids.length > 0 && asks.length > 0) {
-            heatmapCurrentPrice = (parseFloat(bids[0][0]) + parseFloat(asks[0][0])) / 2;
-        }
-
-        heatmapHistory.push({
-            bids: bids.slice(0, 20),
-            asks: asks.slice(0, 20)
-        });
-
-        if (heatmapHistory.length > maxHistoryLength) {
-            heatmapHistory.shift();
-        }
-    }
-
-    function drawHeatmap() {
-        const canvas = document.getElementById('heatmap-canvas');
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-
-        if (width === 0 || height === 0) return;
-
-        ctx.clearRect(0, 0, width, height);
-
-        if (heatmapHistory.length === 0) return;
-
-        const priceMap = new Map();
-        heatmapHistory.forEach((snapshot, timeIndex) => {
-            snapshot.bids.forEach(([price, qty]) => {
-                const p = parseFloat(price);
-                const v = parseFloat(qty);
-                if (!priceMap.has(p)) {
-                    priceMap.set(p, {
-                        bids: new Array(maxHistoryLength).fill(0),
-                        asks: new Array(maxHistoryLength).fill(0)
-                    });
-                }
-                priceMap.get(p).bids[timeIndex] = v;
-            });
-            snapshot.asks.forEach(([price, qty]) => {
-                const p = parseFloat(price);
-                const v = parseFloat(qty);
-                if (!priceMap.has(p)) {
-                    priceMap.set(p, {
-                        bids: new Array(maxHistoryLength).fill(0),
-                        asks: new Array(maxHistoryLength).fill(0)
-                    });
-                }
-                priceMap.get(p).asks[timeIndex] = v;
-            });
-        });
-
-        const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => b - a);
-        if (sortedPrices.length === 0) return;
-
-        let maxQty = 0;
-        priceMap.forEach(data => {
-            data.bids.forEach(v => { if (v > maxQty) maxQty = v; });
-            data.asks.forEach(v => { if (v > maxQty) maxQty = v; });
-        });
-
-        if (maxQty === 0) return;
-
-        const timeStep = width / maxHistoryLength;
-        const priceStep = height / sortedPrices.length;
-
-        sortedPrices.forEach((price, priceIndex) => {
-            const y = priceIndex * priceStep;
-            const priceData = priceMap.get(price);
-
-            for (let t = 0; t < heatmapHistory.length; t++) {
-                const x = t * timeStep;
-
-                let qty = priceData.bids[t];
-                if (qty > 0) {
-                    const intensity = qty / maxQty;
-                    const alpha = Math.pow(intensity, 0.5);
-                    ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
-                    ctx.fillRect(x, y, Math.ceil(timeStep) + 1, Math.ceil(priceStep));
-                }
-
-                qty = priceData.asks[t];
-                if (qty > 0) {
-                    const intensity = qty / maxQty;
-                    const alpha = Math.pow(intensity, 0.5);
-                    ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
-                    ctx.fillRect(x, y, Math.ceil(timeStep) + 1, Math.ceil(priceStep));
-                }
-            }
-        });
-
-        if (heatmapCurrentPrice > 0) {
-            const priceIndex = sortedPrices.findIndex(p => p <= heatmapCurrentPrice);
-            if (priceIndex >= 0) {
-                const y = priceIndex * priceStep;
-                ctx.strokeStyle = '#f0b90b';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-        }
-    }
-
     let sortState = { field: null, direction: 'asc' };
     function sortBy(field) {
         if (sortState.field === field) {
@@ -1243,28 +1073,35 @@
         const searchVal = els.search.value.toUpperCase();
         const minVol = parseFloat(els.vol.value);
         const minChange = parseFloat(els.change.value);
+
         let filtered = allCoins.filter(coin => {
             if (coin.volume < minVol) return false;
             if (coin.change < minChange) return false;
             if (searchVal && !coin.symbol.includes(searchVal)) return false;
             return true;
         });
+
         if (sortState.field) {
             filtered.sort((a, b) => {
                 let valA, valB;
+
                 if (['change', 'volume'].includes(sortState.field)) {
-                    valA = a[sortState.field]; valB = b[sortState.field];
-                } else if (sortState.field === 'natr_1m') {
+                    valA = a[sortState.field];
+                    valB = b[sortState.field];
+                }
+                else if (sortState.field === 'natr_1m') {
                     const natrA = natrData[a.symbol] || {};
                     const natrB = natrData[b.symbol] || {};
                     valA = natrA.natr_1m30 !== undefined && natrA.natr_1m30 !== null ? natrA.natr_1m30 : -1;
                     valB = natrB.natr_1m30 !== undefined && natrB.natr_1m30 !== null ? natrB.natr_1m30 : -1;
-                } else if (sortState.field === 'natr_5m') {
+                }
+                else if (sortState.field === 'natr_5m') {
                     const natrA = natrData[a.symbol] || {};
                     const natrB = natrData[b.symbol] || {};
                     valA = natrA.natr_5m14 !== undefined && natrA.natr_5m14 !== null ? natrA.natr_5m14 : -1;
                     valB = natrB.natr_5m14 !== undefined && natrB.natr_5m14 !== null ? natrB.natr_5m14 : -1;
                 }
+
                 return sortState.direction === 'asc' ? valA - valB : valB - valA;
             });
         } else {
@@ -1286,10 +1123,9 @@
                 height: els.chartWrapper.clientHeight
             });
         }
-        resizeHeatmapCanvas();
-        drawHeatmap();
     });
 
+    // === ГОЛОСОВЫЕ ОПОВЕЩЕНИЯ ===
     let soundEnabled = true;
     let lastNotifiedMinute = -1;
     let russianVoice = null;
@@ -1297,7 +1133,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
@@ -1314,6 +1150,7 @@
         const voices = speechSynthesis.getVoices();
         russianVoice = voices.find(v => v.lang.startsWith('ru')) ||
                        voices.find(v => v.lang.includes('ru')) || null;
+        if (russianVoice) console.log(`✅ Найден русский голос: ${russianVoice.name}`);
     }
 
     if ('speechSynthesis' in window) {
@@ -1348,14 +1185,16 @@
         const minutes = now.getMinutes();
         const seconds = now.getSeconds();
         const currentMinuteKey = now.getHours() * 60 + minutes;
+
         if (minutes === 55 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
             showHourToast('⏰ До нового часа 5 минут');
             speak('До перехода на новый час осталось 5 минут');
         }
+
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast('⏰ До нового часа 1 минута');
+            showHourToast(' До нового часа 1 минута');
             speak('Внимание, до перехода на новый час осталась 1 минута');
         }
     }
@@ -1370,13 +1209,7 @@
         document.removeEventListener('click', initSpeech);
     }, { once: true });
 
-    heatmapEnabled = localStorage.getItem('heatmapEnabled') !== 'false';
-    const heatmapToggleBtn = document.getElementById('heatmapToggle');
-    if (heatmapToggleBtn) {
-        heatmapToggleBtn.textContent = heatmapEnabled ? 'Выкл' : 'Вкл';
-        if (!heatmapEnabled) heatmapToggleBtn.classList.add('off');
-    }
-
+    // Инициализация класса market-spot при загрузке
     if (currentMarket === 'spot') {
         els.rightPanel.classList.add('market-spot');
         els.natrTime1m.style.display = 'none';
