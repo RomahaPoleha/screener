@@ -40,7 +40,7 @@ def cleanup_old_symbols():
         del active_symbols[symbol]
 
     if to_remove:
-        print(f" Candle Updater: удалено {len(to_remove)} старых символов (осталось {len(active_symbols)})")
+        print(f"🧹 Candle Updater: удалено {len(to_remove)} старых символов (осталось {len(active_symbols)})")
 
     last_cleanup = current_time
 
