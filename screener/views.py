@@ -160,3 +160,34 @@ def api_natr(request):
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
+
+@require_http_methods(["GET"])
+def api_densities(request, symbol):
+    market = request.GET.get('market', 'future')
+    threshold = float(request.GET.get('threshold', 100000))
+
+    try:
+        if market == 'future':
+            exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'future'}, 'timeout': 10000})
+            pair = f"{symbol}/USDT:USDT"
+        else:
+            exchange = ccxt.binance({'enableRateLimit': True, 'timeout': 10000})
+            pair = f"{symbol}/USDT"
+
+        orderbook = exchange.fetch_order_book(pair, limit=1000)
+        densities = []
+
+        for price, volume in orderbook['bids']:
+            val = price * volume
+            if val >= threshold:
+                densities.append({'price': price, 'volume': val, 'side': 'buy', 'quantity': volume})
+
+        for price, volume in orderbook['asks']:
+            val = price * volume
+            if val >= threshold:
+                densities.append({'price': price, 'volume': val, 'side': 'sell', 'quantity': volume})
+
+        densities.sort(key=lambda x: x['volume'], reverse=True)
+        return JsonResponse(densities[:20], safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

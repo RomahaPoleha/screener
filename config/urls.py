@@ -24,4 +24,5 @@ urlpatterns = [
     path('api/data/', views.api_data, name='api_data'),
     path('api/candles/<str:symbol>/', views.api_candles, name='api_candles'),  # ← ИСПРАВЛЕНО
     path('api/natr/', views.api_natr, name='api_natr'),
+    path('api/densities/<str:symbol>/', views.api_densities, name='api_densities'),
 ]
