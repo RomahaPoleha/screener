@@ -73,15 +73,25 @@
             color: #9ca3af; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
         }
         .chart-reset-btn:hover { color: #fff; }
-
-        /* Плотности */
         .density-bar {
             background: #151b2b; border-bottom: 1px solid #2d3748;
-            padding: 4px 16px; display: flex; align-items: center; gap: 8px;
+            padding: 6px 16px; display: flex; align-items: center; gap: 8px;
             font-size: 11px; color: #9ca3af;
         }
         .density-bar label { margin: 0; white-space: nowrap; }
-        .density-bar input[type=range] { width: 100px; accent-color: #f0b90b; }
+        .density-bar input[type=number] {
+            width: 100px; background: #0b0f19; border: 1px solid #2d3748;
+            color: #fff; padding: 3px 6px; border-radius: 4px; font-size: 11px;
+        }
+        .density-bar input[type=number]:focus {
+            outline: none; border-color: #f0b90b;
+        }
+        .density-bar button {
+            padding: 3px 10px; background: #f0b90b; color: #000;
+            border: none; border-radius: 4px; cursor: pointer;
+            font-size: 11px; font-weight: 600;
+        }
+        .density-bar button:hover { background: #d4a009; }
         .density-bar .density-count { color: #f0b90b; font-weight: 600; }
         .density-toggle {
             padding: 2px 10px; font-size: 11px; border-radius: 4px;
@@ -89,7 +99,6 @@
         }
         .density-toggle:hover { color: #fff; border-color: #f0b90b; }
         .density-toggle.active { background: #f0b90b; color: #000; border-color: #f0b90b; font-weight: 700; }
-
         .trades-panel {
             height: 140px; background: #151b2b; border-top: 1px solid #2d3748;
             padding: 8px 12px; overflow: hidden;
@@ -240,18 +249,18 @@
     <div class="left-panel">
         <div class="chart-area">
             <div class="chart-title-bar" id="chart-title">График</div>
-            <button class="chart-reset-btn" onclick="closeChart()"> Сброс</button>
+            <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
         </div>
 
         <!-- Панель плотностей -->
         <div class="density-bar" id="densityBar" style="display:none;">
-            <button class="density-toggle active" id="densityToggle" onclick="toggleDensity()">📊 Плотности</button>
+            <button class="density-toggle active" id="densityToggle" onclick="toggleDensity()"> Плотности</button>
             <label>Мин. $:</label>
-            <input type="range" id="densityThreshold" min="5000" max="2000000" step="5000" value="50000">
-            <span id="densityThresholdVal" style="color:#fff; font-weight:600;">$50K</span>
-            <span style="margin-left:8px;">Найдено: <span class="density-count" id="densityCount">0</span></span>
+            <input type="number" id="densityThreshold" value="100000" min="1000" step="10000">
+            <button onclick="applyDensityThreshold()">OK</button>
+            <span>Найдено: <span class="density-count" id="densityCount">0</span></span>
         </div>
 
         <div class="trades-panel">
@@ -356,11 +365,11 @@
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
-    // === ПЛОТНОСТИ ИЗ СТАКАНА (REST API) ===
+    // === ПЛОТНОСТИ ===
     let densityLines = [];
     let densityEnabled = true;
-    let densityThresholdValue = 50000;
-    let densityPollTimer = null;
+    let densityThresholdValue = 100000;
+    let densityUpdateTimer = null;
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -381,16 +390,10 @@
         });
     }
 
-    // Порог плотностей
-    const densityThresholdSlider = document.getElementById('densityThreshold');
-    const densityThresholdVal = document.getElementById('densityThresholdVal');
-    if (densityThresholdSlider) {
-        densityThresholdSlider.addEventListener('input', (e) => {
-            densityThresholdValue = parseInt(e.target.value);
-            densityThresholdVal.textContent = fmtThreshold(densityThresholdValue);
-            if (currentSymbol && densityEnabled) fetchAndDrawDensities(currentSymbol);
-        });
-    }
+    // Обработчик Enter для поля плотностей
+    document.getElementById('densityThreshold').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') applyDensityThreshold();
+    });
 
     document.querySelectorAll('.tf-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -560,129 +563,66 @@
         }).join('');
     }
 
-    // === ПЛОТНОСТИ ИЗ СТАКАНА (REST API POLLING) ===
-    function toggleDensity() {
-        densityEnabled = !densityEnabled;
-        const btn = document.getElementById('densityToggle');
-        btn.classList.toggle('active', densityEnabled);
-
-        if (densityEnabled) {
-            if (currentSymbol) startDensityPolling(currentSymbol);
-        } else {
-            clearDensityLines();
-            if (densityPollTimer) {
-                clearInterval(densityPollTimer);
-                densityPollTimer = null;
-            }
+    // === ПЛОТНОСТИ: ФУНКЦИИ ===
+    function applyDensityThreshold() {
+        const input = document.getElementById('densityThreshold');
+        const val = parseInt(input.value);
+        if (val && val >= 1000) {
+            densityThresholdValue = val;
+            if (currentSymbol && densityEnabled) loadDensities(currentSymbol);
         }
     }
 
-    async function fetchAndDrawDensities(symbol) {
+    function toggleDensity() {
+        densityEnabled = !densityEnabled;
+        document.getElementById('densityToggle').classList.toggle('active', densityEnabled);
+        if (densityEnabled) {
+            if (currentSymbol) startDensityUpdates(currentSymbol);
+        } else {
+            clearDensityLines();
+            if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
+        }
+    }
+
+    async function loadDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
-
         try {
-            // Получаем стакан через REST API (глубина 1000 уровней)
-            const apiUrl = currentMarket === 'future'
-                ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol.toUpperCase()}USDT&limit=1000`
-                : `https://api.binance.com/api/v3/depth?symbol=${symbol.toUpperCase()}USDT&limit=1000`;
-
-            const res = await fetch(apiUrl);
+            const res = await fetch(`/api/densities/${symbol}/?market=${currentMarket}&threshold=${densityThresholdValue}`);
             if (!res.ok) return;
             const data = await res.json();
-
             clearDensityLines();
-
-            const densities = [];
-
-            // Сканируем bids (покупки)
-            if (data.bids) {
-                data.bids.forEach(([price, qty]) => {
-                    const priceNum = parseFloat(price);
-                    const qtyNum = parseFloat(qty);
-                    const totalValue = priceNum * qtyNum;
-                    if (totalValue >= densityThresholdValue) {
-                        densities.push({
-                            price: priceNum,
-                            volume: totalValue,
-                            side: 'buy'
-                        });
-                    }
-                });
-            }
-
-            // Сканируем asks (продажи)
-            if (data.asks) {
-                data.asks.forEach(([price, qty]) => {
-                    const priceNum = parseFloat(price);
-                    const qtyNum = parseFloat(qty);
-                    const totalValue = priceNum * qtyNum;
-                    if (totalValue >= densityThresholdValue) {
-                        densities.push({
-                            price: priceNum,
-                            volume: totalValue,
-                            side: 'sell'
-                        });
-                    }
-                });
-            }
-
-            // Сортируем по объёму
-            densities.sort((a, b) => b.volume - a.volume);
-
-            // Берём топ-20
-            const topDensities = densities.slice(0, 20);
-
-            console.log(`📊 Плотности ${symbol}: найдено ${densities.length}, показываем ${topDensities.length}`);
-
-            topDensities.forEach(d => {
+            data.forEach(d => {
                 const line = candleSeries.createPriceLine({
                     price: d.price,
                     color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
                     lineWidth: 2,
                     lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true,
-                    title: `$${fmt(d.volume)}`
+                    title: `$${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
                 });
                 densityLines.push(line);
             });
-
-            document.getElementById('densityCount').textContent = topDensities.length;
-
-        } catch (err) {
-            console.error('❌ Ошибка загрузки плотностей:', err);
-        }
-    }
-
-    function startDensityPolling(symbol) {
-        if (densityPollTimer) {
-            clearInterval(densityPollTimer);
-        }
-
-        // Сразу загружаем
-        fetchAndDrawDensities(symbol);
-
-        // Обновляем каждые 2 секунды
-        densityPollTimer = setInterval(() => {
-            if (currentSymbol === symbol && densityEnabled) {
-                fetchAndDrawDensities(symbol);
-            }
-        }, 2000);
+            document.getElementById('densityCount').textContent = data.length;
+        } catch (e) { console.error('Densities error:', e); }
     }
 
     function clearDensityLines() {
-        densityLines.forEach(line => {
-            try { candleSeries.removePriceLine(line); } catch (e) {}
-        });
+        densityLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
         densityLines = [];
         document.getElementById('densityCount').textContent = '0';
     }
 
+    function startDensityUpdates(symbol) {
+        if (densityUpdateTimer) clearInterval(densityUpdateTimer);
+        loadDensities(symbol);
+        densityUpdateTimer = setInterval(() => {
+            if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
+        }, 3000);
+    }
+
     function closeChart() {
         clearDensityLines();
-        if (densityPollTimer) {
-            clearInterval(densityPollTimer);
-            densityPollTimer = null;
-        }
+        if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
 
         if (wsCandles) {
             wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
@@ -714,9 +654,9 @@
             wsTrades.close(); wsTrades = null;
         }
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        if (densityPollTimer) { clearInterval(densityPollTimer); densityPollTimer = null; }
 
         clearDensityLines();
+        if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
 
         await new Promise(resolve => setTimeout(resolve, 150));
 
@@ -756,11 +696,9 @@
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
 
-        // Показываем панель плотностей и запускаем polling
+        // Запуск плотностей
         document.getElementById('densityBar').style.display = 'flex';
-        if (densityEnabled) {
-            startDensityPolling(symbol);
-        }
+        if (densityEnabled) startDensityUpdates(symbol);
     }
 
     async function loadChartData(symbol, tf) {

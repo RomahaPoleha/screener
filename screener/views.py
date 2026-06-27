@@ -156,23 +156,19 @@ def api_natr(request):
         'last_update_times': last_update_times
     })
 
-
-def index(request):
-    """Главная страница"""
-    return render(request, 'screener/index.html')
-
 @require_http_methods(["GET"])
 def api_densities(request, symbol):
+    """API: плотности из стакана (крупные лимитные ордера)"""
     market = request.GET.get('market', 'future')
     threshold = float(request.GET.get('threshold', 100000))
 
     try:
-        if market == 'future':
-            exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'future'}, 'timeout': 10000})
-            pair = f"{symbol}/USDT:USDT"
-        else:
-            exchange = ccxt.binance({'enableRateLimit': True, 'timeout': 10000})
-            pair = f"{symbol}/USDT"
+        exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'} if market == 'future' else {},
+            'timeout': 10000
+        })
+        pair = f"{symbol}/USDT:USDT" if market == 'future' else f"{symbol}/USDT"
 
         orderbook = exchange.fetch_order_book(pair, limit=1000)
         densities = []
@@ -180,14 +176,17 @@ def api_densities(request, symbol):
         for price, volume in orderbook['bids']:
             val = price * volume
             if val >= threshold:
-                densities.append({'price': price, 'volume': val, 'side': 'buy', 'quantity': volume})
+                densities.append({'price': price, 'volume': val, 'side': 'buy'})
 
         for price, volume in orderbook['asks']:
             val = price * volume
             if val >= threshold:
-                densities.append({'price': price, 'volume': val, 'side': 'sell', 'quantity': volume})
+                densities.append({'price': price, 'volume': val, 'side': 'sell'})
 
         densities.sort(key=lambda x: x['volume'], reverse=True)
         return JsonResponse(densities[:20], safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+def index(request):
+    """Главная страница"""
+    return render(request, 'screener/index.html')
