@@ -199,8 +199,10 @@
     <span class="status-badge badge bg-secondary" id="status">Загрузка...</span>
     <span class="natr-time" id="natrTime1m">NATR 1m: --:--:--</span>
     <span class="natr-time" id="natrTime5m">NATR 5m: --:--:--</span>
-    <button class="sound-toggle" id="soundToggle" onclick="toggleSound()"> Голосовое оповещение</button>
-    <button class="sound-toggle" id="densityBtn" onclick="openDensityModal()">📊 Плотности</button>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
+        <button class="sound-toggle" id="densityBtn" onclick="openDensityModal()">📊 Плотности</button>
+    </div>
 </div>
 
 <div class="tf-bar" id="tfButtons">
@@ -299,17 +301,10 @@
                 </div>
                 <div style="margin-bottom:20px;">
                     <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                        Мин. объём: <span id="densityMinVolumeVal" style="color:#f0b90b; font-weight:600;">$100K</span>
+                        Мин. объём (USDT):
                     </label>
                     <input type="number" id="densityMinVolume" value="100000" min="1000" step="10000"
                            style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
-                </div>
-                <div style="margin-bottom:20px;">
-                    <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                        Глубина стакана: <span id="densityDepthVal" style="color:#f0b90b; font-weight:600;">100</span>
-                    </label>
-                    <input type="range" id="densityDepth" min="50" max="500" step="50" value="100"
-                           style="width:100%; accent-color:#f0b90b;">
                 </div>
                 <div style="font-size:11px; color:#6b7280; text-align:center;">
                     Найдено: <span id="densityCountModal" style="color:#f0b90b; font-weight:600;">0</span>
@@ -324,7 +319,7 @@
 </div>
 
 <div id="hourToast" class="hour-toast">
-    <div class="toast-icon">🕐</div>
+    <div class="toast-icon"></div>
     <div class="toast-content">
         <div class="toast-title" id="toastTitle">Новый час!</div>
     </div>
@@ -375,7 +370,7 @@
     let densityEnabled = false;
     let densityMarkets = { future: false, spot: false };
     let densityMinVolume = 100000;
-    let densityDepth = 100;
+    // Глубина стакана фиксирована: 100
     let densityUpdateTimer = null;
     let previousDensities = { future: [], spot: [] };
 
@@ -397,16 +392,6 @@
             els.thresholdValue.textContent = fmtThreshold(currentThreshold);
         });
     }
-
-    // Обработчики модалки плотностей
-    document.getElementById('densityDepth').addEventListener('input', (e) => {
-        document.getElementById('densityDepthVal').textContent = e.target.value;
-    });
-
-    document.getElementById('densityMinVolume').addEventListener('input', (e) => {
-        const val = parseInt(e.target.value) || 0;
-        document.getElementById('densityMinVolumeVal').textContent = val >= 1000 ? `$${(val/1000).toFixed(0)}K` : `$${val}`;
-    });
 
     document.querySelectorAll('.tf-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -544,6 +529,11 @@
 
     // === ПЛОТНОСТИ: ФУНКЦИИ ===
     function openDensityModal() {
+        // Подставляем текущие настройки в модалку
+        document.getElementById('densityMarketFuture').checked = densityMarkets.future;
+        document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
+        document.getElementById('densityMinVolume').value = densityMinVolume;
+
         const modal = new bootstrap.Modal(document.getElementById('densityModal'));
         modal.show();
     }
@@ -552,11 +542,9 @@
         const futureChecked = document.getElementById('densityMarketFuture').checked;
         const spotChecked = document.getElementById('densityMarketSpot').checked;
         const minVolume = parseInt(document.getElementById('densityMinVolume').value) || 100000;
-        const depth = parseInt(document.getElementById('densityDepth').value) || 100;
 
         densityMarkets = { future: futureChecked, spot: spotChecked };
         densityMinVolume = minVolume;
-        densityDepth = depth;
         densityEnabled = futureChecked || spotChecked;
 
         const btn = document.getElementById('densityBtn');
@@ -594,7 +582,7 @@
 
         for (const market of marketsToLoad) {
             try {
-                const res = await fetch(`/api/densities/${symbol}/?market=${market}&threshold=${densityMinVolume}&depth=${densityDepth}`);
+                const res = await fetch(`/api/densities/${symbol}/?market=${market}&threshold=${densityMinVolume}`);
                 if (!res.ok) continue;
                 const data = await res.json();
 
@@ -602,7 +590,6 @@
                 const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
 
                 if (currentData === prevData) {
-                    // Данные не изменились, но нужно перерисовать линии после clearDensityLines
                     previousDensities[market].forEach(d => {
                         const line = candleSeries.createPriceLine({
                             price: d.price,
@@ -735,7 +722,6 @@
         await loadChartData(symbol, currentTF);
         startTradesStream(symbol);
 
-        // Если плотности включены — запускаем
         if (densityEnabled) startDensityUpdates(symbol);
     }
 
@@ -970,7 +956,7 @@
         const currentMinuteKey = now.getHours() * 60 + minutes;
         if (minutes === 55 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast(' До нового часа 5 минут');
+            showHourToast('⏰ До нового часа 5 минут');
             speak('До перехода на новый час осталось 5 минут');
         }
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
