@@ -20,13 +20,10 @@
             gap: 16px; flex-wrap: wrap;
         }
         .top-bar .logo { font-size: 18px; font-weight: 700; color: #f0b90b; margin-right: 8px; }
-        .market-btn {
-            padding: 4px 14px; font-size: 13px; font-weight: 600;
-            border-radius: 6px; border: 1px solid #2d3748;
-            background: transparent; color: #d1d5db; cursor: pointer; transition: all 0.2s;
+        .market-label {
+            color: #f0b90b; font-weight: 600; font-size: 13px;
+            padding: 4px 12px; border: 1px solid #f0b90b; border-radius: 6px;
         }
-        .market-btn:hover { background: #2d3748; }
-        .market-btn.active { background: #f0b90b; color: #000; border-color: #f0b90b; }
         .status-badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; }
         .natr-time {
             font-size: 11px; padding: 3px 8px; border-radius: 4px;
@@ -191,8 +188,6 @@
         .coins-header > div { cursor: pointer; user-select: none; }
         .coins-header > div:hover { color: #f0b90b; }
         .coins-header .text-end { text-align: right; }
-        .market-spot .natr-col { display: none !important; }
-        .market-spot .coins-header, .market-spot .coin-row { grid-template-columns: 70px 1fr 1fr !important; }
         .loader {
             display: none; width: 14px; height: 14px;
             border: 2px solid #333; border-top: 2px solid #f0b90b;
@@ -224,15 +219,12 @@
 <body>
 
 <div class="top-bar">
-    <span class="logo">⚡ Screener</span>
-    <div class="d-flex gap-1">
-        <button class="market-btn active" data-market="spot" onclick="switchMarket('spot')">Spot</button>
-        <button class="market-btn" data-market="future" onclick="switchMarket('future')">Futures</button>
-    </div>
+    <span class="logo"> Screener</span>
+    <span class="market-label">⚡ Futures</span>
     <div class="loader" id="loader"></div>
     <span class="status-badge badge bg-secondary" id="status">Загрузка...</span>
-    <span class="natr-time" id="natrTime1m" style="display:none;">NATR 1m: --:--:--</span>
-    <span class="natr-time" id="natrTime5m" style="display:none;">NATR 5m: --:--:--</span>
+    <span class="natr-time" id="natrTime1m">NATR 1m: --:--:--</span>
+    <span class="natr-time" id="natrTime5m">NATR 5m: --:--:--</span>
     <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
 </div>
 
@@ -308,8 +300,8 @@
             <div>Пара</div>
             <div class="text-end" onclick="sortBy('change')">Изм. 24ч <span id="sort-change"></span></div>
             <div class="text-end" onclick="sortBy('volume')">Объём <span id="sort-volume"></span></div>
-            <div class="text-end natr-col" onclick="sortBy('natr_1m')">NATR 1m <span id="sort-natr_1m"></span></div>
-            <div class="text-end natr-col" onclick="sortBy('natr_5m')">NATR 5m <span id="sort-natr_5m"></span></div>
+            <div class="text-end" onclick="sortBy('natr_1m')">NATR 1m <span id="sort-natr_1m"></span></div>
+            <div class="text-end" onclick="sortBy('natr_5m')">NATR 5m <span id="sort-natr_5m"></span></div>
         </div>
         <div class="coins-table-wrap" id="tableBody">
             <div style="color:#6b7280; text-align:center; padding:20px;">Загрузка...</div>
@@ -361,7 +353,6 @@
     let currentThreshold = 10000;
     let currentTF = '1m';
     let currentSymbol = '';
-    let currentMarket = 'spot';
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
@@ -406,63 +397,29 @@
         });
     });
 
-    function switchMarket(market) {
-        currentMarket = market;
-        natrData = {};
-        natrUpdateTimes = {'1m30': null, '5m14': null};
-        updateNatrTimeDisplay();
-        stopNatrAutoUpdate();
-        setTimeout(startNatrAutoUpdate, 1000);
-        document.querySelectorAll('.market-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.market === market) btn.classList.add('active');
-        });
-        if (market === 'spot') {
-            els.rightPanel.classList.add('market-spot');
-            els.natrTime1m.style.display = 'none';
-            els.natrTime5m.style.display = 'none';
-        } else {
-            els.rightPanel.classList.remove('market-spot');
-            els.natrTime1m.style.display = 'inline';
-            els.natrTime5m.style.display = 'inline';
-        }
-        if (chart) closeChart();
-        loadAllData();
-    }
-
     function updateNatrTimeDisplay() {
-        if (currentMarket === 'future') {
-            if (natrUpdateTimes['1m30']) {
-                const time1m = new Date(natrUpdateTimes['1m30']);
-                els.natrTime1m.textContent = `NATR 1m: ${time1m.toLocaleTimeString('ru-RU')}`;
-            } else {
-                els.natrTime1m.textContent = 'NATR 1m: --:--:--';
-            }
-            if (natrUpdateTimes['5m14']) {
-                const time5m = new Date(natrUpdateTimes['5m14']);
-                els.natrTime5m.textContent = `NATR 5m: ${time5m.toLocaleTimeString('ru-RU')}`;
-            } else {
-                els.natrTime5m.textContent = 'NATR 5m: --:--:--';
-            }
+        if (natrUpdateTimes['1m30']) {
+            const time1m = new Date(natrUpdateTimes['1m30']);
+            els.natrTime1m.textContent = `NATR 1m: ${time1m.toLocaleTimeString('ru-RU')}`;
+        } else {
+            els.natrTime1m.textContent = 'NATR 1m: --:--:--';
+        }
+        if (natrUpdateTimes['5m14']) {
+            const time5m = new Date(natrUpdateTimes['5m14']);
+            els.natrTime5m.textContent = `NATR 5m: ${time5m.toLocaleTimeString('ru-RU')}`;
+        } else {
+            els.natrTime5m.textContent = 'NATR 5m: --:--:--';
         }
     }
 
     async function loadAllData() {
         els.loader.style.display = 'block';
         try {
-            const res = await fetch(`/api/data/?market=${currentMarket}`);
+            const res = await fetch(`/api/data/`);
             if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
             allCoins = await res.json();
-            const marketName = currentMarket === 'future' ? 'Futures' : 'Spot';
-            if (currentMarket === 'spot') {
-                els.status.textContent = `${allCoins.length} монет (${marketName})`;
-                els.status.className = 'status-badge badge bg-success';
-            } else {
-                els.status.textContent = 'NATR: загрузка...';
-                els.status.className = 'status-badge badge bg-info';
-                els.natrTime1m.style.display = 'inline';
-                els.natrTime5m.style.display = 'inline';
-            }
+            els.status.textContent = `${allCoins.length} монет (Futures)`;
+            els.status.className = 'status-badge badge bg-success';
             applyLocalFilters();
         } catch (err) {
             console.error(err);
@@ -478,11 +435,11 @@
 
     async function loadNatrData() {
         try {
-            const res = await fetch(`/api/natr/?market=${currentMarket}`);
+            const res = await fetch(`/api/natr/`);
             if (!res.ok) throw new Error('Ошибка NATR');
             const response = await res.json();
             natrData = response.natr || {};
-            if (currentMarket === 'future' && response.last_update_times) {
+            if (response.last_update_times) {
                 natrUpdateTimes = response.last_update_times;
                 updateNatrTimeDisplay();
             }
@@ -556,8 +513,8 @@
                     <div class="coin-symbol">${coin.symbol}</div>
                     <div class="coin-change ${isUp ? 'text-up' : 'text-down'}">${isUp ? '+' : ''}${coin.change}%</div>
                     <div class="coin-volume">$${fmt(coin.volume)}</div>
-                    <div class="coin-natr natr-col ${n5 ? getNatrClass(n5) : 'empty'}">${n5Txt}</div>
-                    <div class="coin-natr natr-col ${n1 ? getNatrClass(n1) : 'empty'}">${n1Txt}</div>
+                    <div class="coin-natr ${n5 ? getNatrClass(n5) : 'empty'}">${n5Txt}</div>
+                    <div class="coin-natr ${n1 ? getNatrClass(n1) : 'empty'}">${n1Txt}</div>
                 </div>
             `;
         }).join('');
@@ -587,7 +544,7 @@
     async function loadDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
         try {
-            const res = await fetch(`/api/densities/${symbol}/?market=${currentMarket}&threshold=${densityThresholdValue}`);
+            const res = await fetch(`/api/densities/${symbol}/?threshold=${densityThresholdValue}`);
             if (!res.ok) return;
             const data = await res.json();
             clearDensityLines();
@@ -706,7 +663,7 @@
         els.chartTitle.textContent = `${symbol}/USDT [${tf}]`;
 
         try {
-            const res = await fetch(`/api/candles/${symbol}/?tf=${tf}&market=${currentMarket}`);
+            const res = await fetch(`/api/candles/${symbol}/?tf=${tf}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const history = await res.json();
             if (!history || history.length === 0) throw new Error('Пустая история');
@@ -735,8 +692,7 @@
             wsCandles.onopen = () => {
                 wsCandles.send(JSON.stringify({
                     symbol: symbol,
-                    tf: tf,
-                    market: currentMarket
+                    tf: tf
                 }));
             };
 
@@ -764,9 +720,8 @@
         if (wsTrades) {
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.close(); wsTrades = null;
         }
-        const tradesUrl = currentMarket === 'future'
-            ? `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@trade`
-            : `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@trade`;
+        // Только Futures
+        const tradesUrl = `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@trade`;
         wsTrades = new WebSocket(tradesUrl);
         wsTrades.onopen = () => {};
         wsTrades.onmessage = (e) => {
@@ -954,15 +909,6 @@
         }
         document.removeEventListener('click', initSpeech);
     }, { once: true });
-
-    if (currentMarket === 'spot') {
-        els.rightPanel.classList.add('market-spot');
-        els.natrTime1m.style.display = 'none';
-        els.natrTime5m.style.display = 'none';
-    } else {
-        els.natrTime1m.style.display = 'inline';
-        els.natrTime5m.style.display = 'inline';
-    }
 
     loadAllData();
     startNatrAutoUpdate();

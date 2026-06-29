@@ -11,30 +11,27 @@ from .candle_updater import add_active_symbol
 MIN_VOLUME = 200000
 
 
-def get_symbols_from_tickers(market_type='future'):
-    """Получает список монет с Binance"""
+def get_symbols_from_tickers():
+    """Получает список монет с Binance Futures"""
     try:
-        exchange_config = {
+        exchange = ccxt.binance({
             'enableRateLimit': True,
             'timeout': 10000,
-            'options': {'defaultType': market_type}
-        }
-
-        exchange = ccxt.binance(exchange_config)
+            'options': {'defaultType': 'future'}
+        })
         tickers = exchange.fetch_tickers()
 
         symbols_with_volume = []
         for symbol, data in tickers.items():
-            if ':USDT' not in symbol and not symbol.endswith('/USDT'):
+            if ':USDT' not in symbol:
                 continue
 
             volume = data.get('quoteVolume') or 0
             if volume < MIN_VOLUME:
                 continue
 
-            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
+            clean_symbol = symbol.replace(':USDT', '')
 
-            # Фильтр невалидных символов
             if '-' in clean_symbol:
                 continue
             if len(clean_symbol) < 2 or len(clean_symbol) > 15:
@@ -48,9 +45,7 @@ def get_symbols_from_tickers(market_type='future'):
                 'change': round(data.get('percentage') or 0, 2)
             })
 
-        # Сортировка по объёму
         symbols_with_volume.sort(key=lambda x: x['volume'], reverse=True)
-
         return symbols_with_volume
 
     except Exception as e:
@@ -60,16 +55,13 @@ def get_symbols_from_tickers(market_type='future'):
 
 @require_http_methods(["GET"])
 def api_data(request):
-    """API: список монет"""
-    market = request.GET.get('market', 'future')
-
-    # Кэш на 60 секунд
-    cache_key = f"coins_{market}"
+    """API: список монет (только Futures)"""
+    cache_key = "coins_future"
     cached = cache.get(cache_key)
     if cached:
         return JsonResponse(cached, safe=False)
 
-    coins = get_symbols_from_tickers(market)
+    coins = get_symbols_from_tickers()
     cache.set(cache_key, coins, 60)
 
     return JsonResponse(coins, safe=False)
@@ -77,33 +69,28 @@ def api_data(request):
 
 @require_http_methods(["GET"])
 def api_candles(request, symbol):
-    """API: история свечей для графика"""
+    """API: история свечей (только Futures)"""
     tf = request.GET.get('tf', '1m')
-    market = request.GET.get('market', 'future')
 
-    # Регистрируем символ как активный (для candle_updater)
-    add_active_symbol(symbol, tf)  # ← Передаём tf!
+    add_active_symbol(symbol, tf)
 
-    # Проверяем кэш
-    cache_key = f"candles_{symbol}_{tf}_{market}"
+    cache_key = f"candles_{symbol}_{tf}_future"
     cached = cache.get(cache_key)
     if cached:
         return JsonResponse(cached, safe=False)
 
     try:
-        if market == 'future':
-            exchange = ccxt.binance({
-                'enableRateLimit': True,
-                'options': {'defaultType': 'future'},
-                'timeout': 10000
-            })
-            pair = f"{symbol}/USDT:USDT"
-        else:
-            exchange = ccxt.binance({
-                'enableRateLimit': True,
-                'timeout': 10000
-            })
-            pair = f"{symbol}/USDT"
+        exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'},
+            'timeout': 10000
+        })
+        pair = f"{symbol}/USDT:USDT"
+
+        # Проверка существования пары
+        exchange.load_markets()
+        if pair not in exchange.markets:
+            return JsonResponse({'error': f'{symbol} не найден на Futures'}, status=404)
 
         ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
 
@@ -119,37 +106,34 @@ def api_candles(request, symbol):
         ]
 
         cache.set(cache_key, candles, 30)
-
         return JsonResponse(candles, safe=False)
 
+    except ccxt.BadSymbol as e:
+        print(f"⚠️ {symbol} не найден: {e}")
+        return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
     except Exception as e:
-        print(f"❌ Ошибка api_candles {symbol}: {e}")
+        print(f" Ошибка api_candles {symbol}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
 def api_natr(request):
-    """API: NATR данные"""
-    market = request.GET.get('market', 'future')
-
-    # Получаем список монет
-    cache_key = f"coins_{market}"
+    """API: NATR данные (только Futures)"""
+    cache_key = "coins_future"
     coins = cache.get(cache_key)
     if not coins:
-        coins = get_symbols_from_tickers(market)
+        coins = get_symbols_from_tickers()
         cache.set(cache_key, coins, 60)
 
-    # Собираем NATR для каждой монеты
     natr_data = {}
     for coin in coins:
         symbol = coin['symbol']
-        cache_key = f"natr_{symbol}_{market}"
+        cache_key = f"natr_{symbol}_future"
         data = cache.get(cache_key)
         if data:
             natr_data[symbol] = data
 
-    # Время последнего обновления
-    last_update_times = cache.get(f"natr_last_update_times_{market}", {})
+    last_update_times = cache.get("natr_last_update_times_future", {})
 
     return JsonResponse({
         'natr': natr_data,
@@ -158,19 +142,18 @@ def api_natr(request):
 
 @require_http_methods(["GET"])
 def api_densities(request, symbol):
-    """API: плотности из стакана (крупные лимитные ордера)"""
-    market = request.GET.get('market', 'future')
+    """API: плотности из стакана (только Futures)"""
     threshold = float(request.GET.get('threshold', 100000))
 
     try:
         exchange = ccxt.binance({
             'enableRateLimit': True,
-            'options': {'defaultType': 'future'} if market == 'future' else {},
+            'options': {'defaultType': 'future'},
             'timeout': 10000
         })
-        pair = f"{symbol}/USDT:USDT" if market == 'future' else f"{symbol}/USDT"
+        pair = f"{symbol}/USDT:USDT"
 
-        orderbook = exchange.fetch_order_book(pair, limit=1000)
+        orderbook = exchange.fetch_order_book(pair, limit=100)  # уменьшено с 1000
         densities = []
 
         for price, volume in orderbook['bids']:
@@ -187,6 +170,7 @@ def api_densities(request, symbol):
         return JsonResponse(densities[:20], safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')

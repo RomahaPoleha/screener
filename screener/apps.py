@@ -7,12 +7,6 @@ class ScreenerConfig(AppConfig):
 
     def ready(self):
         try:
-            from .candle_updater import start_candle_updater
-            start_candle_updater()
-        except Exception as e:
-            print(f"⚠️ Candle updater не запущен: {e}")
-
-        try:
             from .natr_updater import start_natr_updater
             start_natr_updater()
         except Exception as e:

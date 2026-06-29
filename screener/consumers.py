@@ -1,30 +1,31 @@
-
-
 import json
 import asyncio
 import ccxt.async_support as ccxt_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-# Глобальное хранилище активных потоков
 active_streams = {}
 streams_lock = asyncio.Lock()
 
+# Один общий exchange для Futures
+shared_exchange = None
 
-async def binance_polling_task(symbol, tf, market, queue):
-    """Polling к Binance"""
-    print(f"🚀 [POLL] Запуск: {symbol} {tf} {market}")
 
-    if market == 'future':
-        pair = f"{symbol}/USDT:USDT"
-        exchange = ccxt_async.binance({
+async def get_shared_exchange():
+    global shared_exchange
+    if shared_exchange is None:
+        shared_exchange = ccxt_async.binance({
             'enableRateLimit': True,
             'options': {'defaultType': 'future'}
         })
-    else:
-        pair = f"{symbol}/USDT"
-        exchange = ccxt_async.binance({
-            'enableRateLimit': True
-        })
+    return shared_exchange
+
+
+async def binance_polling_task(symbol, tf, queue):
+    """Polling к Binance Futures"""
+    print(f"🚀 [POLL] Запуск: {symbol} {tf}")
+
+    exchange = await get_shared_exchange()
+    pair = f"{symbol}/USDT:USDT"
 
     try:
         print(f"✅ [POLL] Подключен: {symbol}")
@@ -55,70 +56,14 @@ async def binance_polling_task(symbol, tf, market, queue):
             except Exception as e:
                 print(f"⚠️ [POLL] Ошибка: {e}")
                 await asyncio.sleep(2)
-    finally:
-        await exchange.close()
-
-
-async def binance_ws_task(symbol, tf, market, queue):
-    """WebSocket для Spot, polling для Futures"""
-    if market == 'spot':
-        import websockets
-        stream_name = f"{symbol.lower()}usdt@kline_{tf}"
-        ws_url = f"wss://stream.binance.com:9443/ws/{stream_name}"
-
-        print(f"🚀 [WS] Запуск: {symbol} {tf} {market}")
-
-        retry_count = 0
-        max_retries = 5
-
-        while retry_count < max_retries:
-            try:
-                async with websockets.connect(
-                        ws_url,
-                        open_timeout=5,
-                        ping_interval=20,
-                        ping_timeout=10,
-                        close_timeout=5
-                ) as ws:
-                    print(f"✅ [WS] Подключен: {symbol}")
-                    retry_count = 0
-
-                    async for message in ws:
-                        try:
-                            data = json.loads(message)
-                            k = data.get('k')
-                            if not k:
-                                continue
-
-                            candle = {
-                                'time': int(k['t']) // 1000,
-                                'open': float(k['o']),
-                                'high': float(k['h']),
-                                'low': float(k['l']),
-                                'close': float(k['c'])
-                            }
-                            await queue.put(candle)
-                        except Exception as e:
-                            print(f"⚠️ [WS] Ошибка парсинга: {e}")
-
-            except asyncio.CancelledError:
-                print(f"🛑 [WS] Отменен: {symbol}")
-                break
-            except Exception as e:
-                print(f"❌ [WS] Ошибка: {e}")
-                retry_count += 1
-                if retry_count < max_retries:
-                    await asyncio.sleep(2)
-    else:
-        print(f"⚠️ [TASK] Futures → polling")
-        await binance_polling_task(symbol, tf, market, queue)
+    except Exception as e:
+        print(f"❌ [POLL] Критическая ошибка: {e}")
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.symbol = None
         self.tf = None
-        self.market_type = None
         self.stream_key = None
         self.queue = None
         self.read_task = None
@@ -129,7 +74,6 @@ class CandleConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         print(f"🔌 Клиент отключен: {self.channel_name}")
 
-        # Быстрая отмена без задержек
         if self.read_task and not self.read_task.done():
             self.read_task.cancel()
 
@@ -141,21 +85,15 @@ class CandleConsumer(AsyncWebsocketConsumer):
             data = json.loads(text_data)
             new_symbol = data.get('symbol')
             new_tf = data.get('tf', '1m')
-            new_market = data.get('market', 'future')
 
-            print(f"📩 Запрос: {new_symbol} {new_tf} {new_market}")
+            print(f"📩 Запрос: {new_symbol} {new_tf}")
 
-            if (new_symbol != self.symbol or
-                    new_tf != self.tf or
-                    new_market != self.market_type):
-
-                # Быстрая отписка от старого
+            if (new_symbol != self.symbol or new_tf != self.tf):
                 if self.stream_key:
                     await self.unsubscribe_stream()
 
                 self.symbol = new_symbol
                 self.tf = new_tf
-                self.market_type = new_market
 
                 if self.symbol:
                     await self.subscribe_stream()
@@ -163,18 +101,13 @@ class CandleConsumer(AsyncWebsocketConsumer):
             print(f"❌ Ошибка receive: {e}")
 
     async def subscribe_stream(self):
-        self.stream_key = f"{self.symbol}_{self.tf}_{self.market_type}"
+        self.stream_key = f"{self.symbol}_{self.tf}_future"
 
         async with streams_lock:
             if self.stream_key not in active_streams:
                 queue = asyncio.Queue()
                 task = asyncio.create_task(
-                    binance_ws_task(
-                        self.symbol,
-                        self.tf,
-                        self.market_type,
-                        queue
-                    )
+                    binance_polling_task(self.symbol, self.tf, queue)
                 )
                 active_streams[self.stream_key] = {
                     'task': task,
