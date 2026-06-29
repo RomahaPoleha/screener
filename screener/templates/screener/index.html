@@ -570,74 +570,96 @@
         bootstrap.Modal.getInstance(document.getElementById('densityModal')).hide();
     }
 
-    async function loadDensities(symbol) {
-    if (!densityEnabled || !candleSeries) return;
+        async function loadDensities(symbol) {
+        if (!densityEnabled || !candleSeries) return;
 
-    let totalCount = 0;
-    let hasChanges = false;
+        let totalCount = 0;
+        let hasChanges = false;
 
-    const marketsToLoad = [];
-    if (densityMarkets.future) marketsToLoad.push('future');
-    if (densityMarkets.spot) marketsToLoad.push('spot');
+        const marketsToLoad = [];
+        if (densityMarkets.future) marketsToLoad.push('future');
+        if (densityMarkets.spot) marketsToLoad.push('spot');
 
-    // Сначала собираем данные со всех рынков
-    const allNewData = {};
+        const allNewData = {};
 
-    for (const market of marketsToLoad) {
-        try {
-            const res = await fetch(`/api/densities/${symbol}/?market=${market}&threshold=${densityMinVolume}`);
-            if (!res.ok) continue;
-            const data = await res.json();
-            allNewData[market] = data;
-        } catch (e) {
-            console.error(`Densities error (${market}):`, e);
-            allNewData[market] = previousDensities[market] || [];
-        }
-    }
-
-    // Проверяем, изменилось ли что-то
-    for (const market of marketsToLoad) {
-        const newData = allNewData[market] || [];
-        const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
-        const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
-
-        if (currentData !== prevData) {
-            hasChanges = true;
-            previousDensities[market] = newData;
-        }
-    }
-
-    // Если ничего не изменилось — ничего не делаем (линии остаются на месте)
-    if (!hasChanges) {
-        // Просто считаем количество
         for (const market of marketsToLoad) {
-            totalCount += (previousDensities[market] || []).length;
+            try {
+                // Прямой запрос к Binance API (минуя сервер)
+                const url = market === 'future'
+                    ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=100`
+                    : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=100`;
+
+                const res = await fetch(url);
+                if (!res.ok) continue;
+                const data = await res.json();
+
+                // Считаем плотности прямо в браузере
+                const densities = [];
+                const processSide = (sideArr, sideType) => {
+                    for (const [priceStr, qtyStr] of sideArr) {
+                        const price = parseFloat(priceStr);
+                        const qty = parseFloat(qtyStr);
+                        const val = price * qty;
+                        if (val >= densityMinVolume) {
+                            densities.push({ price, volume: val, side: sideType });
+                        }
+                    }
+                };
+
+                if (data.bids) processSide(data.bids, 'buy');
+                if (data.asks) processSide(data.asks, 'sell');
+
+                densities.sort((a, b) => b.volume - a.volume);
+                allNewData[market] = densities.slice(0, 20); // Топ-20
+
+            } catch (e) {
+                console.error(`Densities error (${market}):`, e);
+                allNewData[market] = previousDensities[market] || [];
+            }
         }
-        document.getElementById('densityCountModal').textContent = totalCount;
-        return;
-    }
 
-    // Если изменилось — перерисовываем ВСЕ линии
-    clearDensityLines();
+        // Проверяем, изменилось ли что-то
+        for (const market of marketsToLoad) {
+            const newData = allNewData[market] || [];
+            const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
+            const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
 
-    for (const market of marketsToLoad) {
-        const data = previousDensities[market] || [];
-        data.forEach(d => {
-            const line = candleSeries.createPriceLine({
-                price: d.price,
-                color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-                lineWidth: 2,
-                lineStyle: LightweightCharts.LineStyle.Solid,
-                axisLabelVisible: true,
-                title: `${market === 'future' ? 'F' : 'S'} $${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+            if (currentData !== prevData) {
+                hasChanges = true;
+                previousDensities[market] = newData;
+            }
+        }
+
+        // Если ничего не изменилось — линии не трогаем (нет мерцания)
+        if (!hasChanges) {
+            for (const market of marketsToLoad) {
+                totalCount += (previousDensities[market] || []).length;
+            }
+            document.getElementById('densityCountModal').textContent = totalCount;
+            return;
+        }
+
+        // Если изменилось — перерисовываем
+        clearDensityLines();
+
+        for (const market of marketsToLoad) {
+            const data = previousDensities[market] || [];
+            data.forEach(d => {
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                    lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    title: `${market === 'future' ? 'F' : 'S'} $${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+                });
+                densityLines.push(line);
             });
-            densityLines.push(line);
-        });
-        totalCount += data.length;
-    }
+            totalCount += data.length;
+        }
 
-    document.getElementById('densityCountModal').textContent = totalCount;
-}
+        document.getElementById('densityCountModal').textContent = totalCount;
+    }
 
     function clearDensityLines() {
         if (!candleSeries) return;

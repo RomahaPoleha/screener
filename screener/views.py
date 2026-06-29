@@ -111,39 +111,6 @@ def api_candles(request, symbol):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@require_http_methods(["GET"])
-def api_densities(request, symbol):
-    """API: плотности из стакана"""
-    market = request.GET.get('market', 'future')
-    threshold = float(request.GET.get('threshold', 100000))
-    depth = int(request.GET.get('depth', 100))
-
-    try:
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'options': {'defaultType': market},
-            'timeout': 10000
-        })
-        pair = f"{symbol}/USDT:USDT" if market == 'future' else f"{symbol}/USDT"
-
-        orderbook = exchange.fetch_order_book(pair, limit=depth)
-        densities = []
-
-        for price, volume in orderbook['bids']:
-            val = price * volume
-            if val >= threshold:
-                densities.append({'price': price, 'volume': val, 'side': 'buy'})
-
-        for price, volume in orderbook['asks']:
-            val = price * volume
-            if val >= threshold:
-                densities.append({'price': price, 'volume': val, 'side': 'sell'})
-
-        densities.sort(key=lambda x: x['volume'], reverse=True)
-        return JsonResponse(densities[:20], safe=False)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
 
 @require_http_methods(["GET"])
 def api_natr(request):
