@@ -30,7 +30,6 @@ def get_symbols_from_tickers():
             if volume < MIN_VOLUME:
                 continue
 
-            # ИСПРАВЛЕНИЕ: убираем оба хвоста
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
 
             if '-' in clean_symbol:
@@ -66,6 +65,50 @@ def api_data(request):
     cache.set(cache_key, coins, 60)
 
     return JsonResponse(coins, safe=False)
+
+
+@require_http_methods(["GET"])
+def api_candles(request, symbol):
+    """API: история свечей (только Futures)"""
+    tf = request.GET.get('tf', '1m')
+
+    add_active_symbol(symbol, tf)
+
+    cache_key = f"candles_{symbol}_{tf}_future"
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse(cached, safe=False)
+
+    try:
+        exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'},
+            'timeout': 10000
+        })
+        pair = f"{symbol}/USDT:USDT"
+
+        ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
+
+        candles = [
+            {
+                'time': int(ts / 1000),
+                'open': float(o),
+                'high': float(h),
+                'low': float(l),
+                'close': float(c)
+            }
+            for ts, o, h, l, c, v in ohlcv
+        ]
+
+        cache.set(cache_key, candles, 30)
+        return JsonResponse(candles, safe=False)
+
+    except ccxt.BadSymbol as e:
+        print(f"️ {symbol} не найден: {e}")
+        return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
+    except Exception as e:
+        print(f"❌ Ошибка api_candles {symbol}: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -112,8 +155,8 @@ def api_natr(request):
     natr_data = {}
     for coin in coins:
         symbol = coin['symbol']
-        cache_key = f"natr_{symbol}_future"
-        data = cache.get(cache_key)
+        natr_cache_key = f"natr_{symbol}_future"
+        data = cache.get(natr_cache_key)
         if data:
             natr_data[symbol] = data
 
@@ -124,36 +167,6 @@ def api_natr(request):
         'last_update_times': last_update_times
     })
 
-@require_http_methods(["GET"])
-def api_densities(request, symbol):
-    """API: плотности из стакана (только Futures)"""
-    threshold = float(request.GET.get('threshold', 100000))
-
-    try:
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'options': {'defaultType': 'future'},
-            'timeout': 10000
-        })
-        pair = f"{symbol}/USDT:USDT"
-
-        orderbook = exchange.fetch_order_book(pair, limit=100)  # уменьшено с 1000
-        densities = []
-
-        for price, volume in orderbook['bids']:
-            val = price * volume
-            if val >= threshold:
-                densities.append({'price': price, 'volume': val, 'side': 'buy'})
-
-        for price, volume in orderbook['asks']:
-            val = price * volume
-            if val >= threshold:
-                densities.append({'price': price, 'volume': val, 'side': 'sell'})
-
-        densities.sort(key=lambda x: x['volume'], reverse=True)
-        return JsonResponse(densities[:20], safe=False)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
 
 def index(request):
     """Главная страница"""
