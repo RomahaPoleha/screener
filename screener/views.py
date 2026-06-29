@@ -69,16 +69,9 @@ def api_data(request):
 
 
 @require_http_methods(["GET"])
-def api_candles(request, symbol):
-    """API: история свечей (только Futures)"""
-    tf = request.GET.get('tf', '1m')
-
-    add_active_symbol(symbol, tf)
-
-    cache_key = f"candles_{symbol}_{tf}_future"
-    cached = cache.get(cache_key)
-    if cached:
-        return JsonResponse(cached, safe=False)
+def api_densities(request, symbol):
+    """API: плотности из стакана (только Futures)"""
+    threshold = float(request.GET.get('threshold', 100000))
 
     try:
         exchange = ccxt.binance({
@@ -88,32 +81,22 @@ def api_candles(request, symbol):
         })
         pair = f"{symbol}/USDT:USDT"
 
-        # Проверка существования пары
-        exchange.load_markets()
-        if pair not in exchange.markets:
-            return JsonResponse({'error': f'{symbol} не найден на Futures'}, status=404)
+        orderbook = exchange.fetch_order_book(pair, limit=100)
+        densities = []
 
-        ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
+        for price, volume in orderbook['bids']:
+            val = price * volume
+            if val >= threshold:
+                densities.append({'price': price, 'volume': val, 'side': 'buy'})
 
-        candles = [
-            {
-                'time': int(ts / 1000),
-                'open': float(o),
-                'high': float(h),
-                'low': float(l),
-                'close': float(c)
-            }
-            for ts, o, h, l, c, v in ohlcv
-        ]
+        for price, volume in orderbook['asks']:
+            val = price * volume
+            if val >= threshold:
+                densities.append({'price': price, 'volume': val, 'side': 'sell'})
 
-        cache.set(cache_key, candles, 30)
-        return JsonResponse(candles, safe=False)
-
-    except ccxt.BadSymbol as e:
-        print(f"⚠️ {symbol} не найден: {e}")
-        return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
+        densities.sort(key=lambda x: x['volume'], reverse=True)
+        return JsonResponse(densities[:20], safe=False)
     except Exception as e:
-        print(f" Ошибка api_candles {symbol}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
 

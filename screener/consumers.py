@@ -6,25 +6,16 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 active_streams = {}
 streams_lock = asyncio.Lock()
 
-# Один общий exchange для Futures
-shared_exchange = None
-
-
-async def get_shared_exchange():
-    global shared_exchange
-    if shared_exchange is None:
-        shared_exchange = ccxt_async.binance({
-            'enableRateLimit': True,
-            'options': {'defaultType': 'future'}
-        })
-    return shared_exchange
-
 
 async def binance_polling_task(symbol, tf, queue):
     """Polling к Binance Futures"""
     print(f"🚀 [POLL] Запуск: {symbol} {tf}")
 
-    exchange = await get_shared_exchange()
+    exchange = ccxt_async.binance({
+        'enableRateLimit': True,
+        'options': {'defaultType': 'future'},
+        'timeout': 10000
+    })
     pair = f"{symbol}/USDT:USDT"
 
     try:
@@ -54,10 +45,10 @@ async def binance_polling_task(symbol, tf, queue):
                 print(f"🛑 [POLL] Отменен: {symbol}")
                 break
             except Exception as e:
-                print(f"⚠️ [POLL] Ошибка: {e}")
+                print(f"️ [POLL] Ошибка: {e}")
                 await asyncio.sleep(2)
-    except Exception as e:
-        print(f"❌ [POLL] Критическая ошибка: {e}")
+    finally:
+        await exchange.close()
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
@@ -98,7 +89,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
                 if self.symbol:
                     await self.subscribe_stream()
         except Exception as e:
-            print(f"❌ Ошибка receive: {e}")
+            print(f" Ошибка receive: {e}")
 
     async def subscribe_stream(self):
         self.stream_key = f"{self.symbol}_{self.tf}_future"
@@ -139,7 +130,7 @@ class CandleConsumer(AsyncWebsocketConsumer):
             if subscribers_count == 0:
                 stream['task'].cancel()
                 del active_streams[self.stream_key]
-                print(f"🗑️ Удален поток: {self.stream_key}")
+                print(f"️ Удален поток: {self.stream_key}")
 
         self.stream_key = None
         self.queue = None
