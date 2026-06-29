@@ -520,62 +520,87 @@
         }).join('');
     }
 
-    // === ПЛОТНОСТИ: ФУНКЦИИ ===
-    function applyDensityThreshold() {
-        const input = document.getElementById('densityThreshold');
-        const val = parseInt(input.value);
-        if (val && val >= 1000) {
-            densityThresholdValue = val;
-            if (currentSymbol && densityEnabled) loadDensities(currentSymbol);
-        }
-    }
+// === ПЛОТНОСТИ: ФУНКЦИИ ===
+let previousDensities = []; // Кэш предыдущих плотностей
 
-    function toggleDensity() {
-        densityEnabled = !densityEnabled;
-        document.getElementById('densityToggle').classList.toggle('active', densityEnabled);
-        if (densityEnabled) {
-            if (currentSymbol) startDensityUpdates(currentSymbol);
-        } else {
-            clearDensityLines();
-            if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
-        }
+function applyDensityThreshold() {
+    const input = document.getElementById('densityThreshold');
+    const val = parseInt(input.value);
+    if (val && val >= 1000) {
+        densityThresholdValue = val;
+        previousDensities = []; // Сброс кэша
+        if (currentSymbol && densityEnabled) loadDensities(currentSymbol);
     }
+}
 
-    async function loadDensities(symbol) {
-        if (!densityEnabled || !candleSeries) return;
-        try {
-            const res = await fetch(`/api/densities/${symbol}/?threshold=${densityThresholdValue}`);
-            if (!res.ok) return;
-            const data = await res.json();
-            clearDensityLines();
-            data.forEach(d => {
-                const line = candleSeries.createPriceLine({
-                    price: d.price,
-                    color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-                    lineWidth: 2,
-                    lineStyle: LightweightCharts.LineStyle.Solid,
-                    axisLabelVisible: true,
-                    title: `$${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
-                });
-                densityLines.push(line);
+function toggleDensity() {
+    densityEnabled = !densityEnabled;
+    document.getElementById('densityToggle').classList.toggle('active', densityEnabled);
+
+    if (densityEnabled) {
+        if (currentSymbol) startDensityUpdates(currentSymbol);
+    } else {
+        // Останавливаем polling
+        if (densityUpdateTimer) {
+            clearInterval(densityUpdateTimer);
+            densityUpdateTimer = null;
+        }
+        clearDensityLines();
+    }
+}
+
+async function loadDensities(symbol) {
+    if (!densityEnabled || !candleSeries) return;
+
+    try {
+        const res = await fetch(`/api/densities/${symbol}/?threshold=${densityThresholdValue}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Проверяем изменились ли данные
+        const currentData = JSON.stringify(data.map(d => ({price: d.price, volume: d.volume, side: d.side})));
+        const prevData = JSON.stringify(previousDensities.map(d => ({price: d.price, volume: d.volume, side: d.side})));
+
+        // Если данные не изменились — не перерисовываем
+        if (currentData === prevData && densityLines.length > 0) {
+            return;
+        }
+
+        clearDensityLines();
+        previousDensities = data;
+
+        data.forEach(d => {
+            const line = candleSeries.createPriceLine({
+                price: d.price,
+                color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                title: `$${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
             });
-            document.getElementById('densityCount').textContent = data.length;
-        } catch (e) { console.error('Densities error:', e); }
-    }
+            densityLines.push(line);
+        });
 
-    function clearDensityLines() {
-        densityLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
-        densityLines = [];
-        document.getElementById('densityCount').textContent = '0';
-    }
+        document.getElementById('densityCount').textContent = data.length;
+    } catch (e) { console.error('Densities error:', e); }
+}
 
-    function startDensityUpdates(symbol) {
-        if (densityUpdateTimer) clearInterval(densityUpdateTimer);
-        loadDensities(symbol);
-        densityUpdateTimer = setInterval(() => {
-            if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
-        }, 3000);
-    }
+function clearDensityLines() {
+    if (!candleSeries) return;
+    densityLines.forEach(l => {
+        try { candleSeries.removePriceLine(l); } catch(e){}
+    });
+    densityLines = [];
+    document.getElementById('densityCount').textContent = '0';
+}
+
+function startDensityUpdates(symbol) {
+    if (densityUpdateTimer) clearInterval(densityUpdateTimer);
+    loadDensities(symbol);
+    densityUpdateTimer = setInterval(() => {
+        if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
+    }, 3000);
+}
 
     function closeChart() {
         clearDensityLines();
