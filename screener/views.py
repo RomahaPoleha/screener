@@ -30,7 +30,8 @@ def get_symbols_from_tickers():
             if volume < MIN_VOLUME:
                 continue
 
-            clean_symbol = symbol.replace(':USDT', '')
+            # ИСПРАВЛЕНИЕ: убираем оба хвоста
+            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
 
             if '-' in clean_symbol:
                 continue
