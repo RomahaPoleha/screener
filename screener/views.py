@@ -113,18 +113,20 @@ def api_candles(request, symbol):
 
 @require_http_methods(["GET"])
 def api_densities(request, symbol):
-    """API: плотности из стакана (только Futures)"""
+    """API: плотности из стакана"""
+    market = request.GET.get('market', 'future')
     threshold = float(request.GET.get('threshold', 100000))
+    depth = int(request.GET.get('depth', 100))
 
     try:
         exchange = ccxt.binance({
             'enableRateLimit': True,
-            'options': {'defaultType': 'future'},
+            'options': {'defaultType': market},
             'timeout': 10000
         })
-        pair = f"{symbol}/USDT:USDT"
+        pair = f"{symbol}/USDT:USDT" if market == 'future' else f"{symbol}/USDT"
 
-        orderbook = exchange.fetch_order_book(pair, limit=100)
+        orderbook = exchange.fetch_order_book(pair, limit=depth)
         densities = []
 
         for price, volume in orderbook['bids']:
