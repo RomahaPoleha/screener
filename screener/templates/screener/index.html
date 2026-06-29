@@ -571,61 +571,73 @@
     }
 
     async function loadDensities(symbol) {
-        if (!densityEnabled || !candleSeries) return;
+    if (!densityEnabled || !candleSeries) return;
 
-        clearDensityLines();
-        let totalCount = 0;
+    let totalCount = 0;
+    let hasChanges = false;
 
-        const marketsToLoad = [];
-        if (densityMarkets.future) marketsToLoad.push('future');
-        if (densityMarkets.spot) marketsToLoad.push('spot');
+    const marketsToLoad = [];
+    if (densityMarkets.future) marketsToLoad.push('future');
+    if (densityMarkets.spot) marketsToLoad.push('spot');
 
-        for (const market of marketsToLoad) {
-            try {
-                const res = await fetch(`/api/densities/${symbol}/?market=${market}&threshold=${densityMinVolume}`);
-                if (!res.ok) continue;
-                const data = await res.json();
+    // Сначала собираем данные со всех рынков
+    const allNewData = {};
 
-                const currentData = JSON.stringify(data.map(d => ({price: d.price, volume: d.volume, side: d.side})));
-                const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
-
-                if (currentData === prevData) {
-                    previousDensities[market].forEach(d => {
-                        const line = candleSeries.createPriceLine({
-                            price: d.price,
-                            color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-                            lineWidth: 2,
-                            lineStyle: LightweightCharts.LineStyle.Solid,
-                            axisLabelVisible: true,
-                            title: `${market === 'future' ? 'F' : 'S'} $${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
-                        });
-                        densityLines.push(line);
-                    });
-                    totalCount += previousDensities[market].length;
-                    continue;
-                }
-                previousDensities[market] = data;
-
-                data.forEach(d => {
-                    const line = candleSeries.createPriceLine({
-                        price: d.price,
-                        color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-                        lineWidth: 2,
-                        lineStyle: LightweightCharts.LineStyle.Solid,
-                        axisLabelVisible: true,
-                        title: `${market === 'future' ? 'F' : 'S'} $${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
-                    });
-                    densityLines.push(line);
-                });
-
-                totalCount += data.length;
-            } catch (e) {
-                console.error(`Densities error (${market}):`, e);
-            }
+    for (const market of marketsToLoad) {
+        try {
+            const res = await fetch(`/api/densities/${symbol}/?market=${market}&threshold=${densityMinVolume}`);
+            if (!res.ok) continue;
+            const data = await res.json();
+            allNewData[market] = data;
+        } catch (e) {
+            console.error(`Densities error (${market}):`, e);
+            allNewData[market] = previousDensities[market] || [];
         }
-
-        document.getElementById('densityCountModal').textContent = totalCount;
     }
+
+    // Проверяем, изменилось ли что-то
+    for (const market of marketsToLoad) {
+        const newData = allNewData[market] || [];
+        const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
+        const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
+
+        if (currentData !== prevData) {
+            hasChanges = true;
+            previousDensities[market] = newData;
+        }
+    }
+
+    // Если ничего не изменилось — ничего не делаем (линии остаются на месте)
+    if (!hasChanges) {
+        // Просто считаем количество
+        for (const market of marketsToLoad) {
+            totalCount += (previousDensities[market] || []).length;
+        }
+        document.getElementById('densityCountModal').textContent = totalCount;
+        return;
+    }
+
+    // Если изменилось — перерисовываем ВСЕ линии
+    clearDensityLines();
+
+    for (const market of marketsToLoad) {
+        const data = previousDensities[market] || [];
+        data.forEach(d => {
+            const line = candleSeries.createPriceLine({
+                price: d.price,
+                color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                title: `${market === 'future' ? 'F' : 'S'} $${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+            });
+            densityLines.push(line);
+        });
+        totalCount += data.length;
+    }
+
+    document.getElementById('densityCountModal').textContent = totalCount;
+}
 
     function clearDensityLines() {
         if (!candleSeries) return;
