@@ -282,7 +282,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">⚙️ Настройки плотностей</h5>
+                <h5 class="modal-title">️ Настройки плотностей</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -392,13 +392,18 @@
         });
     }
 
+    function setActiveTF(tf) {
+        document.querySelectorAll('.tf-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tf === tf);
+        });
+    }
+
     document.querySelectorAll('.tf-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const newTF = e.target.dataset.tf;
             if (newTF === currentTF) return;
-            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
             currentTF = newTF;
+            setActiveTF(currentTF);
             if (currentSymbol && chart) {
                 startCandlePolling(currentSymbol, currentTF);
             }
@@ -778,6 +783,10 @@
         await new Promise(resolve => setTimeout(resolve, 150));
 
         currentSymbol = symbol;
+
+        // Подсвечиваем активную кнопку таймфрейма
+        setActiveTF(currentTF);
+
         els.chartHint.style.display = 'none';
         els.chartWrapper.classList.add('active');
 
@@ -1033,7 +1042,7 @@
         }
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast('⏰ До нового часа 1 минута');
+            showHourToast(' До нового часа 1 минута');
             speak('Внимание, до перехода на новый час осталась 1 минута');
         }
     }
