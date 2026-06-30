@@ -673,18 +673,18 @@
     }
 
     // === WEBSOCKET СВЕЧЕЙ (ПРЯМОЕ ПОДКЛЮЧЕНИЕ К BINANCE) ===
- function startCandleWebSocket(symbol, tf) {
+     function startCandleWebSocket(symbol, tf) {
         if (wsCandles) {
             wsCandles.onclose = null;
             wsCandles.close();
             wsCandles = null;
         }
 
-        // Комбинированный стрим
+        // Пробуем SPOT endpoint (он работает из браузера)
         const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
-        const wsUrl = `wss://fstream.binance.com/stream?streams=${streamName}`;
+        const wsUrl = `wss://stream.binance.com:9443/ws/${streamName}`;
 
-        console.log(`🔗 Подключение: ${wsUrl}`);
+        console.log(`🔗 Подключение (Spot endpoint): ${wsUrl}`);
 
         wsCandles = new WebSocket(wsUrl);
 
@@ -696,8 +696,6 @@
             console.log(`📨 Данные:`, e.data);
             try {
                 const data = JSON.parse(e.data);
-                console.log(` Распаршено:`, data);
-
                 const k = data.k;
                 if (k) {
                     const candle = {
