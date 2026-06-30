@@ -673,14 +673,14 @@
     }
 
     // === WEBSOCKET СВЕЧЕЙ (ПРЯМОЕ ПОДКЛЮЧЕНИЕ К BINANCE) ===
-                       function startCandleWebSocket(symbol, tf) {
+ function startCandleWebSocket(symbol, tf) {
         if (wsCandles) {
             wsCandles.onclose = null;
             wsCandles.close();
             wsCandles = null;
         }
 
-        // ПРАВИЛЬНЫЙ URL для Binance Futures
+        // Комбинированный стрим
         const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
         const wsUrl = `wss://fstream.binance.com/stream?streams=${streamName}`;
 
@@ -696,6 +696,8 @@
             console.log(`📨 Данные:`, e.data);
             try {
                 const data = JSON.parse(e.data);
+                console.log(` Распаршено:`, data);
+
                 const k = data.k;
                 if (k) {
                     const candle = {
