@@ -282,7 +282,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">️ Настройки плотностей</h5>
+                <h5 class="modal-title">⚙️ Настройки плотностей</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -319,7 +319,7 @@
 </div>
 
 <div id="hourToast" class="hour-toast">
-    <div class="toast-icon">🕐</div>
+    <div class="toast-icon"></div>
     <div class="toast-content">
         <div class="toast-title" id="toastTitle">Новый час!</div>
     </div>
@@ -353,8 +353,8 @@
     let chart = null;
     let candleSeries = null;
     let wsTrades = null;
-    let candlePollTimer = null;
-    let lastCandleTime = 0;
+    let wsCandles = null;
+    let pollTimer = null;
 
     let currentPrecision = 2;
     let tradeBuffer = [];
@@ -370,6 +370,7 @@
     let densityEnabled = false;
     let densityMarkets = { future: false, spot: false };
     let densityMinVolume = 100000;
+    // Глубина стакана фиксирована: 100
     let densityUpdateTimer = null;
     let previousDensities = { future: [], spot: [] };
 
@@ -392,21 +393,14 @@
         });
     }
 
-    function setActiveTF(tf) {
-        document.querySelectorAll('.tf-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.tf === tf);
-        });
-    }
-
     document.querySelectorAll('.tf-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const newTF = e.target.dataset.tf;
             if (newTF === currentTF) return;
+            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
             currentTF = newTF;
-            setActiveTF(currentTF);
-            if (currentSymbol && chart) {
-                startCandlePolling(currentSymbol, currentTF);
-            }
+            if (currentSymbol && chart) loadChartData(currentSymbol, currentTF);
         });
     });
 
@@ -535,6 +529,7 @@
 
     // === ПЛОТНОСТИ: ФУНКЦИИ ===
     function openDensityModal() {
+        // Подставляем текущие настройки в модалку
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
@@ -575,7 +570,7 @@
         bootstrap.Modal.getInstance(document.getElementById('densityModal')).hide();
     }
 
-    async function loadDensities(symbol) {
+        async function loadDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
 
         let totalCount = 0;
@@ -589,6 +584,7 @@
 
         for (const market of marketsToLoad) {
             try {
+                // Прямой запрос к Binance API (минуя сервер)
                 const url = market === 'future'
                     ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=100`
                     : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=100`;
@@ -597,6 +593,7 @@
                 if (!res.ok) continue;
                 const data = await res.json();
 
+                // Считаем плотности прямо в браузере
                 const densities = [];
                 const processSide = (sideArr, sideType) => {
                     for (const [priceStr, qtyStr] of sideArr) {
@@ -613,7 +610,7 @@
                 if (data.asks) processSide(data.asks, 'sell');
 
                 densities.sort((a, b) => b.volume - a.volume);
-                allNewData[market] = densities.slice(0, 20);
+                allNewData[market] = densities.slice(0, 20); // Топ-20
 
             } catch (e) {
                 console.error(`Densities error (${market}):`, e);
@@ -621,6 +618,7 @@
             }
         }
 
+        // Проверяем, изменилось ли что-то
         for (const market of marketsToLoad) {
             const newData = allNewData[market] || [];
             const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
@@ -632,6 +630,7 @@
             }
         }
 
+        // Если ничего не изменилось — линии не трогаем (нет мерцания)
         if (!hasChanges) {
             for (const market of marketsToLoad) {
                 totalCount += (previousDensities[market] || []).length;
@@ -640,6 +639,7 @@
             return;
         }
 
+        // Если изменилось — перерисовываем
         clearDensityLines();
 
         for (const market of marketsToLoad) {
@@ -674,59 +674,7 @@
         loadDensities(symbol);
         densityUpdateTimer = setInterval(() => {
             if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
-        }, 10000);
-    }
-
-    // === POLLING СВЕЧЕЙ (НАПРЯМУЮ К BINANCE) ===
-    function startCandlePolling(symbol, tf) {
-        // Очистка старого polling
-        if (candlePollTimer) {
-            clearInterval(candlePollTimer);
-            candlePollTimer = null;
-        }
-
-        lastCandleTime = 0;
-        const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}USDT&interval=${tf}&limit=1`;
-        console.log(`🔗 Polling свечей: ${url} (каждую 1 сек)`);
-
-        async function fetchCandle() {
-            try {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-
-                if (data && data[0]) {
-                    const [ts, o, h, l, c, v] = data[0];
-                    const candleTime = Math.floor(ts / 1000);
-
-                    // Защита от накладок: пропускаем если время меньше последнего
-                    if (candleTime < lastCandleTime) {
-                        return;
-                    }
-                    lastCandleTime = candleTime;
-
-                    const candle = {
-                        time: candleTime,
-                        open: parseFloat(o),
-                        high: parseFloat(h),
-                        low: parseFloat(l),
-                        close: parseFloat(c)
-                    };
-
-                    if (candleSeries && currentSymbol === symbol) {
-                        candleSeries.update(candle);
-                    }
-                }
-            } catch (err) {
-                // Тихо игнорируем ошибки сети
-            }
-        }
-
-        // Первый запрос сразу
-        fetchCandle();
-
-        // Затем каждые 1 секунду
-        candlePollTimer = setInterval(fetchCandle, 1000);
+        }, 3000);
     }
 
     function closeChart() {
@@ -737,21 +685,15 @@
         }
         previousDensities = { future: [], spot: [] };
 
-        // Останавливаем polling свечей
-        if (candlePollTimer) {
-            clearInterval(candlePollTimer);
-            candlePollTimer = null;
+        if (wsCandles) {
+            wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
+            wsCandles.close(); wsCandles = null;
         }
-
-        // Закрываем WebSocket сделок
         if (wsTrades) {
-            wsTrades.onclose = null;
-            wsTrades.onmessage = null;
-            wsTrades.onerror = null;
-            wsTrades.close();
-            wsTrades = null;
+            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
+            wsTrades.close(); wsTrades = null;
         }
-
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         if (chart) { chart.remove(); chart = null; candleSeries = null; }
         tradeBuffer = [];
         if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
@@ -763,19 +705,15 @@
     }
 
     async function openChart(symbol) {
-        // Останавливаем старый polling
-        if (candlePollTimer) {
-            clearInterval(candlePollTimer);
-            candlePollTimer = null;
+        if (wsCandles) {
+            wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
+            wsCandles.close(); wsCandles = null;
         }
-
         if (wsTrades) {
-            wsTrades.onclose = null;
-            wsTrades.onmessage = null;
-            wsTrades.onerror = null;
-            wsTrades.close();
-            wsTrades = null;
+            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
+            wsTrades.close(); wsTrades = null;
         }
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 
         clearDensityLines();
         if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
@@ -783,10 +721,6 @@
         await new Promise(resolve => setTimeout(resolve, 150));
 
         currentSymbol = symbol;
-
-        // Подсвечиваем активную кнопку таймфрейма
-        setActiveTF(currentTF);
-
         els.chartHint.style.display = 'none';
         els.chartWrapper.classList.add('active');
 
@@ -819,16 +753,9 @@
             return;
         }
 
-        // Загружаем историю свечей
         await loadChartData(symbol, currentTF);
-
-        // Запускаем polling свечей (1 сек)
-        startCandlePolling(symbol, currentTF);
-
-        // Запускаем ленту сделок
         startTradesStream(symbol);
 
-        // Если плотности включены — запускаем
         if (densityEnabled) startDensityUpdates(symbol);
     }
 
@@ -857,6 +784,32 @@
                 autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 }
             });
             chart.timeScale().scrollToPosition(12, false);
+
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
+
+            wsCandles = new WebSocket(wsUrl);
+
+            wsCandles.onopen = () => {
+                wsCandles.send(JSON.stringify({
+                    symbol: symbol,
+                    tf: tf
+                }));
+            };
+
+            wsCandles.onmessage = (e) => {
+                const candle = JSON.parse(e.data);
+                if (candle.error) return;
+                if (currentSymbol === symbol) {
+                    candleSeries.update(candle);
+                }
+            };
+
+            wsCandles.onerror = (e) => {
+                console.error('WebSocket error:', e);
+            };
+
+            wsCandles.onclose = () => {};
 
         } catch (err) {
             els.chartTitle.textContent = `Ошибка: ${err.message}`;
@@ -993,7 +946,7 @@
     soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
     const soundBtn = document.getElementById('soundToggle');
     if (soundBtn) {
-        soundBtn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
         soundBtn.classList.toggle('muted', !soundEnabled);
     }
 
@@ -1042,7 +995,7 @@
         }
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast(' До нового часа 1 минута');
+            showHourToast('⏰ До нового часа 1 минута');
             speak('Внимание, до перехода на новый час осталась 1 минута');
         }
     }

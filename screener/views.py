@@ -1,8 +1,10 @@
 import ccxt
-from django.http import JsonResponse
+import time
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.shortcuts import render
+from datetime import datetime
 from .candle_updater import add_active_symbol
 
 # Минимальный объём для фильтрации
@@ -102,11 +104,12 @@ def api_candles(request, symbol):
         return JsonResponse(candles, safe=False)
 
     except ccxt.BadSymbol as e:
-        print(f"⚠️ {symbol} не найден: {e}")
+        print(f"️ {symbol} не найден: {e}")
         return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
     except Exception as e:
         print(f"❌ Ошибка api_candles {symbol}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
 
 
 @require_http_methods(["GET"])
