@@ -673,7 +673,7 @@
     }
 
     // === WEBSOCKET СВЕЧЕЙ (ПРЯМОЕ ПОДКЛЮЧЕНИЕ К BINANCE) ===
-    function startCandleWebSocket(symbol, tf) {
+        function startCandleWebSocket(symbol, tf) {
         // Закрываем старое соединение
         if (wsCandles) {
             wsCandles.onclose = null;
@@ -690,14 +690,18 @@
 
         wsCandles.onopen = () => {
             console.log(`✅ WebSocket свечей подключен: ${symbol} ${tf}`);
+            console.log(`📡 ReadyState: ${wsCandles.readyState}`);
         };
 
         wsCandles.onmessage = (e) => {
+            console.log(`📨 Получены данные:`, e.data);
             try {
                 const data = JSON.parse(e.data);
-                const k = data.k; // kline data
+                console.log(` Распарсенные данные:`, data);
 
+                const k = data.k;
                 if (k) {
+                    console.log(`🕯️ Kline data:`, k);
                     const candle = {
                         time: Math.floor(k.t / 1000),
                         open: parseFloat(k.o),
@@ -705,24 +709,30 @@
                         low: parseFloat(k.l),
                         close: parseFloat(k.c)
                     };
+                    console.log(`📈 Свеча для графика:`, candle);
 
                     if (candleSeries && currentSymbol === symbol) {
                         candleSeries.update(candle);
+                        console.log(`✅ Свеча обновлена на графике`);
+                    } else {
+                        console.log(`⚠️ candleSeries или symbol не совпадают`);
                     }
+                } else {
+                    console.log(`️ Поле k отсутствует в данных`);
                 }
             } catch (err) {
-                console.error('Ошибка парсинга свечи:', err);
+                console.error('❌ Ошибка парсинга свечи:', err);
             }
         };
 
         wsCandles.onerror = (e) => {
-            console.error('WebSocket свечей ошибка:', e);
+            console.error('❌ WebSocket свечей ошибка:', e);
         };
 
-        wsCandles.onclose = () => {
-            console.log('🔌 WebSocket свечей закрыт');
-            // Переподключение через 3 секунды
+        wsCandles.onclose = (e) => {
+            console.log(`🔌 WebSocket свечей закрыт. Code: ${e.code}, Reason: ${e.reason}`);
             if (currentSymbol === symbol) {
+                console.log(`🔄 Переподключение через 3 секунды...`);
                 setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
             }
         };
