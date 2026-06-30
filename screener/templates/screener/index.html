@@ -282,7 +282,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">️ Настройки плотностей</h5>
+                <h5 class="modal-title">⚙️ Настройки плотностей</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -353,7 +353,8 @@
     let chart = null;
     let candleSeries = null;
     let wsTrades = null;
-    let candleSSE = null; // SSE для свечей
+    let candlePollTimer = null;
+    let lastCandleTime = 0;
 
     let currentPrecision = 2;
     let tradeBuffer = [];
@@ -399,8 +400,7 @@
             e.target.classList.add('active');
             currentTF = newTF;
             if (currentSymbol && chart) {
-                // Перезапускаем SSE с новым таймфреймом
-                startCandleSSE(currentSymbol, currentTF);
+                startCandlePolling(currentSymbol, currentTF);
             }
         });
     });
@@ -672,39 +672,56 @@
         }, 10000);
     }
 
-    // === SSE СВЕЧЕЙ ===
-    function startCandleSSE(symbol, tf) {
-        // Закрываем старое SSE
-        if (candleSSE) {
-            candleSSE.close();
-            candleSSE = null;
+    // === POLLING СВЕЧЕЙ (НАПРЯМУЮ К BINANCE) ===
+    function startCandlePolling(symbol, tf) {
+        // Очистка старого polling
+        if (candlePollTimer) {
+            clearInterval(candlePollTimer);
+            candlePollTimer = null;
         }
 
-        const url = `/sse/candles/${symbol}/?tf=${tf}&market=future`;
-        console.log(` SSE подключение: ${url}`);
+        lastCandleTime = 0;
+        const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}USDT&interval=${tf}&limit=1`;
+        console.log(`🔗 Polling свечей: ${url} (каждую 1 сек)`);
 
-        candleSSE = new EventSource(url);
-
-        candleSSE.onmessage = (e) => {
+        async function fetchCandle() {
             try {
-                const candle = JSON.parse(e.data);
-                if (candleSeries && currentSymbol === symbol) {
-                    candleSeries.update(candle);
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                if (data && data[0]) {
+                    const [ts, o, h, l, c, v] = data[0];
+                    const candleTime = Math.floor(ts / 1000);
+
+                    // Защита от накладок: пропускаем если время меньше последнего
+                    if (candleTime < lastCandleTime) {
+                        return;
+                    }
+                    lastCandleTime = candleTime;
+
+                    const candle = {
+                        time: candleTime,
+                        open: parseFloat(o),
+                        high: parseFloat(h),
+                        low: parseFloat(l),
+                        close: parseFloat(c)
+                    };
+
+                    if (candleSeries && currentSymbol === symbol) {
+                        candleSeries.update(candle);
+                    }
                 }
             } catch (err) {
-                console.error('❌ Ошибка парсинга SSE:', err);
+                // Тихо игнорируем ошибки сети
             }
-        };
+        }
 
-        candleSSE.onerror = (e) => {
-            console.error('❌ SSE ошибка:', e);
-            candleSSE.close();
-            if (currentSymbol === symbol) {
-                setTimeout(() => startCandleSSE(symbol, tf), 3000);
-            }
-        };
+        // Первый запрос сразу
+        fetchCandle();
 
-        console.log(`✅ SSE подключен`);
+        // Затем каждые 1 секунду
+        candlePollTimer = setInterval(fetchCandle, 1000);
     }
 
     function closeChart() {
@@ -715,10 +732,10 @@
         }
         previousDensities = { future: [], spot: [] };
 
-        // Закрываем SSE
-        if (candleSSE) {
-            candleSSE.close();
-            candleSSE = null;
+        // Останавливаем polling свечей
+        if (candlePollTimer) {
+            clearInterval(candlePollTimer);
+            candlePollTimer = null;
         }
 
         // Закрываем WebSocket сделок
@@ -741,11 +758,12 @@
     }
 
     async function openChart(symbol) {
-        // Закрываем старые соединения
-        if (candleSSE) {
-            candleSSE.close();
-            candleSSE = null;
+        // Останавливаем старый polling
+        if (candlePollTimer) {
+            clearInterval(candlePollTimer);
+            candlePollTimer = null;
         }
+
         if (wsTrades) {
             wsTrades.onclose = null;
             wsTrades.onmessage = null;
@@ -795,8 +813,8 @@
         // Загружаем историю свечей
         await loadChartData(symbol, currentTF);
 
-        // Запускаем SSE для живых свечей
-        startCandleSSE(symbol, currentTF);
+        // Запускаем polling свечей (1 сек)
+        startCandlePolling(symbol, currentTF);
 
         // Запускаем ленту сделок
         startTradesStream(symbol);
@@ -957,7 +975,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
