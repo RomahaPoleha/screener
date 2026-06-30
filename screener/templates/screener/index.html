@@ -282,7 +282,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">⚙️ Настройки плотностей</h5>
+                <h5 class="modal-title">️ Настройки плотностей</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -353,7 +353,7 @@
     let chart = null;
     let candleSeries = null;
     let wsTrades = null;
-    let wsCandles = null; // Теперь это WebSocket к Binance, а не к серверу
+    let candleSSE = null; // SSE для свечей
 
     let currentPrecision = 2;
     let tradeBuffer = [];
@@ -399,8 +399,8 @@
             e.target.classList.add('active');
             currentTF = newTF;
             if (currentSymbol && chart) {
-                // Перезапускаем WebSocket с новым таймфреймом
-                startCandleWebSocket(currentSymbol, currentTF);
+                // Перезапускаем SSE с новым таймфреймом
+                startCandleSSE(currentSymbol, currentTF);
             }
         });
     });
@@ -672,57 +672,39 @@
         }, 10000);
     }
 
-    // === WEBSOCKET СВЕЧЕЙ (ПРЯМОЕ ПОДКЛЮЧЕНИЕ К BINANCE) ===
-     function startCandleWebSocket(symbol, tf) {
-        if (wsCandles) {
-            wsCandles.onclose = null;
-            wsCandles.close();
-            wsCandles = null;
+    // === SSE СВЕЧЕЙ ===
+    function startCandleSSE(symbol, tf) {
+        // Закрываем старое SSE
+        if (candleSSE) {
+            candleSSE.close();
+            candleSSE = null;
         }
 
-        // Пробуем SPOT endpoint (он работает из браузера)
-        const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
-        const wsUrl = `wss://stream.binance.com:9443/ws/${streamName}`;
+        const url = `/sse/candles/${symbol}/?tf=${tf}&market=future`;
+        console.log(` SSE подключение: ${url}`);
 
-        console.log(`🔗 Подключение (Spot endpoint): ${wsUrl}`);
+        candleSSE = new EventSource(url);
 
-        wsCandles = new WebSocket(wsUrl);
-
-        wsCandles.onopen = () => {
-            console.log(`✅ WebSocket подключен`);
-        };
-
-        wsCandles.onmessage = (e) => {
-            console.log(`📨 Данные:`, e.data);
+        candleSSE.onmessage = (e) => {
             try {
-                const data = JSON.parse(e.data);
-                const k = data.k;
-                if (k) {
-                    const candle = {
-                        time: Math.floor(k.t / 1000),
-                        open: parseFloat(k.o),
-                        high: parseFloat(k.h),
-                        low: parseFloat(k.l),
-                        close: parseFloat(k.c)
-                    };
-
-                    if (candleSeries && currentSymbol === symbol) {
-                        candleSeries.update(candle);
-                        console.log(`✅ Обновлена`);
-                    }
+                const candle = JSON.parse(e.data);
+                if (candleSeries && currentSymbol === symbol) {
+                    candleSeries.update(candle);
                 }
             } catch (err) {
-                console.error('❌ Ошибка:', err);
+                console.error('❌ Ошибка парсинга SSE:', err);
             }
         };
 
-        wsCandles.onerror = (e) => console.error('❌ Ошибка WS:', e);
-        wsCandles.onclose = () => {
-            console.log(`🔌 Закрыт`);
+        candleSSE.onerror = (e) => {
+            console.error('❌ SSE ошибка:', e);
+            candleSSE.close();
             if (currentSymbol === symbol) {
-                setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
+                setTimeout(() => startCandleSSE(symbol, tf), 3000);
             }
         };
+
+        console.log(`✅ SSE подключен`);
     }
 
     function closeChart() {
@@ -733,11 +715,10 @@
         }
         previousDensities = { future: [], spot: [] };
 
-        // Закрываем WebSocket свечей
-        if (wsCandles) {
-            wsCandles.onclose = null;
-            wsCandles.close();
-            wsCandles = null;
+        // Закрываем SSE
+        if (candleSSE) {
+            candleSSE.close();
+            candleSSE = null;
         }
 
         // Закрываем WebSocket сделок
@@ -760,11 +741,10 @@
     }
 
     async function openChart(symbol) {
-        // Закрываем старые WebSocket
-        if (wsCandles) {
-            wsCandles.onclose = null;
-            wsCandles.close();
-            wsCandles = null;
+        // Закрываем старые соединения
+        if (candleSSE) {
+            candleSSE.close();
+            candleSSE = null;
         }
         if (wsTrades) {
             wsTrades.onclose = null;
@@ -815,8 +795,8 @@
         // Загружаем историю свечей
         await loadChartData(symbol, currentTF);
 
-        // Запускаем WebSocket для живых свечей
-        startCandleWebSocket(symbol, currentTF);
+        // Запускаем SSE для живых свечей
+        startCandleSSE(symbol, currentTF);
 
         // Запускаем ленту сделок
         startTradesStream(symbol);
@@ -977,7 +957,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');

@@ -6,6 +6,10 @@ from django.core.cache import cache
 from django.shortcuts import render
 from datetime import datetime
 from .candle_updater import add_active_symbol
+import json
+import asyncio
+import ccxt.async_support as ccxt_async
+from django.http import StreamingHttpResponse
 
 # Минимальный объём для фильтрации
 MIN_VOLUME = 200000
@@ -140,3 +144,58 @@ def api_natr(request):
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
+
+
+async def candle_generator(symbol, tf, market):
+    """Генератор свечей через SSE"""
+    exchange = ccxt_async.binance({
+        'enableRateLimit': True,
+        'options': {'defaultType': market},
+        'timeout': 10000
+    })
+
+    pair = f"{symbol}/USDT:USDT" if market == 'future' else f"{symbol}/USDT"
+    last_candle = None
+
+    try:
+        while True:
+            try:
+                ohlcv = await exchange.fetch_ohlcv(pair, timeframe=tf, limit=1)
+                if ohlcv:
+                    ts, o, h, l, c, v = ohlcv[0]
+                    candle = {
+                        'time': int(ts / 1000),
+                        'open': float(o),
+                        'high': float(h),
+                        'low': float(l),
+                        'close': float(c)
+                    }
+
+                    if candle != last_candle:
+                        yield f"data: {json.dumps(candle)}\n\n"
+                        last_candle = candle
+
+                await asyncio.sleep(1)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"SSE error: {e}")
+                await asyncio.sleep(2)
+    finally:
+        await exchange.close()
+
+
+def sse_candles(request, symbol):
+    """SSE поток свечей"""
+    tf = request.GET.get('tf', '1m')
+    market = request.GET.get('market', 'future')
+
+    response = StreamingHttpResponse(
+        candle_generator(symbol, tf, market),
+        content_type='text/event-stream',
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # Отключаем буферизацию nginx
+
+    return response
