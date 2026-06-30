@@ -673,7 +673,7 @@
     }
 
     // === WEBSOCKET СВЕЧЕЙ (ПРЯМОЕ ПОДКЛЮЧЕНИЕ К BINANCE) ===
-            function startCandleWebSocket(symbol, tf) {
+                function startCandleWebSocket(symbol, tf) {
         // Закрываем старое соединение
         if (wsCandles) {
             wsCandles.onclose = null;
@@ -681,8 +681,9 @@
             wsCandles = null;
         }
 
+        // ПРЯМОЙ URL (без явной подписки)
         const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
-        const wsUrl = `wss://fstream.binance.com/ws`;
+        const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
 
         console.log(`🔗 Подключение к свечам: ${wsUrl}`);
 
@@ -690,16 +691,6 @@
 
         wsCandles.onopen = () => {
             console.log(`✅ WebSocket свечей подключен: ${symbol} ${tf}`);
-
-            // Отправляем подписку
-            const subscribeMsg = {
-                method: "SUBSCRIBE",
-                params: [streamName],
-                id: 1
-            };
-
-            console.log(`📤 Отправка подписки:`, subscribeMsg);
-            wsCandles.send(JSON.stringify(subscribeMsg));
         };
 
         wsCandles.onmessage = (e) => {
@@ -708,15 +699,8 @@
                 const data = JSON.parse(e.data);
                 console.log(` Распарсенные данные:`, data);
 
-                // Проверяем, это ответ на подписку или данные свечи
-                if (data.result !== undefined) {
-                    console.log(`📋 Ответ на подписку:`, data.result);
-                    return;
-                }
-
                 const k = data.k;
                 if (k) {
-                    console.log(`🕯️ Kline data:`, k);
                     const candle = {
                         time: Math.floor(k.t / 1000),
                         open: parseFloat(k.o),
@@ -724,30 +708,24 @@
                         low: parseFloat(k.l),
                         close: parseFloat(k.c)
                     };
-                    console.log(`📈 Свеча для графика:`, candle);
 
                     if (candleSeries && currentSymbol === symbol) {
                         candleSeries.update(candle);
-                        console.log(`✅ Свеча обновлена на графике`);
-                    } else {
-                        console.log(`⚠️ candleSeries или symbol не совпадают`);
+                        console.log(`✅ Свеча обновлена`);
                     }
-                } else {
-                    console.log(`️ Поле k отсутствует в данных`);
                 }
             } catch (err) {
-                console.error('❌ Ошибка парсинга свечи:', err);
+                console.error('❌ Ошибка парсинга:', err);
             }
         };
 
         wsCandles.onerror = (e) => {
-            console.error('❌ WebSocket свечей ошибка:', e);
+            console.error('❌ WebSocket ошибка:', e);
         };
 
         wsCandles.onclose = (e) => {
-            console.log(`🔌 WebSocket свечей закрыт. Code: ${e.code}, Reason: ${e.reason}`);
+            console.log(`🔌 WebSocket закрыт. Code: ${e.code}`);
             if (currentSymbol === symbol) {
-                console.log(`🔄 Переподключение через 3 секунды...`);
                 setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
             }
         };
