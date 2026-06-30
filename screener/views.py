@@ -147,7 +147,7 @@ def index(request):
 
 
 async def candle_generator(symbol, tf, market):
-    """Генератор свечей через SSE"""
+    """Асинхронный генератор свечей для SSE"""
     exchange = ccxt_async.binance({
         'enableRateLimit': True,
         'options': {'defaultType': market},
@@ -171,6 +171,7 @@ async def candle_generator(symbol, tf, market):
                         'close': float(c)
                     }
 
+                    # Отдаём только если свеча изменилась
                     if candle != last_candle:
                         yield f"data: {json.dumps(candle)}\n\n"
                         last_candle = candle
@@ -186,8 +187,9 @@ async def candle_generator(symbol, tf, market):
         await exchange.close()
 
 
-def sse_candles(request, symbol):
-    """SSE поток свечей"""
+# ВАЖНО: Вью должна быть async, чтобы работать с async генератором!
+async def sse_candles(request, symbol):
+    """SSE поток свечей (асинхронная вью)"""
     tf = request.GET.get('tf', '1m')
     market = request.GET.get('market', 'future')
 
