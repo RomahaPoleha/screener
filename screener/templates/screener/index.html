@@ -360,6 +360,7 @@
     let currentThreshold = 10000;
     let currentTF = '1m';
     let currentSymbol = '';
+    let lastCandleTime = 0;
 
     let natrUpdateTimes = { '1m30': null, '5m14': null };
 
@@ -676,7 +677,7 @@
         if (window.candlePollTimer) {
             clearInterval(window.candlePollTimer);
         }
-
+        lastCandleTime = 0;
         const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}USDT&interval=${tf}&limit=1`;
         console.log(`🔗 Polling свечей: ${url}`);
 
@@ -708,8 +709,8 @@
         // Первый запрос сразу
         fetchCandle();
 
-        // Затем каждые 0.5 секунды
-        window.candlePollTimer = setInterval(fetchCandle, 500);
+        // Затем каждые 1 секунда
+        window.candlePollTimer = setInterval(fetchCandle, 1000);
     }
 
     function closeChart() {
