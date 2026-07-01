@@ -20,15 +20,6 @@
             gap: 16px; flex-wrap: wrap;
         }
         .top-bar .logo { font-size: 18px; font-weight: 700; color: #f0b90b; margin-right: 8px; }
-        .market-label {
-            color: #f0b90b; font-weight: 600; font-size: 13px;
-            padding: 4px 12px; border: 1px solid #f0b90b; border-radius: 6px;
-        }
-        .status-badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; }
-        .natr-time {
-            font-size: 11px; padding: 3px 8px; border-radius: 4px;
-            background: transparent; border: 1px solid #2d3748; color: #9ca3af;
-        }
         .sound-toggle {
             padding: 4px 12px; font-size: 12px; font-weight: 600;
             border-radius: 6px; border: 1px solid #3d4558;
@@ -76,8 +67,14 @@
         }
         .trades-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
         .trades-header h6 { margin: 0; font-size: 12px; color: #9ca3af; }
-        .trades-controls { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9ca3af; }
-        .trades-controls input[type=range] { width: 80px; accent-color: #f0b90b; }
+        .trades-controls { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #9ca3af; }
+        .trades-toggle {
+            display: flex; align-items: center; gap: 6px; cursor: pointer;
+            font-size: 12px; color: #9ca3af;
+        }
+        .trades-toggle input[type=checkbox] {
+            accent-color: #f0b90b; width: 16px; height: 16px; cursor: pointer;
+        }
         #tradesList { height: 100px; overflow-y: auto; font-family: monospace; font-size: 11px; }
         #tradesList::-webkit-scrollbar { width: 4px; }
         #tradesList::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
@@ -183,6 +180,18 @@
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
         .toast-content { display: flex; flex-direction: column; gap: 4px; }
         .toast-title { font-size: 14px; font-weight: 700; }
+        .modal-section {
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #2d3748;
+        }
+        .modal-section:last-child { border-bottom: none; }
+        .modal-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #f0b90b;
+            margin-bottom: 12px;
+        }
         @media (max-width: 900px) {
             .main-layout { flex-direction: column; height: auto; }
             .right-panel { width: 100%; height: 400px; border-left: none; border-top: 1px solid #2d3748; }
@@ -194,14 +203,10 @@
 
 <div class="top-bar">
     <span class="logo">⚡ Screener</span>
-    <span class="market-label">Futures</span>
     <div class="loader" id="loader"></div>
-    <span class="status-badge badge bg-secondary" id="status">Загрузка...</span>
-    <span class="natr-time" id="natrTime1m">NATR 1m: --:--:--</span>
-    <span class="natr-time" id="natrTime5m">NATR 5m: --:--:--</span>
     <div style="margin-left:auto; display:flex; gap:8px;">
         <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
-        <button class="sound-toggle" id="densityBtn" onclick="openDensityModal()">📊 Плотности</button>
+        <button class="sound-toggle" id="densityBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
     </div>
 </div>
 
@@ -227,9 +232,10 @@
             <div class="trades-header">
                 <h6>Крупные сделки</h6>
                 <div class="trades-controls">
-                    <span>Мин. $:</span>
-                    <input type="range" id="tradeThresholdSlider" min="1000" max="100000" step="1000" value="10000">
-                    <span id="tradeThresholdValue" style="color:#fff; font-weight:600;">$10K</span>
+                    <label class="trades-toggle">
+                        <input type="checkbox" id="tradesEnabledCheckbox" checked>
+                        <span>Показывать</span>
+                    </label>
                 </div>
             </div>
             <div id="tradesList">
@@ -277,42 +283,60 @@
     </div>
 </div>
 
-<!-- Модальное окно плотностей -->
-<div class="modal fade" id="densityModal" tabindex="-1" aria-hidden="true">
+<!-- Модальное окно настроек -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">⚙️ Настройки плотностей</h5>
+                <h5 class="modal-title">⚙️ Настройки</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div style="margin-bottom:20px;">
-                    <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
-                    <div style="display:flex; gap:16px;">
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
-                            <input type="checkbox" id="densityMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;">
-                            <span>Futures</span>
+                <!-- Секция: Плотности -->
+                <div class="modal-section">
+                    <div class="modal-section-title">📊 Плотности</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
+                        <div style="display:flex; gap:16px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="densityMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <span>Futures</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="densityMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <span>Spot</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                            Мин. объём плотности (USDT):
                         </label>
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
-                            <input type="checkbox" id="densityMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;">
-                            <span>Spot</span>
-                        </label>
+                        <input type="number" id="densityMinVolume" value="100000" min="1000" step="10000"
+                               style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
                     </div>
                 </div>
-                <div style="margin-bottom:20px;">
-                    <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                        Мин. объём (USDT):
-                    </label>
-                    <input type="number" id="densityMinVolume" value="100000" min="1000" step="10000"
-                           style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
-                </div>
-                <div style="font-size:11px; color:#6b7280; text-align:center;">
-                    Найдено: <span id="densityCountModal" style="color:#f0b90b; font-weight:600;">0</span>
+
+                <!-- Секция: Крупные сделки -->
+                <div class="modal-section">
+                    <div class="modal-section-title">💰 Крупные сделки</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
+                            <input type="checkbox" id="tradesEnabledModal" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <span>Показывать крупные сделки</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                            Мин. сумма сделки (USDT): <span id="tradesMinValueText" style="color:#f0b90b; font-weight:600;">$10K</span>
+                        </label>
+                        <input type="range" id="tradesMinValueSlider" class="filter-slider" min="1000" max="500000" step="1000" value="10000" style="width:100%;">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer" style="border-top:1px solid #2d3748;">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2d3748; border:none; color:#d1d5db;">Закрыть</button>
-                <button type="button" class="btn btn-primary" onclick="applyDensitySettings()" style="background:#f0b90b; border:none; color:#000; font-weight:600;">Применить</button>
+                <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#f0b90b; border:none; color:#000; font-weight:600;">Применить</button>
             </div>
         </div>
     </div>
@@ -335,15 +359,10 @@
         changeVal: document.getElementById('changeVal'),
         table: document.getElementById('tableBody'),
         loader: document.getElementById('loader'),
-        status: document.getElementById('status'),
-        natrTime1m: document.getElementById('natrTime1m'),
-        natrTime5m: document.getElementById('natrTime5m'),
         chartWrapper: document.getElementById('chart-container'),
         chartHint: document.getElementById('chart-hint'),
         chartTitle: document.getElementById('chart-title'),
         tradesList: document.getElementById('tradesList'),
-        thresholdSlider: document.getElementById('tradeThresholdSlider'),
-        thresholdValue: document.getElementById('tradeThresholdValue'),
         coinsCount: document.getElementById('coinsCount'),
         rightPanel: document.getElementById('rightPanel')
     };
@@ -359,10 +378,9 @@
     let tradeBuffer = [];
     let tradeFlushTimer = null;
     let currentThreshold = 10000;
+    let tradesEnabled = true;
     let currentTF = '1m';
     let currentSymbol = '';
-
-    let natrUpdateTimes = { '1m30': null, '5m14': null };
 
     // === ПЛОТНОСТИ ===
     let densityLines = [];
@@ -383,13 +401,31 @@
     const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
 
-    if (els.thresholdSlider) {
-        els.thresholdValue.textContent = fmtThreshold(currentThreshold);
-        els.thresholdSlider.addEventListener('input', (e) => {
-            currentThreshold = parseInt(e.target.value);
-            els.thresholdValue.textContent = fmtThreshold(currentThreshold);
-        });
-    }
+    // Переключатель крупных сделок в панели графика
+    document.getElementById('tradesEnabledCheckbox').addEventListener('change', (e) => {
+        tradesEnabled = e.target.checked;
+        document.getElementById('tradesEnabledModal').checked = tradesEnabled;
+        if (!tradesEnabled) {
+            // Закрываем WebSocket если отключили
+            if (wsTrades) {
+                wsTrades.onclose = null;
+                wsTrades.close();
+                wsTrades = null;
+            }
+            if (els.tradesList) {
+                els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Сделки отключены</div>';
+            }
+        } else if (currentSymbol) {
+            // Запускаем WebSocket если включили
+            startTradesStream(currentSymbol);
+        }
+    });
+
+    // Слайдер мин. значения сделок в модалке
+    document.getElementById('tradesMinValueSlider').addEventListener('input', (e) => {
+        currentThreshold = parseInt(e.target.value);
+        document.getElementById('tradesMinValueText').textContent = fmtThreshold(currentThreshold);
+    });
 
     document.querySelectorAll('.tf-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -405,34 +441,15 @@
         });
     });
 
-    function updateNatrTimeDisplay() {
-        if (natrUpdateTimes['1m30']) {
-            const time1m = new Date(natrUpdateTimes['1m30']);
-            els.natrTime1m.textContent = `NATR 1m: ${time1m.toLocaleTimeString('ru-RU')}`;
-        } else {
-            els.natrTime1m.textContent = 'NATR 1m: --:--:--';
-        }
-        if (natrUpdateTimes['5m14']) {
-            const time5m = new Date(natrUpdateTimes['5m14']);
-            els.natrTime5m.textContent = `NATR 5m: ${time5m.toLocaleTimeString('ru-RU')}`;
-        } else {
-            els.natrTime5m.textContent = 'NATR 5m: --:--:--';
-        }
-    }
-
     async function loadAllData() {
         els.loader.style.display = 'block';
         try {
             const res = await fetch(`/api/data/`);
             if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
             allCoins = await res.json();
-            els.status.textContent = `${allCoins.length} монет (Futures)`;
-            els.status.className = 'status-badge badge bg-success';
             applyLocalFilters();
         } catch (err) {
             console.error(err);
-            els.status.textContent = `Ошибка: ${err.message}`;
-            els.status.className = 'status-badge badge bg-danger';
             els.table.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">${err.message}</div>`;
         } finally {
             els.loader.style.display = 'none';
@@ -447,10 +464,6 @@
             if (!res.ok) throw new Error('Ошибка NATR');
             const response = await res.json();
             natrData = response.natr || {};
-            if (response.last_update_times) {
-                natrUpdateTimes = response.last_update_times;
-                updateNatrTimeDisplay();
-            }
             applyLocalFilters();
         } catch (err) {
             console.error(err);
@@ -461,13 +474,6 @@
         if (natrAutoUpdateTimer) return;
         loadNatrData();
         natrAutoUpdateTimer = setInterval(loadNatrData, 15000);
-    }
-
-    function stopNatrAutoUpdate() {
-        if (natrAutoUpdateTimer) {
-            clearInterval(natrAutoUpdateTimer);
-            natrAutoUpdateTimer = null;
-        }
     }
 
     function showSearchDropdown(query) {
@@ -528,75 +534,74 @@
         }).join('');
     }
 
-    // === WEBSOCKET СВЕЧЕЙ (НАПРЯМУЮ К BINANCE ИЗ БРАУЗЕРА) ===
-    // === WEBSOCKET СВЕЧЕЙ (НАПРЯМУЮ К BINANCE ИЗ БРАУЗЕРА) ===
-function startCandleWebSocket(symbol, tf) {
-    // Закрываем старое соединение
-    if (wsCandles) {
-        wsCandles.onclose = null;
-        wsCandles.close();
-        wsCandles = null;
+    // === WEBSOCKET СВЕЧЕЙ ===
+    function startCandleWebSocket(symbol, tf) {
+        if (wsCandles) {
+            wsCandles.onclose = null;
+            wsCandles.close();
+            wsCandles = null;
+        }
+
+        const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
+        const wsUrl = `wss://fstream.binance.com/market/ws/${streamName}`;
+
+        console.log(`🔗 WebSocket свечей: ${wsUrl}`);
+
+        wsCandles = new WebSocket(wsUrl);
+
+        wsCandles.onopen = () => {
+            console.log(`✅ WS свечей подключен: ${symbol} ${tf}`);
+        };
+
+        wsCandles.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (data.k) {
+                    const k = data.k;
+                    const candle = {
+                        time: Math.floor(k.t / 1000),
+                        open: parseFloat(k.o),
+                        high: parseFloat(k.h),
+                        low: parseFloat(k.l),
+                        close: parseFloat(k.c)
+                    };
+                    if (candleSeries && currentSymbol === symbol) {
+                        candleSeries.update(candle);
+                    }
+                }
+            } catch (err) {
+                console.error('❌ Ошибка парсинга WS свечи:', err);
+            }
+        };
+
+        wsCandles.onerror = (e) => {
+            console.error('❌ WS свечей ошибка:', e);
+        };
+
+        wsCandles.onclose = () => {
+            console.log('🔌 WS свечей закрыт');
+            if (currentSymbol === symbol) {
+                setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
+            }
+        };
     }
 
-    const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
-    // ❗️ НОВЫЙ URL С /market/ws/ ВМЕСТО /ws/
-    const wsUrl = `wss://fstream.binance.com/market/ws/${streamName}`;
-
-    console.log(`🔗 WebSocket свечей: ${wsUrl}`);
-
-    wsCandles = new WebSocket(wsUrl);
-
-    wsCandles.onopen = () => {
-        console.log(`✅ WS свечей подключен: ${symbol} ${tf}`);
-    };
-
-    wsCandles.onmessage = (e) => {
-        try {
-            const data = JSON.parse(e.data);
-
-            if (data.k) {
-                const k = data.k;
-                const candle = {
-                    time: Math.floor(k.t / 1000),
-                    open: parseFloat(k.o),
-                    high: parseFloat(k.h),
-                    low: parseFloat(k.l),
-                    close: parseFloat(k.c)
-                };
-
-                if (candleSeries && currentSymbol === symbol) {
-                    candleSeries.update(candle);
-                }
-            }
-        } catch (err) {
-            console.error('❌ Ошибка парсинга WS свечи:', err);
-        }
-    };
-
-    wsCandles.onerror = (e) => {
-        console.error('❌ WS свечей ошибка:', e);
-    };
-
-    wsCandles.onclose = () => {
-        console.log('🔌 WS свечей закрыт');
-        // Переподключение через 3 секунды
-        if (currentSymbol === symbol) {
-            setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
-        }
-    };
-}
-
-    // === ПЛОТНОСТИ: ФУНКЦИИ ===
-    function openDensityModal() {
+    // === НАСТРОЙКИ: ФУНКЦИИ ===
+    function openSettingsModal() {
+        // Подставляем текущие значения
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
+        document.getElementById('tradesEnabledModal').checked = tradesEnabled;
+        document.getElementById('tradesMinValueSlider').value = currentThreshold;
+        document.getElementById('tradesMinValueText').textContent = fmtThreshold(currentThreshold);
 
-        const modal = new bootstrap.Modal(document.getElementById('densityModal'));
+        const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
         modal.show();
     }
 
-    function applyDensitySettings() {
+    function applySettings() {
+        // === Плотности ===
         const futureChecked = document.getElementById('densityMarketFuture').checked;
         const spotChecked = document.getElementById('densityMarketSpot').checked;
         const minVolume = parseInt(document.getElementById('densityMinVolume').value) || 100000;
@@ -625,9 +630,33 @@ function startCandleWebSocket(symbol, tf) {
             clearDensityLines();
         }
 
-        bootstrap.Modal.getInstance(document.getElementById('densityModal')).hide();
+        // === Крупные сделки ===
+        const newTradesEnabled = document.getElementById('tradesEnabledModal').checked;
+        const newThreshold = parseInt(document.getElementById('tradesMinValueSlider').value) || 10000;
+
+        currentThreshold = newThreshold;
+        document.getElementById('tradesEnabledCheckbox').checked = newTradesEnabled;
+
+        if (newTradesEnabled !== tradesEnabled) {
+            tradesEnabled = newTradesEnabled;
+            if (!tradesEnabled) {
+                if (wsTrades) {
+                    wsTrades.onclose = null;
+                    wsTrades.close();
+                    wsTrades = null;
+                }
+                if (els.tradesList) {
+                    els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Сделки отключены</div>';
+                }
+            } else if (currentSymbol) {
+                startTradesStream(currentSymbol);
+            }
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
     }
 
+    // === ПЛОТНОСТИ ===
     async function loadDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
 
@@ -686,10 +715,6 @@ function startCandleWebSocket(symbol, tf) {
         }
 
         if (!hasChanges) {
-            for (const market of marketsToLoad) {
-                totalCount += (previousDensities[market] || []).length;
-            }
-            document.getElementById('densityCountModal').textContent = totalCount;
             return;
         }
 
@@ -710,8 +735,6 @@ function startCandleWebSocket(symbol, tf) {
             });
             totalCount += data.length;
         }
-
-        document.getElementById('densityCountModal').textContent = totalCount;
     }
 
     function clearDensityLines() {
@@ -808,7 +831,15 @@ function startCandleWebSocket(symbol, tf) {
 
         await loadChartData(symbol, currentTF);
         startCandleWebSocket(symbol, currentTF);
-        startTradesStream(symbol);
+
+        // Запускаем сделки только если включены
+        if (tradesEnabled) {
+            startTradesStream(symbol);
+        } else {
+            if (els.tradesList) {
+                els.tradesList.innerHTML = '<div style="color:#6b7280; text-align:center; padding:10px;">Сделки отключены</div>';
+            }
+        }
 
         if (densityEnabled) startDensityUpdates(symbol);
     }
@@ -891,7 +922,7 @@ function startCandleWebSocket(symbol, tf) {
             if (els.tradesList) els.tradesList.innerHTML = '<div style="color:#ef4444; text-align:center;">⚠️ Разрыв связи</div>';
         };
         wsTrades.onclose = () => {
-            setTimeout(() => { if (currentSymbol === symbol) startTradesStream(symbol); }, 3000);
+            setTimeout(() => { if (currentSymbol === symbol && tradesEnabled) startTradesStream(symbol); }, 3000);
         };
     }
 
