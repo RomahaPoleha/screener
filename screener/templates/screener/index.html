@@ -400,10 +400,7 @@
             currentTF = newTF;
             if (currentSymbol && chart) {
                 loadChartData(currentSymbol, currentTF);
-                // Отправляем новый таймфрейм через WebSocket
-                if (wsCandles && wsCandles.readyState === WebSocket.OPEN) {
-                    wsCandles.send(JSON.stringify({ symbol: currentSymbol, tf: currentTF }));
-                }
+                startCandleWebSocket(currentSymbol, currentTF);
             }
         });
     });
@@ -529,6 +526,62 @@
                 </div>
             `;
         }).join('');
+    }
+
+    // === WEBSOCKET СВЕЧЕЙ (НАПРЯМУЮ К BINANCE ИЗ БРАУЗЕРА) ===
+    function startCandleWebSocket(symbol, tf) {
+        // Закрываем старое соединение
+        if (wsCandles) {
+            wsCandles.onclose = null;
+            wsCandles.close();
+            wsCandles = null;
+        }
+
+        const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
+        const wsUrl = `wss://fstream.binance.com/ws/${streamName}`;
+
+        console.log(`🔗 WebSocket свечей: ${wsUrl}`);
+
+        wsCandles = new WebSocket(wsUrl);
+
+        wsCandles.onopen = () => {
+            console.log(`✅ WS свечей подключен: ${symbol} ${tf}`);
+        };
+
+        wsCandles.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+
+                if (data.e === 'kline' && data.k) {
+                    const k = data.k;
+                    const candle = {
+                        time: Math.floor(k.t / 1000),
+                        open: parseFloat(k.o),
+                        high: parseFloat(k.h),
+                        low: parseFloat(k.l),
+                        close: parseFloat(k.c)
+                    };
+
+                    if (candleSeries && currentSymbol === symbol) {
+                        candleSeries.update(candle);
+                    }
+                }
+            } catch (err) {
+                console.error('❌ Ошибка парсинга WS свечи:', err);
+            }
+        };
+
+        wsCandles.onerror = (e) => {
+            console.error('❌ WS свечей ошибка:', e);
+        };
+
+        wsCandles.onclose = () => {
+            console.log('🔌 WS свечей закрыт');
+            // Переподключение через 3 секунды
+            if (currentSymbol === symbol) {
+                setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
+            }
+        };
     }
 
     // === ПЛОТНОСТИ: ФУНКЦИИ ===
@@ -684,8 +737,9 @@
         previousDensities = { future: [], spot: [] };
 
         if (wsCandles) {
-            wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
-            wsCandles.close(); wsCandles = null;
+            wsCandles.onclose = null;
+            wsCandles.close();
+            wsCandles = null;
         }
         if (wsTrades) {
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
@@ -703,8 +757,9 @@
 
     async function openChart(symbol) {
         if (wsCandles) {
-            wsCandles.onclose = null; wsCandles.onmessage = null; wsCandles.onerror = null;
-            wsCandles.close(); wsCandles = null;
+            wsCandles.onclose = null;
+            wsCandles.close();
+            wsCandles = null;
         }
         if (wsTrades) {
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
@@ -750,6 +805,7 @@
         }
 
         await loadChartData(symbol, currentTF);
+        startCandleWebSocket(symbol, currentTF);
         startTradesStream(symbol);
 
         if (densityEnabled) startDensityUpdates(symbol);
@@ -780,40 +836,6 @@
                 autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 }
             });
             chart.timeScale().scrollToPosition(12, false);
-
-            // Подключаемся к WebSocket сервера для живых свечей
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/ws/candles/`;
-
-            wsCandles = new WebSocket(wsUrl);
-
-            wsCandles.onopen = () => {
-                console.log(`✅ WS подключен к серверу`);
-                wsCandles.send(JSON.stringify({
-                    symbol: symbol,
-                    tf: tf
-                }));
-            };
-
-            wsCandles.onmessage = (e) => {
-                try {
-                    const candle = JSON.parse(e.data);
-                    if (candle.error) return;
-                    if (currentSymbol === symbol && candleSeries) {
-                        candleSeries.update(candle);
-                    }
-                } catch (err) {
-                    console.error('Ошибка парсинга WS:', err);
-                }
-            };
-
-            wsCandles.onerror = (e) => {
-                console.error('❌ WS ошибка:', e);
-            };
-
-            wsCandles.onclose = () => {
-                console.log('🔌 WS закрыт');
-            };
 
         } catch (err) {
             els.chartTitle.textContent = `Ошибка: ${err.message}`;
