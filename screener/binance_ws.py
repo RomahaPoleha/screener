@@ -5,7 +5,7 @@ import json
 
 async def binance_candle_stream(symbol, tf, callback):
     """
-    WebSocket к Binance Futures с логированием
+    WebSocket к Binance Futures с автоматической подпиской
     """
     stream_name = f"{symbol.lower()}usdt@kline_{tf}"
     url = f"wss://fstream.binance.com/ws/{stream_name}"
@@ -21,12 +21,26 @@ async def binance_candle_stream(symbol, tf, callback):
         ) as ws:
             print(f"✅ WS к Binance подключен: {symbol} {tf}")
 
+            # ❗️ ВАЖНО: Отправляем сообщение подписки!
+            subscribe_msg = {
+                "method": "SUBSCRIBE",
+                "params": [stream_name],
+                "id": 1
+            }
+            await ws.send(json.dumps(subscribe_msg))
+            print(f"📤 Отправлена подписка: {stream_name}")
+
             while True:
                 try:
                     message = await ws.recv()
                     print(f"📨 Получено от Binance ({len(message)} bytes)")
 
                     data = json.loads(message)
+
+                    # Ответ на подписку (игнорируем)
+                    if 'result' in data and data.get('id') == 1:
+                        print(f"✅ Подписка подтверждена")
+                        continue
 
                     # Binance может слать текстовый Ping (редко)
                     if isinstance(data, str) and data == 'PING':
