@@ -5,12 +5,11 @@ import json
 
 async def binance_candle_stream(symbol, tf, callback):
     """
-    WebSocket к Binance Futures
-    ВАЖНО: При подключении к /ws/<streamName> подписка автоматическая!
-    Отправлять SUBSCRIBE НЕ НУЖНО!
+    WebSocket к Binance Futures (новый формат URL)
     """
     stream_name = f"{symbol.lower()}usdt@kline_{tf}"
-    url = f"wss://fstream.binance.com/ws/{stream_name}"
+    # ❗️ НОВЫЙ формат URL с /stream?streams=
+    url = f"wss://fstream.binance.com/stream?streams={stream_name}"
 
     print(f"🔗 Подключение к Binance: {url}", flush=True)
 
@@ -23,7 +22,14 @@ async def binance_candle_stream(symbol, tf, callback):
         ) as ws:
             print(f"✅ WS к Binance подключен: {symbol} {tf}", flush=True)
 
-            # ❌ НЕ отправляем SUBSCRIBE — стрим уже подписан через URL!
+            # ❗️ Отправляем SUBSCRIBE (обязательно для нового URL)
+            subscribe_msg = {
+                "method": "SUBSCRIBE",
+                "params": [stream_name],
+                "id": 1
+            }
+            await ws.send(json.dumps(subscribe_msg))
+            print(f"📤 Отправлена подписка: {stream_name}", flush=True)
 
             while True:
                 try:
@@ -32,18 +38,26 @@ async def binance_candle_stream(symbol, tf, callback):
 
                     data = json.loads(message)
 
-                    # Обрабатываем свечу
-                    if 'e' in data and data['e'] == 'kline' and 'k' in data:
-                        k = data['k']
-                        candle = {
-                            'time': int(k['t'] / 1000),
-                            'open': float(k['o']),
-                            'high': float(k['h']),
-                            'low': float(k['l']),
-                            'close': float(k['c'])
-                        }
-                        print(f"🕯️ Отправка свечи: {candle['time']} close={candle['close']}", flush=True)
-                        await callback(candle)
+                    # Ответ на подписку
+                    if 'result' in data and data.get('id') == 1:
+                        print(f"✅ Подписка подтверждена", flush=True)
+                        continue
+
+                    # Новый формат: данные приходят в data['data']
+                    if 'stream' in data and 'data' in data:
+                        inner_data = data['data']
+
+                        if 'e' in inner_data and inner_data['e'] == 'kline' and 'k' in inner_data:
+                            k = inner_data['k']
+                            candle = {
+                                'time': int(k['t'] / 1000),
+                                'open': float(k['o']),
+                                'high': float(k['h']),
+                                'low': float(k['l']),
+                                'close': float(k['c'])
+                            }
+                            print(f"🕯️ Отправка свечи: {candle['time']} close={candle['close']}", flush=True)
+                            await callback(candle)
                     else:
                         print(f"ℹ️ Другое сообщение: {data}", flush=True)
 
@@ -52,6 +66,8 @@ async def binance_candle_stream(symbol, tf, callback):
                     break
                 except Exception as e:
                     print(f"❌ Ошибка обработки: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc()
                     await asyncio.sleep(2)
                     break
 
