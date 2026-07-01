@@ -1,11 +1,8 @@
 import ccxt
-import time
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.shortcuts import render
-from datetime import datetime
-from .candle_updater import add_active_symbol
 
 # Минимальный объём для фильтрации
 MIN_VOLUME = 200000
@@ -72,8 +69,6 @@ def api_candles(request, symbol):
     """API: история свечей (только Futures)"""
     tf = request.GET.get('tf', '1m')
 
-    add_active_symbol(symbol, tf)
-
     cache_key = f"candles_{symbol}_{tf}_future"
     cached = cache.get(cache_key)
     if cached:
@@ -104,12 +99,11 @@ def api_candles(request, symbol):
         return JsonResponse(candles, safe=False)
 
     except ccxt.BadSymbol as e:
-        print(f"️ {symbol} не найден: {e}")
+        print(f"⚠️ {symbol} не найден: {e}")
         return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
     except Exception as e:
         print(f"❌ Ошибка api_candles {symbol}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
-
 
 
 @require_http_methods(["GET"])
