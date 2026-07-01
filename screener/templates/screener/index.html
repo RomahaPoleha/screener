@@ -69,29 +69,35 @@
             transform: translate(-50%, -50%);
             font-size: 48px;
             font-weight: 900;
-            color: rgba(255, 255, 255, 0.03);
+            color: rgba(255, 255, 255, 0.05);
             pointer-events: none;
-            z-index: 1;
+            z-index: 5;
             text-align: center;
             line-height: 1.2;
             white-space: nowrap;
+            display: none;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            font-family: 'Inter', system-ui, sans-serif;
         }
         .chart-watermark .symbol {
             display: block;
-            font-size: 64px;
+            font-size: 72px;
+            font-weight: 900;
         }
         .chart-watermark .tf {
             display: block;
-            font-size: 32px;
+            font-size: 36px;
             margin-top: 8px;
+            font-weight: 700;
         }
         /* Плавающее окно крупных сделок */
         .trades-floating-window {
             position: fixed;
             bottom: 20px;
             right: 400px;
-            width: 500px;
-            max-height: 400px;
+            width: 420px;
+            height: 400px;
             background: #151b2b;
             border: 1px solid #2d3748;
             border-radius: 8px;
@@ -99,6 +105,7 @@
             z-index: 1000;
             display: none;
             flex-direction: column;
+            overflow: hidden;
         }
         .trades-floating-window.active {
             display: flex;
@@ -107,35 +114,41 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 16px;
+            padding: 10px 16px;
             border-bottom: 1px solid #2d3748;
             background: #0b0f19;
-            border-radius: 8px 8px 0 0;
+            flex-shrink: 0;
         }
         .trades-floating-header h6 {
             margin: 0;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             color: #f0b90b;
         }
         .trades-floating-body {
             flex: 1;
             overflow-y: auto;
-            max-height: 340px;
-            padding: 8px;
+            overflow-x: hidden;
+            padding: 4px 0;
         }
         .trades-floating-body::-webkit-scrollbar {
             width: 6px;
+        }
+        .trades-floating-body::-webkit-scrollbar-track {
+            background: #0b0f19;
         }
         .trades-floating-body::-webkit-scrollbar-thumb {
             background: #2d3748;
             border-radius: 3px;
         }
+        .trades-floating-body::-webkit-scrollbar-thumb:hover {
+            background: #3d4558;
+        }
         .trade-item {
             display: grid;
-            grid-template-columns: 80px 100px 100px 80px 60px;
-            gap: 8px;
-            padding: 6px 10px;
+            grid-template-columns: 70px 80px 90px 80px 60px;
+            gap: 6px;
+            padding: 5px 12px;
             border-bottom: 1px solid #1e2538;
             font-family: monospace;
             font-size: 11px;
@@ -146,16 +159,28 @@
         }
         .trade-time {
             color: #9ca3af;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .trade-value {
-            color: #d1d5db;
+            color: #f0b90b;
             font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .trade-price {
             color: #d1d5db;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .trade-qty {
             color: #6b7280;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .trade-buy {
             color: #22c55e;
@@ -315,11 +340,11 @@
             <div class="chart-title-bar" id="chart-title">График</div>
             <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
-            <div id="chart-container">
-                <div class="chart-watermark" id="chartWatermark" style="display:none;">
-                    <span class="symbol" id="watermarkSymbol">BTC</span>
-                    <span class="tf" id="watermarkTF">1m</span>
-                </div>
+            <div id="chart-container"></div>
+            <!-- Водяной знак вынесен из chart-container, чтобы не перекрывался графиком -->
+            <div class="chart-watermark" id="chartWatermark">
+                <span class="symbol" id="watermarkSymbol">BTC</span>
+                <span class="tf" id="watermarkTF">1m</span>
             </div>
         </div>
     </div>
@@ -449,7 +474,6 @@
         volVal: document.getElementById('volVal'),
         changeVal: document.getElementById('changeVal'),
         table: document.getElementById('tableBody'),
-        loader: document.getElementById('loader'),
         chartWrapper: document.getElementById('chart-container'),
         chartHint: document.getElementById('chart-hint'),
         chartTitle: document.getElementById('chart-title'),
@@ -471,7 +495,6 @@
 
     let currentPrecision = 2;
     let tradeBuffer = [];
-    let tradeFlushTimer = null;
     let currentThreshold = 10000;
     let tradesEnabled = false;
     let currentTF = '1m';
@@ -496,7 +519,6 @@
     const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
 
-    // Слайдер мин. значения сделок в модалке
     document.getElementById('tradesMinValueSlider').addEventListener('input', (e) => {
         currentThreshold = parseInt(e.target.value);
         document.getElementById('tradesMinValueText').textContent = fmtThreshold(currentThreshold);
@@ -522,12 +544,10 @@
             const res = await fetch(`/api/data/`);
             if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
             allCoins = await res.json();
-            console.log('✅ Загружено монет:', allCoins.length);
             applyLocalFilters();
         } catch (err) {
             console.error('❌ Ошибка загрузки:', err);
             els.table.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">${err.message}</div>`;
-        } finally {
         }
     }
 
@@ -586,7 +606,6 @@
     }
 
     function renderTable(data) {
-        console.log('📊 Рендер таблицы:', data.length, 'монет');
         if (els.coinsCount) els.coinsCount.textContent = data.length;
         if (!data.length) {
             els.table.innerHTML = '<div style="color:#6b7280; text-align:center; padding:20px;">Нет данных</div>';
@@ -621,8 +640,6 @@
         const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
         const wsUrl = `wss://fstream.binance.com/market/ws/${streamName}`;
 
-        console.log(`🔗 WebSocket свечей: ${wsUrl}`);
-
         wsCandles = new WebSocket(wsUrl);
 
         wsCandles.onopen = () => {
@@ -655,7 +672,6 @@
         };
 
         wsCandles.onclose = () => {
-            console.log('🔌 WS свечей закрыт');
             if (currentSymbol === symbol) {
                 setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
             }
@@ -664,7 +680,6 @@
 
     // === НАСТРОЙКИ: ФУНКЦИИ ===
     function openSettingsModal() {
-        // Подставляем текущие значения
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
@@ -715,13 +730,11 @@
         if (newTradesEnabled !== tradesEnabled) {
             tradesEnabled = newTradesEnabled;
             if (tradesEnabled) {
-                // Показываем плавающее окно
                 els.tradesFloatingWindow.classList.add('active');
                 if (currentSymbol) {
                     startTradesStream(currentSymbol);
                 }
             } else {
-                // Скрываем плавающее окно и закрываем WebSocket
                 els.tradesFloatingWindow.classList.remove('active');
                 if (wsTrades) {
                     wsTrades.onclose = null;
@@ -749,9 +762,6 @@
         `).join('');
 
         els.tradesFloatingBody.innerHTML = html;
-
-        // Прокрутка вниз
-        els.tradesFloatingBody.scrollTop = els.tradesFloatingBody.scrollHeight;
     }
 
     // === ПЛОТНОСТИ ===
@@ -876,7 +886,6 @@
         }
         if (chart) { chart.remove(); chart = null; candleSeries = null; }
         tradeBuffer = [];
-        if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
         els.chartTitle.textContent = 'График';
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
@@ -904,11 +913,7 @@
         els.chartHint.style.display = 'none';
         els.chartWrapper.classList.add('active');
 
-        // Обновляем водяной знак
-        updateWatermark();
-
         tradeBuffer = [];
-        if (tradeFlushTimer) { clearTimeout(tradeFlushTimer); tradeFlushTimer = null; }
 
         if (chart) { chart.remove(); chart = null; candleSeries = null; }
 
@@ -939,7 +944,9 @@
         await loadChartData(symbol, currentTF);
         startCandleWebSocket(symbol, currentTF);
 
-        // Запускаем сделки только если включены
+        // Обновляем водяной знак
+        updateWatermark();
+
         if (tradesEnabled) {
             startTradesStream(symbol);
         }
@@ -997,12 +1004,10 @@
                 const time = new Date(trade.T).toLocaleTimeString('ru-RU', { hour12: false });
                 tradeBuffer.push({ time, price, qty, value, isBuyerMaker });
 
-                // Оставляем только последние 50 сделок
                 if (tradeBuffer.length > 50) {
                     tradeBuffer.shift();
                 }
 
-                // Обновляем плавающее окно
                 if (tradesEnabled) {
                     updateTradesFloatingWindow();
                 }
