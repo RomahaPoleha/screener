@@ -518,7 +518,6 @@
     });
 
     async function loadAllData() {
-        els.loader.style.display = 'block';
         try {
             const res = await fetch(`/api/data/`);
             if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
@@ -529,7 +528,6 @@
             console.error('❌ Ошибка загрузки:', err);
             els.table.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">${err.message}</div>`;
         } finally {
-            els.loader.style.display = 'none';
         }
     }
 
