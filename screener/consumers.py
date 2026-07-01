@@ -8,47 +8,21 @@ streams_lock = asyncio.Lock()
 
 
 async def binance_polling_task(symbol, tf, queue):
-    """Polling к Binance Futures"""
-    print(f"🚀 [POLL] Запуск: {symbol} {tf}")
+    """WebSocket к Binance Futures с автоматическим Ping/Pong"""
+    print(f"🚀 [WS] Запуск: {symbol} {tf}")
 
-    exchange = ccxt_async.binance({
-        'enableRateLimit': True,
-        'options': {'defaultType': 'future'},
-        'timeout': 10000
-    })
-    pair = f"{symbol}/USDT:USDT"
+    from .binance_ws import binance_candle_stream
+
+    async def send_to_queue(candle):
+        """Callback для отправки свечи в очередь"""
+        await queue.put(candle)
 
     try:
-        print(f"✅ [POLL] Подключен: {symbol}")
-        last_candle = None
-
-        while True:
-            try:
-                ohlcv = await exchange.fetch_ohlcv(pair, timeframe=tf, limit=1)
-                if ohlcv:
-                    ts, o, h, l, c, v = ohlcv[0]
-                    candle = {
-                        'time': int(ts / 1000),
-                        'open': float(o),
-                        'high': float(h),
-                        'low': float(l),
-                        'close': float(c)
-                    }
-
-                    if last_candle != candle:
-                        await queue.put(candle)
-                        last_candle = candle
-
-                await asyncio.sleep(0.5)
-
-            except asyncio.CancelledError:
-                print(f"🛑 [POLL] Отменен: {symbol}")
-                break
-            except Exception as e:
-                print(f"️ [POLL] Ошибка: {e}")
-                await asyncio.sleep(2)
-    finally:
-        await exchange.close()
+        await binance_candle_stream(symbol, tf, send_to_queue)
+    except asyncio.CancelledError:
+        print(f"🛑 [WS] Отменен: {symbol}")
+    except Exception as e:
+        print(f"❌ [WS] Ошибка: {e}")
 
 
 class CandleConsumer(AsyncWebsocketConsumer):
