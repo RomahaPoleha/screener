@@ -1079,85 +1079,61 @@
     }
 
     let sortState = { field: null, direction: 'asc' };
-    function sortBy(field) {
-    if (sortState.field === field) {
-        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        sortState.field = field;
-        if (field === 'natr_1m' || field === 'natr_5m') {
-            sortState.direction = 'desc';
-        } else {
-            sortState.direction = 'asc';
-        }
+
+    function getNatrValue(symbol, field) {
+        const key = field === 'natr_1m' ? 'natr_1m30' : 'natr_5m14';
+        const val = (natrData[symbol] || {})[key];
+        return val != null ? val : (sortState.direction === 'asc'
+            ? Number.POSITIVE_INFINITY
+            : Number.NEGATIVE_INFINITY);
     }
 
-    // ОТЛАДКА: показываем что происходит
-    alert(`Сортировка: ${field}\nНаправление: ${sortState.direction}\nПример NATR для BTC: ${JSON.stringify(natrData['BTC'])}`);
+    function sortBy(field) {
+        if (sortState.field === field) {
+            sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortState.field = field;
+            // По умолчанию сортируем по убыванию для всех полей
+            sortState.direction = 'desc';
+        }
 
-    document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
-    const arrow = document.getElementById(`sort-${field}`);
-    if (arrow) arrow.textContent = sortState.direction === 'asc' ? '↑' : '↓';
-    applyLocalFilters();
-}
+        document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
+        const arrow = document.getElementById(`sort-${field}`);
+        if (arrow) arrow.textContent = sortState.direction === 'asc' ? '↑' : '↓';
+        applyLocalFilters();
+    }
 
     function applyLocalFilters() {
-    const searchVal = els.search.value.toUpperCase();
-    const minVol = parseFloat(els.vol.value);
-    const minChange = parseFloat(els.change.value);
-    let filtered = allCoins.filter(coin => {
-        if (coin.volume < minVol) return false;
-        if (coin.change < minChange) return false;
-        if (searchVal && !coin.symbol.includes(searchVal)) return false;
-        return true;
-    });
-
-    if (sortState.field) {
-        console.log('=== СОРТИРОВКА ===');
-        console.log('Поле:', sortState.field);
-        console.log('Направление:', sortState.direction);
-
-        filtered.sort((a, b) => {
-            let valA, valB;
-            if (['change', 'volume'].includes(sortState.field)) {
-                valA = a[sortState.field]; valB = b[sortState.field];
-            } else if (sortState.field === 'natr_1m') {
-                const natrA = natrData[a.symbol] || {};
-                const natrB = natrData[b.symbol] || {};
-                valA = natrA.natr_1m30 !== undefined && natrA.natr_1m30 !== null ? natrA.natr_1m30 : -1;
-                valB = natrB.natr_1m30 !== undefined && natrB.natr_1m30 !== null ? natrB.natr_1m30 : -1;
-                // Логируем только первые 5 сравнений
-                if (!window._sortLogCount) window._sortLogCount = 0;
-                if (window._sortLogCount < 5) {
-                    console.log(`NATR 1m: ${a.symbol}=${valA}, ${b.symbol}=${valB}`);
-                    window._sortLogCount++;
-                }
-            } else if (sortState.field === 'natr_5m') {
-                const natrA = natrData[a.symbol] || {};
-                const natrB = natrData[b.symbol] || {};
-                valA = natrA.natr_5m14 !== undefined && natrA.natr_5m14 !== null ? natrA.natr_5m14 : -1;
-                valB = natrB.natr_5m14 !== undefined && natrB.natr_5m14 !== null ? natrB.natr_5m14 : -1;
-                if (!window._sortLogCount) window._sortLogCount = 0;
-                if (window._sortLogCount < 5) {
-                    console.log(`NATR 5m: ${a.symbol}=${valA}, ${b.symbol}=${valB}`);
-                    window._sortLogCount++;
-                }
-            }
-            return sortState.direction === 'asc' ? valA - valB : valB - valA;
+        const searchVal = els.search.value.toUpperCase();
+        const minVol = parseFloat(els.vol.value);
+        const minChange = parseFloat(els.change.value);
+        let filtered = allCoins.filter(coin => {
+            if (coin.volume < minVol) return false;
+            if (coin.change < minChange) return false;
+            if (searchVal && !coin.symbol.includes(searchVal)) return false;
+            return true;
         });
 
-        window._sortLogCount = 0; // Сброс счётчика
-
-        // Показываем первые 6 монет с ОБАИМИ значениями
-        alert(`После сортировки (первые 6):\n` +
-            filtered.slice(0, 6).map(c => {
-                const n = natrData[c.symbol] || {};
-                return `${c.symbol}:\n  NATR1m=${n.natr_1m30 || '-'}\n  NATR5m=${n.natr_5m14 || '-'}`;
-            }).join('\n'));
-    } else {
-        filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+        if (sortState.field) {
+            filtered.sort((a, b) => {
+                let valA, valB;
+                if (sortState.field === 'change') {
+                    valA = Math.abs(a.change);
+                    valB = Math.abs(b.change);
+                } else if (sortState.field === 'volume') {
+                    valA = a.volume;
+                    valB = b.volume;
+                } else if (sortState.field === 'natr_1m' || sortState.field === 'natr_5m') {
+                    valA = getNatrValue(a.symbol, sortState.field);
+                    valB = getNatrValue(b.symbol, sortState.field);
+                }
+                return sortState.direction === 'asc' ? valA - valB : valB - valA;
+            });
+        } else {
+            filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+        }
+        renderTable(filtered);
     }
-    renderTable(filtered);
-}
 
     els.vol.addEventListener('input', (e) => { els.volVal.innerText = '$' + fmt(e.target.value); applyLocalFilters(); });
     els.change.addEventListener('input', (e) => { els.changeVal.innerText = e.target.value + '%'; applyLocalFilters(); });
@@ -1184,7 +1160,7 @@
         // Обновляем кнопку в модалке
         const btnModal = document.getElementById('soundToggleModal');
         if (btnModal) {
-            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
             btnModal.classList.toggle('muted', !soundEnabled);
         }
 
