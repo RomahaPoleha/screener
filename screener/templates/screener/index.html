@@ -1079,57 +1079,62 @@
     }
 
     let sortState = { field: null, direction: 'asc' };
-    function sortBy(field) {
-        if (sortState.field === field) {
-            sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-            sortState.field = field;
-            // Для NATR по умолчанию сортировка от большего к меньшему
-            if (field === 'natr_1m' || field === 'natr_5m') {
-                sortState.direction = 'desc';
-            } else {
-                sortState.direction = 'asc';
-            }
-        }
-        document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
-        const arrow = document.getElementById(`sort-${field}`);
-        if (arrow) arrow.textContent = sortState.direction === 'asc' ? '↑' : '↓';
-        applyLocalFilters();
-    }
 
-    function applyLocalFilters() {
-        const searchVal = els.search.value.toUpperCase();
-        const minVol = parseFloat(els.vol.value);
-        const minChange = parseFloat(els.change.value);
-        let filtered = allCoins.filter(coin => {
-            if (coin.volume < minVol) return false;
-            if (coin.change < minChange) return false;
-            if (searchVal && !coin.symbol.includes(searchVal)) return false;
-            return true;
-        });
-        if (sortState.field) {
-            filtered.sort((a, b) => {
-                let valA, valB;
-                if (['change', 'volume'].includes(sortState.field)) {
-                    valA = a[sortState.field]; valB = b[sortState.field];
-                } else if (sortState.field === 'natr_1m') {
-                    const natrA = natrData[a.symbol] || {};
-                    const natrB = natrData[b.symbol] || {};
-                    valA = natrA.natr_1m30 !== undefined && natrA.natr_1m30 !== null ? natrA.natr_1m30 : -1;
-                    valB = natrB.natr_1m30 !== undefined && natrB.natr_1m30 !== null ? natrB.natr_1m30 : -1;
-                } else if (sortState.field === 'natr_5m') {
-                    const natrA = natrData[a.symbol] || {};
-                    const natrB = natrData[b.symbol] || {};
-                    valA = natrA.natr_5m14 !== undefined && natrA.natr_5m14 !== null ? natrA.natr_5m14 : -1;
-                    valB = natrB.natr_5m14 !== undefined && natrB.natr_5m14 !== null ? natrB.natr_5m14 : -1;
-                }
-                return sortState.direction === 'asc' ? valA - valB : valB - valA;
-            });
+function sortBy(field) {
+    if (sortState.field === field) {
+        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortState.field = field;
+        if (field === 'natr_1m' || field === 'natr_5m') {
+            sortState.direction = 'desc';
         } else {
-            filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+            sortState.direction = 'asc';
         }
-        renderTable(filtered);
     }
+    document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
+    const arrow = document.getElementById(`sort-${field}`);
+    if (arrow) arrow.textContent = sortState.direction === 'asc' ? '↑' : '↓';
+    applyLocalFilters();
+}
+
+function getSortValue(coin, field) {
+    if (field === 'change') return coin.change;
+    if (field === 'volume') return coin.volume;
+    if (field === 'natr_1m') {
+        const n = natrData[coin.symbol];
+        return (n && n.natr_1m30 !== undefined && n.natr_1m30 !== null) ? n.natr_1m30 : -1;
+    }
+    if (field === 'natr_5m') {
+        const n = natrData[coin.symbol];
+        return (n && n.natr_5m14 !== undefined && n.natr_5m14 !== null) ? n.natr_5m14 : -1;
+    }
+    return 0;
+}
+
+function applyLocalFilters() {
+    const searchVal = els.search.value.toUpperCase();
+    const minVol = parseFloat(els.vol.value);
+    const minChange = parseFloat(els.change.value);
+    let filtered = allCoins.filter(coin => {
+        if (coin.volume < minVol) return false;
+        if (coin.change < minChange) return false;
+        if (searchVal && !coin.symbol.includes(searchVal)) return false;
+        return true;
+    });
+
+    if (sortState.field) {
+        const field = sortState.field;
+        const dir = sortState.direction;
+        filtered.sort((a, b) => {
+            const valA = getSortValue(a, field);
+            const valB = getSortValue(b, field);
+            return dir === 'asc' ? valA - valB : valB - valA;
+        });
+    } else {
+        filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+    }
+    renderTable(filtered);
+}
 
     els.vol.addEventListener('input', (e) => { els.volVal.innerText = '$' + fmt(e.target.value); applyLocalFilters(); });
     els.change.addEventListener('input', (e) => { els.changeVal.innerText = e.target.value + '%'; applyLocalFilters(); });
