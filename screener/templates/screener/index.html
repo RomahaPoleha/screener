@@ -1112,6 +1112,10 @@
     });
 
     if (sortState.field) {
+        console.log('=== СОРТИРОВКА ===');
+        console.log('Поле:', sortState.field);
+        console.log('Направление:', sortState.direction);
+
         filtered.sort((a, b) => {
             let valA, valB;
             if (['change', 'volume'].includes(sortState.field)) {
@@ -1121,20 +1125,33 @@
                 const natrB = natrData[b.symbol] || {};
                 valA = natrA.natr_1m30 !== undefined && natrA.natr_1m30 !== null ? natrA.natr_1m30 : -1;
                 valB = natrB.natr_1m30 !== undefined && natrB.natr_1m30 !== null ? natrB.natr_1m30 : -1;
+                // Логируем только первые 5 сравнений
+                if (!window._sortLogCount) window._sortLogCount = 0;
+                if (window._sortLogCount < 5) {
+                    console.log(`NATR 1m: ${a.symbol}=${valA}, ${b.symbol}=${valB}`);
+                    window._sortLogCount++;
+                }
             } else if (sortState.field === 'natr_5m') {
                 const natrA = natrData[a.symbol] || {};
                 const natrB = natrData[b.symbol] || {};
                 valA = natrA.natr_5m14 !== undefined && natrA.natr_5m14 !== null ? natrA.natr_5m14 : -1;
                 valB = natrB.natr_5m14 !== undefined && natrB.natr_5m14 !== null ? natrB.natr_5m14 : -1;
+                if (!window._sortLogCount) window._sortLogCount = 0;
+                if (window._sortLogCount < 5) {
+                    console.log(`NATR 5m: ${a.symbol}=${valA}, ${b.symbol}=${valB}`);
+                    window._sortLogCount++;
+                }
             }
             return sortState.direction === 'asc' ? valA - valB : valB - valA;
         });
 
-        // ОТЛАДКА: показываем первые 3 монеты после сортировки
-        alert(`После сортировки (первые 3):\n` +
+        window._sortLogCount = 0; // Сброс счётчика
+
+        // Показываем первые 6 монет с ОБАИМИ значениями
+        alert(`После сортировки (первые 6):\n` +
             filtered.slice(0, 6).map(c => {
                 const n = natrData[c.symbol] || {};
-                return `${c.symbol}: NATR1m=${n.natr_1m30 || '-'}`;
+                return `${c.symbol}:\n  NATR1m=${n.natr_1m30 || '-'}\n  NATR5m=${n.natr_5m14 || '-'}`;
             }).join('\n'));
     } else {
         filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
