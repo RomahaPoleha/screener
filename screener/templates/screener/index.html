@@ -351,7 +351,7 @@
 <div class="main-layout">
     <div class="left-panel">
         <div class="chart-area">
-            <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена">График</div>
+            <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена"></div>
             <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
@@ -883,24 +883,25 @@
             els.chartWatermark.style.display = 'block';
         }
     }
-            function copySymbolToClipboard() {
-            if (!currentSymbol) return;
 
-            const textToCopy = `${currentSymbol}USDT`;
+    function copySymbolToClipboard() {
+        if (!currentSymbol) return;
 
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                // Визуальная обратная связь
-                els.chartTitle.classList.add('copied');
-                els.chartTitle.textContent = `✅ ${textToCopy} скопирован!`;
+        const textToCopy = `${currentSymbol}USDT`;
 
-                setTimeout(() => {
-                    els.chartTitle.classList.remove('copied');
-                    els.chartTitle.textContent = `${currentSymbol}/USDT [${currentTF}]`;
-                }, 1200);
-            }).catch(err => {
-                console.error(' Ошибка копирования:', err);
-            });
-        }
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            // Визуальная обратная связь
+            els.chartTitle.classList.add('copied');
+            els.chartTitle.textContent = `✅ ${textToCopy} скопирован!`;
+
+            setTimeout(() => {
+                els.chartTitle.classList.remove('copied');
+                els.chartTitle.textContent = `${currentSymbol}/USDT`;
+            }, 1200);
+        }).catch(err => {
+            console.error(' Ошибка копирования:', err);
+        });
+    }
 
     function closeChart() {
         clearDensityLines();
@@ -921,7 +922,7 @@
         }
         if (chart) { chart.remove(); chart = null; candleSeries = null; }
         tradeBuffer = [];
-        els.chartTitle.textContent = 'График';
+        els.chartTitle.textContent = '';
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
         els.chartWatermark.style.display = 'none';
@@ -991,7 +992,7 @@
 
     async function loadChartData(symbol, tf) {
         if (!chart || !candleSeries) return;
-        els.chartTitle.textContent = `${symbol}/USDT;
+        els.chartTitle.textContent = `${symbol}/USDT`;
 
         try {
             const res = await fetch(`/api/candles/${symbol}/?tf=${tf}`);
