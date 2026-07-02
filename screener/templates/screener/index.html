@@ -17,7 +17,7 @@
         .top-bar {
             background: #151b2b; border-bottom: 1px solid #2d3748;
             padding: 8px 16px; display: flex; align-items: center;
-            gap: 16px; flex-wrap: wrap;
+            gap: 16px; flex-wrap: nowrap;
         }
         .top-bar .logo { font-size: 18px; font-weight: 700; color: #f0b90b; margin-right: 8px; }
         .sound-toggle {
@@ -356,12 +356,10 @@
 <body>
 
 <div class="top-bar">
-    <span class="logo">⚡ Screener</span>
-    <div style="margin-left:auto; display:flex; gap:8px; flex-wrap: wrap;">
-        <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
-        <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
-        <div style="width:100%"></div>
-        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()">💰 Крупные сделки</button>
+    <span class="logo"> Screener</span>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">️ Настройки</button>
+        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">💰 Крупные сделки</button>
     </div>
 </div>
 
@@ -393,7 +391,7 @@
             <div class="trades-overlay-header">
                 <div class="trades-overlay-header-top">
                     <h5>💰 Крупные сделки</h5>
-                    <button class="trades-overlay-close" onclick="closeTradesOverlay()">✕</button>
+                    <button class="trades-overlay-close" onclick="closeTradesOverlay()"></button>
                 </div>
                 <div class="trades-threshold-row">
                     <label>Мин. сумма:</label>
@@ -427,7 +425,7 @@
                 <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
             </div>
             <div class="filter-section">
-                <button class="reset-filters-btn" onclick="resetFilters()"> Сбросить фильтры</button>
+                <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
             </div>
         </div>
         <div class="right-panel-header">Монеты (<span id="coinsCount">0</span>)</div>
@@ -453,8 +451,16 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <!-- Секция: Голосовое оповещение -->
                 <div class="modal-section">
-                    <div class="modal-section-title"> Плотности</div>
+                    <div class="modal-section-title">🔊 Голосовое оповещение</div>
+                    <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
+                        🔊 Голосовое оповещение
+                    </button>
+                </div>
+                <!-- Секция: Плотности -->
+                <div class="modal-section">
+                    <div class="modal-section-title">📊 Плотности</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
@@ -711,6 +717,13 @@
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
+
+        // Синхронизируем кнопку голосового оповещения в модалке
+        const soundBtnModal = document.getElementById('soundToggleModal');
+        if (soundBtnModal) {
+            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+            soundBtnModal.classList.toggle('muted', !soundEnabled);
+        }
 
         const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
         modal.show();
@@ -1071,7 +1084,12 @@
             sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
         } else {
             sortState.field = field;
-            sortState.direction = 'asc';
+            // Для NATR по умолчанию сортировка от большего к меньшему
+            if (field === 'natr_1m' || field === 'natr_5m') {
+                sortState.direction = 'desc';
+            } else {
+                sortState.direction = 'asc';
+            }
         }
         document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
         const arrow = document.getElementById(`sort-${field}`);
@@ -1134,19 +1152,19 @@
 
     function toggleSound() {
         soundEnabled = !soundEnabled;
-        const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
-        btn.classList.toggle('muted', !soundEnabled);
+
+        // Обновляем кнопку в модалке
+        const btnModal = document.getElementById('soundToggleModal');
+        if (btnModal) {
+            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+            btnModal.classList.toggle('muted', !soundEnabled);
+        }
+
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
     }
 
     soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
-    const soundBtn = document.getElementById('soundToggle');
-    if (soundBtn) {
-        soundBtn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
-        soundBtn.classList.toggle('muted', !soundEnabled);
-    }
 
     function initVoices() {
         const voices = speechSynthesis.getVoices();
