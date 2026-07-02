@@ -1132,7 +1132,7 @@
 
         // ОТЛАДКА: показываем первые 3 монеты после сортировки
         alert(`После сортировки (первые 3):\n` +
-            filtered.slice(0, 3).map(c => {
+            filtered.slice(0, 6).map(c => {
                 const n = natrData[c.symbol] || {};
                 return `${c.symbol}: NATR1m=${n.natr_1m30 || '-'}`;
             }).join('\n'));
