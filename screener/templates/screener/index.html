@@ -1101,38 +1101,46 @@
 }
 
     function applyLocalFilters() {
-        const searchVal = els.search.value.toUpperCase();
-        const minVol = parseFloat(els.vol.value);
-        const minChange = parseFloat(els.change.value);
-        let filtered = allCoins.filter(coin => {
-            if (coin.volume < minVol) return false;
-            if (coin.change < minChange) return false;
-            if (searchVal && !coin.symbol.includes(searchVal)) return false;
-            return true;
+    const searchVal = els.search.value.toUpperCase();
+    const minVol = parseFloat(els.vol.value);
+    const minChange = parseFloat(els.change.value);
+    let filtered = allCoins.filter(coin => {
+        if (coin.volume < minVol) return false;
+        if (coin.change < minChange) return false;
+        if (searchVal && !coin.symbol.includes(searchVal)) return false;
+        return true;
+    });
+
+    if (sortState.field) {
+        filtered.sort((a, b) => {
+            let valA, valB;
+            if (['change', 'volume'].includes(sortState.field)) {
+                valA = a[sortState.field]; valB = b[sortState.field];
+            } else if (sortState.field === 'natr_1m') {
+                const natrA = natrData[a.symbol] || {};
+                const natrB = natrData[b.symbol] || {};
+                valA = natrA.natr_1m30 !== undefined && natrA.natr_1m30 !== null ? natrA.natr_1m30 : -1;
+                valB = natrB.natr_1m30 !== undefined && natrB.natr_1m30 !== null ? natrB.natr_1m30 : -1;
+            } else if (sortState.field === 'natr_5m') {
+                const natrA = natrData[a.symbol] || {};
+                const natrB = natrData[b.symbol] || {};
+                valA = natrA.natr_5m14 !== undefined && natrA.natr_5m14 !== null ? natrA.natr_5m14 : -1;
+                valB = natrB.natr_5m14 !== undefined && natrB.natr_5m14 !== null ? natrB.natr_5m14 : -1;
+            }
+            return sortState.direction === 'asc' ? valA - valB : valB - valA;
         });
-        if (sortState.field) {
-            filtered.sort((a, b) => {
-                let valA, valB;
-                if (['change', 'volume'].includes(sortState.field)) {
-                    valA = a[sortState.field]; valB = b[sortState.field];
-                } else if (sortState.field === 'natr_1m') {
-                    const natrA = natrData[a.symbol] || {};
-                    const natrB = natrData[b.symbol] || {};
-                    valA = natrA.natr_1m30 !== undefined && natrA.natr_1m30 !== null ? natrA.natr_1m30 : -1;
-                    valB = natrB.natr_1m30 !== undefined && natrB.natr_1m30 !== null ? natrB.natr_1m30 : -1;
-                } else if (sortState.field === 'natr_5m') {
-                    const natrA = natrData[a.symbol] || {};
-                    const natrB = natrData[b.symbol] || {};
-                    valA = natrA.natr_5m14 !== undefined && natrA.natr_5m14 !== null ? natrA.natr_5m14 : -1;
-                    valB = natrB.natr_5m14 !== undefined && natrB.natr_5m14 !== null ? natrB.natr_5m14 : -1;
-                }
-                return sortState.direction === 'asc' ? valA - valB : valB - valA;
-            });
-        } else {
-            filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
-        }
-        renderTable(filtered);
+
+        // ОТЛАДКА: показываем первые 3 монеты после сортировки
+        alert(`После сортировки (первые 3):\n` +
+            filtered.slice(0, 3).map(c => {
+                const n = natrData[c.symbol] || {};
+                return `${c.symbol}: NATR1m=${n.natr_1m30 || '-'}`;
+            }).join('\n'));
+    } else {
+        filtered.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
     }
+    renderTable(filtered);
+}
 
     els.vol.addEventListener('input', (e) => { els.volVal.innerText = '$' + fmt(e.target.value); applyLocalFilters(); });
     els.change.addEventListener('input', (e) => { els.changeVal.innerText = e.target.value + '%'; applyLocalFilters(); });
