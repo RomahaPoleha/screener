@@ -1080,22 +1080,25 @@
 
     let sortState = { field: null, direction: 'asc' };
     function sortBy(field) {
-        if (sortState.field === field) {
-            sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    if (sortState.field === field) {
+        sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortState.field = field;
+        if (field === 'natr_1m' || field === 'natr_5m') {
+            sortState.direction = 'desc';
         } else {
-            sortState.field = field;
-            // Для NATR по умолчанию сортировка от большего к меньшему
-            if (field === 'natr_1m' || field === 'natr_5m') {
-                sortState.direction = 'desc';
-            } else {
-                sortState.direction = 'asc';
-            }
+            sortState.direction = 'asc';
         }
-        document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
-        const arrow = document.getElementById(`sort-${field}`);
-        if (arrow) arrow.textContent = sortState.direction === 'asc' ? '↑' : '↓';
-        applyLocalFilters();
     }
+
+    // ОТЛАДКА: показываем что происходит
+    alert(`Сортировка: ${field}\nНаправление: ${sortState.direction}\nПример NATR для BTC: ${JSON.stringify(natrData['BTC'])}`);
+
+    document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
+    const arrow = document.getElementById(`sort-${field}`);
+    if (arrow) arrow.textContent = sortState.direction === 'asc' ? '↑' : '↓';
+    applyLocalFilters();
+}
 
     function applyLocalFilters() {
         const searchVal = els.search.value.toUpperCase();
