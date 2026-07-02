@@ -336,11 +336,16 @@
         }
         .trades-overlay-header {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 10px;
             padding: 12px 16px;
             border-bottom: 1px solid #2d3748;
             background: #0b0f19;
+        }
+        .trades-overlay-header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .trades-overlay-header h5 {
             margin: 0;
@@ -359,6 +364,26 @@
         }
         .trades-overlay-close:hover {
             color: #fff;
+        }
+        .trades-threshold-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .trades-threshold-row label {
+            white-space: nowrap;
+        }
+        .trades-threshold-row input[type=range] {
+            flex: 1;
+            accent-color: #f0b90b;
+        }
+        .trades-threshold-value {
+            color: #f0b90b;
+            font-weight: 600;
+            min-width: 50px;
+            text-align: right;
         }
         .trades-overlay-body {
             flex: 1;
@@ -391,9 +416,9 @@
 <div class="top-bar">
     <span class="logo">⚡ Screener</span>
     <div style="margin-left:auto; display:flex; gap:8px;">
-        <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
-        <button class="sound-toggle" onclick="openTradesOverlay()">💰 Крупные сделки</button>
+        <button class="sound-toggle" id="soundToggle" onclick="toggleSound()"> Голосовое оповещение</button>
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
+        <button class="sound-toggle" onclick="openTradesOverlay()">💰 Крупные сделки</button>
     </div>
 </div>
 
@@ -425,8 +450,15 @@
         <!-- Модальное окно для крупных сделок (перекрывает правую панель) -->
         <div class="trades-overlay" id="tradesOverlay">
             <div class="trades-overlay-header">
-                <h5>💰 Крупные сделки</h5>
-                <button class="trades-overlay-close" onclick="closeTradesOverlay()">✕</button>
+                <div class="trades-overlay-header-top">
+                    <h5>💰 Крупные сделки</h5>
+                    <button class="trades-overlay-close" onclick="closeTradesOverlay()">✕</button>
+                </div>
+                <div class="trades-threshold-row">
+                    <label>Мин. сумма:</label>
+                    <input type="range" id="tradesThresholdSlider" min="1000" max="500000" step="1000" value="10000">
+                    <span class="trades-threshold-value" id="tradesThresholdValue">$10K</span>
+                </div>
             </div>
             <div class="trades-overlay-body" id="tradesOverlayBody">
                 <div style="color:#6b7280; text-align:center; padding:20px;">Ожидание сделок...</div>
@@ -482,7 +514,7 @@
             <div class="modal-body">
                 <!-- Секция: Плотности -->
                 <div class="modal-section">
-                    <div class="modal-section-title">📊 Плотности</div>
+                    <div class="modal-section-title"> Плотности</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
@@ -502,17 +534,6 @@
                         </label>
                         <input type="number" id="densityMinVolume" value="100000" min="1000" step="10000"
                                style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
-                    </div>
-                </div>
-
-                <!-- Секция: Крупные сделки (только порог) -->
-                <div class="modal-section">
-                    <div class="modal-section-title">💰 Крупные сделки</div>
-                    <div>
-                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                            Мин. сумма сделки (USDT): <span id="tradesMinValueText" style="color:#f0b90b; font-weight:600;">$10K</span>
-                        </label>
-                        <input type="range" id="tradesMinValueSlider" class="filter-slider" min="1000" max="500000" step="1000" value="10000" style="width:100%;">
                     </div>
                 </div>
             </div>
@@ -549,7 +570,9 @@
         coinsCount: document.getElementById('coinsCount'),
         rightPanel: document.getElementById('rightPanel'),
         tradesOverlay: document.getElementById('tradesOverlay'),
-        tradesOverlayBody: document.getElementById('tradesOverlayBody')
+        tradesOverlayBody: document.getElementById('tradesOverlayBody'),
+        tradesThresholdSlider: document.getElementById('tradesThresholdSlider'),
+        tradesThresholdValue: document.getElementById('tradesThresholdValue')
     };
 
     let allCoins = [];
@@ -584,9 +607,10 @@
     const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
 
-    document.getElementById('tradesMinValueSlider').addEventListener('input', (e) => {
+    // Ползунок порога сделок в оверлее
+    els.tradesThresholdSlider.addEventListener('input', (e) => {
         currentThreshold = parseInt(e.target.value);
-        document.getElementById('tradesMinValueText').textContent = fmtThreshold(currentThreshold);
+        els.tradesThresholdValue.textContent = fmtThreshold(currentThreshold);
     });
 
     // Клик по заголовку графика — копирование символа
@@ -748,14 +772,9 @@
 
     // === НАСТРОЙКИ: ФУНКЦИИ ===
     function openSettingsModal() {
-        // Закрываем окно сделок если открыто
-        closeTradesOverlay();
-
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
-        document.getElementById('tradesMinValueSlider').value = currentThreshold;
-        document.getElementById('tradesMinValueText').textContent = fmtThreshold(currentThreshold);
 
         const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
         modal.show();
@@ -791,23 +810,17 @@
             clearDensityLines();
         }
 
-        // === Крупные сделки (только порог) ===
-        const newThreshold = parseInt(document.getElementById('tradesMinValueSlider').value) || 10000;
-        currentThreshold = newThreshold;
-
         bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
     }
 
     // === ОКНО КРУПНЫХ СДЕЛОК ===
     function openTradesOverlay() {
-        // Закрываем модальное окно настроек если открыто
-        const settingsModal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
-        if (settingsModal) {
-            settingsModal.hide();
-        }
-
-        // Показываем оверлей
+        // Показываем оверлей (не закрываем настройки!)
         els.tradesOverlay.classList.add('active');
+
+        // Синхронизируем ползунок с текущим порогом
+        els.tradesThresholdSlider.value = currentThreshold;
+        els.tradesThresholdValue.textContent = fmtThreshold(currentThreshold);
 
         // Запускаем WebSocket если ещё не запущен
         if (currentSymbol && !wsTrades) {
@@ -1190,7 +1203,7 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('soundToggle');
-        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
         btn.classList.toggle('muted', !soundEnabled);
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
