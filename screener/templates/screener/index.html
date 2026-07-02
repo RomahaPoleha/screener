@@ -207,6 +207,7 @@
         .right-panel {
             width: 380px; background: #151b2b; display: flex; flex-direction: column;
             overflow: hidden; border-left: 1px solid #2d3748;
+            position: relative;
         }
         .filters-panel { padding: 12px; background: #1e2538; border-bottom: 1px solid #2d3748; }
         .filter-section { margin-bottom: 12px; }
@@ -318,6 +319,62 @@
             color: #f0b90b;
             margin-bottom: 12px;
         }
+        /* Модальное окно для крупных сделок (перекрывает правую панель) */
+        .trades-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #151b2b;
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+        }
+        .trades-overlay.active {
+            display: flex;
+        }
+        .trades-overlay-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #2d3748;
+            background: #0b0f19;
+        }
+        .trades-overlay-header h5 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #f0b90b;
+        }
+        .trades-overlay-close {
+            background: transparent;
+            border: none;
+            color: #9ca3af;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .trades-overlay-close:hover {
+            color: #fff;
+        }
+        .trades-overlay-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .trades-overlay-body::-webkit-scrollbar {
+            width: 6px;
+        }
+        .trades-overlay-body::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        .trades-overlay-body::-webkit-scrollbar-thumb {
+            background: #2d3748;
+            border-radius: 3px;
+        }
         @media (max-width: 900px) {
             .main-layout { flex-direction: column; height: auto; }
             .right-panel { width: 100%; height: 400px; border-left: none; border-top: 1px solid #2d3748; }
@@ -335,6 +392,7 @@
     <span class="logo">⚡ Screener</span>
     <div style="margin-left:auto; display:flex; gap:8px;">
         <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔊 Голосовое оповещение</button>
+        <button class="sound-toggle" onclick="openTradesOverlay()">💰 Крупные сделки</button>
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
     </div>
 </div>
@@ -364,6 +422,17 @@
     </div>
 
     <div class="right-panel" id="rightPanel">
+        <!-- Модальное окно для крупных сделок (перекрывает правую панель) -->
+        <div class="trades-overlay" id="tradesOverlay">
+            <div class="trades-overlay-header">
+                <h5>💰 Крупные сделки</h5>
+                <button class="trades-overlay-close" onclick="closeTradesOverlay()">✕</button>
+            </div>
+            <div class="trades-overlay-body" id="tradesOverlayBody">
+                <div style="color:#6b7280; text-align:center; padding:20px;">Ожидание сделок...</div>
+            </div>
+        </div>
+
         <div class="filters-panel">
             <div class="filter-section">
                 <label class="filter-label">Поиск монеты</label>
@@ -436,15 +505,9 @@
                     </div>
                 </div>
 
-                <!-- Секция: Крупные сделки -->
+                <!-- Секция: Крупные сделки (только порог) -->
                 <div class="modal-section">
                     <div class="modal-section-title">💰 Крупные сделки</div>
-                    <div style="margin-bottom:12px;">
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
-                            <input type="checkbox" id="tradesEnabledModal" style="accent-color:#f0b90b; width:16px; height:16px;">
-                            <span>Показывать крупные сделки</span>
-                        </label>
-                    </div>
                     <div>
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
                             Мин. сумма сделки (USDT): <span id="tradesMinValueText" style="color:#f0b90b; font-weight:600;">$10K</span>
@@ -458,17 +521,6 @@
                 <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#f0b90b; border:none; color:#000; font-weight:600;">Применить</button>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- Плавающее окно крупных сделок -->
-<div class="trades-floating-window" id="tradesFloatingWindow">
-    <div class="trades-floating-header">
-        <h6>💰 Крупные сделки</h6>
-        <div style="font-size:11px; color:#6b7280;">Отключить в настройках</div>
-    </div>
-    <div class="trades-floating-body" id="tradesFloatingBody">
-        <div style="color:#6b7280; text-align:center; padding:20px;">Ожидание сделок...</div>
     </div>
 </div>
 
@@ -496,8 +548,8 @@
         watermarkTF: document.getElementById('watermarkTF'),
         coinsCount: document.getElementById('coinsCount'),
         rightPanel: document.getElementById('rightPanel'),
-        tradesFloatingWindow: document.getElementById('tradesFloatingWindow'),
-        tradesFloatingBody: document.getElementById('tradesFloatingBody')
+        tradesOverlay: document.getElementById('tradesOverlay'),
+        tradesOverlayBody: document.getElementById('tradesOverlayBody')
     };
 
     let allCoins = [];
@@ -510,7 +562,6 @@
     let currentPrecision = 2;
     let tradeBuffer = [];
     let currentThreshold = 10000;
-    let tradesEnabled = false;
     let currentTF = '1m';
     let currentSymbol = '';
 
@@ -697,10 +748,12 @@
 
     // === НАСТРОЙКИ: ФУНКЦИИ ===
     function openSettingsModal() {
+        // Закрываем окно сделок если открыто
+        closeTradesOverlay();
+
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
-        document.getElementById('tradesEnabledModal').checked = tradesEnabled;
         document.getElementById('tradesMinValueSlider').value = currentThreshold;
         document.getElementById('tradesMinValueText').textContent = fmtThreshold(currentThreshold);
 
@@ -738,35 +791,36 @@
             clearDensityLines();
         }
 
-        // === Крупные сделки ===
-        const newTradesEnabled = document.getElementById('tradesEnabledModal').checked;
+        // === Крупные сделки (только порог) ===
         const newThreshold = parseInt(document.getElementById('tradesMinValueSlider').value) || 10000;
-
         currentThreshold = newThreshold;
-
-        if (newTradesEnabled !== tradesEnabled) {
-            tradesEnabled = newTradesEnabled;
-            if (tradesEnabled) {
-                els.tradesFloatingWindow.classList.add('active');
-                if (currentSymbol) {
-                    startTradesStream(currentSymbol);
-                }
-            } else {
-                els.tradesFloatingWindow.classList.remove('active');
-                if (wsTrades) {
-                    wsTrades.onclose = null;
-                    wsTrades.close();
-                    wsTrades = null;
-                }
-                els.tradesFloatingBody.innerHTML = '<div style="color:#6b7280; text-align:center; padding:20px;">Сделки отключены</div>';
-            }
-        }
 
         bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
     }
 
-    function updateTradesFloatingWindow() {
-        if (!els.tradesFloatingBody || tradeBuffer.length === 0) return;
+    // === ОКНО КРУПНЫХ СДЕЛОК ===
+    function openTradesOverlay() {
+        // Закрываем модальное окно настроек если открыто
+        const settingsModal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+        if (settingsModal) {
+            settingsModal.hide();
+        }
+
+        // Показываем оверлей
+        els.tradesOverlay.classList.add('active');
+
+        // Запускаем WebSocket если ещё не запущен
+        if (currentSymbol && !wsTrades) {
+            startTradesStream(currentSymbol);
+        }
+    }
+
+    function closeTradesOverlay() {
+        els.tradesOverlay.classList.remove('active');
+    }
+
+    function updateTradesOverlay() {
+        if (!els.tradesOverlayBody || tradeBuffer.length === 0) return;
 
         const html = tradeBuffer.map(t => `
             <div class="trade-item">
@@ -778,7 +832,10 @@
             </div>
         `).join('');
 
-        els.tradesFloatingBody.innerHTML = html;
+        els.tradesOverlayBody.innerHTML = html;
+
+        // Прокрутка вниз
+        els.tradesOverlayBody.scrollTop = els.tradesOverlayBody.scrollHeight;
     }
 
     // === ПЛОТНОСТИ ===
@@ -926,6 +983,7 @@
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
         els.chartWatermark.style.display = 'none';
+        els.tradesOverlay.classList.remove('active');
         currentSymbol = '';
     }
 
@@ -983,7 +1041,8 @@
         // Обновляем водяной знак
         updateWatermark();
 
-        if (tradesEnabled) {
+        // Если окно сделок открыто — запускаем стрим
+        if (els.tradesOverlay.classList.contains('active')) {
             startTradesStream(symbol);
         }
 
@@ -1044,19 +1103,20 @@
                     tradeBuffer.shift();
                 }
 
-                if (tradesEnabled) {
-                    updateTradesFloatingWindow();
+                // Обновляем оверлей если открыт
+                if (els.tradesOverlay.classList.contains('active')) {
+                    updateTradesOverlay();
                 }
 
             } catch (err) { console.warn('Trade parse error:', err); }
         };
         wsTrades.onerror = () => {
-            if (els.tradesFloatingBody) {
-                els.tradesFloatingBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">⚠️ Разрыв связи</div>';
+            if (els.tradesOverlayBody) {
+                els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">⚠️ Разрыв связи</div>';
             }
         };
         wsTrades.onclose = () => {
-            setTimeout(() => { if (currentSymbol === symbol && tradesEnabled) startTradesStream(symbol); }, 3000);
+            setTimeout(() => { if (currentSymbol === symbol && els.tradesOverlay.classList.contains('active')) startTradesStream(symbol); }, 3000);
         };
     }
 
