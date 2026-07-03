@@ -453,7 +453,7 @@
             <div class="modal-body">
                 <!-- Секция: Голосовое оповещение -->
                 <div class="modal-section">
-                    <div class="modal-section-title">🔊 Голосовое оповещение</div>
+                    <div class="modal-section-title"> Голосовое оповещение</div>
                     <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
                         🔊 Голосовое оповещение
                     </button>
@@ -705,7 +705,7 @@
                             volumeSeries.update({
                                 time: candle.time,
                                 value: candle.volume,
-                                color: candle.close >= candle.open ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.7)'
+                                color: candle.close >= candle.open ? 'rgba(200, 200, 200, 0.6)' : 'rgba(80, 80, 80, 0.7)'
                             });
                         }
                     }
@@ -1003,7 +1003,7 @@
                     rightOffset: 12, barSpacing: 10
                 },
                 rightPriceScale: {
-                    borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.1 }, autoScale: true
+                    borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true
                 },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             });
@@ -1013,15 +1013,20 @@
             });
 
             volumeSeries = chart.addHistogramSeries({
-                color: '#26a69a',
                 priceFormat: {
                     type: 'volume',
                 },
-                priceScaleId: '',
+                priceScaleId: 'volume',
                 scaleMargins: {
-                    top: 0.88,   // ← Гистограмма занимает только нижние 12%
-                    bottom: 0.02, // ← Небольшой отступ снизу
+                    top: 0.85,
+                    bottom: 0,
                 },
+            });
+
+            // Настраиваем отдельную шкалу для объёма (без меток цены)
+            chart.priceScale('volume').applyOptions({
+                visible: false,
+                scaleMargins: { top: 0.85, bottom: 0 },
             });
         } catch (e) {
             console.error('Chart init error:', e);
@@ -1063,14 +1068,11 @@
                 volumeSeries.setData(limitedHistory.map(c => ({
                     time: safeTime(c.time),
                     value: c.volume,
-                    color: c.close >= c.open ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.7)'
+                    color: c.close >= c.open ? 'rgba(200, 200, 200, 0.6)' : 'rgba(80, 80, 80, 0.7)'
                 })));
             }
 
             chart.timeScale().fitContent();
-            chart.priceScale('right').applyOptions({
-                autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 }
-            });
             chart.timeScale().scrollToPosition(12, false);
 
         } catch (err) {
