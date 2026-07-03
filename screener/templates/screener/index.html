@@ -696,10 +696,19 @@
                         open: parseFloat(k.o),
                         high: parseFloat(k.h),
                         low: parseFloat(k.l),
-                        close: parseFloat(k.c)
+                        close: parseFloat(k.c),
+                        volume: parseFloat(k.v)
                     };
                     if (candleSeries && currentSymbol === symbol) {
                         candleSeries.update(candle);
+                        // Обновляем объём
+                        if (volumeSeries) {
+                            volumeSeries.update({
+                                time: candle.time,
+                                value: candle.volume,
+                                color: candle.close >= candle.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                            });
+                        }
                     }
                 }
             } catch (err) {
@@ -995,9 +1004,23 @@
                 },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             });
+            // Создаём график свечей
             candleSeries = chart.addCandlestickSeries({
                 upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
                 wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+            });
+
+            // Добавляем гистограмму объёма
+            const volumeSeries = chart.addHistogramSeries({
+                color: '#26a69a',
+                priceFormat: {
+                    type: 'volume',
+                },
+                priceScaleId: '', // Оверлей на основном графике
+                scaleMargins: {
+                    top: 0.8,    // Объёмы в нижней части (20% высоты)
+                    bottom: 0,
+                },
             });
         } catch (e) {
             console.error('Chart init error:', e);
@@ -1034,6 +1057,13 @@
                 priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
             });
             candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
+            if (c.volume !== undefined) {
+                volumeSeries.setData(limitedHistory.map(c => ({
+                    time: safeTime(c.time),
+                    value: c.volume,
+                    color: c.close >= c.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                })));
+            }
 
             chart.timeScale().fitContent();
             chart.priceScale('right').applyOptions({

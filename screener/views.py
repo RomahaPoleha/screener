@@ -90,7 +90,8 @@ def api_candles(request, symbol):
                 'open': float(o),
                 'high': float(h),
                 'low': float(l),
-                'close': float(c)
+                'close': float(c),
+                'volume': float(v)  # ← Добавляем объём
             }
             for ts, o, h, l, c, v in ohlcv
         ]
