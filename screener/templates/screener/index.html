@@ -872,14 +872,16 @@
         for (const market of marketsToLoad) {
             const data = previousDensities[market] || [];
             data.forEach(d => {
-                  const line = candleSeries.createPriceLine({
-    price: d.price,
-    color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Solid,
-    axisLabelVisible: false,  // ← отключаем label
-    title: `${market === 'future' ? 'BI-F' : 'BI-S'} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
-});
+               const line = candleSeries.createPriceLine({
+                price: d.price,
+                color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                axisLabelColor: '#ffffff',
+                axisLabelBackgroundColor: d.side === 'buy' ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)',
+                title: `${market === 'future' ? 'BI-F' : 'BI-S'} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+            });
                 densityLines.push(line);
             });
         }
