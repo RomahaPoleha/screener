@@ -526,6 +526,7 @@
     let natrData = {};
     let chart = null;
     let candleSeries = null;
+    let volumeSeries = null;
     let wsTrades = null;
     let wsCandles = null;
 
@@ -651,7 +652,6 @@
             const isUp = coin.change >= 0;
             const natr = natrData[coin.symbol] || {};
 
-            // ИСПРАВЛЕНО: правильный порядок - сначала 1m, потом 5m
             const n1 = natr.natr_1m30;
             const n5 = natr.natr_5m14;
 
@@ -701,12 +701,11 @@
                     };
                     if (candleSeries && currentSymbol === symbol) {
                         candleSeries.update(candle);
-                        // Обновляем объём
                         if (volumeSeries) {
                             volumeSeries.update({
                                 time: candle.time,
                                 value: candle.volume,
-                                color: candle.close >= candle.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                                color: candle.close >= candle.open ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.7)'
                             });
                         }
                     }
@@ -732,10 +731,9 @@
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
 
-        // Синхронизируем кнопку голосового оповещения в модалке
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
-            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
             soundBtnModal.classList.toggle('muted', !soundEnabled);
         }
 
@@ -955,7 +953,12 @@
             wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
             wsTrades.close(); wsTrades = null;
         }
-        if (chart) { chart.remove(); chart = null; candleSeries = null; }
+        if (chart) {
+            chart.remove();
+            chart = null;
+            candleSeries = null;
+            volumeSeries = null;
+        }
         tradeBuffer = [];
         els.chartTitle.textContent = '';
         els.chartWrapper.classList.remove('active');
@@ -987,7 +990,7 @@
 
         tradeBuffer = [];
 
-        if (chart) { chart.remove(); chart = null; candleSeries = null; }
+        if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
 
         try {
             chart = LightweightCharts.createChart(els.chartWrapper, {
@@ -1004,21 +1007,19 @@
                 },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             });
-            // Создаём график свечей
             candleSeries = chart.addCandlestickSeries({
                 upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
                 wickUpColor: '#22c55e', wickDownColor: '#ef4444',
             });
 
-            // Добавляем гистограмму объёма
-            const volumeSeries = chart.addHistogramSeries({
+            volumeSeries = chart.addHistogramSeries({
                 color: '#26a69a',
                 priceFormat: {
                     type: 'volume',
                 },
-                priceScaleId: '', // Оверлей на основном графике
+                priceScaleId: '',
                 scaleMargins: {
-                    top: 0.8,    // Объёмы в нижней части (20% высоты)
+                    top: 0.8,
                     bottom: 0,
                 },
             });
@@ -1057,11 +1058,12 @@
                 priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
             });
             candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
-            if (c.volume !== undefined) {
+
+            if (limitedHistory[0].volume !== undefined) {
                 volumeSeries.setData(limitedHistory.map(c => ({
                     time: safeTime(c.time),
                     value: c.volume,
-                    color: c.close >= c.open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+                    color: c.close >= c.open ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.7)'
                 })));
             }
 
@@ -1189,7 +1191,6 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
 
-        // Обновляем кнопку в модалке
         const btnModal = document.getElementById('soundToggleModal');
         if (btnModal) {
             btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
