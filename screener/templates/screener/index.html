@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scalp Screener</title>
+    <title>Scalp Screener + NATR</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
@@ -359,7 +359,7 @@
     <span class="logo"> Screener</span>
     <div style="margin-left:auto; display:flex; gap:8px;">
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">️ Настройки</button>
-        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">Крупные сделки</button>
+        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">💰 Крупные сделки</button>
     </div>
 </div>
 
@@ -651,7 +651,6 @@
             const isUp = coin.change >= 0;
             const natr = natrData[coin.symbol] || {};
 
-            // ИСПРАВЛЕНО: правильный порядок - сначала 1m, потом 5m
             const n1 = natr.natr_1m30;
             const n5 = natr.natr_5m14;
 
@@ -723,10 +722,9 @@
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolume').value = densityMinVolume;
 
-        // Синхронизируем кнопку голосового оповещения в модалке
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
-            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
             soundBtnModal.classList.toggle('muted', !soundEnabled);
         }
 
@@ -808,7 +806,7 @@
     }
 
     async function loadDensities(symbol) {
-        if (!densityEnabled || !candleSeries) return;
+        if (!densityEnabled || !candleSeries || !chart) return;
 
         let hasChanges = false;
 
@@ -869,26 +867,43 @@
 
         clearDensityLines();
 
+        // Получаем видимый диапазон времени для рисования линий на полпути
+        const visibleRange = chart.timeScale().getVisibleRange();
+        if (!visibleRange) return;
+
+        const fromTime = visibleRange.from;
+        const toTime = visibleRange.to;
+        const midTime = Math.floor((fromTime + toTime) / 2);
+
         for (const market of marketsToLoad) {
             const data = previousDensities[market] || [];
             data.forEach(d => {
-                const line = candleSeries.createPriceLine({
-                    price: d.price,
-                    color: d.side === 'buy' ? '#22c55e' : '#ef4444',
+                const lineSeries = chart.addLineSeries({
+                    color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
                     lineWidth: 1,
-                    lineStyle: LightweightCharts.LineStyle.Dashed,
-                    axisLabelVisible: true,
-                    title: `${market === 'future' ? 'F' : 'S'} $${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    lastValueVisible: false,
+                    priceLineVisible: false,
+                    crosshairMarkerVisible: false,
                 });
-                densityLines.push(line);
+
+                // Рисуем линию от середины до правого края видимого диапазона
+                lineSeries.setData([
+                    { time: midTime, value: d.price },
+                    { time: toTime, value: d.price }
+                ]);
+
+                densityLines.push({ series: lineSeries, price: d.price, side: d.side });
             });
         }
     }
 
     function clearDensityLines() {
-        if (!candleSeries) return;
-        densityLines.forEach(l => {
-            try { candleSeries.removePriceLine(l); } catch(e){}
+        if (!chart) return;
+        densityLines.forEach(item => {
+            try {
+                chart.removeSeries(item.series);
+            } catch(e) {}
         });
         densityLines = [];
     }
@@ -996,6 +1011,14 @@
             candleSeries = chart.addCandlestickSeries({
                 upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
                 wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+            });
+
+            // Подписка на изменение видимого диапазона для обновления плотностей
+            chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+                if (densityEnabled && currentSymbol && densityLines.length > 0) {
+                    clearDensityLines();
+                    loadDensities(currentSymbol);
+                }
             });
         } catch (e) {
             console.error('Chart init error:', e);
@@ -1157,7 +1180,6 @@
     function toggleSound() {
         soundEnabled = !soundEnabled;
 
-        // Обновляем кнопку в модалке
         const btnModal = document.getElementById('soundToggleModal');
         if (btnModal) {
             btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
