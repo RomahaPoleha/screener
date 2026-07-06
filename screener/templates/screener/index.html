@@ -358,7 +358,7 @@
 <div class="top-bar">
     <span class="logo"> Screener</span>
     <div style="margin-left:auto; display:flex; gap:8px;">
-        <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">️ Настройки</button>
+        <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
         <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">💰 Крупные сделки</button>
     </div>
 </div>
@@ -391,7 +391,7 @@
             <div class="trades-overlay-header">
                 <div class="trades-overlay-header-top">
                     <h5>💰 Крупные сделки</h5>
-                    <button class="trades-overlay-close" onclick="closeTradesOverlay()"></button>
+                    <button class="trades-overlay-close" onclick="closeTradesOverlay()">✕</button>
                 </div>
                 <div class="trades-threshold-row">
                     <label>Мин. сумма:</label>
@@ -453,14 +453,14 @@
             <div class="modal-body">
                 <!-- Секция: Голосовое оповещение -->
                 <div class="modal-section">
-                    <div class="modal-section-title"> Голосовое оповещение</div>
+                    <div class="modal-section-title">🔊 Голосовое оповещение</div>
                     <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
-                        🔊 Голосовое оповещение
+                         Голосовое оповещение
                     </button>
                 </div>
-                <!-- Секция: Плотности -->
+                <!-- Секция: RECON -->
                 <div class="modal-section">
-                    <div class="modal-section-title">📊 Плотности</div>
+                    <div class="modal-section-title">🔍 RECON — Сырой стакан</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
@@ -474,12 +474,21 @@
                             </label>
                         </div>
                     </div>
-                    <div>
-                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                            Мин. объём плотности (USDT):
-                        </label>
-                        <input type="number" id="densityMinVolume" value="100000" min="1000" step="10000"
-                               style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                                Futures мин. объём (USDT):
+                            </label>
+                            <input type="number" id="densityMinVolumeFuture" value="50000" min="1000" step="10000"
+                                   style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                                Spot мин. объём (USDT):
+                            </label>
+                            <input type="number" id="densityMinVolumeSpot" value="10000" min="1000" step="10000"
+                                   style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -539,9 +548,16 @@
     let densityLines = [];
     let densityEnabled = false;
     let densityMarkets = { future: false, spot: false };
-    let densityMinVolume = 100000;
+    let densityMinVolumeFuture = 50000;
+    let densityMinVolumeSpot = 10000;
     let densityUpdateTimer = null;
     let previousDensities = { future: [], spot: [] };
+
+    // Загружаем сохранённые настройки RECON
+    const savedFutureVol = localStorage.getItem('densityMinVolumeFuture');
+    const savedSpotVol = localStorage.getItem('densityMinVolumeSpot');
+    if (savedFutureVol) densityMinVolumeFuture = parseInt(savedFutureVol);
+    if (savedSpotVol) densityMinVolumeSpot = parseInt(savedSpotVol);
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -729,11 +745,12 @@
     function openSettingsModal() {
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
-        document.getElementById('densityMinVolume').value = densityMinVolume;
+        document.getElementById('densityMinVolumeFuture').value = densityMinVolumeFuture;
+        document.getElementById('densityMinVolumeSpot').value = densityMinVolumeSpot;
 
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
-            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
             soundBtnModal.classList.toggle('muted', !soundEnabled);
         }
 
@@ -744,11 +761,16 @@
     function applySettings() {
         const futureChecked = document.getElementById('densityMarketFuture').checked;
         const spotChecked = document.getElementById('densityMarketSpot').checked;
-        const minVolume = parseInt(document.getElementById('densityMinVolume').value) || 100000;
+        const minVolumeFuture = parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000;
+        const minVolumeSpot = parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000;
 
         densityMarkets = { future: futureChecked, spot: spotChecked };
-        densityMinVolume = minVolume;
+        densityMinVolumeFuture = minVolumeFuture;
+        densityMinVolumeSpot = minVolumeSpot;
         densityEnabled = futureChecked || spotChecked;
+
+        localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
+        localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
 
         const btn = document.getElementById('settingsBtn');
         if (densityEnabled) {
@@ -836,12 +858,14 @@
                 const data = await res.json();
 
                 const densities = [];
+                const minVolume = market === 'future' ? densityMinVolumeFuture : densityMinVolumeSpot;
+
                 const processSide = (sideArr, sideType) => {
                     for (const [priceStr, qtyStr] of sideArr) {
                         const price = parseFloat(priceStr);
                         const qty = parseFloat(qtyStr);
                         const val = price * qty;
-                        if (val >= densityMinVolume) {
+                        if (val >= minVolume) {
                             densities.push({ price, volume: val, side: sideType });
                         }
                     }
@@ -1023,7 +1047,6 @@
                 },
             });
 
-            // Настраиваем отдельную шкалу для объёма (без меток цены)
             chart.priceScale('volume').applyOptions({
                 visible: false,
                 scaleMargins: { top: 0.85, bottom: 0 },
@@ -1195,7 +1218,7 @@
 
         const btnModal = document.getElementById('soundToggleModal');
         if (btnModal) {
-            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
             btnModal.classList.toggle('muted', !soundEnabled);
         }
 
