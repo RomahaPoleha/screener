@@ -346,6 +346,29 @@
             color: #ef4444;
             font-weight: 700;
         }
+        .scalp-tooltip {
+            position: fixed;
+            background: rgba(21, 27, 43, 0.95);
+            border: 1px solid #f0b90b;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #d1d5db;
+            pointer-events: none;
+            z-index: 10000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            white-space: nowrap;
+        }
+        .scalp-tooltip.visible {
+            display: block;
+        }
+        .scalp-tooltip-title {
+            font-weight: 700;
+            color: #f0b90b;
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
         @media (max-width: 900px) {
             .main-layout { flex-direction: column; height: auto; }
             .right-panel { width: 100%; height: 400px; border-left: none; border-top: 1px solid #2d3748; }
@@ -425,7 +448,7 @@
                 <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
             </div>
             <div class="filter-section">
-                <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
+                <button class="reset-filters-btn" onclick="resetFilters()"> Сбросить фильтры</button>
             </div>
         </div>
         <div class="right-panel-header">Монеты (<span id="coinsCount">0</span>)</div>
@@ -455,12 +478,12 @@
                 <div class="modal-section">
                     <div class="modal-section-title">🔊 Голосовое оповещение</div>
                     <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
-                        🔊 Голосовое оповещение
+                         Голосовое оповещение
                     </button>
                 </div>
                 <!-- Секция: RECON -->
                 <div class="modal-section">
-                    <div class="modal-section-title"> RECON — Сырой стакан</div>
+                    <div class="modal-section-title">🔍 RECON — Сырой стакан</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
@@ -528,7 +551,7 @@
                         <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
                             <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность 1-3 минуты<br>
                             <span style="color:#ef4444;">🔴 Красный</span> — плотность 3+ минут<br>
-                            <span style="color:#6b7280;"> Серый</span> — плотность исчезла
+                            <span style="color:#6b7280;">⏱ Наведение</span> — показывает время жизни
                         </div>
                     </div>
                 </div>
@@ -539,6 +562,12 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Tooltip для Scalp -->
+<div id="scalpTooltip" class="scalp-tooltip">
+    <div class="scalp-tooltip-title">Время жизни плотности</div>
+    <div id="scalpTooltipContent"></div>
 </div>
 
 <div id="hourToast" class="hour-toast">
@@ -787,7 +816,7 @@
         };
 
         wsCandles.onerror = (e) => {
-            console.error(' WS свечей ошибка:', e);
+            console.error('❌ WS свечей ошибка:', e);
         };
 
         wsCandles.onclose = () => {
@@ -1022,7 +1051,7 @@
         }, 3000);
     }
 
-    // Scalp функции (новые)
+    // Scalp функции
     async function loadScalpDensities(symbol) {
         if (!scalpEnabled || !candleSeries) return;
 
@@ -1034,7 +1063,6 @@
             clearScalpLines();
 
             const densities = data.densities || [];
-            const now = data.server_time || Date.now() / 1000;
 
             densities.forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
@@ -1042,16 +1070,14 @@
                 // Цветовая схема: 1-3 мин = жёлтый, 3+ мин = красный
                 let color, lineWidth;
                 if (ageSeconds < 180) {
-                    // 1-3 минуты — жёлтый
                     color = d.side === 'buy' ? 'rgba(251, 191, 36, 0.7)' : 'rgba(251, 191, 36, 0.7)';
                     lineWidth = 1;
                 } else {
-                    // 3+ минут — красный
                     color = d.side === 'buy' ? 'rgba(239, 68, 68, 0.7)' : 'rgba(239, 68, 68, 0.7)';
                     lineWidth = 2;
                 }
 
-                const marketLabel = d.market === 'future' ? 'SC-F' : 'SC-S';
+                const marketLabel = d.market === 'future' ? 'Bi-F' : 'Bi-S';
                 const ageText = formatAge(ageSeconds);
 
                 const line = candleSeries.createPriceLine({
@@ -1061,9 +1087,15 @@
                     lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true,
                     axisLabelColor: '#ffffff',
-                    axisLabelBackgroundColor: ageSeconds < 180 ? 'rgba(251, 191, 36, 0.6)' : 'rgba(239, 68, 68, 0.6)',
-                    title: `${marketLabel} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume} [${ageText}]`
+                    axisLabelBackgroundColor: 'rgba(251, 191, 36, 0.7)',
+                    title: `${marketLabel} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
                 });
+
+                // Сохраняем данные для tooltip
+                line._scalpData = {
+                    price: d.price,
+                    age_seconds: ageSeconds
+                };
 
                 scalpLines.push(line);
             });
@@ -1096,6 +1128,25 @@
         }, 3000);
     }
 
+    // Tooltip для Scalp
+    function showScalpTooltip(point, ageSeconds) {
+        const tooltip = document.getElementById('scalpTooltip');
+        const content = document.getElementById('scalpTooltipContent');
+        if (!tooltip || !content) return;
+
+        content.textContent = formatAge(ageSeconds);
+        tooltip.style.left = (point.x + 20) + 'px';
+        tooltip.style.top = (point.y - 20) + 'px';
+        tooltip.classList.add('visible');
+    }
+
+    function hideScalpTooltip() {
+        const tooltip = document.getElementById('scalpTooltip');
+        if (tooltip) {
+            tooltip.classList.remove('visible');
+        }
+    }
+
     function updateWatermark() {
         if (currentSymbol && els.chartWatermark) {
             els.watermarkSymbol.textContent = currentSymbol;
@@ -1125,6 +1176,7 @@
     function closeChart() {
         clearReconLines();
         clearScalpLines();
+        hideScalpTooltip();
         if (reconUpdateTimer) {
             clearInterval(reconUpdateTimer);
             reconUpdateTimer = null;
@@ -1172,6 +1224,7 @@
 
         clearReconLines();
         clearScalpLines();
+        hideScalpTooltip();
         if (reconUpdateTimer) { clearInterval(reconUpdateTimer); reconUpdateTimer = null; }
         if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
@@ -1220,6 +1273,38 @@
                 visible: false,
                 scaleMargins: { top: 0.85, bottom: 0 },
             });
+
+            // Подписка на crosshair для tooltip
+            chart.subscribeCrosshairMove(param => {
+                if (!param.point || !scalpEnabled || scalpLines.length === 0) {
+                    hideScalpTooltip();
+                    return;
+                }
+
+                const price = param.seriesPrices.get(candleSeries);
+                if (!price) {
+                    hideScalpTooltip();
+                    return;
+                }
+
+                // Ищем ближайшую линию Scalp
+                const tolerance = price * 0.0005; // 0.05% от цены
+                let foundLine = null;
+
+                for (const line of scalpLines) {
+                    if (Math.abs(line.price - price) <= tolerance) {
+                        foundLine = line;
+                        break;
+                    }
+                }
+
+                if (foundLine && foundLine._scalpData) {
+                    showScalpTooltip(param.point, foundLine._scalpData.age_seconds);
+                } else {
+                    hideScalpTooltip();
+                }
+            });
+
         } catch (e) {
             console.error('Chart init error:', e);
             return;
@@ -1388,7 +1473,7 @@
 
         const btnModal = document.getElementById('soundToggleModal');
         if (btnModal) {
-            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
             btnModal.classList.toggle('muted', !soundEnabled);
         }
 
