@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.shortcuts import render
+import time
 
 # Минимальный объём для фильтрации
 MIN_VOLUME = 200000
