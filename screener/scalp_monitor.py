@@ -2,6 +2,7 @@
 Scalp Monitor — фоновый мониторинг плотностей в реальном времени
 WebSocket + Django cache. Хранит только плотности старше 1 минуты.
 """
+import sys
 import os
 import json
 import time
