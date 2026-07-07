@@ -14,10 +14,10 @@ from logging.handlers import RotatingFileHandler
 from django.core.cache import cache
 import ccxt
 
-# Минимальный объём для записи в кэш (USDT)
+# Минимальный объём для записи в кэш (USDT) — снижен для отладки
 GLOBAL_MIN_VOLUME = 10000
 
-# Минимальное время жизни плотности (секунды)
+# Минимальное время жизни плотности (секунды) — 0 = выводим все сразу
 MIN_AGE_SECONDS = 0
 
 # Количество монет для мониторинга
@@ -64,7 +64,7 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
-    log(f" get_top_symbols() СТАРТ")
+    log(f"🔥 get_top_symbols() СТАРТ")
     try:
         exchange = ccxt.binance({
             'enableRateLimit': True,
@@ -111,10 +111,13 @@ shutdown_event = threading.Event()
 
 def init_order_book(symbol):
     try:
+        log(f" init_order_book({symbol}): запрос стакана...")
         url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}USDT&limit=500"
         res = requests.get(url, timeout=10)
+        log(f"🔍 init_order_book({symbol}): HTTP {res.status_code}")
+
         if not res.ok:
-            log(f"️ {symbol}: HTTP {res.status_code}")
+            log(f"⚠️ {symbol}: HTTP {res.status_code}")
             return False
 
         data = res.json()
@@ -132,6 +135,7 @@ def init_order_book(symbol):
 
     except Exception as e:
         log(f"❌ init_order_book({symbol}): {e}")
+        log(traceback.format_exc())
         return False
 
 
@@ -141,6 +145,7 @@ def sync_to_cache(symbol):
             book = order_books.get(symbol, {})
             timestamps = density_timestamps.get(symbol, {})
             if not book:
+                log(f"⚠️ sync_to_cache({symbol}): нет стакана")
                 return
 
         key = f"scalp:{symbol}"
@@ -170,11 +175,22 @@ def sync_to_cache(symbol):
                     'timestamp': timestamps[price]
                 })
 
-        # Логируем только для BTC
+        # Логируем для BTC
         if symbol == 'BTC':
             log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей")
 
+            # Тест cache
+            test_key = "scalp:test"
+            cache.set(test_key, "test_value", 60)
+            test_value = cache.get(test_key)
+            log(f" Cache test: set/get = '{test_value}'")
+
         cache.set(key, densities, CACHE_TTL)
+
+        # Проверяем что записалось
+        saved = cache.get(key)
+        if symbol == 'BTC':
+            log(f" Cache save: {len(saved) if saved else 0} items saved")
 
         with order_books_lock:
             density_timestamps[symbol] = timestamps
@@ -235,6 +251,14 @@ def update_order_book(symbol, bids_delta, asks_delta):
 
 def on_message(ws, message):
     try:
+        # Логируем первые 3 сообщения
+        if not hasattr(ws, 'message_count'):
+            ws.message_count = 0
+        ws.message_count += 1
+
+        if ws.message_count <= 3:
+            log(f" Сообщение #{ws.message_count}: {message[:300]}...")
+
         data = json.loads(message)
 
         if 'data' in data:
@@ -250,15 +274,17 @@ def on_message(ws, message):
                 update_order_book(symbol, bids, asks)
 
     except Exception as e:
-        log(f" on_message: {e}")
+        log(f"❌ on_message: {e}")
+        log(traceback.format_exc())
 
 
 def on_error(ws, error):
     log(f"❌ WebSocket ошибка: {error}")
+    log(traceback.format_exc())
 
 
 def on_close(ws, close_status_code, close_msg):
-    log(f"️ WebSocket закрыт: code={close_status_code}, msg={close_msg}")
+    log(f"⚠️ WebSocket закрыт: code={close_status_code}, msg={close_msg}")
     log("🔄 Переподключение через 5 секунд...")
     time.sleep(5)
 
@@ -282,6 +308,7 @@ def on_close(ws, close_status_code, close_msg):
 
     except Exception as e:
         log(f"❌ Ошибка переподключения: {e}")
+        log(traceback.format_exc())
 
 
 def on_open(ws):
@@ -299,8 +326,13 @@ def on_open(ws):
 
 def start_websocket(symbols_list):
     try:
+        log(f"🔧 start_websocket() вызван с {len(symbols_list)} символами")
+
+        import websocket
+        log(f"✅ websocket импортирован: {websocket.__version__}")
+
         url = "wss://fstream.binance.com/ws"
-        log(f"🔌 Подключение WebSocket для {len(symbols_list)} символов...")
+        log(f"🔌 URL: {url}")
 
         ws = websocket.WebSocketApp(
             url,
@@ -311,12 +343,12 @@ def start_websocket(symbols_list):
         )
         ws.symbols = symbols_list
 
-        log(f"🚀 Запуск ws.run_forever()...")
+        log(f"🚀 Вызов ws.run_forever()...")
         ws.run_forever(ping_interval=20, ping_timeout=10)
         log(f"⚠️ ws.run_forever() завершился!")
 
     except Exception as e:
-        log(f"❌ Ошибка в start_websocket: {e}")
+        log(f"❌ КРИТИЧЕСКАЯ ОШИБКА в start_websocket: {e}")
         log(traceback.format_exc())
 
 
@@ -326,16 +358,20 @@ def scalp_monitor_loop():
     log("🚀 Scalp Monitor запущен (WebSocket)!")
     log(f"📝 Лог-файл: {LOG_FILE}")
     log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
-    log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
+    log(f" Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
     time.sleep(5)
 
+    log("🔍 Вызов get_top_symbols()...")
     symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
+    log(f"🔍 get_top_symbols() вернул: {len(symbols) if symbols else 0} символов")
+
     if not symbols:
-        log("⚠️ Нет символов для мониторинга")
+        log("️ Нет символов для мониторинга")
         return
 
     log(f"🔄 Инициализация стаканов для {len(symbols)} символов...")
     for idx, symbol in enumerate(symbols, 1):
+        log(f"🔍 Инициализация {idx}/{len(symbols)}: {symbol}")
         init_order_book(symbol)
         time.sleep(0.05)
         if idx % 20 == 0:
@@ -343,6 +379,7 @@ def scalp_monitor_loop():
 
     log(f"✅ Все стаканы инициализированы")
 
+    log(f" Создание WebSocket потока...")
     ws_thread = threading.Thread(
         target=start_websocket,
         args=(symbols,),
@@ -350,7 +387,10 @@ def scalp_monitor_loop():
         daemon=True
     )
     ws_thread.start()
-    log(f"✅ WebSocket поток запущен")
+    log(f"✅ WebSocket поток запущен: {ws_thread.name}, PID: {ws_thread.ident}")
+    log(f"🔧 Ожидание 2 секунды...")
+    time.sleep(2)
+    log(f"🔧 Поток жив: {ws_thread.is_alive()}")
 
     heartbeat_counter = 0
     while not shutdown_event.is_set():
