@@ -314,11 +314,14 @@ def on_open(ws):
 
 def start_websocket(symbols_list):
     """Запустить WebSocket в отдельном потоке"""
-    try:
-        # Короткий URL — подписываемся через SUBSCRIBE сообщение
-        url = "wss://fstream.binance.com/ws"
+    log(f"🔧 start_websocket() вызван с {len(symbols_list)} символами")
 
-        log(f"🔌 Подключение WebSocket для {len(symbols_list)} символов...")
+    try:
+        import websocket
+        log(f"✅ websocket импортирован: {websocket.__version__}")
+
+        url = "wss://fstream.binance.com/ws"
+        log(f"🔌 URL: {url}")
 
         ws = websocket.WebSocketApp(
             url,
@@ -329,12 +332,12 @@ def start_websocket(symbols_list):
         )
         ws.symbols = symbols_list
 
-        log(f"🚀 Запуск ws.run_forever()...")
+        log(f"🚀 Вызов ws.run_forever()...")
         ws.run_forever(ping_interval=20, ping_timeout=10)
-        log(f"⚠️ ws.run_forever() завершился!")
+        log(f"️ ws.run_forever() завершился!")
 
     except Exception as e:
-        log(f"❌ Ошибка в start_websocket: {e}")
+        log(f" КРИТИЧЕСКАЯ ОШИБКА в start_websocket: {e}")
         log(traceback.format_exc())
 
 
@@ -343,7 +346,7 @@ def scalp_monitor_loop():
 
     log("🚀 Scalp Monitor запущен!")
     log(f"📝 Лог-файл: {LOG_FILE}")
-    log(f"️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
+    log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
     log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
     time.sleep(5)
 
@@ -363,7 +366,8 @@ def scalp_monitor_loop():
 
     log(f"✅ Все стаканы инициализированы")
 
-    # Запускаем WebSocket в отдельном потоке
+    # ← ВОТ ЭТОТ БЛОК ЗАМЕНИ
+    log(f"🔧 Создание WebSocket потока...")
     ws_thread = threading.Thread(
         target=start_websocket,
         args=(symbols,),
@@ -371,7 +375,11 @@ def scalp_monitor_loop():
         daemon=True
     )
     ws_thread.start()
-    log(f"✅ WebSocket поток запущен")
+    log(f"✅ WebSocket поток запущен: {ws_thread.name}, PID: {ws_thread.ident}")
+    log(f"🔧 Ожидание 2 секунды для проверки...")
+    time.sleep(2)
+    log(f"🔧 Поток жив: {ws_thread.is_alive()}")
+    # ← КОНЕЦ ЗАМЕНЫ
 
     # Heartbeat цикл
     heartbeat_counter = 0
