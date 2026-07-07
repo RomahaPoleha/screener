@@ -391,13 +391,18 @@ def scalp_monitor_loop():
 
 
 def start_scalp_monitor():
-    thread = threading.Thread(
-        target=scalp_monitor_loop,
-        name='Scalp-Monitor',
-        daemon=True
-    )
-    thread.start()
-    log(f"✅ Scalp Monitor поток запущен (daemon=True, PID: {thread.ident})")
+    log(" Вызов start_scalp_monitor()...")
+    try:
+        thread = threading.Thread(
+            target=scalp_monitor_loop,
+            name='Scalp-Monitor',
+            daemon=True
+        )
+        thread.start()
+        log(f"✅ Scalp Monitor поток запущен (daemon=True, PID: {thread.ident})")
+    except Exception as e:
+        log(f"❌ Ошибка запуска Scalp Monitor: {e}")
+        log(traceback.format_exc())
 
 
 def stop_scalp_monitor():
