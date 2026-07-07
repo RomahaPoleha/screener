@@ -15,10 +15,10 @@ from django.core.cache import cache
 import ccxt
 
 # Минимальный объём для записи в кэш (USDT)
-GLOBAL_MIN_VOLUME = 5000
+GLOBAL_MIN_VOLUME = 10000
 
 # Минимальное время жизни плотности (секунды)
-MIN_AGE_SECONDS = 60
+MIN_AGE_SECONDS = 0
 
 # Количество монет для мониторинга
 TOP_SYMBOLS_COUNT = 100
