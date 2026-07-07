@@ -1,7 +1,7 @@
 """
 Scalp Monitor — фоновый мониторинг плотностей в реальном времени
 WebSocket + Django cache. Хранит только плотности старше 1 минуты.
-Поддерживает Futures и Spot.
+Только Futures.
 """
 import os
 import json
@@ -12,10 +12,10 @@ import requests
 from logging.handlers import RotatingFileHandler
 from django.core.cache import cache
 
-# Минимальный объём для записи в кэш (USDT) — глобальный порог
+# Минимальный объём для записи в кэш (USDT)
 GLOBAL_MIN_VOLUME = 5000
 
-# Минимальное время жизни плотности (секунды) — младше не храним
+# Минимальное время жизни плотности (секунды)
 MIN_AGE_SECONDS = 60
 
 # Количество монет для мониторинга
@@ -24,7 +24,7 @@ TOP_SYMBOLS_COUNT = 200
 # Максимум монет на одно WebSocket подключение
 MAX_SYMBOLS_PER_WS = 70
 
-# TTL кэша (15 минут без обновлений = удаление)
+# TTL кэша
 CACHE_TTL = 900
 
 # Настройка логов
@@ -72,9 +72,7 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
-    """Получить топ монет по объёму (Futures)"""
     log(f"🔥 get_top_symbols() СТАРТ")
-
     try:
         import ccxt
         exchange = ccxt.binance({
@@ -103,7 +101,7 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
         symbols_with_volume.sort(key=lambda x: x[1], reverse=True)
         symbols = [s[0] for s in symbols_with_volume[:limit]]
 
-        log(f"✅ Топ-{limit}: найдено {len(symbols)} монет для мониторинга")
+        log(f"✅ Топ-{limit}: найдено {len(symbols)} монет")
         return symbols
 
     except Exception as e:
@@ -113,21 +111,16 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
 
 
 # Глобальное состояние
-order_books = {}  # {symbol: {'bids': {price: qty}, 'asks': {price: qty}}}
-density_timestamps = {}  # {symbol: {price: timestamp}} — когда появилась плотность
+order_books = {}
+density_timestamps = {}
 order_books_lock = threading.Lock()
 symbols = []
 shutdown_event = threading.Event()
 
 
-def init_order_book(symbol, market='future'):
-    """Загрузить полный стакан через REST API"""
+def init_order_book(symbol):
     try:
-        if market == 'future':
-            url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}USDT&limit=1000"
-        else:
-            url = f"https://api.binance.com/api/v3/depth?symbol={symbol}USDT&limit=1000"
-
+        url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}USDT&limit=1000"
         res = requests.get(url, timeout=10)
         if not res.ok:
             return False
@@ -136,35 +129,29 @@ def init_order_book(symbol, market='future'):
         bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
         asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
 
-        book_key = f"{market}_{symbol}"
         with order_books_lock:
-            order_books[book_key] = {'bids': bids, 'asks': asks}
-            density_timestamps[book_key] = {}
+            order_books[symbol] = {'bids': bids, 'asks': asks}
+            density_timestamps[symbol] = {}
 
-        sync_to_cache(symbol, market)
+        sync_to_cache(symbol)
 
-        log(f"✅ Инициализирован стакан для {market.upper()} {symbol}: {len(bids)} bids, {len(asks)} asks")
+        log(f"✅ Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
         return True
 
     except Exception as e:
-        log(f"❌ Ошибка init_order_book({market} {symbol}): {e}")
+        log(f"❌ init_order_book({symbol}): {e}")
         return False
 
 
-def sync_to_cache(symbol, market='future'):
-    """
-    Синхронизировать локальный стакан с Django cache.
-    ВАЖНО: записываем только плотности старше MIN_AGE_SECONDS (60 сек).
-    """
+def sync_to_cache(symbol):
     try:
-        book_key = f"{market}_{symbol}"
         with order_books_lock:
-            book = order_books.get(book_key, {})
-            timestamps = density_timestamps.get(book_key, {})
+            book = order_books.get(symbol, {})
+            timestamps = density_timestamps.get(symbol, {})
             if not book:
                 return
 
-        key = f"scalp:{market}:{symbol}"
+        key = f"scalp:{symbol}"
         now = time.time()
 
         densities = []
@@ -176,17 +163,14 @@ def sync_to_cache(symbol, market='future'):
                 if volume < GLOBAL_MIN_VOLUME:
                     continue
 
-                # Проверяем возраст плотности
                 if price in timestamps:
                     age = now - timestamps[price]
                     if age < MIN_AGE_SECONDS:
                         continue
                 else:
-                    # Новая плотность — запоминаем timestamp
                     timestamps[price] = now
                     continue
 
-                # Плотность старше 1 минуты — добавляем
                 densities.append({
                     'price': price,
                     'volume': volume,
@@ -194,27 +178,23 @@ def sync_to_cache(symbol, market='future'):
                     'timestamp': timestamps[price]
                 })
 
-        # Сохраняем в cache с TTL
         cache.set(key, densities, CACHE_TTL)
 
-        # Сохраняем обновлённые timestamps
         with order_books_lock:
-            density_timestamps[book_key] = timestamps
+            density_timestamps[symbol] = timestamps
 
     except Exception as e:
-        log(f"❌ Ошибка sync_to_cache({market} {symbol}): {e}")
+        log(f"❌ sync_to_cache({symbol}): {e}")
 
 
-def update_order_book(symbol, market, bids_delta, asks_delta):
-    """Обновить локальный стакан дельтами из WebSocket"""
+def update_order_book(symbol, bids_delta, asks_delta):
     try:
-        book_key = f"{market}_{symbol}"
         with order_books_lock:
-            if book_key not in order_books:
+            if symbol not in order_books:
                 return
 
-            book = order_books[book_key]
-            timestamps = density_timestamps.get(book_key, {})
+            book = order_books[symbol]
+            timestamps = density_timestamps.get(symbol, {})
             changed = False
 
             for price_str, qty_str in bids_delta:
@@ -250,79 +230,71 @@ def update_order_book(symbol, market, bids_delta, asks_delta):
                     changed = True
 
         if changed:
-            sync_to_cache(symbol, market)
+            sync_to_cache(symbol)
 
     except Exception as e:
-        log(f"❌ Ошибка update_order_book({market} {symbol}): {e}")
+        log(f" update_order_book({symbol}): {e}")
 
 
-def make_on_message(market):
-    """Создать обработчик сообщений WebSocket для конкретного рынка"""
-    def on_message(ws, message):
-        try:
-            data = json.loads(message)
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
 
-            if 'data' in data:
-                stream_data = data['data']
-                symbol = stream_data.get('s', '')
-                if symbol.endswith('USDT'):
-                    symbol = symbol[:-4]
+        if 'data' in data:
+            stream_data = data['data']
+            symbol = stream_data.get('s', '')
+            if symbol.endswith('USDT'):
+                symbol = symbol[:-4]
 
-                bids = stream_data.get('b', [])
-                asks = stream_data.get('a', [])
+            bids = stream_data.get('b', [])
+            asks = stream_data.get('a', [])
 
-                if bids or asks:
-                    update_order_book(symbol, market, bids, asks)
+            if bids or asks:
+                update_order_book(symbol, bids, asks)
 
-        except Exception as e:
-            log(f"❌ Ошибка on_message ({market}): {e}")
-
-    return on_message
+    except Exception as e:
+        log(f"❌ on_message: {e}")
 
 
-def make_on_error(market):
-    def on_error(ws, error):
-        log(f"❌ WebSocket ошибка ({market}): {error}")
-    return on_error
+def on_error(ws, error):
+    log(f"❌ WebSocket ошибка: {error}")
 
 
-def make_on_close(market, symbols_list):
-    def on_close(ws, close_status_code, close_msg):
-        log(f"⚠️ WebSocket закрыт ({market}): {close_status_code} {close_msg}")
-        log(f"🔄 Переподключение {market} через 5 секунд...")
-        time.sleep(5)
+def on_close(ws, close_status_code, close_msg):
+    log(f"⚠️ WebSocket закрыт: {close_status_code} {close_msg}")
+    log("🔄 Переподключение через 5 секунд...")
+    time.sleep(5)
 
-        try:
-            import websocket
-            if market == 'future':
-                streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols_list]
-                url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
-            else:
-                streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols_list]
-                url = f"wss://stream.binance.com:9443/stream?streams={'/'.join(streams)}"
+    if shutdown_event.is_set():
+        return
 
-            new_ws = websocket.WebSocketApp(
-                url,
-                on_open=lambda ws: on_open(ws, market),
-                on_message=make_on_message(market),
-                on_error=make_on_error(market),
-                on_close=make_on_close(market, symbols_list)
-            )
-            new_ws.symbol_group = ws.symbol_group
-            new_ws.symbols = symbols_list
-            new_ws.market = market
+    # Переподключаемся
+    try:
+        import websocket
+        streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
+        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
 
-            new_ws.run_forever()
-        except Exception as e:
-            log(f"❌ Ошибка переподключения ({market}): {e}")
+        log(f"🔌 Переподключение WebSocket для группы {ws.symbol_group}...")
 
-    return on_close
+        new_ws = websocket.WebSocketApp(
+            url,
+            on_open=lambda ws: on_open(ws),
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+        new_ws.symbol_group = ws.symbol_group
+        new_ws.symbols = ws.symbols
+
+        new_ws.run_forever()
+
+    except Exception as e:
+        log(f"❌ Ошибка переподключения: {e}")
 
 
-def on_open(ws, market=None):
+def on_open(ws):
     symbol_group = ws.symbol_group
-    m = market or getattr(ws, 'market', 'unknown')
-    log(f"✅ WebSocket открыт ({m}) для группы {symbol_group}: {len(ws.symbols)} символов")
+    log(f"✅ WebSocket открыт для группы {symbol_group}: {len(ws.symbols)} символов")
 
     streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
     subscribe_msg = {
@@ -333,48 +305,41 @@ def on_open(ws, market=None):
     ws.send(json.dumps(subscribe_msg))
 
 
-def start_websocket_connection(symbol_group, symbols_list, market='future'):
-    """Запустить одно WebSocket подключение для группы символов"""
+def start_websocket_connection(symbol_group, symbols_list):
     try:
         import websocket
 
         if not symbols_list:
             return
 
-        log(f"🔄 Инициализация стаканов ({market}) для группы {symbol_group} ({len(symbols_list)} символов)...")
+        log(f"🔄 Инициализация стаканов для группы {symbol_group} ({len(symbols_list)} символов)...")
         for symbol in symbols_list:
-            init_order_book(symbol, market)
+            init_order_book(symbol)
             time.sleep(0.05)
 
         streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols_list]
+        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
 
-        if market == 'future':
-            url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
-        else:
-            url = f"wss://stream.binance.com:9443/stream?streams={'/'.join(streams)}"
-
-        log(f"🔌 Подключение WebSocket ({market}) для группы {symbol_group}...")
+        log(f" Подключение WebSocket для группы {symbol_group}...")
 
         ws = websocket.WebSocketApp(
             url,
-            on_open=lambda ws: on_open(ws, market),
-            on_message=make_on_message(market),
-            on_error=make_on_error(market),
-            on_close=make_on_close(market, symbols_list)
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
         )
         ws.symbol_group = symbol_group
         ws.symbols = symbols_list
-        ws.market = market
 
         ws.run_forever()
 
     except Exception as e:
-        log(f"❌ Ошибка start_websocket_connection({market} {symbol_group}): {e}")
+        log(f"❌ start_websocket_connection({symbol_group}): {e}")
         log(traceback.format_exc())
 
 
 def start_all_websocket_connections():
-    """Запустить все WebSocket подключения для Futures и Spot"""
     global symbols
 
     if not symbols:
@@ -386,36 +351,26 @@ def start_all_websocket_connections():
     num_groups = (len(symbols) + MAX_SYMBOLS_PER_WS - 1) // MAX_SYMBOLS_PER_WS
     symbol_groups = [symbols[i::num_groups] for i in range(num_groups)]
 
-    log(f"🚀 Запуск WebSocket подключений для Futures и Spot...")
+    log(f"🚀 Запуск {num_groups} WebSocket подключений...")
 
-    # Futures подключения
+    threads = []
     for idx, symbol_group in enumerate(symbol_groups):
         thread = threading.Thread(
             target=start_websocket_connection,
-            args=(f"F{idx}", symbol_group, 'future'),
-            name=f'Scalp-Future-{idx}',
+            args=(idx, symbol_group),
+            name=f'Scalp-WS-{idx}',
             daemon=True
         )
-        thread.start()
-        time.sleep(1)
-
-    # Spot подключения
-    for idx, symbol_group in enumerate(symbol_groups):
-        thread = threading.Thread(
-            target=start_websocket_connection,
-            args=(f"S{idx}", symbol_group, 'spot'),
-            name=f'Scalp-Spot-{idx}',
-            daemon=True
-        )
+        threads.append(thread)
         thread.start()
         time.sleep(1)
 
 
 def scalp_monitor_loop():
     setup_excepthook()
-    log("🚀 Scalp Monitor запущен (WebSocket + Django cache, Futures + Spot)!")
-    log(f"📝 Лог-файл: {LOG_FILE}")
-    log(f"⏱️ Минимальный возраст плотности: {MIN_AGE_SECONDS} сек")
+    log("🚀 Scalp Monitor запущен!")
+    log(f" Лог-файл: {LOG_FILE}")
+    log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
     time.sleep(5)
 
     heartbeat_counter = 0
@@ -441,7 +396,7 @@ def scalp_monitor_loop():
             time.sleep(10)
 
         except Exception as e:
-            log(f"❌ Ошибка в цикле Scalp Monitor: {e}")
+            log(f"❌ Ошибка в цикле: {e}")
             log(traceback.format_exc())
             if shutdown_event.wait(timeout=60):
                 break
@@ -454,9 +409,9 @@ def start_scalp_monitor():
         daemon=True
     )
     thread.start()
-    log(f"✅ Scalp Monitor поток запущен (daemon=True, PID: {thread.ident})")
+    log(f"✅ Scalp Monitor запущен (PID: {thread.ident})")
 
 
 def stop_scalp_monitor():
-    log("📤 Отправка сигнала остановки Scalp Monitor...")
+    log("📤 Остановка Scalp Monitor...")
     shutdown_event.set()
