@@ -1,15 +1,13 @@
 """
-Scalp Monitor — мониторинг плотностей в реальном времени
-WebSocket + Django cache. Только Futures. Топ-100.
+Scalp Monitor — простой мониторинг плотностей через REST API
+Django cache (Redis). Только Futures. Топ-100.
 """
 import os
 import sys
-import json
 import time
 import threading
 import traceback
 import requests
-import websocket
 from logging.handlers import RotatingFileHandler
 from django.core.cache import cache
 import ccxt
@@ -22,6 +20,9 @@ MIN_AGE_SECONDS = 60
 
 # Количество монет для мониторинга
 TOP_SYMBOLS_COUNT = 100
+
+# Интервал между циклами (секунды)
+UPDATE_INTERVAL = 10
 
 # TTL кэша
 CACHE_TTL = 900
@@ -51,6 +52,13 @@ _scalp_logger.addHandler(_console_handler)
 
 def log(msg):
     _scalp_logger.info(msg)
+
+
+def setup_excepthook():
+    def excepthook(exc_type, exc_value, exc_tb):
+        log(f"❌ НЕОБРАБОТАННОЕ ИСКЛЮЧЕНИЕ: {exc_type.__name__}: {exc_value}")
+        log(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
+    sys.excepthook = excepthook
 
 
 def is_valid_symbol(symbol):
@@ -102,294 +110,190 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
 
 
 # Глобальное состояние
-order_books = {}
-density_timestamps = {}
-order_books_lock = threading.Lock()
-symbols = []
+density_timestamps = {}  # {symbol: {price: timestamp}}
 shutdown_event = threading.Event()
 
 
-def init_order_book(symbol):
+def fetch_order_book(symbol):
+    """Получить стакан через REST API"""
     try:
         url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}USDT&limit=1000"
         res = requests.get(url, timeout=10)
         if not res.ok:
-            log(f"️ {symbol}: HTTP {res.status_code}")
+            return None
+        return res.json()
+    except Exception as e:
+        log(f"⚠️ fetch_order_book({symbol}): {e}")
+        return None
+
+
+def update_scalp_for_symbol(symbol):
+    """Обновить плотности для одной монеты"""
+    try:
+        depth = fetch_order_book(symbol)
+        if not depth:
             return False
 
-        data = res.json()
-        bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
-        asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
+        now = time.time()
+        key = f"scalp:{symbol}"
 
-        with order_books_lock:
-            order_books[symbol] = {'bids': bids, 'asks': asks}
+        # Получаем текущие timestamps для этой монеты
+        if symbol not in density_timestamps:
             density_timestamps[symbol] = {}
 
-        sync_to_cache(symbol)
+        timestamps = density_timestamps[symbol]
 
-        log(f"✅ Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
+        # Собираем текущие цены из стакана
+        current_prices = set()
+
+        # Проверяем bids
+        for price_str, qty_str in depth.get('bids', []):
+            price = float(price_str)
+            qty = float(qty_str)
+            volume = price * qty
+
+            if volume >= GLOBAL_MIN_VOLUME:
+                current_prices.add(price)
+                if price not in timestamps:
+                    # Новая плотность — запоминаем время появления
+                    timestamps[price] = now
+
+        # Проверяем asks
+        for price_str, qty_str in depth.get('asks', []):
+            price = float(price_str)
+            qty = float(qty_str)
+            volume = price * qty
+
+            if volume >= GLOBAL_MIN_VOLUME:
+                current_prices.add(price)
+                if price not in timestamps:
+                    timestamps[price] = now
+
+        # Удаляем timestamps для исчезнувших плотностей
+        for price in list(timestamps.keys()):
+            if price not in current_prices:
+                del timestamps[price]
+
+        # Собираем плотности старше 60 секунд
+        densities = []
+        for price in current_prices:
+            if price in timestamps:
+                age = now - timestamps[price]
+                if age >= MIN_AGE_SECONDS:
+                    # Определяем сторону
+                    side = None
+                    volume = 0
+                    for p, q in depth.get('bids', []):
+                        if float(p) == price:
+                            side = 'buy'
+                            volume = price * float(q)
+                            break
+                    if side is None:
+                        for p, q in depth.get('asks', []):
+                            if float(p) == price:
+                                side = 'sell'
+                                volume = price * float(q)
+                                break
+
+                    if side:
+                        densities.append({
+                            'price': price,
+                            'volume': volume,
+                            'side': side,
+                            'timestamp': timestamps[price]
+                        })
+
+        # Сохраняем в cache
+        cache.set(key, densities, CACHE_TTL)
+
+        # Логируем только для BTC
+        if symbol == 'BTC':
+            log(f"📊 {symbol}: {len(densities)} плотностей старше 60с, всего в стакане {len(current_prices)}")
+
         return True
 
     except Exception as e:
-        log(f"❌ init_order_book({symbol}): {e}")
+        log(f"❌ update_scalp_for_symbol({symbol}): {e}")
+        log(traceback.format_exc())
         return False
 
 
-def sync_to_cache(symbol):
-    try:
-        with order_books_lock:
-            book = order_books.get(symbol, {})
-            timestamps = density_timestamps.get(symbol, {})
-            if not book:
-                return
+def update_scalp_all(symbols):
+    """Обновить плотности для всех монет"""
+    log(f"🔄 Обновление плотностей для {len(symbols)} монет...")
 
-        key = f"scalp:{symbol}"
-        now = time.time()
+    success = 0
+    errors = 0
 
-        densities = []
-        young_count = 0
-        new_count = 0
+    for idx, symbol in enumerate(symbols, 1):
+        if shutdown_event.is_set():
+            break
 
-        for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
-            for price, qty in book.get(side, {}).items():
-                volume = price * qty
+        try:
+            if update_scalp_for_symbol(symbol):
+                success += 1
+            else:
+                errors += 1
 
-                if volume < GLOBAL_MIN_VOLUME:
-                    continue
+            # Задержка чтобы не превысить rate limit
+            time.sleep(0.1)
 
-                if price in timestamps:
-                    age = now - timestamps[price]
-                    if age < MIN_AGE_SECONDS:
-                        young_count += 1
-                        continue
-                else:
-                    timestamps[price] = now
-                    new_count += 1
-                    continue
+            if idx % 20 == 0:
+                log(f"  Прогресс: {idx}/{len(symbols)} | ✅ {success} | ❌ {errors}")
 
-                densities.append({
-                    'price': price,
-                    'volume': volume,
-                    'side': side_name,
-                    'timestamp': timestamps[price]
-                })
+        except Exception as e:
+            errors += 1
+            log(f"⚠️ Ошибка для {symbol}: {e}")
+            continue
 
-        # Логируем только для BTC чтобы не спамить
-        if symbol == 'BTC':
-            log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей, {young_count} молодых, {new_count} новых")
-
-        cache.set(key, densities, CACHE_TTL)
-
-        with order_books_lock:
-            density_timestamps[symbol] = timestamps
-
-    except Exception as e:
-        log(f"❌ sync_to_cache({symbol}): {e}")
-        log(traceback.format_exc())
-
-
-def update_order_book(symbol, bids_delta, asks_delta):
-    try:
-        with order_books_lock:
-            if symbol not in order_books:
-                return
-
-            book = order_books[symbol]
-            timestamps = density_timestamps.get(symbol, {})
-            changed = False
-
-            for price_str, qty_str in bids_delta:
-                price = float(price_str)
-                qty = float(qty_str)
-
-                if qty == 0:
-                    if price in book['bids']:
-                        del book['bids'][price]
-                        if price in timestamps:
-                            del timestamps[price]
-                        changed = True
-                else:
-                    book['bids'][price] = qty
-                    if price not in timestamps:
-                        timestamps[price] = time.time()
-                    changed = True
-
-            for price_str, qty_str in asks_delta:
-                price = float(price_str)
-                qty = float(qty_str)
-
-                if qty == 0:
-                    if price in book['asks']:
-                        del book['asks'][price]
-                        if price in timestamps:
-                            del timestamps[price]
-                        changed = True
-                else:
-                    book['asks'][price] = qty
-                    if price not in timestamps:
-                        timestamps[price] = time.time()
-                    changed = True
-
-        if changed:
-            sync_to_cache(symbol)
-
-    except Exception as e:
-        log(f" update_order_book({symbol}): {e}")
-
-
-def on_message(ws, message):
-    try:
-        # Логируем первые 5 сообщений
-        if not hasattr(ws, 'message_count'):
-            ws.message_count = 0
-        ws.message_count += 1
-
-        if ws.message_count <= 5:
-            log(f"📨 Сообщение #{ws.message_count}: {message[:300]}...")
-
-        data = json.loads(message)
-
-        if 'data' in data:
-            stream_data = data['data']
-            symbol = stream_data.get('s', '')
-            if symbol.endswith('USDT'):
-                symbol = symbol[:-4]
-
-            bids = stream_data.get('b', [])
-            asks = stream_data.get('a', [])
-
-            if bids or asks:
-                update_order_book(symbol, bids, asks)
-
-    except Exception as e:
-        log(f"❌ on_message: {e}")
-        log(traceback.format_exc())
-
-
-def on_error(ws, error):
-    log(f"❌ WebSocket ошибка: {error}")
-    log(traceback.format_exc())
-
-
-def on_close(ws, close_status_code, close_msg):
-    log(f"⚠️ WebSocket закрыт: code={close_status_code}, msg={close_msg}")
-    log("🔄 Переподключение через 5 секунд...")
-    time.sleep(5)
-
-    if shutdown_event.is_set():
-        return
-
-    try:
-        url = "wss://fstream.binance.com/ws"
-
-        log(f"🔌 Переподключение WebSocket...")
-
-        new_ws = websocket.WebSocketApp(
-            url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
-        )
-        new_ws.symbols = ws.symbols
-        new_ws.run_forever(ping_interval=20, ping_timeout=10)
-
-    except Exception as e:
-        log(f"❌ Ошибка переподключения: {e}")
-        log(traceback.format_exc())
-
-
-def on_open(ws):
-    log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
-
-    streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
-    subscribe_msg = {
-        "method": "SUBSCRIBE",
-        "params": streams,
-        "id": 1
-    }
-    ws.send(json.dumps(subscribe_msg))
-    log(f"✅ Подписка отправлена: {len(streams)} стримов")
-
-
-def start_websocket(symbols_list):
-    """Запустить WebSocket в отдельном потоке"""
-    log(f"🔧 start_websocket() вызван с {len(symbols_list)} символами")
-
-    try:
-        import websocket
-        log(f"✅ websocket импортирован: {websocket.__version__}")
-
-        url = "wss://fstream.binance.com/ws"
-        log(f"🔌 URL: {url}")
-
-        ws = websocket.WebSocketApp(
-            url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
-        )
-        ws.symbols = symbols_list
-
-        log(f"🚀 Вызов ws.run_forever()...")
-        ws.run_forever(ping_interval=20, ping_timeout=10)
-        log(f"️ ws.run_forever() завершился!")
-
-    except Exception as e:
-        log(f" КРИТИЧЕСКАЯ ОШИБКА в start_websocket: {e}")
-        log(traceback.format_exc())
+    log(f"✅ Завершено: {success}/{len(symbols)} успешно, {errors} ошибок")
 
 
 def scalp_monitor_loop():
-    global symbols
-
-    log("🚀 Scalp Monitor запущен!")
+    setup_excepthook()
+    log("🚀 Scalp Monitor запущен (REST API режим)!")
     log(f"📝 Лог-файл: {LOG_FILE}")
     log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
     log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
-    time.sleep(5)
+    log(f"🔄 Интервал обновления: {UPDATE_INTERVAL} сек")
+    time.sleep(10)
 
-    # Получаем топ монет
-    symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
-    if not symbols:
-        log("⚠️ Нет символов для мониторинга")
-        return
-
-    # Инициализируем стаканы
-    log(f"🔄 Инициализация стаканов для {len(symbols)} символов...")
-    for idx, symbol in enumerate(symbols, 1):
-        init_order_book(symbol)
-        time.sleep(0.05)
-        if idx % 20 == 0:
-            log(f"  Прогресс: {idx}/{len(symbols)}")
-
-    log(f"✅ Все стаканы инициализированы")
-
-    # ← ВОТ ЭТОТ БЛОК ЗАМЕНИ
-    log(f"🔧 Создание WebSocket потока...")
-    ws_thread = threading.Thread(
-        target=start_websocket,
-        args=(symbols,),
-        name='Scalp-WebSocket',
-        daemon=True
-    )
-    ws_thread.start()
-    log(f"✅ WebSocket поток запущен: {ws_thread.name}, PID: {ws_thread.ident}")
-    log(f"🔧 Ожидание 2 секунды для проверки...")
-    time.sleep(2)
-    log(f"🔧 Поток жив: {ws_thread.is_alive()}")
-    # ← КОНЕЦ ЗАМЕНЫ
-
-    # Heartbeat цикл
     heartbeat_counter = 0
-    while not shutdown_event.is_set():
-        heartbeat_counter += 1
-        if heartbeat_counter % 6 == 0:
-            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter})")
 
-        if shutdown_event.wait(timeout=10):
-            break
+    while not shutdown_event.is_set():
+        try:
+            heartbeat_counter += 1
+            if heartbeat_counter % 6 == 0:
+                log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter})")
+
+            # Получаем топ монет
+            symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
+            if not symbols:
+                log("⚠️ Нет символов для мониторинга")
+                if shutdown_event.wait(timeout=UPDATE_INTERVAL):
+                    break
+                continue
+
+            # Обновляем плотности
+            try:
+                update_scalp_all(symbols)
+            except Exception as e:
+                log(f"❌ Цикл обновления упал: {e}")
+                log(traceback.format_exc())
+
+            if shutdown_event.is_set():
+                break
+
+            log(f"💤 Scalp Monitor: сон {UPDATE_INTERVAL} секунд...")
+            if shutdown_event.wait(timeout=UPDATE_INTERVAL):
+                log("🛑 Получен сигнал остановки")
+                break
+
+        except Exception as e:
+            log(f"❌ Ошибка в цикле Scalp Monitor: {e}")
+            log(traceback.format_exc())
+            if shutdown_event.wait(timeout=60):
+                break
 
 
 def start_scalp_monitor():
