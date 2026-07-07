@@ -146,6 +146,8 @@ def sync_to_cache(symbol):
         now = time.time()
 
         densities = []
+        young_count = 0
+        new_count = 0
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
@@ -157,9 +159,11 @@ def sync_to_cache(symbol):
                 if price in timestamps:
                     age = now - timestamps[price]
                     if age < MIN_AGE_SECONDS:
+                        young_count += 1
                         continue
                 else:
                     timestamps[price] = now
+                    new_count += 1
                     continue
 
                 densities.append({
@@ -168,6 +172,10 @@ def sync_to_cache(symbol):
                     'side': side_name,
                     'timestamp': timestamps[price]
                 })
+
+        # Логируем только для BTC чтобы не спамить
+        if symbol == 'BTC':
+            log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей, {young_count} молодых, {new_count} новых")
 
         cache.set(key, densities, CACHE_TTL)
 
