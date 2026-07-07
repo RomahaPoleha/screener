@@ -455,21 +455,21 @@
                 <div class="modal-section">
                     <div class="modal-section-title">🔊 Голосовое оповещение</div>
                     <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
-                         Голосовое оповещение
+                        🔊 Голосовое оповещение
                     </button>
                 </div>
                 <!-- Секция: RECON -->
                 <div class="modal-section">
-                    <div class="modal-section-title">🔍 RECON — Сырой стакан</div>
+                    <div class="modal-section-title"> RECON — Сырой стакан</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
                             <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
-                                <input type="checkbox" id="densityMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <input type="checkbox" id="reconMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;">
                                 <span>Futures</span>
                             </label>
                             <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
-                                <input type="checkbox" id="densityMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <input type="checkbox" id="reconMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;">
                                 <span>Spot</span>
                             </label>
                         </div>
@@ -479,15 +479,56 @@
                             <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
                                 Futures мин. объём (USDT):
                             </label>
-                            <input type="number" id="densityMinVolumeFuture" value="50000" min="1000" step="10000"
+                            <input type="number" id="reconMinVolumeFuture" value="50000" min="1000" step="10000"
                                    style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
                         </div>
                         <div style="flex:1;">
                             <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
                                 Spot мин. объём (USDT):
                             </label>
-                            <input type="number" id="densityMinVolumeSpot" value="10000" min="1000" step="10000"
+                            <input type="number" id="reconMinVolumeSpot" value="10000" min="1000" step="10000"
                                    style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                    </div>
+                </div>
+                <!-- Секция: Scalp -->
+                <div class="modal-section">
+                    <div class="modal-section-title">🎯 Scalp — Мониторинг плотностей</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
+                        <div style="display:flex; gap:16px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="scalpMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <span>Futures</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="scalpMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <span>Spot</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                                Futures мин. объём (USDT):
+                            </label>
+                            <input type="number" id="scalpMinVolumeFuture" value="200000" min="10000" step="10000"
+                                   style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                                Spot мин. объём (USDT):
+                            </label>
+                            <input type="number" id="scalpMinVolumeSpot" value="100000" min="10000" step="10000"
+                                   style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; padding:10px; background:rgba(240, 185, 11, 0.1); border-radius:6px; border:1px solid rgba(240, 185, 11, 0.3);">
+                        <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">ℹ️ Цветовая схема:</div>
+                        <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
+                            <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность 1-3 минуты<br>
+                            <span style="color:#ef4444;">🔴 Красный</span> — плотность 3+ минут<br>
+                            <span style="color:#6b7280;"> Серый</span> — плотность исчезла
                         </div>
                     </div>
                 </div>
@@ -545,19 +586,33 @@
     let currentTF = '1m';
     let currentSymbol = '';
 
-    let densityLines = [];
-    let densityEnabled = false;
-    let densityMarkets = { future: false, spot: false };
-    let densityMinVolumeFuture = 50000;
-    let densityMinVolumeSpot = 10000;
-    let densityUpdateTimer = null;
-    let previousDensities = { future: [], spot: [] };
+    // RECON настройки
+    let reconLines = [];
+    let reconEnabled = false;
+    let reconMarkets = { future: false, spot: false };
+    let reconMinVolumeFuture = 50000;
+    let reconMinVolumeSpot = 10000;
+    let reconUpdateTimer = null;
+    let previousReconDensities = { future: [], spot: [] };
 
-    // Загружаем сохранённые настройки RECON
-    const savedFutureVol = localStorage.getItem('densityMinVolumeFuture');
-    const savedSpotVol = localStorage.getItem('densityMinVolumeSpot');
-    if (savedFutureVol) densityMinVolumeFuture = parseInt(savedFutureVol);
-    if (savedSpotVol) densityMinVolumeSpot = parseInt(savedSpotVol);
+    // Scalp настройки
+    let scalpLines = [];
+    let scalpEnabled = false;
+    let scalpMarkets = { future: true, spot: false };
+    let scalpMinVolumeFuture = 200000;
+    let scalpMinVolumeSpot = 100000;
+    let scalpUpdateTimer = null;
+
+    // Загружаем сохранённые настройки
+    const savedReconFutureVol = localStorage.getItem('reconMinVolumeFuture');
+    const savedReconSpotVol = localStorage.getItem('reconMinVolumeSpot');
+    if (savedReconFutureVol) reconMinVolumeFuture = parseInt(savedReconFutureVol);
+    if (savedReconSpotVol) reconMinVolumeSpot = parseInt(savedReconSpotVol);
+
+    const savedScalpFutureVol = localStorage.getItem('scalpMinVolumeFuture');
+    const savedScalpSpotVol = localStorage.getItem('scalpMinVolumeSpot');
+    if (savedScalpFutureVol) scalpMinVolumeFuture = parseInt(savedScalpFutureVol);
+    if (savedScalpSpotVol) scalpMinVolumeSpot = parseInt(savedScalpSpotVol);
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -732,7 +787,7 @@
         };
 
         wsCandles.onerror = (e) => {
-            console.error('❌ WS свечей ошибка:', e);
+            console.error(' WS свечей ошибка:', e);
         };
 
         wsCandles.onclose = () => {
@@ -743,10 +798,15 @@
     }
 
     function openSettingsModal() {
-        document.getElementById('densityMarketFuture').checked = densityMarkets.future;
-        document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
-        document.getElementById('densityMinVolumeFuture').value = densityMinVolumeFuture;
-        document.getElementById('densityMinVolumeSpot').value = densityMinVolumeSpot;
+        document.getElementById('reconMarketFuture').checked = reconMarkets.future;
+        document.getElementById('reconMarketSpot').checked = reconMarkets.spot;
+        document.getElementById('reconMinVolumeFuture').value = reconMinVolumeFuture;
+        document.getElementById('reconMinVolumeSpot').value = reconMinVolumeSpot;
+
+        document.getElementById('scalpMarketFuture').checked = scalpMarkets.future;
+        document.getElementById('scalpMarketSpot').checked = scalpMarkets.spot;
+        document.getElementById('scalpMinVolumeFuture').value = scalpMinVolumeFuture;
+        document.getElementById('scalpMinVolumeSpot').value = scalpMinVolumeSpot;
 
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
@@ -759,21 +819,36 @@
     }
 
     function applySettings() {
-        const futureChecked = document.getElementById('densityMarketFuture').checked;
-        const spotChecked = document.getElementById('densityMarketSpot').checked;
-        const minVolumeFuture = parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000;
-        const minVolumeSpot = parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000;
+        // RECON настройки
+        const reconFutureChecked = document.getElementById('reconMarketFuture').checked;
+        const reconSpotChecked = document.getElementById('reconMarketSpot').checked;
+        const reconMinVolumeFutureNew = parseInt(document.getElementById('reconMinVolumeFuture').value) || 50000;
+        const reconMinVolumeSpotNew = parseInt(document.getElementById('reconMinVolumeSpot').value) || 10000;
 
-        densityMarkets = { future: futureChecked, spot: spotChecked };
-        densityMinVolumeFuture = minVolumeFuture;
-        densityMinVolumeSpot = minVolumeSpot;
-        densityEnabled = futureChecked || spotChecked;
+        reconMarkets = { future: reconFutureChecked, spot: reconSpotChecked };
+        reconMinVolumeFuture = reconMinVolumeFutureNew;
+        reconMinVolumeSpot = reconMinVolumeSpotNew;
+        reconEnabled = reconFutureChecked || reconSpotChecked;
 
-        localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
-        localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
+        localStorage.setItem('reconMinVolumeFuture', reconMinVolumeFuture);
+        localStorage.setItem('reconMinVolumeSpot', reconMinVolumeSpot);
+
+        // Scalp настройки
+        const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
+        const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
+        const scalpMinVolumeFutureNew = parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000;
+        const scalpMinVolumeSpotNew = parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000;
+
+        scalpMarkets = { future: scalpFutureChecked, spot: scalpSpotChecked };
+        scalpMinVolumeFuture = scalpMinVolumeFutureNew;
+        scalpMinVolumeSpot = scalpMinVolumeSpotNew;
+        scalpEnabled = scalpFutureChecked || scalpSpotChecked;
+
+        localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
+        localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
 
         const btn = document.getElementById('settingsBtn');
-        if (densityEnabled) {
+        if (reconEnabled || scalpEnabled) {
             btn.style.background = '#f0b90b';
             btn.style.color = '#000';
         } else {
@@ -781,15 +856,27 @@
             btn.style.color = '#9ca3af';
         }
 
-        if (densityEnabled && currentSymbol) {
-            previousDensities = { future: [], spot: [] };
-            startDensityUpdates(currentSymbol);
-        } else {
-            if (densityUpdateTimer) {
-                clearInterval(densityUpdateTimer);
-                densityUpdateTimer = null;
+        if (currentSymbol) {
+            if (reconEnabled) {
+                previousReconDensities = { future: [], spot: [] };
+                startReconUpdates(currentSymbol);
+            } else {
+                if (reconUpdateTimer) {
+                    clearInterval(reconUpdateTimer);
+                    reconUpdateTimer = null;
+                }
+                clearReconLines();
             }
-            clearDensityLines();
+
+            if (scalpEnabled) {
+                startScalpUpdates(currentSymbol);
+            } else {
+                if (scalpUpdateTimer) {
+                    clearInterval(scalpUpdateTimer);
+                    scalpUpdateTimer = null;
+                }
+                clearScalpLines();
+            }
         }
 
         bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
@@ -836,14 +923,15 @@
         els.tradesOverlayBody.scrollTop = els.tradesOverlayBody.scrollHeight;
     }
 
-    async function loadDensities(symbol) {
-        if (!densityEnabled || !candleSeries) return;
+    // RECON функции (без изменений)
+    async function loadReconDensities(symbol) {
+        if (!reconEnabled || !candleSeries) return;
 
         let hasChanges = false;
 
         const marketsToLoad = [];
-        if (densityMarkets.future) marketsToLoad.push('future');
-        if (densityMarkets.spot) marketsToLoad.push('spot');
+        if (reconMarkets.future) marketsToLoad.push('future');
+        if (reconMarkets.spot) marketsToLoad.push('spot');
 
         const allNewData = {};
 
@@ -858,7 +946,7 @@
                 const data = await res.json();
 
                 const densities = [];
-                const minVolume = market === 'future' ? densityMinVolumeFuture : densityMinVolumeSpot;
+                const minVolume = market === 'future' ? reconMinVolumeFuture : reconMinVolumeSpot;
 
                 const processSide = (sideArr, sideType) => {
                     for (const [priceStr, qtyStr] of sideArr) {
@@ -878,19 +966,19 @@
                 allNewData[market] = densities.slice(0, 20);
 
             } catch (e) {
-                console.error(`Densities error (${market}):`, e);
-                allNewData[market] = previousDensities[market] || [];
+                console.error(`Recon error (${market}):`, e);
+                allNewData[market] = previousReconDensities[market] || [];
             }
         }
 
         for (const market of marketsToLoad) {
             const newData = allNewData[market] || [];
             const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
-            const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
+            const prevData = JSON.stringify((previousReconDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
 
             if (currentData !== prevData) {
                 hasChanges = true;
-                previousDensities[market] = newData;
+                previousReconDensities[market] = newData;
             }
         }
 
@@ -898,10 +986,10 @@
             return;
         }
 
-        clearDensityLines();
+        clearReconLines();
 
         for (const market of marketsToLoad) {
-            const data = previousDensities[market] || [];
+            const data = previousReconDensities[market] || [];
             data.forEach(d => {
                const line = candleSeries.createPriceLine({
                 price: d.price,
@@ -913,24 +1001,98 @@
                 axisLabelBackgroundColor: d.side === 'buy' ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)',
                 title: `${market === 'future' ? 'BI-F' : 'BI-S'} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
             });
-                densityLines.push(line);
+                reconLines.push(line);
             });
         }
     }
 
-    function clearDensityLines() {
+    function clearReconLines() {
         if (!candleSeries) return;
-        densityLines.forEach(l => {
+        reconLines.forEach(l => {
             try { candleSeries.removePriceLine(l); } catch(e){}
         });
-        densityLines = [];
+        reconLines = [];
     }
 
-    function startDensityUpdates(symbol) {
-        if (densityUpdateTimer) clearInterval(densityUpdateTimer);
-        loadDensities(symbol);
-        densityUpdateTimer = setInterval(() => {
-            if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
+    function startReconUpdates(symbol) {
+        if (reconUpdateTimer) clearInterval(reconUpdateTimer);
+        loadReconDensities(symbol);
+        reconUpdateTimer = setInterval(() => {
+            if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
+        }, 3000);
+    }
+
+    // Scalp функции (новые)
+    async function loadScalpDensities(symbol) {
+        if (!scalpEnabled || !candleSeries) return;
+
+        try {
+            const res = await fetch(`/api/scalp/${symbol}/?min_future=${scalpMinVolumeFuture}&min_spot=${scalpMinVolumeSpot}`);
+            if (!res.ok) return;
+            const data = await res.json();
+
+            clearScalpLines();
+
+            const densities = data.densities || [];
+            const now = data.server_time || Date.now() / 1000;
+
+            densities.forEach(d => {
+                const ageSeconds = d.age_seconds || 0;
+
+                // Цветовая схема: 1-3 мин = жёлтый, 3+ мин = красный
+                let color, lineWidth;
+                if (ageSeconds < 180) {
+                    // 1-3 минуты — жёлтый
+                    color = d.side === 'buy' ? 'rgba(251, 191, 36, 0.7)' : 'rgba(251, 191, 36, 0.7)';
+                    lineWidth = 1;
+                } else {
+                    // 3+ минут — красный
+                    color = d.side === 'buy' ? 'rgba(239, 68, 68, 0.7)' : 'rgba(239, 68, 68, 0.7)';
+                    lineWidth = 2;
+                }
+
+                const marketLabel = d.market === 'future' ? 'SC-F' : 'SC-S';
+                const ageText = formatAge(ageSeconds);
+
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: color,
+                    lineWidth: lineWidth,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    axisLabelColor: '#ffffff',
+                    axisLabelBackgroundColor: ageSeconds < 180 ? 'rgba(251, 191, 36, 0.6)' : 'rgba(239, 68, 68, 0.6)',
+                    title: `${marketLabel} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume} [${ageText}]`
+                });
+
+                scalpLines.push(line);
+            });
+
+        } catch (err) {
+            console.error('Scalp load error:', err);
+        }
+    }
+
+    function formatAge(seconds) {
+        if (seconds < 60) return `${Math.round(seconds)}с`;
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${mins}м ${secs}с`;
+    }
+
+    function clearScalpLines() {
+        if (!candleSeries) return;
+        scalpLines.forEach(l => {
+            try { candleSeries.removePriceLine(l); } catch(e){}
+        });
+        scalpLines = [];
+    }
+
+    function startScalpUpdates(symbol) {
+        if (scalpUpdateTimer) clearInterval(scalpUpdateTimer);
+        loadScalpDensities(symbol);
+        scalpUpdateTimer = setInterval(() => {
+            if (currentSymbol === symbol && scalpEnabled) loadScalpDensities(symbol);
         }, 3000);
     }
 
@@ -961,12 +1123,17 @@
     }
 
     function closeChart() {
-        clearDensityLines();
-        if (densityUpdateTimer) {
-            clearInterval(densityUpdateTimer);
-            densityUpdateTimer = null;
+        clearReconLines();
+        clearScalpLines();
+        if (reconUpdateTimer) {
+            clearInterval(reconUpdateTimer);
+            reconUpdateTimer = null;
         }
-        previousDensities = { future: [], spot: [] };
+        if (scalpUpdateTimer) {
+            clearInterval(scalpUpdateTimer);
+            scalpUpdateTimer = null;
+        }
+        previousReconDensities = { future: [], spot: [] };
 
         if (wsCandles) {
             wsCandles.onclose = null;
@@ -1003,8 +1170,10 @@
             wsTrades.close(); wsTrades = null;
         }
 
-        clearDensityLines();
-        if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
+        clearReconLines();
+        clearScalpLines();
+        if (reconUpdateTimer) { clearInterval(reconUpdateTimer); reconUpdateTimer = null; }
+        if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
         await new Promise(resolve => setTimeout(resolve, 150));
 
@@ -1064,7 +1233,8 @@
             startTradesStream(symbol);
         }
 
-        if (densityEnabled) startDensityUpdates(symbol);
+        if (reconEnabled) startReconUpdates(symbol);
+        if (scalpEnabled) startScalpUpdates(symbol);
     }
 
     async function loadChartData(symbol, tf) {

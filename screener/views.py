@@ -132,6 +132,64 @@ def api_natr(request):
     })
 
 
+@require_http_methods(["GET"])
+def api_scalp(request, symbol):
+    """API: плотности с временем жизни (из Redis)"""
+    import redis as redis_lib
+
+    min_future = int(request.GET.get('min_future', 200000))
+    min_spot = int(request.GET.get('min_spot', 100000))
+
+    redis_client = redis_lib.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+
+    key = f"scalp:{symbol.upper()}"
+    data = redis_client.hgetall(key)
+
+    densities = []
+    now = time.time()
+
+    for field, value in data.items():
+        parts = field.split('_', 1)
+        if len(parts) != 2:
+            continue
+
+        market, price_str = parts
+        price = float(price_str)
+
+        try:
+            density_data = json.loads(value)
+            volume = density_data['v']
+            timestamp = density_data['t']
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+        # Считаем возраст
+        age_seconds = now - timestamp
+
+        # Применяем порог пользователя
+        if market == 'future' and volume < min_future:
+            continue
+        if market == 'spot' and volume < min_spot:
+            continue
+
+        densities.append({
+            'price': price,
+            'volume': volume,
+            'side': 'buy' if market == 'future' else 'sell',  # Исправлено
+            'age_seconds': round(age_seconds, 1),
+            'market': market
+        })
+
+    # Сортировка по объёму
+    densities.sort(key=lambda x: x['volume'], reverse=True)
+
+    return JsonResponse({
+        'symbol': symbol.upper(),
+        'densities': densities[:20],
+        'server_time': now
+    })
+
+
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')

@@ -11,3 +11,9 @@ class ScreenerConfig(AppConfig):
             start_natr_updater()
         except Exception as e:
             print(f"⚠️ NATR updater не запущен: {e}")
+
+        try:
+            from .scalp_monitor import start_scalp_monitor
+            start_scalp_monitor()
+        except Exception as e:
+            print(f"️ Scalp monitor не запущен: {e}")
