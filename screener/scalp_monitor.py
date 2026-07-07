@@ -278,6 +278,31 @@ def on_error(ws, error):
 
 def on_close(ws, close_status_code, close_msg):
     log(f"⚠️ WebSocket закрыт: {close_status_code} {close_msg}")
+    log("🔄 Переподключение через 5 секунд...")
+    time.sleep(5)
+
+    # Переподключаемся
+    try:
+        import websocket
+        streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
+        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
+
+        log(f"🔌 Переподключение WebSocket для группы {ws.symbol_group}...")
+
+        new_ws = websocket.WebSocketApp(
+            url,
+            on_open=lambda ws: on_open(ws),
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+        new_ws.symbol_group = ws.symbol_group
+        new_ws.symbols = ws.symbols
+
+        ws.run_forever()
+
+    except Exception as e:
+        log(f"❌ Ошибка переподключения: {e}")
 
 
 def on_open(ws):
