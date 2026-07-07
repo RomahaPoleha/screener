@@ -1,5 +1,5 @@
 """
-Scalp Monitor — простой мониторинг плотностей
+Scalp Monitor — мониторинг плотностей в реальном времени
 WebSocket + Django cache. Только Futures. Топ-100.
 """
 import os
@@ -111,11 +111,10 @@ shutdown_event = threading.Event()
 
 def init_order_book(symbol):
     try:
-        log(f"🔄 Инициализация стакана {symbol}...")
         url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}USDT&limit=1000"
         res = requests.get(url, timeout=10)
         if not res.ok:
-            log(f"⚠️ {symbol}: HTTP {res.status_code}")
+            log(f"️ {symbol}: HTTP {res.status_code}")
             return False
 
         data = res.json()
@@ -133,7 +132,6 @@ def init_order_book(symbol):
 
     except Exception as e:
         log(f"❌ init_order_book({symbol}): {e}")
-        log(traceback.format_exc())
         return False
 
 
@@ -143,7 +141,6 @@ def sync_to_cache(symbol):
             book = order_books.get(symbol, {})
             timestamps = density_timestamps.get(symbol, {})
             if not book:
-                log(f"⚠️ sync_to_cache({symbol}): нет стакана")
                 return
 
         key = f"scalp:{symbol}"
@@ -177,9 +174,9 @@ def sync_to_cache(symbol):
                     'timestamp': timestamps[price]
                 })
 
-        # Логируем только для BTC
+        # Логируем только для BTC чтобы не спамить
         if symbol == 'BTC':
-            log(f" sync_to_cache({symbol}): {len(densities)} плотностей, {young_count} молодых, {new_count} новых")
+            log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей, {young_count} молодых, {new_count} новых")
 
         cache.set(key, densities, CACHE_TTL)
 
@@ -237,18 +234,17 @@ def update_order_book(symbol, bids_delta, asks_delta):
             sync_to_cache(symbol)
 
     except Exception as e:
-        log(f"❌ update_order_book({symbol}): {e}")
-        log(traceback.format_exc())
+        log(f" update_order_book({symbol}): {e}")
 
 
 def on_message(ws, message):
     try:
-        # Логируем первые 10 сообщений
+        # Логируем первые 5 сообщений
         if not hasattr(ws, 'message_count'):
             ws.message_count = 0
         ws.message_count += 1
 
-        if ws.message_count <= 10:
+        if ws.message_count <= 5:
             log(f"📨 Сообщение #{ws.message_count}: {message[:300]}...")
 
         data = json.loads(message)
@@ -284,8 +280,7 @@ def on_close(ws, close_status_code, close_msg):
         return
 
     try:
-        streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
-        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
+        url = "wss://fstream.binance.com/ws"
 
         log(f"🔌 Переподключение WebSocket...")
 
@@ -297,7 +292,7 @@ def on_close(ws, close_status_code, close_msg):
             on_close=on_close
         )
         new_ws.symbols = ws.symbols
-        new_ws.run_forever()
+        new_ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
         log(f"❌ Ошибка переподключения: {e}")
@@ -320,11 +315,10 @@ def on_open(ws):
 def start_websocket(symbols_list):
     """Запустить WebSocket в отдельном потоке"""
     try:
-        streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols_list]
-        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
+        # Короткий URL — подписываемся через SUBSCRIBE сообщение
+        url = "wss://fstream.binance.com/ws"
 
-        log(f"🔌 Подключение WebSocket к {len(streams)} стримам...")
-        log(f"📡 URL: {url[:150]}...")
+        log(f"🔌 Подключение WebSocket для {len(symbols_list)} символов...")
 
         ws = websocket.WebSocketApp(
             url,
@@ -335,12 +329,12 @@ def start_websocket(symbols_list):
         )
         ws.symbols = symbols_list
 
-        log(f" Запуск ws.run_forever()...")
-        ws.run_forever()
-        log(f"️ ws.run_forever() завершился!")
+        log(f"🚀 Запуск ws.run_forever()...")
+        ws.run_forever(ping_interval=20, ping_timeout=10)
+        log(f"⚠️ ws.run_forever() завершился!")
 
     except Exception as e:
-        log(f" Ошибка в start_websocket: {e}")
+        log(f"❌ Ошибка в start_websocket: {e}")
         log(traceback.format_exc())
 
 
@@ -349,7 +343,7 @@ def scalp_monitor_loop():
 
     log("🚀 Scalp Monitor запущен!")
     log(f"📝 Лог-файл: {LOG_FILE}")
-    log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
+    log(f"️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
     log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
     time.sleep(5)
 
