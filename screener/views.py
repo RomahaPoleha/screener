@@ -137,14 +137,18 @@ def api_natr(request):
 def api_scalp(request, symbol):
     """API: плотности с временем жизни (из Django cache)"""
     from django.core.cache import cache
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     min_future = int(request.GET.get('min_future', 200000))
 
     key = f"scalp:{symbol.upper()}"
 
     # Получаем все плотности из cache
-    # Django cache использует тот же Redis что и NATR
     data = cache.get(key)
+
+    logger.info(f"🔍 Scalp API: key={key}, data={data}")
 
     if not data:
         return JsonResponse({
@@ -179,6 +183,8 @@ def api_scalp(request, symbol):
         })
 
     densities.sort(key=lambda x: x['volume'], reverse=True)
+
+    logger.info(f"✅ Scalp API: {len(densities)} densities for {symbol}")
 
     return JsonResponse({
         'symbol': symbol.upper(),
