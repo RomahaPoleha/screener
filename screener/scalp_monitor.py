@@ -1,16 +1,18 @@
 """
-Scalp Monitor — фоновый мониторинг плотностей в реальном времени
-WebSocket + Django cache. Хранит только плотности старше 1 минуты.
-Только Futures.
+Scalp Monitor — простой мониторинг плотностей
+WebSocket + Django cache. Только Futures. Топ-100. Одно подключение.
 """
 import os
+import sys
 import json
 import time
 import threading
 import traceback
 import requests
+import websocket
 from logging.handlers import RotatingFileHandler
 from django.core.cache import cache
+import ccxt
 
 # Минимальный объём для записи в кэш (USDT)
 GLOBAL_MIN_VOLUME = 5000
@@ -19,10 +21,7 @@ GLOBAL_MIN_VOLUME = 5000
 MIN_AGE_SECONDS = 60
 
 # Количество монет для мониторинга
-TOP_SYMBOLS_COUNT = 200
-
-# Максимум монет на одно WebSocket подключение
-MAX_SYMBOLS_PER_WS = 70
+TOP_SYMBOLS_COUNT = 100
 
 # TTL кэша
 CACHE_TTL = 900
@@ -54,13 +53,6 @@ def log(msg):
     _scalp_logger.info(msg)
 
 
-def setup_excepthook():
-    def excepthook(exc_type, exc_value, exc_tb):
-        log(f"❌ НЕОБРАБОТАННОЕ ИСКЛЮЧЕНИЕ: {exc_type.__name__}: {exc_value}")
-        log(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
-    sys.excepthook = excepthook
-
-
 def is_valid_symbol(symbol):
     if '-' in symbol:
         return False
@@ -74,7 +66,6 @@ def is_valid_symbol(symbol):
 def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
     log(f"🔥 get_top_symbols() СТАРТ")
     try:
-        import ccxt
         exchange = ccxt.binance({
             'enableRateLimit': True,
             'timeout': 10000,
@@ -149,7 +140,6 @@ def sync_to_cache(symbol):
             book = order_books.get(symbol, {})
             timestamps = density_timestamps.get(symbol, {})
             if not book:
-                log(f"⚠️ sync_to_cache({symbol}): нет стакана")
                 return
 
         key = f"scalp:{symbol}"
@@ -178,11 +168,6 @@ def sync_to_cache(symbol):
                     'side': side_name,
                     'timestamp': timestamps[price]
                 })
-
-        # ← ДОБАВЬ ЭТИ СТРОКИ
-        log(f"✅ sync_to_cache({symbol}): {len(densities)} плотностей, TTL={CACHE_TTL}")
-        if len(densities) > 0:
-            log(f"  Пример: price={densities[0]['price']}, volume={densities[0]['volume']}, age={now - densities[0]['timestamp']:.0f}s")
 
         cache.set(key, densities, CACHE_TTL)
 
@@ -240,7 +225,7 @@ def update_order_book(symbol, bids_delta, asks_delta):
             sync_to_cache(symbol)
 
     except Exception as e:
-        log(f" update_order_book({symbol}): {e}")
+        log(f"❌ update_order_book({symbol}): {e}")
 
 
 def on_message(ws, message):
@@ -275,33 +260,29 @@ def on_close(ws, close_status_code, close_msg):
     if shutdown_event.is_set():
         return
 
-    # Переподключаемся
     try:
-        import websocket
         streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
         url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
 
-        log(f"🔌 Переподключение WebSocket для группы {ws.symbol_group}...")
+        log(f"🔌 Переподключение WebSocket...")
 
         new_ws = websocket.WebSocketApp(
             url,
-            on_open=lambda ws: on_open(ws),
+            on_open=on_open,
             on_message=on_message,
             on_error=on_error,
             on_close=on_close
         )
-        new_ws.symbol_group = ws.symbol_group
         new_ws.symbols = ws.symbols
-
         new_ws.run_forever()
 
     except Exception as e:
         log(f"❌ Ошибка переподключения: {e}")
+        log(traceback.format_exc())
 
 
 def on_open(ws):
-    symbol_group = ws.symbol_group
-    log(f"✅ WebSocket открыт для группы {symbol_group}: {len(ws.symbols)} символов")
+    log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
 
     streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
     subscribe_msg = {
@@ -310,113 +291,69 @@ def on_open(ws):
         "id": 1
     }
     ws.send(json.dumps(subscribe_msg))
-
-
-def start_websocket_connection(symbol_group, symbols_list):
-    try:
-        import websocket
-
-        if not symbols_list:
-            return
-
-        log(f"🔄 Инициализация стаканов для группы {symbol_group} ({len(symbols_list)} символов)...")
-        for symbol in symbols_list:
-            init_order_book(symbol)
-            time.sleep(0.05)
-
-        streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols_list]
-        url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
-
-        log(f" Подключение WebSocket для группы {symbol_group}...")
-
-        ws = websocket.WebSocketApp(
-            url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
-        )
-        ws.symbol_group = symbol_group
-        ws.symbols = symbols_list
-
-        ws.run_forever()
-
-    except Exception as e:
-        log(f"❌ start_websocket_connection({symbol_group}): {e}")
-        log(traceback.format_exc())
-
-
-def start_all_websocket_connections():
-    global symbols
-
-    if not symbols:
-        symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
-        if not symbols:
-            log("⚠️ Нет символов для мониторинга")
-            return
-
-    num_groups = (len(symbols) + MAX_SYMBOLS_PER_WS - 1) // MAX_SYMBOLS_PER_WS
-    symbol_groups = [symbols[i::num_groups] for i in range(num_groups)]
-
-    log(f"🚀 Запуск {num_groups} WebSocket подключений...")
-
-    threads = []
-    for idx, symbol_group in enumerate(symbol_groups):
-        thread = threading.Thread(
-            target=start_websocket_connection,
-            args=(idx, symbol_group),
-            name=f'Scalp-WS-{idx}',
-            daemon=True
-        )
-        threads.append(thread)
-        thread.start()
-        time.sleep(1)
+    log(f"✅ Подписка отправлена")
 
 
 def scalp_monitor_loop():
-    setup_excepthook()
+    global symbols
+
     log("🚀 Scalp Monitor запущен!")
-    log(f" Лог-файл: {LOG_FILE}")
+    log(f"📝 Лог-файл: {LOG_FILE}")
     log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
+    log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
     time.sleep(5)
 
+    # Получаем топ монет
+    symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
+    if not symbols:
+        log("⚠️ Нет символов для мониторинга")
+        return
+
+    # Инициализируем стаканы
+    log(f"🔄 Инициализация стаканов для {len(symbols)} символов...")
+    for idx, symbol in enumerate(symbols, 1):
+        init_order_book(symbol)
+        time.sleep(0.05)
+        if idx % 20 == 0:
+            log(f"  Прогресс: {idx}/{len(symbols)}")
+
+    # Подключаемся к WebSocket
+    streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols]
+    url = f"wss://fstream.binance.com/stream?streams={'/'.join(streams)}"
+
+    log(f"🔌 Подключение WebSocket к {len(streams)} стримам...")
+
+    ws = websocket.WebSocketApp(
+        url,
+        on_open=on_open,
+        on_message=on_message,
+        on_error=on_error,
+        on_close=on_close
+    )
+    ws.symbols = symbols
+
+    # Heartbeat цикл
     heartbeat_counter = 0
-
-    start_all_websocket_connections()
-
     while not shutdown_event.is_set():
-        try:
-            heartbeat_counter += 1
-            if heartbeat_counter % 6 == 0:
-                log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter})")
+        heartbeat_counter += 1
+        if heartbeat_counter % 6 == 0:
+            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter})")
 
-            if heartbeat_counter % 60 == 0:
-                new_symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
-                if new_symbols != symbols[:TOP_SYMBOLS_COUNT]:
-                    log(f"🔄 Список символов обновлён")
-                    symbols.clear()
-                    symbols.extend(new_symbols)
+        if shutdown_event.wait(timeout=10):
+            break
 
-            if shutdown_event.is_set():
-                break
-
-            time.sleep(10)
-
-        except Exception as e:
-            log(f"❌ Ошибка в цикле: {e}")
-            log(traceback.format_exc())
-            if shutdown_event.wait(timeout=60):
-                break
+    ws.close()
 
 
 def start_scalp_monitor():
+    log("🔧 Вызов start_scalp_monitor()...")
     thread = threading.Thread(
         target=scalp_monitor_loop,
         name='Scalp-Monitor',
         daemon=True
     )
     thread.start()
-    log(f"✅ Scalp Monitor запущен (PID: {thread.ident})")
+    log(f"✅ Scalp Monitor поток запущен (PID: {thread.ident})")
 
 
 def stop_scalp_monitor():
