@@ -135,53 +135,58 @@ def api_natr(request):
 
 @require_http_methods(["GET"])
 def api_scalp(request, symbol):
-    """API: плотности с временем жизни (из Django cache)"""
     from django.core.cache import cache
     import logging
 
     logger = logging.getLogger(__name__)
 
     min_future = int(request.GET.get('min_future', 200000))
-    min_spot = int(request.GET.get('min_spot', 100000))
+
+    key = f"scalp:{symbol.upper()}"
+    data = cache.get(key)
+
+    # ← ДОБАВЬ ЭТИ СТРОКИ
+    logger.info(f"🔍 api_scalp({symbol}): key={key}, data_type={type(data)}, len={len(data) if data else 0}")
+
+    if not data:
+        return JsonResponse({
+            'symbol': symbol.upper(),
+            'densities': [],
+            'server_time': time.time()
+        })
 
     densities = []
     now = time.time()
 
-    # Получаем данные для Futures и Spot
-    for market, min_vol in [('future', min_future), ('spot', min_spot)]:
-        key = f"scalp:{market}:{symbol.upper()}"
-        data = cache.get(key)
-
-        if not data:
+    for item in data:
+        try:
+            price = item['price']
+            volume = item['volume']
+            timestamp = item['timestamp']
+            side = item['side']
+        except (KeyError, TypeError):
             continue
 
-        for item in data:
-            try:
-                price = item['price']
-                volume = item['volume']
-                timestamp = item['timestamp']
-                side = item['side']
-            except (KeyError, TypeError):
-                continue
+        age_seconds = now - timestamp
 
-            age_seconds = now - timestamp
+        if volume < min_future:
+            continue
 
-            if volume < min_vol:
-                continue
-
-            densities.append({
-                'price': price,
-                'volume': volume,
-                'side': side,
-                'age_seconds': round(age_seconds, 1),
-                'market': market
-            })
+        densities.append({
+            'price': price,
+            'volume': volume,
+            'side': side,
+            'age_seconds': round(age_seconds, 1),
+            'market': 'future'
+        })
 
     densities.sort(key=lambda x: x['volume'], reverse=True)
 
+    logger.info(f"✅ api_scalp({symbol}): возвращено {len(densities)} плотностей")
+
     return JsonResponse({
         'symbol': symbol.upper(),
-        'densities': densities[:30],
+        'densities': densities[:20],
         'server_time': now
     })
 

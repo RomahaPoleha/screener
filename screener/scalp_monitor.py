@@ -149,6 +149,7 @@ def sync_to_cache(symbol):
             book = order_books.get(symbol, {})
             timestamps = density_timestamps.get(symbol, {})
             if not book:
+                log(f"⚠️ sync_to_cache({symbol}): нет стакана")
                 return
 
         key = f"scalp:{symbol}"
@@ -178,6 +179,11 @@ def sync_to_cache(symbol):
                     'timestamp': timestamps[price]
                 })
 
+        # ← ДОБАВЬ ЭТИ СТРОКИ
+        log(f"✅ sync_to_cache({symbol}): {len(densities)} плотностей, TTL={CACHE_TTL}")
+        if len(densities) > 0:
+            log(f"  Пример: price={densities[0]['price']}, volume={densities[0]['volume']}, age={now - densities[0]['timestamp']:.0f}s")
+
         cache.set(key, densities, CACHE_TTL)
 
         with order_books_lock:
@@ -185,6 +191,7 @@ def sync_to_cache(symbol):
 
     except Exception as e:
         log(f"❌ sync_to_cache({symbol}): {e}")
+        log(traceback.format_exc())
 
 
 def update_order_book(symbol, bids_delta, asks_delta):
