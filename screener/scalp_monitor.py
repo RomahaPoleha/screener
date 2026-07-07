@@ -1,6 +1,6 @@
 """
 Scalp Monitor — фоновый мониторинг плотностей в реальном времени
-WebSocket + Redis. Хранит только плотности старше 1 минуты.
+WebSocket + Django cache. Хранит только плотности старше 1 минуты.
 """
 import json
 import time
@@ -8,8 +8,9 @@ import threading
 import traceback
 import requests
 from logging.handlers import RotatingFileHandler
+from django.core.cache import cache
 
-# Минимальный объём для записи в Redis (USDT) — глобальный порог
+# Минимальный объём для записи в кэш (USDT) — глобальный порог
 GLOBAL_MIN_VOLUME = 5000
 
 # Минимальное время жизни плотности (секунды) — младше не храним
@@ -21,8 +22,8 @@ TOP_SYMBOLS_COUNT = 200
 # Максимум монет на одно WebSocket подключение
 MAX_SYMBOLS_PER_WS = 70
 
-# TTL ключа в Redis (15 минут без обновлений = удаление)
-REDIS_TTL = 900
+# TTL кэша (15 минут без обновлений = удаление)
+CACHE_TTL = 900
 
 # Настройка логов
 LOG_DIR = '/app/data'
@@ -70,7 +71,7 @@ def is_valid_symbol(symbol):
 
 def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
     """Получить топ монет по объёму"""
-    log(f" get_top_symbols() СТАРТ")
+    log(f"🔥 get_top_symbols() СТАРТ")
 
     try:
         import ccxt
@@ -109,14 +110,6 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
         return []
 
 
-# Подключение к Redis
-redis_client = __import__('redis').Redis(
-    host='localhost',
-    port=6379,
-    db=0,
-    decode_responses=True
-)
-
 # Глобальное состояние
 order_books = {}  # {symbol: {'bids': {price: qty}, 'asks': {price: qty}}}
 density_timestamps = {}  # {symbol: {price: timestamp}} — когда появилась плотность
@@ -141,7 +134,7 @@ def init_order_book(symbol):
             order_books[symbol] = {'bids': bids, 'asks': asks}
             density_timestamps[symbol] = {}
 
-        sync_to_redis(symbol)
+        sync_to_cache(symbol)
 
         log(f"✅ Инициализирован стакан для {symbol}: {len(bids)} bids, {len(asks)} asks")
         return True
@@ -151,9 +144,9 @@ def init_order_book(symbol):
         return False
 
 
-def sync_to_redis(symbol):
+def sync_to_cache(symbol):
     """
-    Синхронизировать локальный стакан с Redis.
+    Синхронизировать локальный стакан с Django cache.
     ВАЖНО: записываем только плотности старше MIN_AGE_SECONDS (60 сек).
     """
     try:
@@ -166,64 +159,44 @@ def sync_to_redis(symbol):
         key = f"scalp:{symbol}"
         now = time.time()
 
-        existing_fields = set(redis_client.hkeys(key))
-        current_fields = set()
-
-        pipe = redis_client.pipeline()
+        densities = []
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-                field = f"future_{price}"
-                current_fields.add(field)
 
                 if volume < GLOBAL_MIN_VOLUME:
-                    # Объём ниже порога — удаляем из Redis если был
-                    if field in existing_fields:
-                        pipe.hdel(key, field)
                     continue
 
                 # Проверяем возраст плотности
                 if price in timestamps:
                     age = now - timestamps[price]
                     if age < MIN_AGE_SECONDS:
-                        # Плотность младше 1 минуты — НЕ храним в Redis
-                        if field in existing_fields:
-                            pipe.hdel(key, field)
+                        # Плотность младше 1 минуты — НЕ храним
                         continue
                 else:
                     # Новая плотность — запоминаем timestamp
                     timestamps[price] = now
                     # Ещё не храним — ждём 1 минуту
-                    if field in existing_fields:
-                        pipe.hdel(key, field)
                     continue
 
-                # Плотность старше 1 минуты — записываем/обновляем в Redis
-                existing = redis_client.hget(key, field)
-                if existing:
-                    data = json.loads(existing)
-                    data['v'] = volume
-                    pipe.hset(key, field, json.dumps(data))
-                else:
-                    data = {'v': volume, 't': timestamps[price]}
-                    pipe.hset(key, field, json.dumps(data))
+                # Плотность старше 1 минуты — добавляем
+                densities.append({
+                    'price': price,
+                    'volume': volume,
+                    'side': side_name,
+                    'timestamp': timestamps[price]
+                })
 
-        # Удаляем поля, которых больше нет в стакане
-        for field in existing_fields - current_fields:
-            pipe.hdel(key, field)
-
-        pipe.execute()
-
-        # Обновляем TTL
-        redis_client.expire(key, REDIS_TTL)
+        # Сохраняем в cache с TTL
+        cache.set(key, densities, CACHE_TTL)
 
         # Сохраняем обновлённые timestamps
         with order_books_lock:
             density_timestamps[symbol] = timestamps
 
     except Exception as e:
-        log(f" Ошибка sync_to_redis({symbol}): {e}")
+        log(f" Ошибка sync_to_cache({symbol}): {e}")
 
 
 def update_order_book(symbol, bids_delta, asks_delta):
@@ -270,7 +243,7 @@ def update_order_book(symbol, bids_delta, asks_delta):
                     changed = True
 
         if changed:
-            sync_to_redis(symbol)
+            sync_to_cache(symbol)
 
     except Exception as e:
         log(f"❌ Ошибка update_order_book({symbol}): {e}")
@@ -302,7 +275,7 @@ def on_error(ws, error):
 
 
 def on_close(ws, close_status_code, close_msg):
-    log(f"️ WebSocket закрыт: {close_status_code} {close_msg}")
+    log(f"⚠️ WebSocket закрыт: {close_status_code} {close_msg}")
 
 
 def on_open(ws):
@@ -383,7 +356,7 @@ def start_all_websocket_connections():
 
 def scalp_monitor_loop():
     setup_excepthook()
-    log("🚀 Scalp Monitor запущен (WebSocket + Redis)!")
+    log("🚀 Scalp Monitor запущен (WebSocket + Django cache)!")
     log(f"📝 Лог-файл: {LOG_FILE}")
     log(f"⏱️ Минимальный возраст плотности: {MIN_AGE_SECONDS} сек")
     time.sleep(5)

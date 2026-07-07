@@ -134,53 +134,49 @@ def api_natr(request):
 
 @require_http_methods(["GET"])
 def api_scalp(request, symbol):
-    """API: плотности с временем жизни (из Redis)"""
-    import redis as redis_lib
+    """API: плотности с временем жизни (из Django cache)"""
+    from django.core.cache import cache
 
     min_future = int(request.GET.get('min_future', 200000))
-    min_spot = int(request.GET.get('min_spot', 100000))
-
-    redis_client = redis_lib.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
     key = f"scalp:{symbol.upper()}"
-    data = redis_client.hgetall(key)
+
+    # Получаем все плотности из cache
+    # Django cache использует тот же Redis что и NATR
+    data = cache.get(key)
+
+    if not data:
+        return JsonResponse({
+            'symbol': symbol.upper(),
+            'densities': [],
+            'server_time': time.time()
+        })
 
     densities = []
     now = time.time()
 
-    for field, value in data.items():
-        parts = field.split('_', 1)
-        if len(parts) != 2:
-            continue
-
-        market, price_str = parts
-        price = float(price_str)
-
+    for item in data:
         try:
-            density_data = json.loads(value)
-            volume = density_data['v']
-            timestamp = density_data['t']
-        except (json.JSONDecodeError, KeyError):
+            price = item['price']
+            volume = item['volume']
+            timestamp = item['timestamp']
+            side = item['side']
+        except (KeyError, TypeError):
             continue
 
-        # Считаем возраст
         age_seconds = now - timestamp
 
-        # Применяем порог пользователя
-        if market == 'future' and volume < min_future:
-            continue
-        if market == 'spot' and volume < min_spot:
+        if volume < min_future:
             continue
 
         densities.append({
             'price': price,
             'volume': volume,
-            'side': 'buy' if market == 'future' else 'sell',  # Исправлено
+            'side': side,
             'age_seconds': round(age_seconds, 1),
-            'market': market
+            'market': 'future'
         })
 
-    # Сортировка по объёму
     densities.sort(key=lambda x: x['volume'], reverse=True)
 
     return JsonResponse({
