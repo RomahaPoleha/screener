@@ -547,13 +547,13 @@
                         </div>
                     </div>
                     <div style="margin-top:12px; padding:10px; background:rgba(240, 185, 11, 0.1); border-radius:6px; border:1px solid rgba(240, 185, 11, 0.3);">
-                        <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">ℹ️ Цветовая схема:</div>
-                        <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
-                            <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность 1-3 минуты<br>
-                            <span style="color:#ef4444;">🔴 Красный</span> — плотность 3+ минут<br>
-                            <span style="color:#6b7280;">⏱ Наведение</span> — показывает время жизни
-                        </div>
+                    <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">ℹ️ Цветовая схема:</div>
+                    <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
+                        <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность 1-3 минуты<br>
+                        <span style="color:#ffffff;">⚪ Белый</span> — плотность 3+ минут<br>
+                        <span style="color:#6b7280;">⏱ Наведение</span> — показывает время жизни
                     </div>
+                </div>
                 </div>
             </div>
             <div class="modal-footer" style="border-top:1px solid #2d3748;">
@@ -1053,57 +1053,57 @@
 
     // Scalp функции
     async function loadScalpDensities(symbol) {
-        if (!scalpEnabled || !candleSeries) return;
+                if (!scalpEnabled || !candleSeries) return;
 
-        try {
-            const res = await fetch(`/api/scalp/${symbol}/?min_future=${scalpMinVolumeFuture}&min_spot=${scalpMinVolumeSpot}`);
-            if (!res.ok) return;
-            const data = await res.json();
+                try {
+                    const res = await fetch(`/api/scalp/${symbol}/?min_future=${scalpMinVolumeFuture}&min_spot=${scalpMinVolumeSpot}`);
+                    if (!res.ok) return;
+                    const data = await res.json();
 
-            clearScalpLines();
+                    clearScalpLines();
 
-            const densities = data.densities || [];
+                    const densities = data.densities || [];
 
-            densities.forEach(d => {
-                const ageSeconds = d.age_seconds || 0;
+                    densities.forEach(d => {
+                        const ageSeconds = d.age_seconds || 0;
 
-                // Цветовая схема: 1-3 мин = жёлтый, 3+ мин = красный
-                let color, lineWidth;
-                if (ageSeconds < 180) {
-                    color = d.side === 'buy' ? 'rgba(251, 191, 36, 0.7)' : 'rgba(251, 191, 36, 0.7)';
-                    lineWidth = 1;
-                } else {
-                    color = d.side === 'buy' ? 'rgba(239, 68, 68, 0.7)' : 'rgba(239, 68, 68, 0.7)';
-                    lineWidth = 2;
+                        // Цветовая схема: 1-3 мин = жёлтый, 3+ мин = белый
+                        let color, lineWidth;
+                        if (ageSeconds < 180) {
+                            color = 'rgba(251, 191, 36, 0.7)';  // Жёлтый
+                            lineWidth = 1;
+                        } else {
+                            color = 'rgba(255, 255, 255, 0.7)';  // Белый
+                            lineWidth = 2;
+                        }
+
+                        const marketLabel = d.market === 'future' ? 'SC-F' : 'SC-S';
+                        const ageText = formatAge(ageSeconds);
+
+                        const line = candleSeries.createPriceLine({
+                            price: d.price,
+                            color: color,
+                            lineWidth: lineWidth,
+                            lineStyle: LightweightCharts.LineStyle.Solid,
+                            axisLabelVisible: true,
+                            axisLabelColor: '#ffffff',
+                            axisLabelBackgroundColor: ageSeconds < 180 ? 'rgba(251, 191, 36, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+                            title: `${marketLabel} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume} [${ageText}]`
+                        });
+
+                        // Сохраняем данные для tooltip
+                        line._scalpData = {
+                            price: d.price,
+                            age_seconds: ageSeconds
+                        };
+
+                        scalpLines.push(line);
+                    });
+
+                } catch (err) {
+                    console.error('Scalp load error:', err);
                 }
-
-                const marketLabel = d.market === 'future' ? 'Bi-F' : 'Bi-S';
-                const ageText = formatAge(ageSeconds);
-
-                const line = candleSeries.createPriceLine({
-                    price: d.price,
-                    color: color,
-                    lineWidth: lineWidth,
-                    lineStyle: LightweightCharts.LineStyle.Solid,
-                    axisLabelVisible: true,
-                    axisLabelColor: '#ffffff',
-                    axisLabelBackgroundColor: 'rgba(251, 191, 36, 0.7)',
-                    title: `${marketLabel} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
-                });
-
-                // Сохраняем данные для tooltip
-                line._scalpData = {
-                    price: d.price,
-                    age_seconds: ageSeconds
-                };
-
-                scalpLines.push(line);
-            });
-
-        } catch (err) {
-            console.error('Scalp load error:', err);
-        }
-    }
+            }
 
     function formatAge(seconds) {
         if (seconds < 60) return `${Math.round(seconds)}с`;
