@@ -175,8 +175,9 @@ def sync_to_cache(symbol):
                     'timestamp': timestamps[price]
                 })
 
-        if symbol == 'BTC':
-            log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей")
+        # Логируем для BTC и ETH
+        if symbol in ['BTC', 'ETH']:
+            log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей, всего уровней: {len(book.get('bids', {})) + len(book.get('asks', {}))}")
 
         cache.set(key, densities, CACHE_TTL)
 
@@ -232,6 +233,9 @@ def update_order_book(symbol, bids_delta, asks_delta):
 
         if changed:
             sync_to_cache(symbol)
+            # Логируем для ETH
+            if symbol == 'ETH':
+                log(f"🔄 update_order_book({symbol}): changed=True, вызван sync_to_cache")
 
     except Exception as e:
         log(f" update_order_book({symbol}): {e}")
