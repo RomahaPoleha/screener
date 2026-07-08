@@ -597,7 +597,7 @@
     // ===== Scalp настройки =====
     let scalpLines = [];
     let scalpEnabled = false;
-    let scalpMarkets = { future: false, spot: false };
+    let scalpMarkets = { future: true, spot: false };
     let scalpMinVolumeFuture = 50000;
     let scalpMinVolumeSpot = 10000;
     let scalpUpdateTimer = null;
@@ -654,6 +654,16 @@
             }
         });
     });
+// Авто-включение Scalp при первом запуске (если нет сохранённых настроек)
+const hasScalpSettings = localStorage.getItem('scalpMinVolumeFuture');
+if (!hasScalpSettings) {
+    scalpEnabled = true;
+    scalpMarkets = { future: true, spot: false };
+    localStorage.setItem('scalpMinVolumeFuture', '50000');
+    localStorage.setItem('scalpMinVolumeSpot', '10000');
+    document.getElementById('settingsBtn').style.background = '#f0b90b';
+    document.getElementById('settingsBtn').style.color = '#000';
+}
 
     async function loadAllData() {
         try {
