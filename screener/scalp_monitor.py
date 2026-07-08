@@ -248,6 +248,14 @@ def update_order_book(symbol, bids_delta, asks_delta):
 def on_message(ws, message):
     """Обработка сообщений WebSocket"""
     try:
+        # Логируем первые 10 сообщений
+        if not hasattr(ws, 'message_count'):
+            ws.message_count = 0
+        ws.message_count += 1
+
+        if ws.message_count <= 10:
+            log(f"📨 Сообщение #{ws.message_count}: {message[:200]}...")
+
         data = json.loads(message)
 
         if 'data' in data:
@@ -264,6 +272,7 @@ def on_message(ws, message):
 
     except Exception as e:
         log(f"❌ on_message: {e}")
+        log(traceback.format_exc())
 
 
 def on_error(ws, error):
