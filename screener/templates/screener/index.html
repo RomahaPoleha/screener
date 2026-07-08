@@ -1057,7 +1057,7 @@
     const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
 
     // Определяем префикс как у Recon
-    const prefix = d.side === 'buy' ? 'BI-F' : 'BI-S';
+            const prefix = 'BI-F';
 
                 // Жёлтая линия с жёлтой заливкой и чёрным текстом
                 const line = candleSeries.createPriceLine({
