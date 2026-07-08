@@ -465,7 +465,7 @@
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
                             <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
-                                <input type="checkbox" id="densityMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <input type="checkbox" id="densityMarketFuture" style="accent-color:#f0b90b; width:16px; height:16px;">
                                 <span>Futures</span>
                             </label>
                             <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
@@ -597,7 +597,7 @@
     // ===== Scalp настройки =====
     let scalpLines = [];
     let scalpEnabled = false;
-    let scalpMarkets = { future: true, spot: false };
+    let scalpMarkets = { future: false, spot: false };
     let scalpMinVolumeFuture = 50000;
     let scalpMinVolumeSpot = 10000;
     let scalpUpdateTimer = null;
@@ -654,16 +654,7 @@
             }
         });
     });
-// Авто-включение Scalp при первом запуске (если нет сохранённых настроек)
-const hasScalpSettings = localStorage.getItem('scalpMinVolumeFuture');
-if (!hasScalpSettings) {
-    scalpEnabled = true;
-    scalpMarkets = { future: true, spot: false };
-    localStorage.setItem('scalpMinVolumeFuture', '50000');
-    localStorage.setItem('scalpMinVolumeSpot', '10000');
-    document.getElementById('settingsBtn').style.background = '#f0b90b';
-    document.getElementById('settingsBtn').style.color = '#000';
-}
+
 
     async function loadAllData() {
         try {
@@ -1061,20 +1052,23 @@ if (!hasScalpSettings) {
             const densities = data.densities || [];
 
             densities.forEach(d => {
-                const ageSeconds = d.age_seconds || 0;
-                const ageText = formatAge(ageSeconds);
-                const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
+    const ageSeconds = d.age_seconds || 0;
+    const ageText = formatAge(ageSeconds);
+    const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
 
-                // Жёлтая линия
+    // Определяем префикс как у Recon
+    const prefix = d.side === 'buy' ? 'BI-F' : 'BI-S';
+
+                // Жёлтая линия с жёлтой заливкой и чёрным текстом
                 const line = candleSeries.createPriceLine({
                     price: d.price,
                     color: 'rgba(251, 191, 36, 0.7)',
                     lineWidth: 1,
                     lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true,
-                    axisLabelColor: '#ffffff',
-                    axisLabelBackgroundColor: 'rgba(251, 191, 36, 0.7)',
-                    title: `SC ${volumeText} [${ageText}]`
+                    axisLabelColor: '#000000',  // ← Чёрный текст
+                    axisLabelBackgroundColor: 'rgba(251, 191, 36, 0.9)',  // ← Жёлтая заливка (более насыщенная)
+                    title: `${prefix} ${volumeText} [${ageText}]`  // ← BI-F/BI-S как у Recon
                 });
 
                 scalpLines.push(line);
