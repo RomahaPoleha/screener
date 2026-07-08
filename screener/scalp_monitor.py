@@ -329,17 +329,18 @@ def on_close(ws, close_status_code, close_msg):
         log(f"❌ Ошибка переподключения: {e}")
 
 
-# def on_open(ws):
-#     log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
-#
-#     streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
-#     subscribe_msg = {
-#         "method": "SUBSCRIBE",
-#         "params": streams,
-#         "id": 1
-#     }
-#     ws.send(json.dumps(subscribe_msg))
-#     log(f"✅ Подписка отправлена: {len(streams)} стримов")
+def on_open(ws):
+    # log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
+    #
+    # streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
+    # subscribe_msg = {
+    #     "method": "SUBSCRIBE",
+    #     "params": streams,
+    #     "id": 1
+    # }
+    # ws.send(json.dumps(subscribe_msg))
+    # log(f"✅ Подписка отправлена: {len(streams)} стримов")
+    pass
 
 
 # def start_websocket(symbols_list):
