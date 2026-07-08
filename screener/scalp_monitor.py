@@ -19,7 +19,7 @@ import os
 GLOBAL_MIN_VOLUME = 1000
 
 # Минимальное время жизни плотности (секунды)
-MIN_AGE_SECONDS = 0
+MIN_AGE_SECONDS = 60
 
 # Количество монет для мониторинга
 TOP_SYMBOLS_COUNT = 100
@@ -353,7 +353,7 @@ def on_close(ws, close_status_code, close_msg):
 def on_open(ws):
     log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
 
-    streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
+    streams = [f"{s.lower()}usdt@depth100@100ms" for s in ws.symbols]
     subscribe_msg = {
         "method": "SUBSCRIBE",
         "params": streams,
