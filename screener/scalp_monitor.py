@@ -13,6 +13,7 @@ from queue import Queue, Empty
 from logging.handlers import RotatingFileHandler
 from django.core.cache import cache
 import ccxt
+import os
 
 # Минимальный объём для записи в кэш (USDT)
 GLOBAL_MIN_VOLUME = 10000
