@@ -132,6 +132,56 @@ def api_natr(request):
     })
 
 
+@require_http_methods(["GET"])
+def api_scalp(request, symbol):
+    """API: плотности из Redis"""
+    import time
+
+    min_volume = int(request.GET.get('min_volume', 10000))
+
+    key = f"scalp:{symbol.upper()}"
+    data = cache.get(key)
+
+    if not data:
+        return JsonResponse({
+            'symbol': symbol.upper(),
+            'densities': [],
+            'server_time': time.time()
+        })
+
+    densities = []
+    now = time.time()
+
+    for item in data:
+        try:
+            price = item['price']
+            volume = item['volume']
+            timestamp = item['timestamp']
+            side = item['side']
+        except (KeyError, TypeError):
+            continue
+
+        age_seconds = now - timestamp
+
+        if volume < min_volume:
+            continue
+
+        densities.append({
+            'price': price,
+            'volume': volume,
+            'side': side,
+            'age_seconds': round(age_seconds, 1),
+            'market': 'future'
+        })
+
+    densities.sort(key=lambda x: x['volume'], reverse=True)
+
+    return JsonResponse({
+        'symbol': symbol.upper(),
+        'densities': densities[:50],
+        'server_time': now
+    })
+
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
