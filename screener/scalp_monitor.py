@@ -1,23 +1,23 @@
 """
-Scalp Monitor — фоновый мониторинг плотностей
-WebSocket + Django cache (Redis). Только Futures. Топ-100.
-БЕЗ ФИЛЬТРОВ — выводим все плотности для отладки
+Scalp Monitor — мониторинг плотностей в реальном времени
+WebSocket + Django cache. Только Futures. Топ-100.
+Асинхронная обработка через очередь.
 """
 import json
 import time
 import threading
 import traceback
-import sys
-import os
+import requests
 import websocket
+from queue import Queue, Empty
 from logging.handlers import RotatingFileHandler
 from django.core.cache import cache
 import ccxt
 
-# Минимальный объём для записи в кэш (USDT) — снижен для отладки
+# Минимальный объём для записи в кэш (USDT)
 GLOBAL_MIN_VOLUME = 10000
 
-# Минимальное время жизни плотности (секунды) — 0 = выводим все сразу
+# Минимальное время жизни плотности (секунды)
 MIN_AGE_SECONDS = 0
 
 # Количество монет для мониторинга
@@ -25,6 +25,9 @@ TOP_SYMBOLS_COUNT = 100
 
 # TTL кэша (15 минут)
 CACHE_TTL = 900
+
+# Максимальный размер очереди сообщений
+MAX_QUEUE_SIZE = 10000
 
 # Настройка логов
 LOG_DIR = '/app/data'
@@ -53,14 +56,6 @@ def log(msg):
     _scalp_logger.info(msg)
 
 
-def setup_excepthook():
-    def excepthook(exc_type, exc_value, exc_tb):
-        log(f"❌ НЕОБРАБОТАННОЕ ИСКЛЮЧЕНИЕ: {exc_type.__name__}: {exc_value}")
-        log(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
-
-    sys.excepthook = excepthook
-
-
 def is_valid_symbol(symbol):
     if '-' in symbol:
         return False
@@ -72,7 +67,6 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
-    """Получить топ монет по объёму"""
     log(f"🔥 get_top_symbols() СТАРТ")
     try:
         exchange = ccxt.binance({
@@ -111,17 +105,16 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
 
 
 # Глобальное состояние
-order_books = {}  # {symbol: {'bids': {price: qty}, 'asks': {price: qty}}}
-density_timestamps = {}  # {symbol: {price: timestamp}}
+order_books = {}
+density_timestamps = {}
 order_books_lock = threading.Lock()
 symbols = []
 shutdown_event = threading.Event()
+message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
 
 
 def init_order_book(symbol):
-    """Загрузить полный стакан через REST API"""
     try:
-        import requests
         url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}USDT&limit=1000"
         res = requests.get(url, timeout=10)
         if not res.ok:
@@ -147,7 +140,6 @@ def init_order_book(symbol):
 
 
 def sync_to_cache(symbol):
-    """Синхронизировать локальный стакан с Redis — выводим ВСЕ плотности"""
     try:
         with order_books_lock:
             book = order_books.get(symbol, {})
@@ -159,20 +151,21 @@ def sync_to_cache(symbol):
         now = time.time()
 
         densities = []
-        total_count = 0
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-                total_count += 1
 
-                # Для отладки — выводим всё что >= 10K
                 if volume < GLOBAL_MIN_VOLUME:
                     continue
 
-                # Запоминаем время появления
-                if price not in timestamps:
+                if price in timestamps:
+                    age = now - timestamps[price]
+                    if age < MIN_AGE_SECONDS:
+                        continue
+                else:
                     timestamps[price] = now
+                    continue
 
                 densities.append({
                     'price': price,
@@ -181,9 +174,8 @@ def sync_to_cache(symbol):
                     'timestamp': timestamps[price]
                 })
 
-        # Логируем для BTC
         if symbol == 'BTC':
-            log(f"📊 {symbol}: {len(densities)} плотностей (всего уровней: {total_count})")
+            log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей")
 
         cache.set(key, densities, CACHE_TTL)
 
@@ -196,7 +188,6 @@ def sync_to_cache(symbol):
 
 
 def update_order_book(symbol, bids_delta, asks_delta):
-    """Обновить локальный стакан дельтами из WebSocket"""
     try:
         with order_books_lock:
             if symbol not in order_books:
@@ -242,45 +233,72 @@ def update_order_book(symbol, bids_delta, asks_delta):
             sync_to_cache(symbol)
 
     except Exception as e:
-        log(f"❌ update_order_book({symbol}): {e}")
+        log(f" update_order_book({symbol}): {e}")
+
+
+def process_message_queue():
+    """Отдельный поток для обработки очереди сообщений"""
+    log("🔄 Процессор очереди сообщений запущен")
+
+    while not shutdown_event.is_set():
+        try:
+            # Получаем сообщение из очереди (таймаут 1 сек)
+            message = message_queue.get(timeout=1)
+
+            data = json.loads(message)
+
+            if 'data' in data:
+                stream_data = data['data']
+                symbol = stream_data.get('s', '')
+                if symbol.endswith('USDT'):
+                    symbol = symbol[:-4]
+
+                bids = stream_data.get('b', [])
+                asks = stream_data.get('a', [])
+
+                if bids or asks:
+                    update_order_book(symbol, bids, asks)
+
+        except Empty:
+            # Очередь пуста, продолжаем
+            continue
+        except Exception as e:
+            log(f"❌ Ошибка обработки сообщения: {e}")
 
 
 def on_message(ws, message):
-    """Обработка сообщений WebSocket"""
+    """WebSocket только складывает сообщения в очередь"""
     try:
-        # Логируем первые 10 сообщений
+        # Логируем первые 5 сообщений
         if not hasattr(ws, 'message_count'):
             ws.message_count = 0
         ws.message_count += 1
 
-        if ws.message_count <= 10:
+        if ws.message_count <= 5:
             log(f"📨 Сообщение #{ws.message_count}: {message[:200]}...")
 
-        data = json.loads(message)
+        # Логируем каждые 1000 сообщений
+        if ws.message_count % 1000 == 0:
+            log(f"📨 Обработано {ws.message_count} сообщений, очередь: {message_queue.qsize()}")
 
-        if 'data' in data:
-            stream_data = data['data']
-            symbol = stream_data.get('s', '')
-            if symbol.endswith('USDT'):
-                symbol = symbol[:-4]
-
-            bids = stream_data.get('b', [])
-            asks = stream_data.get('a', [])
-
-            if bids or asks:
-                update_order_book(symbol, bids, asks)
+        # Складываем в очередь (неблокирующе)
+        try:
+            message_queue.put_nowait(message)
+        except:
+            # Очередь полная, пропускаем сообщение
+            pass
 
     except Exception as e:
         log(f"❌ on_message: {e}")
-        log(traceback.format_exc())
 
 
 def on_error(ws, error):
     log(f"❌ WebSocket ошибка: {error}")
+    log(traceback.format_exc())
 
 
 def on_close(ws, close_status_code, close_msg):
-    log(f"⚠️ WebSocket закрыт: {close_status_code} {close_msg}")
+    log(f"⚠️ WebSocket закрыт: code={close_status_code}, msg={close_msg}")
     log("🔄 Переподключение через 5 секунд...")
     time.sleep(5)
 
@@ -289,6 +307,8 @@ def on_close(ws, close_status_code, close_msg):
 
     try:
         url = "wss://fstream.binance.com/ws"
+
+        log(f" Переподключение WebSocket...")
 
         new_ws = websocket.WebSocketApp(
             url,
@@ -318,7 +338,6 @@ def on_open(ws):
 
 
 def start_websocket(symbols_list):
-    """Запустить WebSocket"""
     try:
         url = "wss://fstream.binance.com/ws"
         log(f"🔌 Подключение WebSocket для {len(symbols_list)} символов...")
@@ -343,16 +362,24 @@ def start_websocket(symbols_list):
 def scalp_monitor_loop():
     global symbols
 
-    setup_excepthook()
-    log("🚀 Scalp Monitor запущен (БЕЗ ФИЛЬТРОВ)!")
+    log("🚀 Scalp Monitor запущен (асинхронный)!")
     log(f"📝 Лог-файл: {LOG_FILE}")
+    log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
     log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
-    log(f"💰 Мин. объём: ${GLOBAL_MIN_VOLUME}")
     time.sleep(5)
+
+    # Запускаем процессор очереди сообщений
+    processor_thread = threading.Thread(
+        target=process_message_queue,
+        name='Queue-Processor',
+        daemon=True
+    )
+    processor_thread.start()
+    log(f"✅ Процессор очереди запущен")
 
     symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
     if not symbols:
-        log("⚠️ Нет символов для мониторинга")
+        log("️ Нет символов для мониторинга")
         return
 
     log(f"🔄 Инициализация стаканов для {len(symbols)} символов...")
@@ -377,13 +404,14 @@ def scalp_monitor_loop():
     while not shutdown_event.is_set():
         heartbeat_counter += 1
         if heartbeat_counter % 6 == 0:
-            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter})")
+            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter}), очередь: {message_queue.qsize()}")
 
         if shutdown_event.wait(timeout=10):
             break
 
 
 def start_scalp_monitor():
+    log("🔧 Вызов start_scalp_monitor()...")
     thread = threading.Thread(
         target=scalp_monitor_loop,
         name='Scalp-Monitor',
@@ -394,5 +422,5 @@ def start_scalp_monitor():
 
 
 def stop_scalp_monitor():
-    log("📤 Остановка Scalp Monitor...")
+    log(" Остановка Scalp Monitor...")
     shutdown_event.set()
