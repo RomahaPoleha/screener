@@ -259,28 +259,37 @@ def process_message_queue():
 
     while not shutdown_event.is_set():
         try:
-            # Получаем сообщение из очереди (таймаут 1 сек)
             message = message_queue.get(timeout=1)
-
             data = json.loads(message)
 
+            # Формат 1: с обёрткой data (для /stream?streams=...)
             if 'data' in data:
                 stream_data = data['data']
                 symbol = stream_data.get('s', '')
                 if symbol.endswith('USDT'):
                     symbol = symbol[:-4]
-
                 bids = stream_data.get('b', [])
                 asks = stream_data.get('a', [])
 
-                if bids or asks:
-                    update_order_book(symbol, bids, asks)
+            # Формат 2: прямое сообщение (для /ws + SUBSCRIBE) — НАШ СЛУЧАЙ
+            elif 's' in data:
+                symbol = data.get('s', '')
+                if symbol.endswith('USDT'):
+                    symbol = symbol[:-4]
+                bids = data.get('b', [])
+                asks = data.get('a', [])
+            else:
+                # Подтверждение подписки и прочие служебные сообщения
+                continue
+
+            if bids or asks:
+                update_order_book(symbol, bids, asks)
 
         except Empty:
-            # Очередь пуста, продолжаем
             continue
         except Exception as e:
             log(f"❌ Ошибка обработки сообщения: {e}")
+            log(traceback.format_exc())
 
 
 def on_message(ws, message):
