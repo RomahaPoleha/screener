@@ -191,8 +191,20 @@ def sync_to_cache(symbol):
 
 def update_order_book(symbol, bids_delta, asks_delta):
     try:
+        # Логируем первые 5 вызовов для каждой монеты
+        if not hasattr(update_order_book, 'call_counts'):
+            update_order_book.call_counts = {}
+
+        if symbol not in update_order_book.call_counts:
+            update_order_book.call_counts[symbol] = 0
+        update_order_book.call_counts[symbol] += 1
+
+        if update_order_book.call_counts[symbol] <= 3:
+            log(f"🔄 update_order_book({symbol}) вызов #{update_order_book.call_counts[symbol]}: {len(bids_delta)} bids, {len(asks_delta)} asks")
+
         with order_books_lock:
             if symbol not in order_books:
+                log(f"⚠️ update_order_book({symbol}): нет в order_books")
                 return
 
             book = order_books[symbol]
@@ -233,12 +245,12 @@ def update_order_book(symbol, bids_delta, asks_delta):
 
         if changed:
             sync_to_cache(symbol)
-            # Логируем для ETH
-            if symbol == 'ETH':
-                log(f"🔄 update_order_book({symbol}): changed=True, вызван sync_to_cache")
+            if symbol == 'BTC':
+                log(f"✅ update_order_book({symbol}): changed=True, вызван sync_to_cache")
 
     except Exception as e:
-        log(f" update_order_book({symbol}): {e}")
+        log(f"❌ update_order_book({symbol}): {e}")
+        log(traceback.format_exc())
 
 
 def process_message_queue():
