@@ -16,7 +16,7 @@ import ccxt
 import os
 
 # Минимальный объём для записи в кэш (USDT)
-GLOBAL_MIN_VOLUME = 5000
+GLOBAL_MIN_VOLUME = 1000
 
 # Минимальное время жизни плотности (секунды)
 MIN_AGE_SECONDS = 0
