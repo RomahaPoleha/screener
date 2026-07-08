@@ -491,6 +491,46 @@
                         </div>
                     </div>
                 </div>
+                <!-- Секция: Scalp -->
+                <div class="modal-section">
+                    <div class="modal-section-title">🎯 Scalp — Мониторинг плотностей</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
+                        <div style="display:flex; gap:16px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="scalpMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <span>Futures</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="scalpMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;">
+                                <span>Spot</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                                Futures мин. объём (USDT):
+                            </label>
+                            <input type="number" id="scalpMinVolumeFuture" value="50000" min="1000" step="10000"
+                                   style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
+                                Spot мин. объём (USDT):
+                            </label>
+                            <input type="number" id="scalpMinVolumeSpot" value="10000" min="1000" step="10000"
+                                   style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; padding:10px; background:rgba(240, 185, 11, 0.1); border-radius:6px; border:1px solid rgba(240, 185, 11, 0.3);">
+                        <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">ℹ️ Цветовая схема:</div>
+                        <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
+                            <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность с временем жизни<br>
+                            <span style="color:#fbbf24;">📊 Label</span> — SC объём [время]
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer" style="border-top:1px solid #2d3748;">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2d3748; border:none; color:#d1d5db;">Закрыть</button>
@@ -545,6 +585,7 @@
     let currentTF = '1m';
     let currentSymbol = '';
 
+    // ===== RECON настройки =====
     let densityLines = [];
     let densityEnabled = false;
     let densityMarkets = { future: false, spot: false };
@@ -553,11 +594,25 @@
     let densityUpdateTimer = null;
     let previousDensities = { future: [], spot: [] };
 
+    // ===== Scalp настройки =====
+    let scalpLines = [];
+    let scalpEnabled = false;
+    let scalpMarkets = { future: false, spot: false };
+    let scalpMinVolumeFuture = 50000;
+    let scalpMinVolumeSpot = 10000;
+    let scalpUpdateTimer = null;
+
     // Загружаем сохранённые настройки RECON
     const savedFutureVol = localStorage.getItem('densityMinVolumeFuture');
     const savedSpotVol = localStorage.getItem('densityMinVolumeSpot');
     if (savedFutureVol) densityMinVolumeFuture = parseInt(savedFutureVol);
     if (savedSpotVol) densityMinVolumeSpot = parseInt(savedSpotVol);
+
+    // Загружаем сохранённые настройки Scalp
+    const savedScalpFutureVol = localStorage.getItem('scalpMinVolumeFuture');
+    const savedScalpSpotVol = localStorage.getItem('scalpMinVolumeSpot');
+    if (savedScalpFutureVol) scalpMinVolumeFuture = parseInt(savedScalpFutureVol);
+    if (savedScalpSpotVol) scalpMinVolumeSpot = parseInt(savedScalpSpotVol);
 
     const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
     const fmt = (num) => {
@@ -569,6 +624,14 @@
     };
     const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
+
+    // Форматирование времени жизни плотности
+    function formatAge(seconds) {
+        if (seconds < 60) return `${Math.round(seconds)}с`;
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${mins}м ${secs}с`;
+    }
 
     els.tradesThresholdSlider.addEventListener('input', (e) => {
         currentThreshold = parseInt(e.target.value);
@@ -743,10 +806,17 @@
     }
 
     function openSettingsModal() {
+        // RECON
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolumeFuture').value = densityMinVolumeFuture;
         document.getElementById('densityMinVolumeSpot').value = densityMinVolumeSpot;
+
+        // Scalp
+        document.getElementById('scalpMarketFuture').checked = scalpMarkets.future;
+        document.getElementById('scalpMarketSpot').checked = scalpMarkets.spot;
+        document.getElementById('scalpMinVolumeFuture').value = scalpMinVolumeFuture;
+        document.getElementById('scalpMinVolumeSpot').value = scalpMinVolumeSpot;
 
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
@@ -759,21 +829,37 @@
     }
 
     function applySettings() {
-        const futureChecked = document.getElementById('densityMarketFuture').checked;
-        const spotChecked = document.getElementById('densityMarketSpot').checked;
-        const minVolumeFuture = parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000;
-        const minVolumeSpot = parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000;
+        // ===== RECON настройки =====
+        const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
+        const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
+        const reconMinVolumeFutureNew = parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000;
+        const reconMinVolumeSpotNew = parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000;
 
-        densityMarkets = { future: futureChecked, spot: spotChecked };
-        densityMinVolumeFuture = minVolumeFuture;
-        densityMinVolumeSpot = minVolumeSpot;
-        densityEnabled = futureChecked || spotChecked;
+        densityMarkets = { future: reconFutureChecked, spot: reconSpotChecked };
+        densityMinVolumeFuture = reconMinVolumeFutureNew;
+        densityMinVolumeSpot = reconMinVolumeSpotNew;
+        densityEnabled = reconFutureChecked || reconSpotChecked;
 
         localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
         localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
 
+        // ===== Scalp настройки =====
+        const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
+        const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
+        const scalpMinVolumeFutureNew = parseInt(document.getElementById('scalpMinVolumeFuture').value) || 50000;
+        const scalpMinVolumeSpotNew = parseInt(document.getElementById('scalpMinVolumeSpot').value) || 10000;
+
+        scalpMarkets = { future: scalpFutureChecked, spot: scalpSpotChecked };
+        scalpMinVolumeFuture = scalpMinVolumeFutureNew;
+        scalpMinVolumeSpot = scalpMinVolumeSpotNew;
+        scalpEnabled = scalpFutureChecked || scalpSpotChecked;
+
+        localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
+        localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
+
+        // Кнопка настроек
         const btn = document.getElementById('settingsBtn');
-        if (densityEnabled) {
+        if (densityEnabled || scalpEnabled) {
             btn.style.background = '#f0b90b';
             btn.style.color = '#000';
         } else {
@@ -781,15 +867,30 @@
             btn.style.color = '#9ca3af';
         }
 
-        if (densityEnabled && currentSymbol) {
-            previousDensities = { future: [], spot: [] };
-            startDensityUpdates(currentSymbol);
-        } else {
-            if (densityUpdateTimer) {
-                clearInterval(densityUpdateTimer);
-                densityUpdateTimer = null;
+        // Перезапуск обновлений
+        if (currentSymbol) {
+            // RECON
+            if (densityEnabled) {
+                previousDensities = { future: [], spot: [] };
+                startDensityUpdates(currentSymbol);
+            } else {
+                if (densityUpdateTimer) {
+                    clearInterval(densityUpdateTimer);
+                    densityUpdateTimer = null;
+                }
+                clearDensityLines();
             }
-            clearDensityLines();
+
+            // Scalp
+            if (scalpEnabled) {
+                startScalpUpdates(currentSymbol);
+            } else {
+                if (scalpUpdateTimer) {
+                    clearInterval(scalpUpdateTimer);
+                    scalpUpdateTimer = null;
+                }
+                clearScalpLines();
+            }
         }
 
         bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
@@ -836,6 +937,7 @@
         els.tradesOverlayBody.scrollTop = els.tradesOverlayBody.scrollHeight;
     }
 
+    // ===== RECON функции (без изменений) =====
     async function loadDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
 
@@ -934,6 +1036,61 @@
         }, 3000);
     }
 
+    // ===== Scalp функции (новые) =====
+    async function loadScalpDensities(symbol) {
+        if (!scalpEnabled || !candleSeries) return;
+
+        try {
+            const minVol = scalpMinVolumeFuture;
+            const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}`);
+            if (!res.ok) return;
+            const data = await res.json();
+
+            clearScalpLines();
+
+            const densities = data.densities || [];
+
+            densities.forEach(d => {
+                const ageSeconds = d.age_seconds || 0;
+                const ageText = formatAge(ageSeconds);
+                const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
+
+                // Жёлтая линия
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: 'rgba(251, 191, 36, 0.7)',
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    axisLabelColor: '#ffffff',
+                    axisLabelBackgroundColor: 'rgba(251, 191, 36, 0.7)',
+                    title: `SC ${volumeText} [${ageText}]`
+                });
+
+                scalpLines.push(line);
+            });
+
+        } catch (err) {
+            console.error('Scalp load error:', err);
+        }
+    }
+
+    function clearScalpLines() {
+        if (!candleSeries) return;
+        scalpLines.forEach(l => {
+            try { candleSeries.removePriceLine(l); } catch(e){}
+        });
+        scalpLines = [];
+    }
+
+    function startScalpUpdates(symbol) {
+        if (scalpUpdateTimer) clearInterval(scalpUpdateTimer);
+        loadScalpDensities(symbol);
+        scalpUpdateTimer = setInterval(() => {
+            if (currentSymbol === symbol && scalpEnabled) loadScalpDensities(symbol);
+        }, 3000);
+    }
+
     function updateWatermark() {
         if (currentSymbol && els.chartWatermark) {
             els.watermarkSymbol.textContent = currentSymbol;
@@ -961,12 +1118,20 @@
     }
 
     function closeChart() {
+        // Очистка RECON
         clearDensityLines();
         if (densityUpdateTimer) {
             clearInterval(densityUpdateTimer);
             densityUpdateTimer = null;
         }
         previousDensities = { future: [], spot: [] };
+
+        // Очистка Scalp
+        clearScalpLines();
+        if (scalpUpdateTimer) {
+            clearInterval(scalpUpdateTimer);
+            scalpUpdateTimer = null;
+        }
 
         if (wsCandles) {
             wsCandles.onclose = null;
@@ -1003,8 +1168,13 @@
             wsTrades.close(); wsTrades = null;
         }
 
+        // Очистка RECON
         clearDensityLines();
         if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
+
+        // Очистка Scalp
+        clearScalpLines();
+        if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
         await new Promise(resolve => setTimeout(resolve, 150));
 
@@ -1064,7 +1234,11 @@
             startTradesStream(symbol);
         }
 
+        // Запуск RECON
         if (densityEnabled) startDensityUpdates(symbol);
+
+        // Запуск Scalp
+        if (scalpEnabled) startScalpUpdates(symbol);
     }
 
     async function loadChartData(symbol, tf) {
