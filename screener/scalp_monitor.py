@@ -16,7 +16,7 @@ import ccxt
 import os
 
 # Минимальный объём для записи в кэш (USDT)
-GLOBAL_MIN_VOLUME = 10000
+GLOBAL_MIN_VOLUME = 5000
 
 # Минимальное время жизни плотности (секунды)
 MIN_AGE_SECONDS = 0
@@ -330,48 +330,23 @@ def on_close(ws, close_status_code, close_msg):
 
 
 def on_open(ws):
-    # log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
-    #
-    # streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
-    # subscribe_msg = {
-    #     "method": "SUBSCRIBE",
-    #     "params": streams,
-    #     "id": 1
-    # }
-    # ws.send(json.dumps(subscribe_msg))
-    # log(f"✅ Подписка отправлена: {len(streams)} стримов")
-    pass
+    log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
+
+    streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
+    subscribe_msg = {
+        "method": "SUBSCRIBE",
+        "params": streams,
+        "id": 1
+    }
+    ws.send(json.dumps(subscribe_msg))
+    log(f"✅ Подписка отправлена: {len(streams)} стримов")
 
 
-# def start_websocket(symbols_list):
-#     try:
-#         url = "wss://fstream.binance.com/ws"
-#         log(f"🔌 Подключение WebSocket для {len(symbols_list)} символов...")
-#
-#         ws = websocket.WebSocketApp(
-#             url,
-#             on_open=on_open,
-#             on_message=on_message,
-#             on_error=on_error,
-#             on_close=on_close
-#         )
-#         ws.symbols = symbols_list
-#
-#         log(f"🚀 Запуск ws.run_forever()...")
-#         ws.run_forever(ping_interval=20, ping_timeout=10)
-#
-#     except Exception as e:
-#         log(f"❌ Ошибка в start_websocket: {e}")
-#         log(traceback.format_exc())
 
 def start_websocket(symbols_list):
     try:
-        # Используем ссылку как для свечей - через /market/ws/
-        # Подписываемся на все stream'ы сразу
-        streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols_list]
-        url = f"wss://fstream.binance.com/market/ws/{'/'.join(streams)}"
-
-        log(f"🔌 Подключение WebSocket: {url[:100]}...")
+        url = "wss://fstream.binance.com/ws"
+        log(f"🔌 Подключение WebSocket для {len(symbols_list)} символов...")
 
         ws = websocket.WebSocketApp(
             url,
@@ -388,6 +363,7 @@ def start_websocket(symbols_list):
     except Exception as e:
         log(f"❌ Ошибка в start_websocket: {e}")
         log(traceback.format_exc())
+
 
 
 def scalp_monitor_loop():
