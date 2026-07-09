@@ -1062,16 +1062,12 @@
             let lineColor, bgColor;
             const volumeNum = parseFloat(d.volume) || 0;
 
-            if (volumeNum < 100000) {
-                // До 100K — оранжевый
+            if (volumeNum < 500000) {
+                // До 500K — оранжевый
                 lineColor = 'rgba(255, 165, 0, 0.7)';
                 bgColor = 'rgba(255, 165, 0, 0.9)';
-            } else if (volumeNum < 300000) {
-                // 100K-300K — жёлтый
-                lineColor = 'rgba(251, 191, 36, 0.7)';
-                bgColor = 'rgba(251, 191, 36, 0.9)';
-            } else {
-                // Более 300K — фиолетовый
+             else {
+                // Более 500K — фиолетовый
                 lineColor = 'rgba(186, 85, 211, 0.7)';
                 bgColor = 'rgba(186, 85, 211, 0.9)';
             }

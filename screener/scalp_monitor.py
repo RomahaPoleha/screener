@@ -19,7 +19,7 @@ import os
 GLOBAL_MIN_VOLUME = 10000
 
 # Минимальное время жизни плотности (секунды)
-MIN_AGE_SECONDS = 60
+MIN_AGE_SECONDS = 180
 
 # Количество монет для мониторинга
 TOP_SYMBOLS_COUNT = 100
