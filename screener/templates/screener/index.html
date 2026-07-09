@@ -1038,7 +1038,7 @@
     }
 
     // ===== Scalp функции (новые) =====
-    sync function loadScalpDensities(symbol) {
+    async function loadScalpDensities(symbol) {
     if (!scalpEnabled || !candleSeries) return;
 
     try {
