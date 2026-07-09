@@ -16,7 +16,7 @@ import ccxt
 import os
 
 # Минимальный объём для записи в кэш (USDT)
-GLOBAL_MIN_VOLUME = 1000
+GLOBAL_MIN_VOLUME = 10000
 
 # Минимальное время жизни плотности (секунды)
 MIN_AGE_SECONDS = 60
@@ -28,7 +28,7 @@ TOP_SYMBOLS_COUNT = 100
 CACHE_TTL = 900
 
 # Максимальный размер очереди сообщений
-MAX_QUEUE_SIZE = 10000
+MAX_QUEUE_SIZE = 50000
 
 # Настройка логов
 LOG_DIR = '/app/data'
@@ -112,7 +112,7 @@ order_books_lock = threading.Lock()
 symbols = []
 shutdown_event = threading.Event()
 message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
-
+last_sync_time = {}
 
 def init_order_book(symbol):
     try:
@@ -190,6 +190,8 @@ def sync_to_cache(symbol):
 
 
 def update_order_book(symbol, bids_delta, asks_delta):
+    global last_sync_time
+
     try:
         # Логируем первые 5 вызовов для каждой монеты
         if not hasattr(update_order_book, 'call_counts'):
@@ -244,9 +246,16 @@ def update_order_book(symbol, bids_delta, asks_delta):
                     changed = True
 
         if changed:
-            sync_to_cache(symbol)
-            if symbol == 'BTC':
-                log(f"✅ update_order_book({symbol}): changed=True, вызван sync_to_cache")
+            # Rate limiting: не чаще раза в 3 секунды
+            now = time.time()
+            if symbol not in last_sync_time or (now - last_sync_time[symbol]) >= 3:
+                sync_to_cache(symbol)
+                last_sync_time[symbol] = now
+                if symbol == 'BTC':
+                    log(f"✅ update_order_book({symbol}): changed=True, вызван sync_to_cache")
+            else:
+                if symbol == 'BTC' and update_order_book.call_counts[symbol] <= 10:
+                    log(f"⏱️ update_order_book({symbol}): пропуск sync_to_cache (слишком часто)")
 
     except Exception as e:
         log(f"❌ update_order_book({symbol}): {e}")
@@ -320,7 +329,27 @@ def on_message(ws, message):
 
 def on_error(ws, error):
     log(f"❌ WebSocket ошибка: {error}")
-    log(traceback.format_exc())
+    log("🔄 Переподключение через 5 секунд...")
+    time.sleep(5)
+
+    if shutdown_event.is_set():
+        return
+
+    try:
+        url = "wss://fstream.binance.com/ws"
+
+        new_ws = websocket.WebSocketApp(
+            url,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
+        new_ws.symbols = ws.symbols
+        new_ws.run_forever(ping_interval=20, ping_timeout=10)
+
+    except Exception as e:
+        log(f"❌ Ошибка переподключения: {e}")
 
 
 def on_close(ws, close_status_code, close_msg):
@@ -429,10 +458,22 @@ def scalp_monitor_loop():
     log(f"✅ WebSocket поток запущен")
 
     heartbeat_counter = 0
+    empty_queue_count = 0  # ← Счетчик пустых очередей
+
     while not shutdown_event.is_set():
         heartbeat_counter += 1
         if heartbeat_counter % 6 == 0:
-            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter}), очередь: {message_queue.qsize()}")
+            qsize = message_queue.qsize()
+            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter}), очередь: {qsize}")
+
+            # Если очередь пуста 3 раза подряд — WebSocket умер
+            if qsize == 0:
+                empty_queue_count += 1
+                if empty_queue_count >= 3:
+                    log(f"⚠️ Очередь пуста {empty_queue_count} раз! Перезапуск WebSocket...")
+                    # Перезапуск произойдёт через on_close/on_error
+            else:
+                empty_queue_count = 0
 
         if shutdown_event.wait(timeout=10):
             break
