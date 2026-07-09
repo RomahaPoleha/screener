@@ -1039,66 +1039,45 @@
 
     // ===== Scalp функции (новые) =====
     async function loadScalpDensities(symbol) {
-    if (!scalpEnabled || !candleSeries) return;
+        if (!scalpEnabled || !candleSeries) return;
 
-    try {
-        const minVol = scalpMinVolumeFuture;
-        const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}`);
-        if (!res.ok) return;
-        const data = await res.json();
+        try {
+            const minVol = scalpMinVolumeFuture;
+            const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}`);
+            if (!res.ok) return;
+            const data = await res.json();
 
-        clearScalpLines();
+            clearScalpLines();
 
-        const densities = data.densities || [];
+            const densities = data.densities || [];
 
-        // Отладка: выводим первые 3 плотности в консоль
-        if (densities.length > 0) {
-            console.log('🔍 Scalp densities:', densities.slice(0, 3).map(d => ({
-                price: d.price,
-                volume: d.volume,
-                type: typeof d.volume,
-                age: d.age_seconds
-            })));
-        }
+            densities.forEach(d => {
+    const ageSeconds = d.age_seconds || 0;
+    const ageText = formatAge(ageSeconds);
+    const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
 
-        densities.forEach(d => {
-            const ageSeconds = d.age_seconds || 0;
-            const ageText = formatAge(ageSeconds);
-            const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
+    // Определяем префикс как у Recon
+            const prefix = 'BI-F';
 
-            // Принудительно конвертируем в число
-            const volumeNum = parseFloat(d.volume) || 0;
+                // Жёлтая линия с жёлтой заливкой и чёрным текстом
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: 'rgba(251, 191, 36, 0.7)',
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    axisLabelColor: '#000000',  // ← Чёрный текст
+                    axisLabelBackgroundColor: 'rgba(251, 191, 36, 0.9)',  // ← Жёлтая заливка (более насыщенная)
+                    title: `${prefix} ${volumeText} [${ageText}]`  // ← BI-F/BI-S как у Recon
+                });
 
-            // Определяем цвет по объёму
-            let lineColor, bgColor;
-            if (volumeNum < 500000) {
-                // До 500K — оранжевый
-                lineColor = 'rgba(255, 165, 0, 0.7)';
-                bgColor = 'rgba(255, 165, 0, 0.9)';
-            } else {
-                // Более 500K — бледный фиолетовый
-                lineColor = 'rgba(186, 85, 211, 0.7)';
-                bgColor = 'rgba(186, 85, 211, 0.9)';
-            }
-
-            const line = candleSeries.createPriceLine({
-                price: d.price,
-                color: lineColor,
-                lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Solid,
-                axisLabelVisible: true,
-                axisLabelColor: '#000000',
-                axisLabelBackgroundColor: bgColor,
-                title: `BI-F ${volumeText} ${ageText}`
+                scalpLines.push(line);
             });
 
-            scalpLines.push(line);
-        });
-
-    } catch (err) {
-        console.error('Scalp load error:', err);
+        } catch (err) {
+            console.error('Scalp load error:', err);
+        }
     }
-}
 
     function clearScalpLines() {
         if (!candleSeries) return;
