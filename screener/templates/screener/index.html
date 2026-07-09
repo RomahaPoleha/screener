@@ -1007,15 +1007,15 @@
             const data = previousDensities[market] || [];
             data.forEach(d => {
                const line = candleSeries.createPriceLine({
-                price: d.price,
-                color: d.side === 'buy' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-                lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Solid,
-                axisLabelVisible: true,
-                axisLabelColor: '#ffffff',
-                axisLabelBackgroundColor: d.side === 'buy' ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)',
-                title: `${market === 'future' ? 'BI-F' : 'BI-S'} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
-            });
+                    price: d.price,
+                    color: 'rgba(255, 255, 255, 0.5)',  // Белая линия
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    axisLabelColor: '#ffffff',  // Белый текст
+                    axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',  // Серый фон для контраста
+                    title: `${market === 'future' ? 'BI-F' : 'BI-S'} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+                });
                 densityLines.push(line);
             });
         }
