@@ -1038,7 +1038,7 @@
     }
 
     // ===== Scalp функции (новые) =====
-    async function loadScalpDensities(symbol) {
+    sync function loadScalpDensities(symbol) {
     if (!scalpEnabled || !candleSeries) return;
 
     try {
@@ -1066,7 +1066,7 @@
                 // До 500K — оранжевый
                 lineColor = 'rgba(255, 165, 0, 0.7)';
                 bgColor = 'rgba(255, 165, 0, 0.9)';
-            } else {  // ← ДОБАВЛЕНА ЗАКРЫВАЮЩАЯ СКОБКА
+            } else {
                 // Более 500K — фиолетовый
                 lineColor = 'rgba(186, 85, 211, 0.7)';
                 bgColor = 'rgba(186, 85, 211, 0.9)';
@@ -1080,7 +1080,7 @@
                 axisLabelVisible: true,
                 axisLabelColor: '#000000',
                 axisLabelBackgroundColor: bgColor,
-                title: `${prefix} ${volumeText} ${ageText}`  // ← БЕЗ СКОБОК
+                title: `${prefix} ${volumeText} ${ageText}`
             });
 
             scalpLines.push(line);
