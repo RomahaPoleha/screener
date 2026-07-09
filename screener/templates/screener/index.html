@@ -626,12 +626,19 @@
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
 
     // Форматирование времени жизни плотности
-    function formatAge(seconds) {
-        if (seconds < 60) return `${Math.round(seconds)}с`;
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.round(seconds % 60);
-        return `${mins}м ${secs}с`;
-    }
+    // Форматирование времени жизни плотности
+        function formatAge(seconds) {
+            const totalMinutes = Math.floor(seconds / 60);
+            const hours = Math.floor(totalMinutes / 60);
+            const mins = totalMinutes % 60;
+
+            if (hours > 0) {
+                // Более 1 часа — показываем часы и минуты
+                return `${hours}ч ${mins}м`;
+            }
+            // Менее 1 часа — только минуты
+            return `${mins}м`;
+        }
 
     els.tradesThresholdSlider.addEventListener('input', (e) => {
         currentThreshold = parseInt(e.target.value);
