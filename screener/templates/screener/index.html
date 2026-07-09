@@ -1052,23 +1052,31 @@
             const densities = data.densities || [];
 
             densities.forEach(d => {
-    const ageSeconds = d.age_seconds || 0;
-    const ageText = formatAge(ageSeconds);
-    const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
+                const ageSeconds = d.age_seconds || 0;
+                const ageText = formatAge(ageSeconds);
+                const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
 
-    // Определяем префикс как у Recon
-            const prefix = 'BI-F';
+                // Определяем цвет по объёму
+                let lineColor, bgColor;
+                if (d.volume < 500000) {
+                    // До 500K — оранжевый
+                    lineColor = 'rgba(255, 165, 0, 0.7)';
+                    bgColor = 'rgba(255, 165, 0, 0.9)';
+                } else {
+                    // Более 500K — бледный фиолетовый
+                    lineColor = 'rgba(186, 85, 211, 0.7)';
+                    bgColor = 'rgba(186, 85, 211, 0.9)';
+                }
 
-                // Жёлтая линия с жёлтой заливкой и чёрным текстом
                 const line = candleSeries.createPriceLine({
                     price: d.price,
-                    color: 'rgba(251, 191, 36, 0.7)',
+                    color: lineColor,
                     lineWidth: 1,
                     lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true,
-                    axisLabelColor: '#000000',  // ← Чёрный текст
-                    axisLabelBackgroundColor: 'rgba(251, 191, 36, 0.9)',  // ← Жёлтая заливка (более насыщенная)
-                    title: `${prefix} ${volumeText} [${ageText}]`  // ← BI-F/BI-S как у Recon
+                    axisLabelColor: '#000000',
+                    axisLabelBackgroundColor: bgColor,
+                    title: `BI-F ${volumeText} ${ageText}`  // ← Убраны скобки
                 });
 
                 scalpLines.push(line);
