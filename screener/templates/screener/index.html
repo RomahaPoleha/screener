@@ -607,7 +607,8 @@
     let scalpMinVolumeFuture = 200000;
     let scalpMinVolumeSpot = 100000;
     let scalpUpdateTimer = null;
-    let isScalpLoading = false; // ← Блокировка повторного вызова
+    let isScalpLoading = false;
+    let previousScalpData = { futures: [], spot: [] }; // ← ДОБАВЛЕНО
 
     // ===== Гистограмма объёма =====
     let volumeHistogramEnabled = true;
@@ -915,6 +916,7 @@
 
             // Scalp
             if (scalpEnabled) {
+                previousScalpData = { futures: [], spot: [] }; // ← ДОБАВЛЕНО
                 startScalpUpdates(currentSymbol);
             } else {
                 if (scalpUpdateTimer) {
@@ -1082,19 +1084,51 @@
         isScalpLoading = true;
 
         try {
-            clearScalpLines();
-
             const marketsToLoad = [];
             if (scalpMarkets.future) marketsToLoad.push('futures');
             if (scalpMarkets.spot) marketsToLoad.push('spot');
 
+            const allNewData = {};
+            let hasChanges = false;
+
+            // 1. СНАЧАЛА получаем все данные с сервера
             for (const market of marketsToLoad) {
                 const minVol = market === 'futures' ? scalpMinVolumeFuture : scalpMinVolumeSpot;
-                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=${market}`);
-                if (!res.ok) continue;
-                const data = await res.json();
+                try {
+                    const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=${market}`);
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    allNewData[market] = data.densities || [];
+                } catch (e) {
+                    console.error(`Scalp load error (${market}):`, e);
+                    allNewData[market] = previousScalpData[market] || [];
+                }
+            }
 
-                const densities = data.densities || [];
+            // 2. СРАВНИВАЕМ новые данные со старыми (только price, volume, side)
+            for (const market of marketsToLoad) {
+                const newData = allNewData[market] || [];
+                const prevData = previousScalpData[market] || [];
+
+                const currentSignature = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
+                const prevSignature = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
+
+                if (currentSignature !== prevSignature) {
+                    hasChanges = true;
+                    previousScalpData[market] = newData;
+                }
+            }
+
+            // 3. Если изменений нет — выходим, линии остаются на графике
+            if (!hasChanges) {
+                return;
+            }
+
+            // 4. Только если есть изменения — перерисовываем
+            clearScalpLines();
+
+            for (const market of marketsToLoad) {
+                const densities = allNewData[market] || [];
 
                 densities.forEach(d => {
                     const ageSeconds = d.age_seconds || 0;
@@ -1187,6 +1221,7 @@
         previousDensities = { future: [], spot: [] };
 
         clearScalpLines();
+        previousScalpData = { futures: [], spot: [] }; // ← ДОБАВЛЕНО
         if (scalpUpdateTimer) {
             clearInterval(scalpUpdateTimer);
             scalpUpdateTimer = null;
@@ -1231,6 +1266,7 @@
         if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
 
         clearScalpLines();
+        previousScalpData = { futures: [], spot: [] }; // ← ДОБАВЛЕНО
         if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
         await new Promise(resolve => setTimeout(resolve, 150));
