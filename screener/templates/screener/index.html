@@ -526,9 +526,15 @@
                     <div style="margin-top:12px; padding:10px; background:rgba(240, 185, 11, 0.1); border-radius:6px; border:1px solid rgba(240, 185, 11, 0.3);">
                         <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">ℹ️ Цветовая схема:</div>
                         <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
-                            <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность с временем жизни<br>
-                            <span style="color:#fbbf24;">📊 Label</span> — SC объём [время]
+                            <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность до 500K<br>
+                            <span style="color:#ba55d3;">🟣 Фиолетовый</span> — плотность от 500K<br>
                         </div>
+                    </div>
+                    <div style="margin-top:12px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db;">
+                            <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <span>Показывать гистограмму объёма</span>
+                        </label>
                     </div>
                 </div>
             </div>
@@ -589,8 +595,8 @@
     let densityLines = [];
     let densityEnabled = false;
     let densityMarkets = { future: false, spot: false };
-    let densityMinVolumeFuture = 50000;  // Было 50000
-    let densityMinVolumeSpot = 10000;    // Было 10000
+    let densityMinVolumeFuture = 50000;
+    let densityMinVolumeSpot = 10000;
     let densityUpdateTimer = null;
     let previousDensities = { future: [], spot: [] };
 
@@ -598,9 +604,16 @@
     let scalpLines = [];
     let scalpEnabled = false;
     let scalpMarkets = { future: false, spot: false };
-    let scalpMinVolumeFuture = 200000;   // Было 50000
-    let scalpMinVolumeSpot = 100000;     // Было 10000
+    let scalpMinVolumeFuture = 200000;
+    let scalpMinVolumeSpot = 100000;
     let scalpUpdateTimer = null;
+
+    // ===== Гистограмма объёма =====
+    let volumeHistogramEnabled = true;
+    const savedVolumeHistogram = localStorage.getItem('volumeHistogramEnabled');
+    if (savedVolumeHistogram !== null) {
+        volumeHistogramEnabled = savedVolumeHistogram === 'true';
+    }
 
     // Загружаем сохранённые настройки RECON
     const savedFutureVol = localStorage.getItem('densityMinVolumeFuture');
@@ -625,20 +638,16 @@
     const safeTime = (t) => t > 10000000000 ? Math.floor(t / 1000) : Math.floor(t);
     const getNatrClass = (val) => val > 1.0 ? 'natr-high' : val > 0.3 ? 'natr-mid' : 'natr-low';
 
-    // Форматирование времени жизни плотности
-    // Форматирование времени жизни плотности
-        function formatAge(seconds) {
-            const totalMinutes = Math.floor(seconds / 60);
-            const hours = Math.floor(totalMinutes / 60);
-            const mins = totalMinutes % 60;
+    function formatAge(seconds) {
+        const totalMinutes = Math.floor(seconds / 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
 
-            if (hours > 0) {
-                // Более 1 часа — показываем часы и минуты
-                return `${hours}ч ${mins}м`;
-            }
-            // Менее 1 часа — только минуты
-            return `${mins}м`;
+        if (hours > 0) {
+            return `${hours}ч ${mins}м`;
         }
+        return `${mins}м`;
+    }
 
     els.tradesThresholdSlider.addEventListener('input', (e) => {
         currentThreshold = parseInt(e.target.value);
@@ -661,7 +670,6 @@
             }
         });
     });
-
 
     async function loadAllData() {
         try {
@@ -826,6 +834,9 @@
         document.getElementById('scalpMinVolumeFuture').value = scalpMinVolumeFuture;
         document.getElementById('scalpMinVolumeSpot').value = scalpMinVolumeSpot;
 
+        // Гистограмма
+        document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
+
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
             soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
@@ -836,12 +847,11 @@
         modal.show();
     }
 
-        function applySettings() {
+    function applySettings() {
         // ===== RECON настройки =====
         const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
         const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
 
-        // Валидация с Math.max — не меньше минимума
         const reconMinVolumeFutureNew = Math.max(50000, parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000);
         const reconMinVolumeSpotNew = Math.max(10000, parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000);
 
@@ -857,7 +867,6 @@
         const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
         const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
 
-        // Валидация с Math.max — не меньше минимума
         const scalpMinVolumeFutureNew = Math.max(200000, parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000);
         const scalpMinVolumeSpotNew = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000);
 
@@ -868,6 +877,16 @@
 
         localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
         localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
+
+        // ===== Гистограмма объёма =====
+        volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
+        localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
+
+        if (volumeSeries) {
+            volumeSeries.applyOptions({
+                visible: volumeHistogramEnabled
+            });
+        }
 
         // Кнопка настроек
         const btn = document.getElementById('settingsBtn');
@@ -949,7 +968,6 @@
         els.tradesOverlayBody.scrollTop = els.tradesOverlayBody.scrollHeight;
     }
 
-    // ===== RECON функции (без изменений) =====
     async function loadDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
 
@@ -1019,12 +1037,12 @@
             data.forEach(d => {
                const line = candleSeries.createPriceLine({
                     price: d.price,
-                    color: 'rgba(255, 255, 255, 0.5)',  // Белая линия
+                    color: 'rgba(255, 255, 255, 0.5)',
                     lineWidth: 1,
                     lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true,
-                    axisLabelColor: '#ffffff',  // Белый текст
-                    axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',  // Серый фон для контраста
+                    axisLabelColor: '#ffffff',
+                    axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
                     title: `${market === 'future' ? 'BI-F' : 'BI-S'} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
                 });
                 densityLines.push(line);
@@ -1047,68 +1065,65 @@
             if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
         }, 3000);
     }
-            // Форматирование объёма для отображения
-        function formatVolumeText(volume) {
-            if (volume >= 1000000) {
-                return `${(volume / 1000000).toFixed(2)}M`;
-            } else if (volume >= 1000) {
-                return `${(volume / 1000).toFixed(1)}K`;
-            }
-            return `${volume.toFixed(0)}`;
+
+    function formatVolumeText(volume) {
+        if (volume >= 1000000) {
+            return `${(volume / 1000000).toFixed(2)}M`;
+        } else if (volume >= 1000) {
+            return `${(volume / 1000).toFixed(1)}K`;
         }
-    // ===== Scalp функции (новые) =====
+        return `${volume.toFixed(0)}`;
+    }
+
     async function loadScalpDensities(symbol) {
-    if (!scalpEnabled || !candleSeries) return;
+        if (!scalpEnabled || !candleSeries) return;
 
-    try {
-        const minVol = scalpMinVolumeFuture;
-        const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}`);
-        if (!res.ok) return;
-        const data = await res.json();
+        try {
+            const minVol = scalpMinVolumeFuture;
+            const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}`);
+            if (!res.ok) return;
+            const data = await res.json();
 
-        clearScalpLines();
+            clearScalpLines();
 
-        const densities = data.densities || [];
+            const densities = data.densities || [];
 
-        densities.forEach(d => {
-            const ageSeconds = d.age_seconds || 0;
-            const ageText = formatAge(ageSeconds);
-            const volumeText = formatVolumeText(d.volume);
+            densities.forEach(d => {
+                const ageSeconds = d.age_seconds || 0;
+                const ageText = formatAge(ageSeconds);
+                const volumeText = formatVolumeText(d.volume);
 
-            const prefix = 'BI-F';
+                const prefix = 'BI-F';
 
-            // Определяем цвет по объёму
-            let lineColor, bgColor;
-            const volumeNum = parseFloat(d.volume) || 0;
+                let lineColor, bgColor;
+                const volumeNum = parseFloat(d.volume) || 0;
 
-            if (volumeNum < 500000) {
-                // До 500K — жёлтый
-                lineColor = 'rgba(251, 191, 36, 0.9)';  // Жёлтый как Bitcoin
-                bgColor = 'rgba(251, 191, 36, 0.9)';
-            } else {
-                // Более 500K — фиолетовый
-                lineColor = 'rgba(186, 85, 211, 0.9)';  // MediumPurple
-                bgColor = 'rgba(186, 85, 211, 0.9)';
-            }
+                if (volumeNum < 500000) {
+                    lineColor = 'rgba(251, 191, 36, 0.9)';
+                    bgColor = 'rgba(251, 191, 36, 0.9)';
+                } else {
+                    lineColor = 'rgba(186, 85, 211, 0.9)';
+                    bgColor = 'rgba(186, 85, 211, 0.9)';
+                }
 
-            const line = candleSeries.createPriceLine({
-                price: d.price,
-                color: lineColor,
-                lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Solid,
-                axisLabelVisible: true,
-                axisLabelColor: '#000000',
-                axisLabelBackgroundColor: bgColor,
-                title: `${prefix} ${volumeText} ${ageText}`
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: lineColor,
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    axisLabelColor: '#000000',
+                    axisLabelBackgroundColor: bgColor,
+                    title: `${prefix} ${volumeText} ${ageText}`
+                });
+
+                scalpLines.push(line);
             });
 
-            scalpLines.push(line);
-        });
-
-    } catch (err) {
-        console.error('Scalp load error:', err);
+        } catch (err) {
+            console.error('Scalp load error:', err);
+        }
     }
-}
 
     function clearScalpLines() {
         if (!candleSeries) return;
@@ -1153,7 +1168,6 @@
     }
 
     function closeChart() {
-        // Очистка RECON
         clearDensityLines();
         if (densityUpdateTimer) {
             clearInterval(densityUpdateTimer);
@@ -1161,7 +1175,6 @@
         }
         previousDensities = { future: [], spot: [] };
 
-        // Очистка Scalp
         clearScalpLines();
         if (scalpUpdateTimer) {
             clearInterval(scalpUpdateTimer);
@@ -1203,11 +1216,9 @@
             wsTrades.close(); wsTrades = null;
         }
 
-        // Очистка RECON
         clearDensityLines();
         if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
 
-        // Очистка Scalp
         clearScalpLines();
         if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
@@ -1256,6 +1267,13 @@
                 visible: false,
                 scaleMargins: { top: 0.85, bottom: 0 },
             });
+
+            // Применяем видимость гистограммы из настроек
+            if (volumeSeries) {
+                volumeSeries.applyOptions({
+                    visible: volumeHistogramEnabled
+                });
+            }
         } catch (e) {
             console.error('Chart init error:', e);
             return;
@@ -1269,10 +1287,7 @@
             startTradesStream(symbol);
         }
 
-        // Запуск RECON
         if (densityEnabled) startDensityUpdates(symbol);
-
-        // Запуск Scalp
         if (scalpEnabled) startScalpUpdates(symbol);
     }
 
