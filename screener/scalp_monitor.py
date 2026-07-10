@@ -78,10 +78,13 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures'):
     """Получает топ монет для указанного рынка"""
     log(f"🔥 get_top_symbols() СТАРТ для {market}")
     try:
+        # Маппинг для CCXT
+        ccxt_market = 'future' if market == 'futures' else 'spot'
+
         exchange = ccxt.binance({
             'enableRateLimit': True,
             'timeout': 10000,
-            'options': {'defaultType': market}
+            'options': {'defaultType': ccxt_market}  # ← ИСПРАВЛЕНО
         })
         tickers = exchange.fetch_tickers()
 
