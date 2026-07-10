@@ -836,40 +836,38 @@
         modal.show();
     }
 
-    function applySettings() {
-        // ===== RECON настройки =====
         function applySettings() {
-    // ===== RECON настройки =====
-    const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
-    const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
+        // ===== RECON настройки =====
+        const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
+        const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
 
-    // Валидация с Math.max — не меньше минимума
-    const reconMinVolumeFutureNew = Math.max(50000, parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000);
-    const reconMinVolumeSpotNew = Math.max(10000, parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000);
+        // Валидация с Math.max — не меньше минимума
+        const reconMinVolumeFutureNew = Math.max(50000, parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000);
+        const reconMinVolumeSpotNew = Math.max(10000, parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000);
 
-    densityMarkets = { future: reconFutureChecked, spot: reconSpotChecked };
-    densityMinVolumeFuture = reconMinVolumeFutureNew;
-    densityMinVolumeSpot = reconMinVolumeSpotNew;
-    densityEnabled = reconFutureChecked || reconSpotChecked;
+        densityMarkets = { future: reconFutureChecked, spot: reconSpotChecked };
+        densityMinVolumeFuture = reconMinVolumeFutureNew;
+        densityMinVolumeSpot = reconMinVolumeSpotNew;
+        densityEnabled = reconFutureChecked || reconSpotChecked;
 
-    localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
-    localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
+        localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
+        localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
 
-    // ===== Scalp настройки =====
-    const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
-    const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
+        // ===== Scalp настройки =====
+        const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
+        const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
 
-    // Валидация с Math.max — не меньше минимума
-    const scalpMinVolumeFutureNew = Math.max(200000, parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000);
-    const scalpMinVolumeSpotNew = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000);
+        // Валидация с Math.max — не меньше минимума
+        const scalpMinVolumeFutureNew = Math.max(200000, parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000);
+        const scalpMinVolumeSpotNew = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000);
 
-    scalpMarkets = { future: scalpFutureChecked, spot: scalpSpotChecked };
-    scalpMinVolumeFuture = scalpMinVolumeFutureNew;
-    scalpMinVolumeSpot = scalpMinVolumeSpotNew;
-    scalpEnabled = scalpFutureChecked || scalpSpotChecked;
+        scalpMarkets = { future: scalpFutureChecked, spot: scalpSpotChecked };
+        scalpMinVolumeFuture = scalpMinVolumeFutureNew;
+        scalpMinVolumeSpot = scalpMinVolumeSpotNew;
+        scalpEnabled = scalpFutureChecked || scalpSpotChecked;
 
-    localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
-    localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
+        localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
+        localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
 
         // Кнопка настроек
         const btn = document.getElementById('settingsBtn');
