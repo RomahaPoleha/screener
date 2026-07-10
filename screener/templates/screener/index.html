@@ -838,32 +838,38 @@
 
     function applySettings() {
         // ===== RECON настройки =====
-        const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
-        const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
-        const reconMinVolumeFutureNew = parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000;
-        const reconMinVolumeSpotNew = parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000;
+        function applySettings() {
+    // ===== RECON настройки =====
+    const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
+    const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
 
-        densityMarkets = { future: reconFutureChecked, spot: reconSpotChecked };
-        densityMinVolumeFuture = reconMinVolumeFutureNew;
-        densityMinVolumeSpot = reconMinVolumeSpotNew;
-        densityEnabled = reconFutureChecked || reconSpotChecked;
+    // Валидация с Math.max — не меньше минимума
+    const reconMinVolumeFutureNew = Math.max(50000, parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000);
+    const reconMinVolumeSpotNew = Math.max(10000, parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000);
 
-        localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
-        localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
+    densityMarkets = { future: reconFutureChecked, spot: reconSpotChecked };
+    densityMinVolumeFuture = reconMinVolumeFutureNew;
+    densityMinVolumeSpot = reconMinVolumeSpotNew;
+    densityEnabled = reconFutureChecked || reconSpotChecked;
 
-        // ===== Scalp настройки =====
-        const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
-        const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
-        const scalpMinVolumeFutureNew = parseInt(document.getElementById('scalpMinVolumeFuture').value) || 50000;
-        const scalpMinVolumeSpotNew = parseInt(document.getElementById('scalpMinVolumeSpot').value) || 10000;
+    localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
+    localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
 
-        scalpMarkets = { future: scalpFutureChecked, spot: scalpSpotChecked };
-        scalpMinVolumeFuture = scalpMinVolumeFutureNew;
-        scalpMinVolumeSpot = scalpMinVolumeSpotNew;
-        scalpEnabled = scalpFutureChecked || scalpSpotChecked;
+    // ===== Scalp настройки =====
+    const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
+    const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
 
-        localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
-        localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
+    // Валидация с Math.max — не меньше минимума
+    const scalpMinVolumeFutureNew = Math.max(200000, parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000);
+    const scalpMinVolumeSpotNew = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000);
+
+    scalpMarkets = { future: scalpFutureChecked, spot: scalpSpotChecked };
+    scalpMinVolumeFuture = scalpMinVolumeFutureNew;
+    scalpMinVolumeSpot = scalpMinVolumeSpotNew;
+    scalpEnabled = scalpFutureChecked || scalpSpotChecked;
+
+    localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
+    localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
 
         // Кнопка настроек
         const btn = document.getElementById('settingsBtn');
@@ -1043,7 +1049,15 @@
             if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
         }, 3000);
     }
-
+            // Форматирование объёма для отображения
+        function formatVolumeText(volume) {
+            if (volume >= 1000000) {
+                return `${(volume / 1000000).toFixed(2)}M`;
+            } else if (volume >= 1000) {
+                return `${(volume / 1000).toFixed(1)}K`;
+            }
+            return `${volume.toFixed(0)}`;
+        }
     // ===== Scalp функции (новые) =====
     async function loadScalpDensities(symbol) {
     if (!scalpEnabled || !candleSeries) return;
@@ -1061,7 +1075,7 @@
         densities.forEach(d => {
             const ageSeconds = d.age_seconds || 0;
             const ageText = formatAge(ageSeconds);
-            const volumeText = d.volume >= 1000 ? `${(d.volume/1000).toFixed(1)}K` : `${d.volume.toFixed(0)}`;
+            const volumeText = formatVolumeText(d.volume);
 
             const prefix = 'BI-F';
 
