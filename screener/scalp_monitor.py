@@ -1,6 +1,6 @@
 """
 Scalp Monitor — мониторинг плотностей в реальном времени
-WebSocket + Django cache. Только Futures. Топ-100.
+WebSocket + Django cache. Futures + Spot. Топ-100.
 Асинхронная обработка через очередь.
 """
 import json
@@ -29,6 +29,13 @@ CACHE_TTL = 900
 
 # Максимальный размер очереди сообщений
 MAX_QUEUE_SIZE = 50000
+
+# URLs для разных рынков
+FUTURES_WS_URL = "wss://fstream.binance.com/ws"
+FUTURES_REST_URL = "https://fapi.binance.com/fapi/v1/depth"
+
+SPOT_WS_URL = "wss://stream.binance.com:9443/ws"
+SPOT_REST_URL = "https://api.binance.com/api/v3/depth"
 
 # Настройка логов
 LOG_DIR = '/app/data'
@@ -67,13 +74,14 @@ def is_valid_symbol(symbol):
     return True
 
 
-def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
-    log(f"🔥 get_top_symbols() СТАРТ")
+def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures'):
+    """Получает топ монет для указанного рынка"""
+    log(f"🔥 get_top_symbols() СТАРТ для {market}")
     try:
         exchange = ccxt.binance({
             'enableRateLimit': True,
             'timeout': 10000,
-            'options': {'defaultType': 'future'}
+            'options': {'defaultType': market}
         })
         tickers = exchange.fetch_tickers()
 
@@ -96,59 +104,89 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT):
         symbols_with_volume.sort(key=lambda x: x[1], reverse=True)
         symbols = [s[0] for s in symbols_with_volume[:limit]]
 
-        log(f"✅ Топ-{limit}: найдено {len(symbols)} монет")
+        log(f"✅ {market} Топ-{limit}: найдено {len(symbols)} монет")
         return symbols
 
     except Exception as e:
-        log(f"❌ Ошибка в get_top_symbols(): {e}")
+        log(f"❌ Ошибка в get_top_symbols({market}): {e}")
         log(traceback.format_exc())
         return []
 
 
-# Глобальное состояние
-order_books = {}
-density_timestamps = {}
-order_books_lock = threading.Lock()
-symbols = []
+# Глобальное состояние для Futures
+futures_order_books = {}
+futures_density_timestamps = {}
+futures_order_books_lock = threading.Lock()
+futures_symbols = []
+futures_message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
+
+# Глобальное состояние для Spot
+spot_order_books = {}
+spot_density_timestamps = {}
+spot_order_books_lock = threading.Lock()
+spot_symbols = []
+spot_message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
+
 shutdown_event = threading.Event()
-message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
 last_sync_time = {}
 
-def init_order_book(symbol):
+
+def init_order_book(symbol, market='futures'):
+    """Инициализация стакана для конкретного рынка"""
     try:
-        url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}USDT&limit=1000"
+        if market == 'futures':
+            url = f"{FUTURES_REST_URL}?symbol={symbol}USDT&limit=1000"
+            order_books = futures_order_books
+            timestamps = futures_density_timestamps
+            lock = futures_order_books_lock
+        else:
+            url = f"{SPOT_REST_URL}?symbol={symbol}USDT&limit=1000"
+            order_books = spot_order_books
+            timestamps = spot_density_timestamps
+            lock = spot_order_books_lock
+
         res = requests.get(url, timeout=10)
         if not res.ok:
-            log(f"⚠️ {symbol}: HTTP {res.status_code}")
+            log(f"⚠️ {market} {symbol}: HTTP {res.status_code}")
             return False
 
         data = res.json()
         bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
         asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
 
-        with order_books_lock:
+        with lock:
             order_books[symbol] = {'bids': bids, 'asks': asks}
-            density_timestamps[symbol] = {}
+            timestamps[symbol] = {}
 
-        sync_to_cache(symbol)
+        sync_to_cache(symbol, market)
 
-        log(f"✅ Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
+        log(f"✅ {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
         return True
 
     except Exception as e:
-        log(f"❌ init_order_book({symbol}): {e}")
+        log(f"❌ init_order_book({market} {symbol}): {e}")
         return False
 
 
-def sync_to_cache(symbol):
+def sync_to_cache(symbol, market='futures'):
+    """Синхронизация стакана в Redis"""
     try:
-        with order_books_lock:
+        if market == 'futures':
+            order_books = futures_order_books
+            timestamps = futures_density_timestamps
+            lock = futures_order_books_lock
+        else:
+            order_books = spot_order_books
+            timestamps = spot_density_timestamps
+            lock = spot_order_books_lock
+
+        with lock:
             book = order_books.get(symbol, {})
-            timestamps = density_timestamps.get(symbol, {})
+            ts = timestamps.get(symbol, {})
             if not book:
                 return
 
-        key = f"scalp:{symbol}"
+        key = f"scalp:{market}:{symbol}"
         now = time.time()
 
         densities = []
@@ -160,57 +198,68 @@ def sync_to_cache(symbol):
                 if volume < GLOBAL_MIN_VOLUME:
                     continue
 
-                if price in timestamps:
-                    age = now - timestamps[price]
+                if price in ts:
+                    age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
                 else:
-                    timestamps[price] = now
+                    ts[price] = now
                     continue
 
                 densities.append({
                     'price': price,
                     'volume': volume,
                     'side': side_name,
-                    'timestamp': timestamps[price]
+                    'timestamp': ts[price]
                 })
 
         # Логируем для BTC и ETH
         if symbol in ['BTC', 'ETH']:
-            log(f"📊 sync_to_cache({symbol}): {len(densities)} плотностей, всего уровней: {len(book.get('bids', {})) + len(book.get('asks', {}))}")
+            log(f"📊 {market} sync_to_cache({symbol}): {len(densities)} плотностей, всего уровней: {len(book.get('bids', {})) + len(book.get('asks', {}))}")
 
         cache.set(key, densities, CACHE_TTL)
 
-        with order_books_lock:
-            density_timestamps[symbol] = timestamps
+        with lock:
+            timestamps[symbol] = ts
 
     except Exception as e:
-        log(f"❌ sync_to_cache({symbol}): {e}")
+        log(f"❌ sync_to_cache({market} {symbol}): {e}")
         log(traceback.format_exc())
 
 
-def update_order_book(symbol, bids_delta, asks_delta):
+def update_order_book(symbol, bids_delta, asks_delta, market='futures'):
+    """Обновление стакана данными из WebSocket"""
     global last_sync_time
 
     try:
+        if market == 'futures':
+            order_books = futures_order_books
+            timestamps = futures_density_timestamps
+            lock = futures_order_books_lock
+        else:
+            order_books = spot_order_books
+            timestamps = spot_density_timestamps
+            lock = spot_order_books_lock
+
         # Логируем первые 5 вызовов для каждой монеты
         if not hasattr(update_order_book, 'call_counts'):
             update_order_book.call_counts = {}
 
-        if symbol not in update_order_book.call_counts:
-            update_order_book.call_counts[symbol] = 0
-        update_order_book.call_counts[symbol] += 1
+        key = f"{market}:{symbol}"
+        if key not in update_order_book.call_counts:
+            update_order_book.call_counts[key] = 0
+        update_order_book.call_counts[key] += 1
 
-        if update_order_book.call_counts[symbol] <= 3:
-            log(f"🔄 update_order_book({symbol}) вызов #{update_order_book.call_counts[symbol]}: {len(bids_delta)} bids, {len(asks_delta)} asks")
+        if update_order_book.call_counts[key] <= 3:
+            log(f"🔄 {market} update_order_book({symbol}) вызов #{update_order_book.call_counts[key]}: {len(bids_delta)} bids, {len(asks_delta)} asks")
 
-        with order_books_lock:
+        with lock:
             if symbol not in order_books:
-                log(f"⚠️ update_order_book({symbol}): нет в order_books")
+                log(f"⚠️ {market} update_order_book({symbol}): нет в order_books")
                 return
 
             book = order_books[symbol]
-            timestamps = density_timestamps.get(symbol, {})
+            ts = timestamps.get(symbol, {})
             changed = False
 
             for price_str, qty_str in bids_delta:
@@ -220,13 +269,13 @@ def update_order_book(symbol, bids_delta, asks_delta):
                 if qty == 0:
                     if price in book['bids']:
                         del book['bids'][price]
-                        if price in timestamps:
-                            del timestamps[price]
+                        if price in ts:
+                            del ts[price]
                         changed = True
                 else:
                     book['bids'][price] = qty
-                    if price not in timestamps:
-                        timestamps[price] = time.time()
+                    if price not in ts:
+                        ts[price] = time.time()
                     changed = True
 
             for price_str, qty_str in asks_delta:
@@ -236,35 +285,40 @@ def update_order_book(symbol, bids_delta, asks_delta):
                 if qty == 0:
                     if price in book['asks']:
                         del book['asks'][price]
-                        if price in timestamps:
-                            del timestamps[price]
+                        if price in ts:
+                            del ts[price]
                         changed = True
                 else:
                     book['asks'][price] = qty
-                    if price not in timestamps:
-                        timestamps[price] = time.time()
+                    if price not in ts:
+                        ts[price] = time.time()
                     changed = True
 
         if changed:
             # Rate limiting: не чаще раза в 3 секунды
             now = time.time()
-            if symbol not in last_sync_time or (now - last_sync_time[symbol]) >= 3:
-                sync_to_cache(symbol)
-                last_sync_time[symbol] = now
+            if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
+                sync_to_cache(symbol, market)
+                last_sync_time[key] = now
                 if symbol == 'BTC':
-                    log(f"✅ update_order_book({symbol}): changed=True, вызван sync_to_cache")
+                    log(f"✅ {market} update_order_book({symbol}): changed=True, вызван sync_to_cache")
             else:
-                if symbol == 'BTC' and update_order_book.call_counts[symbol] <= 10:
-                    log(f"⏱️ update_order_book({symbol}): пропуск sync_to_cache (слишком часто)")
+                if symbol == 'BTC' and update_order_book.call_counts[key] <= 10:
+                    log(f"⏱️ {market} update_order_book({symbol}): пропуск sync_to_cache (слишком часто)")
 
     except Exception as e:
-        log(f"❌ update_order_book({symbol}): {e}")
+        log(f"❌ update_order_book({market} {symbol}): {e}")
         log(traceback.format_exc())
 
 
-def process_message_queue():
-    """Отдельный поток для обработки очереди сообщений"""
-    log("🔄 Процессор очереди сообщений запущен")
+def process_message_queue(market='futures'):
+    """Обработка очереди сообщений для конкретного рынка"""
+    log(f"🔄 {market} Процессор очереди сообщений запущен")
+
+    if market == 'futures':
+        message_queue = futures_message_queue
+    else:
+        message_queue = spot_message_queue
 
     while not shutdown_event.is_set():
         try:
@@ -280,7 +334,7 @@ def process_message_queue():
                 bids = stream_data.get('b', [])
                 asks = stream_data.get('a', [])
 
-            # Формат 2: прямое сообщение (для /ws + SUBSCRIBE) — НАШ СЛУЧАЙ
+            # Формат 2: прямое сообщение (для /ws + SUBSCRIBE)
             elif 's' in data:
                 symbol = data.get('s', '')
                 if symbol.endswith('USDT'):
@@ -288,47 +342,48 @@ def process_message_queue():
                 bids = data.get('b', [])
                 asks = data.get('a', [])
             else:
-                # Подтверждение подписки и прочие служебные сообщения
                 continue
 
             if bids or asks:
-                update_order_book(symbol, bids, asks)
+                update_order_book(symbol, bids, asks, market)
 
         except Empty:
             continue
         except Exception as e:
-            log(f"❌ Ошибка обработки сообщения: {e}")
+            log(f"❌ {market} Ошибка обработки сообщения: {e}")
             log(traceback.format_exc())
 
 
-def on_message(ws, message):
+def on_message(ws, message, market='futures'):
     """WebSocket только складывает сообщения в очередь"""
     try:
+        if market == 'futures':
+            message_queue = futures_message_queue
+        else:
+            message_queue = spot_message_queue
+
         # Логируем первые 5 сообщений
         if not hasattr(ws, 'message_count'):
             ws.message_count = 0
         ws.message_count += 1
 
         if ws.message_count <= 5:
-            log(f"📨 Сообщение #{ws.message_count}: {message[:200]}...")
+            log(f"📨 {market} Сообщение #{ws.message_count}: {message[:200]}...")
 
-        # Логируем каждые 1000 сообщений
         if ws.message_count % 1000 == 0:
-            log(f"📨 Обработано {ws.message_count} сообщений, очередь: {message_queue.qsize()}")
+            log(f"📨 {market} Обработано {ws.message_count} сообщений, очередь: {message_queue.qsize()}")
 
-        # Складываем в очередь (неблокирующе)
         try:
             message_queue.put_nowait(message)
         except:
-            # Очередь полная, пропускаем сообщение
             pass
 
     except Exception as e:
-        log(f"❌ on_message: {e}")
+        log(f"❌ {market} on_message: {e}")
 
 
-def on_error(ws, error):
-    log(f"❌ WebSocket ошибка: {error}")
+def on_error(ws, error, market='futures'):
+    log(f"❌ {market} WebSocket ошибка: {error}")
     log("🔄 Переподключение через 5 секунд...")
     time.sleep(5)
 
@@ -336,24 +391,27 @@ def on_error(ws, error):
         return
 
     try:
-        url = "wss://fstream.binance.com/ws"
+        if market == 'futures':
+            url = FUTURES_WS_URL
+        else:
+            url = SPOT_WS_URL
 
         new_ws = websocket.WebSocketApp(
             url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
+            on_open=lambda ws: on_open(ws, market),
+            on_message=lambda ws, msg: on_message(ws, msg, market),
+            on_error=lambda ws, err: on_error(ws, err, market),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
         )
         new_ws.symbols = ws.symbols
         new_ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
-        log(f"❌ Ошибка переподключения: {e}")
+        log(f"❌ {market} Ошибка переподключения: {e}")
 
 
-def on_close(ws, close_status_code, close_msg):
-    log(f"⚠️ WebSocket закрыт: code={close_status_code}, msg={close_msg}")
+def on_close(ws, close_status_code, close_msg, market='futures'):
+    log(f"⚠️ {market} WebSocket закрыт: code={close_status_code}, msg={close_msg}")
     log("🔄 Переподключение через 5 секунд...")
     time.sleep(5)
 
@@ -361,26 +419,27 @@ def on_close(ws, close_status_code, close_msg):
         return
 
     try:
-        url = "wss://fstream.binance.com/ws"
-
-        log(f" Переподключение WebSocket...")
+        if market == 'futures':
+            url = FUTURES_WS_URL
+        else:
+            url = SPOT_WS_URL
 
         new_ws = websocket.WebSocketApp(
             url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
+            on_open=lambda ws: on_open(ws, market),
+            on_message=lambda ws, msg: on_message(ws, msg, market),
+            on_error=lambda ws, err: on_error(ws, err, market),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
         )
         new_ws.symbols = ws.symbols
         new_ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
-        log(f"❌ Ошибка переподключения: {e}")
+        log(f"❌ {market} Ошибка переподключения: {e}")
 
 
-def on_open(ws):
-    log(f"✅ WebSocket открыт: {len(ws.symbols)} символов")
+def on_open(ws, market='futures'):
+    log(f"✅ {market} WebSocket открыт: {len(ws.symbols)} символов")
 
     streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
     subscribe_msg = {
@@ -389,89 +448,125 @@ def on_open(ws):
         "id": 1
     }
     ws.send(json.dumps(subscribe_msg))
-    log(f"✅ Подписка отправлена: {len(streams)} стримов")
+    log(f"✅ {market} Подписка отправлена: {len(streams)} стримов")
 
 
-
-def start_websocket(symbols_list):
+def start_websocket(symbols_list, market='futures'):
+    """Запуск WebSocket для конкретного рынка"""
     try:
-        url = "wss://fstream.binance.com/ws"
-        log(f"🔌 Подключение WebSocket для {len(symbols_list)} символов...")
+        if market == 'futures':
+            url = FUTURES_WS_URL
+        else:
+            url = SPOT_WS_URL
+
+        log(f"🔌 {market} Подключение WebSocket для {len(symbols_list)} символов...")
 
         ws = websocket.WebSocketApp(
             url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
+            on_open=lambda ws: on_open(ws, market),
+            on_message=lambda ws, msg: on_message(ws, msg, market),
+            on_error=lambda ws, err: on_error(ws, err, market),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
         )
         ws.symbols = symbols_list
 
-        log(f"🚀 Запуск ws.run_forever()...")
+        log(f"🚀 {market} Запуск ws.run_forever()...")
         ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
-        log(f"❌ Ошибка в start_websocket: {e}")
+        log(f"❌ {market} Ошибка в start_websocket: {e}")
         log(traceback.format_exc())
 
 
-
 def scalp_monitor_loop():
-    global symbols
+    """Основной цикл мониторинга"""
+    global futures_symbols, spot_symbols
 
     log("🚀 Scalp Monitor запущен (асинхронный)!")
     log(f"📝 Лог-файл: {LOG_FILE}")
     log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
-    log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет")
+    log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет для Futures и Spot")
     time.sleep(5)
 
-    # Запускаем процессор очереди сообщений
-    processor_thread = threading.Thread(
-        target=process_message_queue,
-        name='Queue-Processor',
+    # Запускаем процессоры очередей
+    futures_processor_thread = threading.Thread(
+        target=lambda: process_message_queue('futures'),
+        name='Futures-Queue-Processor',
         daemon=True
     )
-    processor_thread.start()
-    log(f"✅ Процессор очереди запущен")
+    futures_processor_thread.start()
+    log(f"✅ Futures процессор очереди запущен")
 
-    symbols = get_top_symbols(TOP_SYMBOLS_COUNT)
-    if not symbols:
+    spot_processor_thread = threading.Thread(
+        target=lambda: process_message_queue('spot'),
+        name='Spot-Queue-Processor',
+        daemon=True
+    )
+    spot_processor_thread.start()
+    log(f"✅ Spot процессор очереди запущен")
+
+    # Получаем топ монет для обоих рынков
+    futures_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'futures')
+    spot_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'spot')
+
+    if not futures_symbols and not spot_symbols:
         log("️ Нет символов для мониторинга")
         return
 
-    log(f"🔄 Инициализация стаканов для {len(symbols)} символов...")
-    for idx, symbol in enumerate(symbols, 1):
-        init_order_book(symbol)
-        time.sleep(0.05)
-        if idx % 20 == 0:
-            log(f"  Прогресс: {idx}/{len(symbols)}")
+    # Инициализация стаканов Futures
+    if futures_symbols:
+        log(f"🔄 Futures инициализация стаканов для {len(futures_symbols)} символов...")
+        for idx, symbol in enumerate(futures_symbols, 1):
+            init_order_book(symbol, 'futures')
+            time.sleep(0.05)
+            if idx % 20 == 0:
+                log(f"  Futures прогресс: {idx}/{len(futures_symbols)}")
+        log(f"✅ Futures все стаканы инициализированы")
 
-    log(f"✅ Все стаканы инициализированы")
+    # Инициализация стаканов Spot
+    if spot_symbols:
+        log(f"🔄 Spot инициализация стаканов для {len(spot_symbols)} символов...")
+        for idx, symbol in enumerate(spot_symbols, 1):
+            init_order_book(symbol, 'spot')
+            time.sleep(0.05)
+            if idx % 20 == 0:
+                log(f"  Spot прогресс: {idx}/{len(spot_symbols)}")
+        log(f"✅ Spot все стаканы инициализированы")
 
-    ws_thread = threading.Thread(
-        target=start_websocket,
-        args=(symbols,),
-        name='Scalp-WebSocket',
-        daemon=True
-    )
-    ws_thread.start()
-    log(f"✅ WebSocket поток запущен")
+    # Запуск WebSocket для Futures
+    if futures_symbols:
+        futures_ws_thread = threading.Thread(
+            target=lambda: start_websocket(futures_symbols, 'futures'),
+            name='Futures-WebSocket',
+            daemon=True
+        )
+        futures_ws_thread.start()
+        log(f"✅ Futures WebSocket поток запущен")
+
+    # Запуск WebSocket для Spot
+    if spot_symbols:
+        spot_ws_thread = threading.Thread(
+            target=lambda: start_websocket(spot_symbols, 'spot'),
+            name='Spot-WebSocket',
+            daemon=True
+        )
+        spot_ws_thread.start()
+        log(f"✅ Spot WebSocket поток запущен")
 
     heartbeat_counter = 0
-    empty_queue_count = 0  # ← Счетчик пустых очередей
+    empty_queue_count = 0
 
     while not shutdown_event.is_set():
         heartbeat_counter += 1
         if heartbeat_counter % 6 == 0:
-            qsize = message_queue.qsize()
-            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter}), очередь: {qsize}")
+            futures_qsize = futures_message_queue.qsize()
+            spot_qsize = spot_message_queue.qsize()
+            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter}), Futures очередь: {futures_qsize}, Spot очередь: {spot_qsize}")
 
-            # Если очередь пуста 3 раза подряд — WebSocket умер
-            if qsize == 0:
+            if futures_qsize == 0 and spot_qsize == 0:
                 empty_queue_count += 1
                 if empty_queue_count >= 3:
-                    log(f"⚠️ Очередь пуста {empty_queue_count} раз! Перезапуск WebSocket...")
-                    # Перезапуск произойдёт через on_close/on_error
+                    log(f"⚠️ Обе очереди пусты {empty_queue_count} раз!")
             else:
                 empty_queue_count = 0
 

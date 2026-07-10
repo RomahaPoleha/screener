@@ -138,14 +138,20 @@ def api_scalp(request, symbol):
     import time
 
     min_volume = int(request.GET.get('min_volume', 10000))
+    market = request.GET.get('market', 'futures')  # ← ДОБАВИТЬ
 
-    key = f"scalp:{symbol.upper()}"
+    # Валидация market
+    if market not in ['futures', 'spot']:
+        market = 'futures'
+
+    key = f"scalp:{market}:{symbol.upper()}"  # ← ИЗМЕНИТЬ КЛЮЧ
     data = cache.get(key)
 
     if not data:
         return JsonResponse({
             'symbol': symbol.upper(),
             'densities': [],
+            'market': market,
             'server_time': time.time()
         })
 
@@ -171,7 +177,7 @@ def api_scalp(request, symbol):
             'volume': volume,
             'side': side,
             'age_seconds': round(age_seconds, 1),
-            'market': 'future'
+            'market': market
         })
 
     densities.sort(key=lambda x: x['volume'], reverse=True)
@@ -179,6 +185,7 @@ def api_scalp(request, symbol):
     return JsonResponse({
         'symbol': symbol.upper(),
         'densities': densities[:50],
+        'market': market,
         'server_time': now
     })
 
