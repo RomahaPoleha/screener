@@ -359,7 +359,7 @@
     <span class="logo"> Screener</span>
     <div style="margin-left:auto; display:flex; gap:8px;">
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
-        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">💰 Крупные сделки</button>
+        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;"> Крупные сделки</button>
     </div>
 </div>
 
@@ -607,6 +607,7 @@
     let scalpMinVolumeFuture = 200000;
     let scalpMinVolumeSpot = 100000;
     let scalpUpdateTimer = null;
+    let isScalpLoading = false; // ← Блокировка повторного вызова
 
     // ===== Гистограмма объёма =====
     let volumeHistogramEnabled = true;
@@ -839,7 +840,7 @@
 
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
-            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
             soundBtnModal.classList.toggle('muted', !soundEnabled);
         }
 
@@ -1075,13 +1076,14 @@
         return `${volume.toFixed(0)}`;
     }
 
-        async function loadScalpDensities(symbol) {
-        if (!scalpEnabled || !candleSeries) return;
+    async function loadScalpDensities(symbol) {
+        // Блокировка повторного вызова
+        if (!scalpEnabled || !candleSeries || isScalpLoading) return;
+        isScalpLoading = true;
 
         try {
             clearScalpLines();
 
-            // Загружаем данные из обоих рынков если включены
             const marketsToLoad = [];
             if (scalpMarkets.future) marketsToLoad.push('futures');
             if (scalpMarkets.spot) marketsToLoad.push('spot');
@@ -1099,7 +1101,6 @@
                     const ageText = formatAge(ageSeconds);
                     const volumeText = formatVolumeText(d.volume);
 
-                    // Префикс зависит от рынка
                     const prefix = market === 'futures' ? 'BI-F' : 'BI-S';
 
                     let lineColor, bgColor;
@@ -1130,6 +1131,8 @@
 
         } catch (err) {
             console.error('Scalp load error:', err);
+        } finally {
+            isScalpLoading = false;
         }
     }
 
@@ -1276,7 +1279,6 @@
                 scaleMargins: { top: 0.85, bottom: 0 },
             });
 
-            // Применяем видимость гистограммы из настроек
             if (volumeSeries) {
                 volumeSeries.applyOptions({
                     visible: volumeHistogramEnabled
@@ -1500,7 +1502,7 @@
         const currentMinuteKey = now.getHours() * 60 + minutes;
         if (minutes === 55 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast('⏰ До нового часа 5 минут');
+            showHourToast(' До нового часа 5 минут');
             speak('До перехода на новый час осталось 5 минут');
         }
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
