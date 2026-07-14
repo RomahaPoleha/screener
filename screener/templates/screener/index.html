@@ -1371,59 +1371,41 @@
 }
 
     function handleChartClick(param) {
-    console.log(' [CLICK DEBUG] Начало функции');
-    console.log('   - isAlertModeEnabled:', isAlertModeEnabled);
-    console.log('   - candleSeries:', !!candleSeries);
-    console.log('   - chart:', !!chart);
-    console.log('   - param:', param);
+    console.log('🔴 [CLICK] Начало. param:', param);
 
     if (!isAlertModeEnabled) {
-        console.log('❌ [CLICK DEBUG] Стоп: Режим алерта выключен');
+        console.log('❌ [CLICK] Режим алерта выключен');
         return;
     }
 
     if (!candleSeries || !chart) {
-        console.log('❌ [CLICK DEBUG] Стоп: График не инициализирован');
-        console.log('   - candleSeries:', candleSeries);
-        console.log('   - chart:', chart);
+        console.log('❌ [CLICK] График не инициализирован');
         return;
     }
 
-    console.log('🟡 [CLICK DEBUG] Прошли проверки, вычисляем цену...');
-    console.log('   - param.price:', param.price);
-    console.log('   - param.point:', param.point);
-
-    // Пытаемся взять цену напрямую из param
-    let price = param.price;
-
-    if (!price || isNaN(price)) {
-        console.log(' [CLICK DEBUG] param.price не определён или NaN, вычисляем из Y-координаты...');
-
-        if (!param.point) {
-            console.log('❌ [CLICK DEBUG] param.point undefined, не можем вычислить цену!');
-            return;
-        }
-
-        console.log('   - param.point.y:', param.point.y);
-        console.log('   - candleSeries.priceScale():', candleSeries.priceScale());
-
-        try {
-            price = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
-            console.log('   - Результат coordinateToPrice:', price);
-        } catch (e) {
-            console.error(' [CLICK DEBUG] Ошибка при coordinateToPrice:', e);
-            return;
-        }
+    if (!param.point || typeof param.point.y !== 'number') {
+        console.log('❌ [CLICK] param.point.y не определён');
+        return;
     }
 
-    console.log('🟢 [CLICK DEBUG] Итоговая цена:', price);
+    console.log('🟡 [CLICK] Y-координата:', param.point.y);
+
+    // В LC v4 coordinateToPrice принимает строку 'right' или 'left', а не объект
+    let price;
+    try {
+        price = chart.coordinateToPrice(param.point.y, 'right');
+        console.log('🟢 [CLICK] Цена из координаты:', price);
+    } catch (e) {
+        console.error('❌ [CLICK] Ошибка coordinateToPrice:', e);
+        return;
+    }
 
     if (!price || isNaN(price) || price === null) {
-        console.log('❌ [CLICK DEBUG] Цена всё ещё невалидна, прерываем');
+        console.log('❌ [CLICK] Получена невалидная цена:', price);
         return;
     }
 
-    console.log('🔵 [CLICK DEBUG] Создаём линию...');
+    console.log('🔵 [CLICK] Создаю линию на цене:', price);
     try {
         const line = candleSeries.createPriceLine({
             price: price,
@@ -1436,16 +1418,14 @@
             title: `🔔 ${price.toFixed(currentPrecision)}`
         });
 
-        console.log('✅ [CLICK DEBUG] Линия создана успешно!', line);
+        console.log('✅ [CLICK] Линия создана!', line);
         alertLines.push(line);
 
-        // Выключаем режим
         toggleAlertMode();
-        console.log('✅ [CLICK DEBUG] Готово!');
+        console.log('✅ [CLICK] Готово!');
 
     } catch (e) {
-        console.error('❌ [CLICK DEBUG] Ошибка createPriceLine:', e);
-        console.error('   - Stack:', e.stack);
+        console.error('❌ [CLICK] Ошибка createPriceLine:', e);
     }
 }
 
