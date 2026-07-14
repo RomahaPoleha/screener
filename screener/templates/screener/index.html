@@ -267,7 +267,7 @@
         <div class="chart-area">
             <div class="drawing-tools-panel" id="drawingToolsPanel">
                 <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (CTRL+S)">📈 Трендовая</div>
-                <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (ALT+LEFT)">✏️ Карандаш</div>
+                <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (ALT+LEFT)">️ Карандаш</div>
                 <div class="tool-btn" id="rulerBtn" onclick="toggleRuler()" title="Линейка (Колесико)">📏 Линейка</div>
                 <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">🧲 Магнит</div>
                 <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (B)">🔔 Алерт</div>
@@ -291,7 +291,7 @@
         <div class="trades-overlay" id="tradesOverlay">
             <div class="trades-overlay-header">
                 <div class="trades-overlay-header-top">
-                    <h5>💰 Крупные сделки</h5>
+                    <h5> Крупные сделки</h5>
                     <button class="trades-overlay-close" onclick="closeTradesOverlay()">✕</button>
                 </div>
                 <div class="trades-threshold-row">
@@ -343,12 +343,12 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">⚙️ Настройки</h5>
+                <h5 class="modal-title">️ Настройки</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div class="modal-section">
-                    <div class="modal-section-title">🔊 Голосовое оповещение</div>
+                    <div class="modal-section-title"> Голосовое оповещение</div>
                     <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
                          Голосовое оповещение
                     </button>
@@ -359,28 +359,6 @@
                         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db; margin-bottom:8px;">
                             <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f0b90b; width:16px; height:16px;">
                             <span>Показывать панель инструментов</span>
-                        </label>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
-                            <input type="checkbox" id="magnetEnabledCheckbox" onclick="toggleMagnetFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
-                            <span>🧲 Магнит</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
-                            <input type="checkbox" id="alertModeEnabledCheckbox" onclick="toggleAlertModeFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
-                            <span>🔔 Режим алерта</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
-                            <input type="checkbox" id="trendLineEnabledCheckbox" onclick="toggleTrendLineFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
-                            <span>📈 Трендовая линия</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
-                            <input type="checkbox" id="pencilEnabledCheckbox" onclick="togglePencilFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
-                            <span>✏️ Карандаш</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
-                            <input type="checkbox" id="rulerEnabledCheckbox" onclick="toggleRulerFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
-                            <span>📏 Линейка</span>
                         </label>
                     </div>
                 </div>
@@ -731,7 +709,6 @@
         if (isMagnetEnabled) createMagnetIndicator();
         else removeMagnetIndicator();
     }
-    function toggleMagnetFromCheckbox() { toggleMagnet(); }
 
     function toggleAlertMode() {
         isAlertModeEnabled = !isAlertModeEnabled;
@@ -743,7 +720,6 @@
             clearSpecificDrawings('alerts'); // Исчезают при выключении
         }
     }
-    function toggleAlertModeFromCheckbox() { toggleAlertMode(); }
 
     function toggleTrendLine() {
         isTrendLineEnabled = !isTrendLineEnabled;
@@ -756,7 +732,6 @@
             clearSpecificDrawings('trendlines'); // Исчезают при выключении
         }
     }
-    function toggleTrendLineFromCheckbox() { toggleTrendLine(); }
 
     function togglePencil() {
         isPencilEnabled = !isPencilEnabled;
@@ -770,7 +745,6 @@
             clearSpecificDrawings('pencil'); // Исчезают при выключении
         }
     }
-    function togglePencilFromCheckbox() { togglePencil(); }
 
     function toggleRuler() {
         isRulerEnabled = !isRulerEnabled;
@@ -782,7 +756,6 @@
             clearSpecificDrawings('ruler');
         }
     }
-    function toggleRulerFromCheckbox() { toggleRuler(); }
 
     function clearAllDrawings() {
         clearSpecificDrawings('alerts');
@@ -898,7 +871,7 @@
             barsCount = Math.abs(Math.floor((t2 - t1) / tfSeconds));
         }
 
-        els.rulerMeasurement.textContent = `📏 ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)} | ${barsCount} баров`;
+        els.rulerMeasurement.textContent = ` ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)} | ${barsCount} баров`;
         els.rulerMeasurement.style.left = `${(rulerStart.x + rulerEnd.x) / 2 - 60}px`;
         els.rulerMeasurement.style.top = `${(rulerStart.y + rulerEnd.y) / 2 - 20}px`;
         els.rulerMeasurement.style.display = 'block';
@@ -973,11 +946,6 @@
         document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
 
         document.getElementById('showDrawingTools').checked = showDrawingTools;
-        document.getElementById('magnetEnabledCheckbox').checked = isMagnetEnabled;
-        document.getElementById('alertModeEnabledCheckbox').checked = isAlertModeEnabled;
-        document.getElementById('trendLineEnabledCheckbox').checked = isTrendLineEnabled;
-        document.getElementById('pencilEnabledCheckbox').checked = isPencilEnabled;
-        document.getElementById('rulerEnabledCheckbox').checked = isRulerEnabled;
 
         const btn = document.getElementById('soundToggleModal');
         btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
@@ -1277,7 +1245,7 @@
         }
         if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast('⏰ До нового часа 1 минута'); speak('Внимание, до перехода на новый час осталась 1 минута');
+            showHourToast(' До нового часа 1 минута'); speak('Внимание, до перехода на новый час осталась 1 минута');
         }
     }
     setInterval(checkHourTransition, 1000);
