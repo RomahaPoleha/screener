@@ -1305,98 +1305,110 @@
     }
 
     function updateMagnetIndicator(param) {
-        if (!isMagnetEnabled || !magnetIndicator || !param.point || !param.time) {
-            if (magnetIndicator) magnetIndicator.style.display = 'none';
-            return;
-        }
+    if (!isMagnetEnabled || !magnetIndicator) {
+        if (magnetIndicator) magnetIndicator.style.display = 'none';
+        return;
+    }
 
-        const candles = window.candleData || [];
-        if (candles.length === 0) return;
+    // Если курсор ушёл за пределы графика, скрываем индикатор
+    if (!param.point || !param.time) {
+        magnetIndicator.style.display = 'none';
+        return;
+    }
 
-        let nearestCandle = null;
-        let minTimeDiff = Infinity;
+    const candles = window.candleData || [];
+    if (candles.length === 0) return;
 
-        for (const candle of candles) {
-            const timeDiff = Math.abs(candle.time - param.time);
-            if (timeDiff < minTimeDiff) {
-                minTimeDiff = timeDiff;
-                nearestCandle = candle;
-            }
-        }
+    let nearestCandle = null;
+    let minTimeDiff = Infinity;
 
-        if (!nearestCandle) {
-            magnetIndicator.style.display = 'none';
-            return;
-        }
-
-        const priceAtCursor = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
-        if (priceAtCursor === null) {
-            magnetIndicator.style.display = 'none';
-            return;
-        }
-
-        const prices = {
-            'open': nearestCandle.open,
-            'high': nearestCandle.high,
-            'low': nearestCandle.low,
-            'close': nearestCandle.close
-        };
-
-        let nearestPoint = 'close';
-        let minPriceDiff = Infinity;
-
-        for (const [point, price] of Object.entries(prices)) {
-            const priceDiff = Math.abs(price - priceAtCursor);
-            if (priceDiff < minPriceDiff) {
-                minPriceDiff = priceDiff;
-                nearestPoint = point;
-            }
-        }
-
-        const magnetPrice = prices[nearestPoint];
-        const y = chart.priceToCoordinate(magnetPrice, candleSeries.priceScale());
-
-        if (y !== null) {
-            magnetIndicator.style.display = 'block';
-            magnetIndicator.style.left = `${param.point.x - 4}px`;
-            magnetIndicator.style.top = `${y - 4}px`;
+    for (const candle of candles) {
+        const timeDiff = Math.abs(candle.time - param.time);
+        if (timeDiff < minTimeDiff) {
+            minTimeDiff = timeDiff;
+            nearestCandle = candle;
         }
     }
+
+    if (!nearestCandle) {
+        magnetIndicator.style.display = 'none';
+        return;
+    }
+
+    // Получаем цену по Y-координате
+    const priceAtCursor = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
+    if (priceAtCursor === null) {
+        magnetIndicator.style.display = 'none';
+        return;
+    }
+
+    const prices = {
+        'open': nearestCandle.open,
+        'high': nearestCandle.high,
+        'low': nearestCandle.low,
+        'close': nearestCandle.close
+    };
+
+    let nearestPoint = 'close';
+    let minPriceDiff = Infinity;
+
+    for (const [point, price] of Object.entries(prices)) {
+        const priceDiff = Math.abs(price - priceAtCursor);
+        if (priceDiff < minPriceDiff) {
+            minPriceDiff = priceDiff;
+            nearestPoint = point;
+        }
+    }
+
+    const magnetPrice = prices[nearestPoint];
+    const y = chart.priceToCoordinate(magnetPrice, candleSeries.priceScale());
+
+    if (y !== null) {
+        magnetIndicator.style.display = 'block';
+        magnetIndicator.style.left = `${param.point.x - 4}px`;
+        magnetIndicator.style.top = `${y - 4}px`;
+    }
+}
 
     function handleChartClick(param) {
-        if (!isAlertModeEnabled || !candleSeries || !param.point) {
-            console.log('❌ Клик не обработан:', {
-                mode: isAlertModeEnabled,
-                series: !!candleSeries,
-                point: !!param.point
-            });
-            return;
-        }
+    console.log('👆 Raw Click param:', param); // Смотрим, что вообще приходит
 
-        const price = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
-
-        if (price === null || price === undefined) {
-            console.log('❌ Не удалось получить цену');
-            return;
-        }
-
-        console.log('✅ Алерт создан:', price.toFixed(2));
-
-        const line = candleSeries.createPriceLine({
-            price: price,
-            color: 'rgba(240, 185, 11, 0.8)',
-            lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed,
-            axisLabelVisible: true,
-            axisLabelColor: '#f0b90b',
-            axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.3)',
-            title: `🔔 ${price.toFixed(2)}`
-        });
-
-        alertLines.push(line);
-        localStorage.setItem('alertLines', JSON.stringify(alertLines.map(l => ({ price: l._price, options: l._options }))));
-        toggleAlertMode();
+    if (!isAlertModeEnabled) {
+        console.log('❌ Режим алерта выключен');
+        return;
     }
+    if (!candleSeries) {
+        console.log('❌ График (candleSeries) не инициализирован');
+        return;
+    }
+
+    // В LC v4 param.price содержит цену под курсором. Это надёжнее, чем param.point
+    const price = param.price;
+
+    if (!price) {
+        console.log('❌ Не удалось определить цену. Возможно, клик был вне области графика.');
+        return;
+    }
+
+    console.log('✅ Алерт создан на цене:', price);
+
+    const line = candleSeries.createPriceLine({
+        price: price,
+        color: 'rgba(240, 185, 11, 0.8)',
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        axisLabelColor: '#f0b90b',
+        axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.3)',
+        title: `🔔 ${price.toFixed(currentPrecision)}` // Используем точность графика
+    });
+
+    alertLines.push(line);
+    saveAlerts();
+
+    // Выключаем режим алерта после успешного создания
+    toggleAlertMode();
+}
 
     function updateWatermark() {
         if (currentSymbol && els.chartWatermark) {
