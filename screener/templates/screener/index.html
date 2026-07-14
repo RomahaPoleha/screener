@@ -106,7 +106,6 @@
             font-weight: 700;
         }
 
-        /* Панель инструментов слева */
         .drawing-tools-panel {
             position: absolute;
             left: 8px;
@@ -149,7 +148,6 @@
             box-shadow: 0 0 10px rgba(240, 185, 11, 0.5);
         }
 
-        /* Индикатор магнита */
         .magnet-indicator {
             position: absolute;
             width: 10px;
@@ -526,6 +524,19 @@
                     </button>
                 </div>
                 <div class="modal-section">
+                    <div class="modal-section-title">🎨 Инструменты графика</div>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
+                            <input type="checkbox" id="magnetEnabledCheckbox" onclick="toggleMagnetFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
+                            <span>🧲 Магнит (притягивание к свечам и алертам)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
+                            <input type="checkbox" id="alertModeEnabledCheckbox" onclick="toggleAlertModeFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
+                            <span>🔔 Режим алерта (клик для создания ценовых уровней)</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-section">
                     <div class="modal-section-title"> RECON — Сырой стакан</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
@@ -649,7 +660,7 @@
     let currentThreshold = 10000;
     let currentTF = '1m';
     let currentSymbol = '';
-    let lastCandlePrice = null; // Для отслеживания пересечения
+    let lastCandlePrice = null;
 
     let densityLines = [];
     let densityEnabled = false;
@@ -673,12 +684,11 @@
         volumeHistogramEnabled = savedVolumeHistogram === 'true';
     }
 
-    // ===== Рисовашки =====
     let isMagnetEnabled = false;
     let isAlertModeEnabled = false;
     let magnetIndicator = null;
     let alertLines = [];
-    let alertData = []; // Храним {price, line, active}
+    let alertData = [];
 
     const savedMagnetState = localStorage.getItem('magnetEnabled');
     if (savedMagnetState !== null) {
@@ -714,7 +724,6 @@
         return `${mins}м`;
     }
 
-    // ===== Звук алерта через Web Audio API =====
     let audioCtx = null;
     function playAlertSound() {
         try {
@@ -734,7 +743,6 @@
         }
     }
 
-    // ===== Toast для алерта =====
     function showPriceAlertToast(currentPrice, alertPrice, direction) {
         const toast = document.createElement('div');
         toast.className = 'hour-toast show';
@@ -756,7 +764,6 @@
         }, 5000);
     }
 
-    // ===== Проверка пересечения алертов =====
     function checkAlerts(currentPrice, prevPrice) {
         if (alertData.length === 0) return;
 
@@ -774,7 +781,6 @@
                 playAlertSound();
                 showPriceAlertToast(currentPrice, alertPrice, direction);
 
-                // Помечаем как сработавший (но не удаляем линию)
                 alert.active = false;
             }
         });
@@ -925,7 +931,6 @@
                     if (candleSeries && currentSymbol === symbol) {
                         candleSeries.update(candle);
 
-                        // ===== ПРОВЕРКА АЛЕРТОВ =====
                         if (alertData.length > 0) {
                             const prevPrice = lastCandlePrice !== null ? lastCandlePrice : candle.open;
                             checkAlerts(candle.close, prevPrice);
@@ -970,6 +975,9 @@
 
         document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
 
+        document.getElementById('magnetEnabledCheckbox').checked = isMagnetEnabled;
+        document.getElementById('alertModeEnabledCheckbox').checked = isAlertModeEnabled;
+
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
             soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
@@ -978,6 +986,14 @@
 
         const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
         modal.show();
+    }
+
+    function toggleMagnetFromCheckbox() {
+        toggleMagnet();
+    }
+
+    function toggleAlertModeFromCheckbox() {
+        toggleAlertMode();
     }
 
     function applySettings() {
@@ -1257,8 +1273,7 @@
         console.log('🗑️ Все рисунки очищены');
     }
 
-        function createMagnetIndicator() {
-        // ИСПРАВЛЕНО: используем els.chartWrapper вместо несуществующего chartWrapper
+    function createMagnetIndicator() {
         if (!chart || !els.chartWrapper) {
             console.warn('⚠️ [МАГНИТ] График или контейнер не готовы');
             return;
@@ -1279,9 +1294,6 @@
     }
 
     function updateMagnetIndicator(param) {
-        // Добавлен лог для отладки, чтобы видеть, что функция вызывается
-        // console.log('🟡 [МАГНИТ] Движение мыши. Включен:', isMagnetEnabled, 'Элемент существует:', !!magnetIndicator);
-
         if (!isMagnetEnabled || !magnetIndicator) {
             if (magnetIndicator) magnetIndicator.style.display = 'none';
             return;
@@ -1298,13 +1310,11 @@
             return;
         }
 
-        // Надёжно получаем время под курсором
         let cursorTime = param.time;
         if (!cursorTime && param.point.x !== undefined) {
             cursorTime = chart.timeScale().coordinateToTime(param.point.x);
         }
 
-        // Находим ближайшую свечу по времени
         let nearestCandle = null;
         let minTimeDiff = Infinity;
 
@@ -1325,14 +1335,12 @@
             return;
         }
 
-        // Получаем цену под курсором
         const priceAtCursor = candleSeries.coordinateToPrice(param.point.y);
         if (priceAtCursor === null || priceAtCursor === undefined) {
             magnetIndicator.style.display = 'none';
             return;
         }
 
-        // Собираем точки примагничивания (OHLC + Алерты)
         const magnetPoints = [
             { type: 'ohlc', price: nearestCandle.open, distance: Math.abs(nearestCandle.open - priceAtCursor) },
             { type: 'ohlc', price: nearestCandle.high, distance: Math.abs(nearestCandle.high - priceAtCursor) },
@@ -1350,11 +1358,9 @@
             });
         });
 
-        // Находим ближайшую точку по цене
         magnetPoints.sort((a, b) => a.distance - b.distance);
         const nearestPoint = magnetPoints[0];
 
-        // Вычисляем итоговые координаты для "примагничивания"
         const snapX = chart.timeScale().timeToCoordinate(nearestCandle.time);
         const snapY = candleSeries.priceToCoordinate(nearestPoint.price);
 
