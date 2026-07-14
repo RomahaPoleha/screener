@@ -1314,85 +1314,108 @@
     }
 
     function updateMagnetIndicator(param) {
-        if (!isMagnetEnabled || !magnetIndicator || !param.point || !param.time) return;
+    if (!isMagnetEnabled || !magnetIndicator || !param.point || !param.time) {
+        if (magnetIndicator) magnetIndicator.style.display = 'none';
+        return;
+    }
 
-        // Находим ближайшую свечу
-        const candles = window.candleData || [];
-        if (candles.length === 0) return;
+    // Находим ближайшую свечу
+    const candles = window.candleData || [];
+    if (candles.length === 0) return;
 
-        // Находим индекс свечи по времени
-        let nearestCandle = null;
-        let minTimeDiff = Infinity;
+    // Находим свечу по времени
+    let nearestCandle = null;
+    let minTimeDiff = Infinity;
 
-        for (const candle of candles) {
-            const timeDiff = Math.abs(candle.time - param.time);
-            if (timeDiff < minTimeDiff) {
-                minTimeDiff = timeDiff;
-                nearestCandle = candle;
-            }
-        }
-
-        if (!nearestCandle) return;
-
-        // Определяем ближайшую точку OHLC к текущей цене
-        const prices = {
-            'open': nearestCandle.open,
-            'high': nearestCandle.high,
-            'low': nearestCandle.low,
-            'close': nearestCandle.close
-        };
-
-        let nearestPoint = 'close';
-        let minPriceDiff = Infinity;
-
-        for (const [point, price] of Object.entries(prices)) {
-            const priceDiff = Math.abs(price - param.price);
-            if (priceDiff < minPriceDiff) {
-                minPriceDiff = priceDiff;
-                nearestPoint = point;
-            }
-        }
-
-        // Показываем индикатор на точке примагничивания
-        const magnetPrice = prices[nearestPoint];
-
-        // Конвертируем цену в координаты
-        const y = chart.priceToCoordinate(magnetPrice, candleSeries.priceScale());
-
-        if (y !== null) {
-            magnetIndicator.style.left = `${param.point.x}px`;
-            magnetIndicator.style.top = `${y - 4}px`; // Центрируем (8px / 2)
+    for (const candle of candles) {
+        const timeDiff = Math.abs(candle.time - param.time);
+        if (timeDiff < minTimeDiff) {
+            minTimeDiff = timeDiff;
+            nearestCandle = candle;
         }
     }
+
+    if (!nearestCandle) {
+        magnetIndicator.style.display = 'none';
+        return;
+    }
+
+    // Конвертируем Y координату в цену
+    const priceAtCursor = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
+    if (priceAtCursor === null) {
+        magnetIndicator.style.display = 'none';
+        return;
+    }
+
+    // Определяем ближайшую точку OHLC
+    const prices = {
+        'open': nearestCandle.open,
+        'high': nearestCandle.high,
+        'low': nearestCandle.low,
+        'close': nearestCandle.close
+    };
+
+    let nearestPoint = 'close';
+    let minPriceDiff = Infinity;
+
+    for (const [point, price] of Object.entries(prices)) {
+        const priceDiff = Math.abs(price - priceAtCursor);
+        if (priceDiff < minPriceDiff) {
+            minPriceDiff = priceDiff;
+            nearestPoint = point;
+        }
+    }
+
+    // Показываем индикатор
+    const magnetPrice = prices[nearestPoint];
+    const y = chart.priceToCoordinate(magnetPrice, candleSeries.priceScale());
+
+    if (y !== null) {
+        magnetIndicator.style.display = 'block';
+        magnetIndicator.style.left = `${param.point.x - 4}px`;
+        magnetIndicator.style.top = `${y - 4}px`;
+    }
+}
 
     // Обработка клика по графику для создания алерта
     function handleChartClick(param) {
-        if (!isAlertModeEnabled || !candleSeries || !param.point || !param.price) return;
-
-        const price = param.price;
-
-        // Создаём горизонтальную линию
-        const line = candleSeries.createPriceLine({
-            price: price,
-            color: 'rgba(240, 185, 11, 0.8)',
-            lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed,
-            axisLabelVisible: true,
-            axisLabelColor: '#f0b90b',
-            axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.3)',
-            title: `🔔 ${price.toFixed(2)}`
+    if (!isAlertModeEnabled || !candleSeries || !param.point) {
+        console.log('❌ Клик не обработан:', {
+            mode: isAlertModeEnabled,
+            series: !!candleSeries,
+            point: !!param.point
         });
-
-        alertLines.push(line);
-
-        // Сохраняем в localStorage
-        saveAlerts();
-
-        // Выключаем режим алерта
-        toggleAlertMode();
-
-        console.log(`🔔 Алерт создан на уровне ${price.toFixed(2)}`);
+        return;
     }
+
+    // Конвертируем Y координату в цену
+    const price = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
+
+    if (price === null || price === undefined) {
+        console.log('❌ Не удалось получить цену');
+        return;
+    }
+
+    console.log('✅ Алерт создан:', price.toFixed(2));
+
+    // Создаём горизонтальную линию
+    const line = candleSeries.createPriceLine({
+        price: price,
+        color: 'rgba(240, 185, 11, 0.8)',
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        axisLabelColor: '#f0b90b',
+        axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.3)',
+        title: `🔔 ${price.toFixed(2)}`
+    });
+
+    alertLines.push(line);
+    saveAlerts();
+
+    // Выключаем режим алерта
+    toggleAlertMode();
+}
 
     function saveAlerts() {
         // Упрощённое сохранение - просто количество алертов
@@ -1536,21 +1559,19 @@
                 });
             }
 
-            // Подписка на движение мыши (для магнита)
-            chart.subscribeCrosshairMove((param) => {
-                if (isMagnetEnabled) {
-                    updateMagnetIndicator(param);
-                }
-            });
+           // Подписка на движение мыши (для магнита)
+chart.subscribeCrosshairMove((param) => {
+    console.log('🖱️ Mouse move:', param);
+    if (isMagnetEnabled) {
+        updateMagnetIndicator(param);
+    }
+});
 
-            // Подписка на клик (для алертов)
-            chart.subscribeClick((param) => {
-                handleChartClick(param);
-            });
-        } catch (e) {
-            console.error('Chart init error:', e);
-            return;
-        }
+// Подписка на клик (для алертов)
+chart.subscribeClick((param) => {
+    console.log('👆 Click:', param);
+    handleChartClick(param);
+});
 
         await loadChartData(symbol, currentTF);
         startCandleWebSocket(symbol, currentTF);
