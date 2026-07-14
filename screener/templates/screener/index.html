@@ -1272,74 +1272,92 @@
         }
     }
 
-    function updateMagnetIndicator(param) {
+        function updateMagnetIndicator(param) {
+        // 1. Базовые проверки
         if (!isMagnetEnabled || !magnetIndicator) {
             if (magnetIndicator) magnetIndicator.style.display = 'none';
             return;
         }
-        if (!param.point || !param.time) {
+
+        // param.point существует, когда мышь над областью графика
+        if (!param || !param.point) {
             magnetIndicator.style.display = 'none';
             return;
         }
 
         const candles = window.candleData || [];
-        if (candles.length === 0) return;
+        if (candles.length === 0) {
+            magnetIndicator.style.display = 'none';
+            return;
+        }
 
-        // 1. Находим ближайшую свечу
+        // 2. Надёжно получаем время под курсором (даже если param.time === undefined)
+        let cursorTime = param.time;
+        if (!cursorTime && param.point.x !== undefined) {
+            cursorTime = chart.timeScale().coordinateToTime(param.point.x);
+        }
+
+        // 3. Находим ближайшую свечу по времени
         let nearestCandle = null;
         let minTimeDiff = Infinity;
+
         for (const candle of candles) {
-            const timeDiff = Math.abs(candle.time - param.time);
-            if (timeDiff < minTimeDiff) {
-                minTimeDiff = timeDiff;
-                nearestCandle = candle;
+            if (cursorTime) {
+                const timeDiff = Math.abs(candle.time - cursorTime);
+                if (timeDiff < minTimeDiff) {
+                    minTimeDiff = timeDiff;
+                    nearestCandle = candle;
+                }
+            } else {
+                // Фоллбэк: если время не определилось, берём последнюю свечу
+                nearestCandle = candles[candles.length - 1];
             }
         }
+
         if (!nearestCandle) {
             magnetIndicator.style.display = 'none';
             return;
         }
 
-        // 2. Получаем цену под курсором
+        // 4. Получаем цену под курсором
         const priceAtCursor = candleSeries.coordinateToPrice(param.point.y);
-        if (priceAtCursor === null) {
+        if (priceAtCursor === null || priceAtCursor === undefined) {
             magnetIndicator.style.display = 'none';
             return;
         }
 
-        // 3. Собираем точки примагничивания
-        const magnetPoints = [];
-
-        // OHLC свечи
-        magnetPoints.push(
+        // 5. Собираем точки примагничивания (OHLC + Алерты)
+        const magnetPoints = [
             { type: 'ohlc', price: nearestCandle.open, distance: Math.abs(nearestCandle.open - priceAtCursor) },
             { type: 'ohlc', price: nearestCandle.high, distance: Math.abs(nearestCandle.high - priceAtCursor) },
             { type: 'ohlc', price: nearestCandle.low, distance: Math.abs(nearestCandle.low - priceAtCursor) },
             { type: 'ohlc', price: nearestCandle.close, distance: Math.abs(nearestCandle.close - priceAtCursor) }
-        );
+        ];
 
-        // Линии алертов
         alertData.forEach((alert, index) => {
             if (!alert.active) return;
-            const alertPrice = alert.price;
             magnetPoints.push({
                 type: 'alert',
-                price: alertPrice,
-                distance: Math.abs(alertPrice - priceAtCursor),
+                price: alert.price,
+                distance: Math.abs(alert.price - priceAtCursor),
                 index: index
             });
         });
 
-        // 4. Находим ближайшую точку
+        // 6. Находим ближайшую точку по цене
         magnetPoints.sort((a, b) => a.distance - b.distance);
         const nearestPoint = magnetPoints[0];
 
-        // 5. Показываем индикатор
-        const y = candleSeries.priceToCoordinate(nearestPoint.price);
-        if (y !== null) {
+        // 7. Вычисляем итоговые координаты для "примагничивания"
+        // Привязываем X к времени свечи, а Y к цене точки (OHLC или алерт)
+        const snapX = chart.timeScale().timeToCoordinate(nearestCandle.time);
+        const snapY = candleSeries.priceToCoordinate(nearestPoint.price);
+
+        if (snapX !== null && snapY !== null) {
             magnetIndicator.style.display = 'block';
-            magnetIndicator.style.left = `${param.point.x - 5}px`;
-            magnetIndicator.style.top = `${y - 5}px`;
+            // Центрируем индикатор 10x10px (сдвигаем на 5px)
+            magnetIndicator.style.left = `${snapX - 5}px`;
+            magnetIndicator.style.top = `${snapY - 5}px`;
 
             // Цвет зависит от типа точки
             if (nearestPoint.type === 'alert') {
@@ -1347,6 +1365,8 @@
             } else {
                 magnetIndicator.classList.remove('alert-magnet');
             }
+        } else {
+            magnetIndicator.style.display = 'none';
         }
     }
 
