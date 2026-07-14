@@ -152,18 +152,20 @@
         /* Индикатор магнита */
         .magnet-indicator {
             position: absolute;
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             background: #22c55e;
             border-radius: 50%;
             pointer-events: none;
             z-index: 15;
             display: none;
-            box-shadow: 0 0 10px #22c55e;
+            box-shadow: 0 0 12px #22c55e;
+            transition: background 0.2s, box-shadow 0.2s;
         }
 
-        .magnet-indicator.active {
-            display: block;
+        .magnet-indicator.alert-magnet {
+            background: #f0b90b;
+            box-shadow: 0 0 12px #f0b90b;
         }
 
         .right-panel {
@@ -436,20 +438,13 @@
 <div class="main-layout">
     <div class="left-panel">
         <div class="chart-area">
-            <!-- Панель инструментов слева -->
             <div class="drawing-tools-panel">
-                <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит (примагничивание к свечам)">
-                    🧲 Магнит
-                </div>
-                <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (клик для создания)">
-                    🔔 Алерт
-                </div>
-                <div class="tool-btn" onclick="clearAllDrawings()" title="Очистить всё">
-                    🗑️ Очистить
-                </div>
+                <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">🧲 Магнит</div>
+                <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт"> Алерт</div>
+                <div class="tool-btn" onclick="clearAllDrawings()" title="Очистить">🗑️ Очистить</div>
             </div>
 
-            <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена"></div>
+            <div class="chart-title-bar" id="chart-title" title="Копировать монету"></div>
             <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
@@ -499,7 +494,7 @@
                 <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
             </div>
             <div class="filter-section">
-                <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
+                <button class="reset-filters-btn" onclick="resetFilters()"> Сбросить фильтры</button>
             </div>
         </div>
         <div class="right-panel-header">Монеты (<span id="coinsCount">0</span>)</div>
@@ -516,7 +511,6 @@
     </div>
 </div>
 
-<!-- Модальное окно настроек -->
 <div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
@@ -525,16 +519,14 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <!-- Секция: Голосовое оповещение -->
                 <div class="modal-section">
                     <div class="modal-section-title">🔊 Голосовое оповещение</div>
                     <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
                          Голосовое оповещение
                     </button>
                 </div>
-                <!-- Секция: RECON -->
                 <div class="modal-section">
-                    <div class="modal-section-title">🔍 RECON — Сырой стакан</div>
+                    <div class="modal-section-title"> RECON — Сырой стакан</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
@@ -550,22 +542,17 @@
                     </div>
                     <div style="display:flex; gap:12px;">
                         <div style="flex:1;">
-                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                                Futures мин. объём (USDT):
-                            </label>
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Futures мин. объём (USDT):</label>
                             <input type="number" id="densityMinVolumeFuture" value="50000" min="50000" step="10000"
                                    style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
                         </div>
                         <div style="flex:1;">
-                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                                Spot мин. объём (USDT):
-                            </label>
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Spot мин. объём (USDT):</label>
                             <input type="number" id="densityMinVolumeSpot" value="10000" min="1000" step="10000"
                                    style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
                         </div>
                     </div>
                 </div>
-                <!-- Секция: Scalp -->
                 <div class="modal-section">
                     <div class="modal-section-title">🎯 Scalp — Мониторинг плотностей</div>
                     <div style="margin-bottom:12px;">
@@ -583,27 +570,23 @@
                     </div>
                     <div style="display:flex; gap:12px;">
                         <div style="flex:1;">
-                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                                Futures мин. объём (USDT):
-                            </label>
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Futures мин. объём (USDT):</label>
                             <input type="number" id="scalpMinVolumeFuture" value="200000" min="200000" step="10000"
                                    style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
                         </div>
                         <div style="flex:1;">
-                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">
-                                Spot мин. объём (USDT):
-                            </label>
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Spot мин. объём (USDT):</label>
                             <input type="number" id="scalpMinVolumeSpot" value="100000" min="100000" step="10000"
                                    style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
                         </div>
                     </div>
                     <div style="margin-top:12px; padding:10px; background:rgba(240, 185, 11, 0.1); border-radius:6px; border:1px solid rgba(240, 185, 11, 0.3);">
-                        <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">ℹ️ Цветовая схема:</div>
+                        <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">️ Цветовая схема:</div>
                         <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
                             <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность до 500K<br>
                             <span style="color:#ba55d3;">🟣 Фиолетовый</span> — плотность от 500K<br>
-                            <span style="color:#ffffff;">⚪ Белые линии</span> — RECON (сырой стакан)<br>
-                            <span style="color:#fbbf24;">📊 Label</span> — BI-F объём время (1ч 45м)
+                            <span style="color:#ffffff;"> Белые линии</span> — RECON<br>
+                            <span style="color:#fbbf24;">📊 Label</span> — BI-F объём время
                         </div>
                     </div>
                     <div style="margin-top:12px;">
@@ -666,8 +649,8 @@
     let currentThreshold = 10000;
     let currentTF = '1m';
     let currentSymbol = '';
+    let lastCandlePrice = null; // Для отслеживания пересечения
 
-    // ===== RECON настройки =====
     let densityLines = [];
     let densityEnabled = false;
     let densityMarkets = { future: false, spot: false };
@@ -676,7 +659,6 @@
     let densityUpdateTimer = null;
     let previousDensities = { future: [], spot: [] };
 
-    // ===== Scalp настройки =====
     let scalpLines = [];
     let scalpEnabled = false;
     let scalpMarkets = { future: false, spot: false };
@@ -685,18 +667,18 @@
     let scalpUpdateTimer = null;
     let isScalpLoading = false;
 
-    // ===== Гистограмма объёма =====
     let volumeHistogramEnabled = true;
     const savedVolumeHistogram = localStorage.getItem('volumeHistogramEnabled');
     if (savedVolumeHistogram !== null) {
         volumeHistogramEnabled = savedVolumeHistogram === 'true';
     }
 
-    // ===== Рисовашки и инструменты =====
+    // ===== Рисовашки =====
     let isMagnetEnabled = false;
     let isAlertModeEnabled = false;
     let magnetIndicator = null;
     let alertLines = [];
+    let alertData = []; // Храним {price, line, active}
 
     const savedMagnetState = localStorage.getItem('magnetEnabled');
     if (savedMagnetState !== null) {
@@ -728,11 +710,74 @@
         const totalMinutes = Math.floor(seconds / 60);
         const hours = Math.floor(totalMinutes / 60);
         const mins = totalMinutes % 60;
-
-        if (hours > 0) {
-            return `${hours}ч ${mins}м`;
-        }
+        if (hours > 0) return `${hours}ч ${mins}м`;
         return `${mins}м`;
+    }
+
+    // ===== Звук алерта через Web Audio API =====
+    let audioCtx = null;
+    function playAlertSound() {
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = 880;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + 0.5);
+        } catch(e) {
+            console.warn('Ошибка звука:', e);
+        }
+    }
+
+    // ===== Toast для алерта =====
+    function showPriceAlertToast(currentPrice, alertPrice, direction) {
+        const toast = document.createElement('div');
+        toast.className = 'hour-toast show';
+        toast.style.background = 'linear-gradient(135deg, #f0b90b 0%, #f59e0b 100%)';
+        toast.innerHTML = `
+            <div class="toast-icon">🔔</div>
+            <div class="toast-content">
+                <div class="toast-title">Алерт сработал!</div>
+                <div style="font-size:12px; margin-top:4px;">
+                    Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>
+                    Направление: ${direction}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 500);
+        }, 5000);
+    }
+
+    // ===== Проверка пересечения алертов =====
+    function checkAlerts(currentPrice, prevPrice) {
+        if (alertData.length === 0) return;
+
+        alertData.forEach((alert, index) => {
+            if (!alert.active) return;
+
+            const alertPrice = alert.price;
+            const crossedAbove = (prevPrice < alertPrice && currentPrice >= alertPrice);
+            const crossedBelow = (prevPrice > alertPrice && currentPrice <= alertPrice);
+
+            if (crossedAbove || crossedBelow) {
+                const direction = crossedAbove ? 'вверх ↑' : 'вниз ↓';
+                console.log(` Алерт сработал! Цена ${direction} пересекла ${alertPrice}`);
+
+                playAlertSound();
+                showPriceAlertToast(currentPrice, alertPrice, direction);
+
+                // Помечаем как сработавший (но не удаляем линию)
+                alert.active = false;
+            }
+        });
     }
 
     els.tradesThresholdSlider.addEventListener('input', (e) => {
@@ -832,13 +877,10 @@
         els.table.innerHTML = data.map(coin => {
             const isUp = coin.change >= 0;
             const natr = natrData[coin.symbol] || {};
-
             const n1 = natr.natr_1m30;
             const n5 = natr.natr_5m14;
-
             const n1Txt = (n1 !== undefined && n1 !== null) ? n1.toFixed(1) : '-';
             const n5Txt = (n5 !== undefined && n5 !== null) ? n5.toFixed(1) : '-';
-
             return `
                 <div class="coin-row" onclick="openChart('${coin.symbol}')">
                     <div class="coin-symbol">${coin.symbol}</div>
@@ -882,6 +924,14 @@
                     };
                     if (candleSeries && currentSymbol === symbol) {
                         candleSeries.update(candle);
+
+                        // ===== ПРОВЕРКА АЛЕРТОВ =====
+                        if (alertData.length > 0) {
+                            const prevPrice = lastCandlePrice !== null ? lastCandlePrice : candle.open;
+                            checkAlerts(candle.close, prevPrice);
+                            lastCandlePrice = candle.close;
+                        }
+
                         if (volumeSeries) {
                             volumeSeries.update({
                                 time: candle.time,
@@ -933,7 +983,6 @@
     function applySettings() {
         const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
         const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
-
         const reconMinVolumeFutureNew = Math.max(50000, parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000);
         const reconMinVolumeSpotNew = Math.max(10000, parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000);
 
@@ -947,7 +996,6 @@
 
         const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
         const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
-
         const scalpMinVolumeFutureNew = Math.max(200000, parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000);
         const scalpMinVolumeSpotNew = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000);
 
@@ -963,9 +1011,7 @@
         localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
 
         if (volumeSeries) {
-            volumeSeries.applyOptions({
-                visible: volumeHistogramEnabled
-            });
+            volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
         }
 
         const btn = document.getElementById('settingsBtn');
@@ -982,20 +1028,13 @@
                 previousDensities = { future: [], spot: [] };
                 startDensityUpdates(currentSymbol);
             } else {
-                if (densityUpdateTimer) {
-                    clearInterval(densityUpdateTimer);
-                    densityUpdateTimer = null;
-                }
+                if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
                 clearDensityLines();
             }
-
             if (scalpEnabled) {
                 startScalpUpdates(currentSymbol);
             } else {
-                if (scalpUpdateTimer) {
-                    clearInterval(scalpUpdateTimer);
-                    scalpUpdateTimer = null;
-                }
+                if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
                 clearScalpLines();
             }
         }
@@ -1005,11 +1044,8 @@
 
     function toggleTradesOverlay() {
         const isActive = els.tradesOverlay.classList.contains('active');
-        if (isActive) {
-            closeTradesOverlay();
-        } else {
-            openTradesOverlay();
-        }
+        if (isActive) closeTradesOverlay();
+        else openTradesOverlay();
     }
 
     function openTradesOverlay() {
@@ -1017,9 +1053,7 @@
         els.tradesBtn.classList.add('active');
         els.tradesThresholdSlider.value = currentThreshold;
         els.tradesThresholdValue.textContent = fmtThreshold(currentThreshold);
-        if (currentSymbol && !wsTrades) {
-            startTradesStream(currentSymbol);
-        }
+        if (currentSymbol && !wsTrades) startTradesStream(currentSymbol);
     }
 
     function closeTradesOverlay() {
@@ -1029,7 +1063,6 @@
 
     function updateTradesOverlay() {
         if (!els.tradesOverlayBody || tradeBuffer.length === 0) return;
-
         const html = tradeBuffer.map(t => `
             <div class="trade-item-compact">
                 <span class="trade-time">${t.time}</span>
@@ -1039,20 +1072,16 @@
                 <span class="${t.isBuyerMaker ? 'trade-sell' : 'trade-buy'}">${t.isBuyerMaker ? 'S' : 'B'}</span>
             </div>
         `).join('');
-
         els.tradesOverlayBody.innerHTML = html;
         els.tradesOverlayBody.scrollTop = els.tradesOverlayBody.scrollHeight;
     }
 
     async function loadDensities(symbol) {
         if (!densityEnabled || !candleSeries) return;
-
         let hasChanges = false;
-
         const marketsToLoad = [];
         if (densityMarkets.future) marketsToLoad.push('future');
         if (densityMarkets.spot) marketsToLoad.push('spot');
-
         const allNewData = {};
 
         for (const market of marketsToLoad) {
@@ -1060,31 +1089,23 @@
                 const url = market === 'future'
                     ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=1000`
                     : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=1000`;
-
                 const res = await fetch(url);
                 if (!res.ok) continue;
                 const data = await res.json();
-
                 const densities = [];
                 const minVolume = market === 'future' ? densityMinVolumeFuture : densityMinVolumeSpot;
-
                 const processSide = (sideArr, sideType) => {
                     for (const [priceStr, qtyStr] of sideArr) {
                         const price = parseFloat(priceStr);
                         const qty = parseFloat(qtyStr);
                         const val = price * qty;
-                        if (val >= minVolume) {
-                            densities.push({ price, volume: val, side: sideType });
-                        }
+                        if (val >= minVolume) densities.push({ price, volume: val, side: sideType });
                     }
                 };
-
                 if (data.bids) processSide(data.bids, 'buy');
                 if (data.asks) processSide(data.asks, 'sell');
-
                 densities.sort((a, b) => b.volume - a.volume);
                 allNewData[market] = densities.slice(0, 20);
-
             } catch (e) {
                 console.error(`Densities error (${market}):`, e);
                 allNewData[market] = previousDensities[market] || [];
@@ -1095,17 +1116,13 @@
             const newData = allNewData[market] || [];
             const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
             const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
-
             if (currentData !== prevData) {
                 hasChanges = true;
                 previousDensities[market] = newData;
             }
         }
 
-        if (!hasChanges) {
-            return;
-        }
-
+        if (!hasChanges) return;
         clearDensityLines();
 
         for (const market of marketsToLoad) {
@@ -1128,9 +1145,7 @@
 
     function clearDensityLines() {
         if (!candleSeries) return;
-        densityLines.forEach(l => {
-            try { candleSeries.removePriceLine(l); } catch(e){}
-        });
+        densityLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
         densityLines = [];
     }
 
@@ -1143,21 +1158,16 @@
     }
 
     function formatVolumeText(volume) {
-        if (volume >= 1000000) {
-            return `${(volume / 1000000).toFixed(2)}M`;
-        } else if (volume >= 1000) {
-            return `${(volume / 1000).toFixed(1)}K`;
-        }
+        if (volume >= 1000000) return `${(volume / 1000000).toFixed(2)}M`;
+        else if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
         return `${volume.toFixed(0)}`;
     }
 
     async function loadScalpDensities(symbol) {
         if (!scalpEnabled || !candleSeries || isScalpLoading) return;
         isScalpLoading = true;
-
         try {
             clearScalpLines();
-
             const marketsToLoad = [];
             if (scalpMarkets.future) marketsToLoad.push('futures');
             if (scalpMarkets.spot) marketsToLoad.push('spot');
@@ -1167,19 +1177,14 @@
                 const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=${market}`);
                 if (!res.ok) continue;
                 const data = await res.json();
-
                 const densities = data.densities || [];
-
                 densities.forEach(d => {
                     const ageSeconds = d.age_seconds || 0;
                     const ageText = formatAge(ageSeconds);
                     const volumeText = formatVolumeText(d.volume);
-
                     const prefix = market === 'futures' ? 'BI-F' : 'BI-S';
-
                     let lineColor, bgColor;
                     const volumeNum = parseFloat(d.volume) || 0;
-
                     if (volumeNum < 500000) {
                         lineColor = 'rgba(251, 191, 36, 0.9)';
                         bgColor = 'rgba(251, 191, 36, 0.9)';
@@ -1187,7 +1192,6 @@
                         lineColor = 'rgba(186, 85, 211, 0.9)';
                         bgColor = 'rgba(186, 85, 211, 0.9)';
                     }
-
                     const line = candleSeries.createPriceLine({
                         price: d.price,
                         color: lineColor,
@@ -1198,11 +1202,9 @@
                         axisLabelBackgroundColor: bgColor,
                         title: `${prefix} ${volumeText} ${ageText}`
                     });
-
                     scalpLines.push(line);
                 });
             }
-
         } catch (err) {
             console.error('Scalp load error:', err);
         } finally {
@@ -1212,9 +1214,7 @@
 
     function clearScalpLines() {
         if (!candleSeries) return;
-        scalpLines.forEach(l => {
-            try { candleSeries.removePriceLine(l); } catch(e){}
-        });
+        scalpLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
         scalpLines = [];
     }
 
@@ -1229,13 +1229,8 @@
     function toggleMagnet() {
         isMagnetEnabled = !isMagnetEnabled;
         const btn = document.getElementById('magnetBtn');
-
-        if (btn) {
-            btn.classList.toggle('active', isMagnetEnabled);
-        }
-
+        if (btn) btn.classList.toggle('active', isMagnetEnabled);
         localStorage.setItem('magnetEnabled', isMagnetEnabled);
-
         if (isMagnetEnabled) {
             createMagnetIndicator();
             console.log('🧲 Магнит включён');
@@ -1248,27 +1243,16 @@
     function toggleAlertMode() {
         isAlertModeEnabled = !isAlertModeEnabled;
         const btn = document.getElementById('alertBtn');
-
-        if (btn) {
-            btn.classList.toggle('active', isAlertModeEnabled);
-        }
-
-        if (isAlertModeEnabled) {
-            console.log('🔔 Режим алерта включён');
-        } else {
-            console.log('🔔 Режим алерта выключен');
-        }
+        if (btn) btn.classList.toggle('active', isAlertModeEnabled);
+        console.log(isAlertModeEnabled ? '🔔 Режим алерта включён' : '🔔 Режим алерта выключен');
     }
 
     function clearAllDrawings() {
         alertLines.forEach(line => {
-            if (candleSeries) {
-                try {
-                    candleSeries.removePriceLine(line);
-                } catch(e) {}
-            }
+            if (candleSeries) { try { candleSeries.removePriceLine(line); } catch(e) {} }
         });
         alertLines = [];
+        alertData = [];
         localStorage.removeItem('alertLines');
         console.log('🗑️ Все рисунки очищены');
     }
@@ -1293,7 +1277,6 @@
             if (magnetIndicator) magnetIndicator.style.display = 'none';
             return;
         }
-
         if (!param.point || !param.time) {
             magnetIndicator.style.display = 'none';
             return;
@@ -1302,9 +1285,9 @@
         const candles = window.candleData || [];
         if (candles.length === 0) return;
 
+        // 1. Находим ближайшую свечу
         let nearestCandle = null;
         let minTimeDiff = Infinity;
-
         for (const candle of candles) {
             const timeDiff = Math.abs(candle.time - param.time);
             if (timeDiff < minTimeDiff) {
@@ -1312,88 +1295,88 @@
                 nearestCandle = candle;
             }
         }
-
         if (!nearestCandle) {
             magnetIndicator.style.display = 'none';
             return;
         }
 
+        // 2. Получаем цену под курсором
         const priceAtCursor = candleSeries.coordinateToPrice(param.point.y);
         if (priceAtCursor === null) {
             magnetIndicator.style.display = 'none';
             return;
         }
 
-        const prices = {
-            'open': nearestCandle.open,
-            'high': nearestCandle.high,
-            'low': nearestCandle.low,
-            'close': nearestCandle.close
-        };
+        // 3. Собираем точки примагничивания
+        const magnetPoints = [];
 
-        let nearestPoint = 'close';
-        let minPriceDiff = Infinity;
+        // OHLC свечи
+        magnetPoints.push(
+            { type: 'ohlc', price: nearestCandle.open, distance: Math.abs(nearestCandle.open - priceAtCursor) },
+            { type: 'ohlc', price: nearestCandle.high, distance: Math.abs(nearestCandle.high - priceAtCursor) },
+            { type: 'ohlc', price: nearestCandle.low, distance: Math.abs(nearestCandle.low - priceAtCursor) },
+            { type: 'ohlc', price: nearestCandle.close, distance: Math.abs(nearestCandle.close - priceAtCursor) }
+        );
 
-        for (const [point, price] of Object.entries(prices)) {
-            const priceDiff = Math.abs(price - priceAtCursor);
-            if (priceDiff < minPriceDiff) {
-                minPriceDiff = priceDiff;
-                nearestPoint = point;
-            }
-        }
+        // Линии алертов
+        alertData.forEach((alert, index) => {
+            if (!alert.active) return;
+            const alertPrice = alert.price;
+            magnetPoints.push({
+                type: 'alert',
+                price: alertPrice,
+                distance: Math.abs(alertPrice - priceAtCursor),
+                index: index
+            });
+        });
 
-        const magnetPrice = prices[nearestPoint];
-        const y = candleSeries.priceToCoordinate(magnetPrice);
+        // 4. Находим ближайшую точку
+        magnetPoints.sort((a, b) => a.distance - b.distance);
+        const nearestPoint = magnetPoints[0];
 
+        // 5. Показываем индикатор
+        const y = candleSeries.priceToCoordinate(nearestPoint.price);
         if (y !== null) {
             magnetIndicator.style.display = 'block';
-            magnetIndicator.style.left = `${param.point.x - 4}px`;
-            magnetIndicator.style.top = `${y - 4}px`;
+            magnetIndicator.style.left = `${param.point.x - 5}px`;
+            magnetIndicator.style.top = `${y - 5}px`;
+
+            // Цвет зависит от типа точки
+            if (nearestPoint.type === 'alert') {
+                magnetIndicator.classList.add('alert-magnet');
+            } else {
+                magnetIndicator.classList.remove('alert-magnet');
+            }
         }
     }
 
     function handleChartClick(param) {
         console.log('🔴 [CLICK] Начало');
-
         if (!isAlertModeEnabled) {
             console.log(' Режим алерта выключен');
             return;
         }
-
         if (!candleSeries || !chart) {
             console.log('❌ График не инициализирован');
             return;
         }
-
         if (!param.point || typeof param.point.y !== 'number') {
             console.log('❌ Нет точки клика');
             return;
         }
 
         const y = param.point.y;
-        console.log('🟡 Y-координата:', y);
+        console.log(' Y-координата:', y);
 
         let price;
-
         if (typeof candleSeries.coordinateToPrice === 'function') {
             try {
                 price = candleSeries.coordinateToPrice(y);
-                console.log('🟢 Цена через candleSeries.coordinateToPrice:', price);
+                console.log('🟢 Цена:', price);
             } catch (e) {
-                console.error('❌ Ошибка candleSeries.coordinateToPrice:', e);
+                console.error(' Ошибка:', e);
             }
         }
-
-        if ((price === null || price === undefined) && typeof chart.coordinateToPrice === 'function') {
-            try {
-                price = chart.coordinateToPrice(y);
-                console.log(' Цена через chart.coordinateToPrice:', price);
-            } catch (e) {
-                console.error('❌ Ошибка chart.coordinateToPrice:', e);
-            }
-        }
-
-        console.log(' Итоговая цена:', price);
 
         if (!price || isNaN(price) || price === null) {
             console.log('❌ Не удалось получить цену');
@@ -1401,7 +1384,6 @@
         }
 
         console.log('🟣 Создаю линию на цене:', price);
-
         try {
             const line = candleSeries.createPriceLine({
                 price: price,
@@ -1414,11 +1396,12 @@
                 title: ` ${price.toFixed(currentPrecision)}`
             });
 
-            console.log('✅ Линия создана!', line);
             alertLines.push(line);
+            alertData.push({ price: price, line: line, active: true });
+            console.log('✅ Линия создана! Всего алертов:', alertData.length);
+
             toggleAlertMode();
             console.log('✅ Готово!');
-
         } catch (e) {
             console.error('❌ Ошибка createPriceLine:', e);
         }
@@ -1434,13 +1417,10 @@
 
     function copySymbolToClipboard() {
         if (!currentSymbol) return;
-
         const textToCopy = `${currentSymbol}USDT`;
-
         navigator.clipboard.writeText(textToCopy).then(() => {
             els.chartTitle.classList.add('copied');
             els.chartTitle.textContent = `✅ ${textToCopy} скопирован!`;
-
             setTimeout(() => {
                 els.chartTitle.classList.remove('copied');
                 els.chartTitle.textContent = `${currentSymbol}/USDT`;
@@ -1452,36 +1432,20 @@
 
     function closeChart() {
         clearDensityLines();
-        if (densityUpdateTimer) {
-            clearInterval(densityUpdateTimer);
-            densityUpdateTimer = null;
-        }
+        if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
         previousDensities = { future: [], spot: [] };
 
         clearScalpLines();
-        if (scalpUpdateTimer) {
-            clearInterval(scalpUpdateTimer);
-            scalpUpdateTimer = null;
-        }
+        if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
         clearAllDrawings();
 
-        if (wsCandles) {
-            wsCandles.onclose = null;
-            wsCandles.close();
-            wsCandles = null;
-        }
-        if (wsTrades) {
-            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
-            wsTrades.close(); wsTrades = null;
-        }
-        if (chart) {
-            chart.remove();
-            chart = null;
-            candleSeries = null;
-            volumeSeries = null;
-        }
+        if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
+        if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
+        if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
+
         tradeBuffer = [];
+        lastCandlePrice = null;
         els.chartTitle.textContent = '';
         els.chartWrapper.classList.remove('active');
         els.chartHint.style.display = 'block';
@@ -1491,19 +1455,11 @@
     }
 
     async function openChart(symbol) {
-        if (wsCandles) {
-            wsCandles.onclose = null;
-            wsCandles.close();
-            wsCandles = null;
-        }
-        if (wsTrades) {
-            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null;
-            wsTrades.close(); wsTrades = null;
-        }
+        if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
+        if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
 
         clearDensityLines();
         if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
-
         clearScalpLines();
         if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
@@ -1512,8 +1468,8 @@
         currentSymbol = symbol;
         els.chartHint.style.display = 'none';
         els.chartWrapper.classList.add('active');
-
         tradeBuffer = [];
+        lastCandlePrice = null;
 
         if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
 
@@ -1523,41 +1479,25 @@
                 height: els.chartWrapper.clientHeight,
                 layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
                 grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
-                timeScale: {
-                    timeVisible: true, secondsVisible: false, borderColor: '#2d3748',
-                    rightOffset: 12, barSpacing: 10
-                },
-                rightPriceScale: {
-                    borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true
-                },
+                timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#2d3748', rightOffset: 12, barSpacing: 10 },
+                rightPriceScale: { borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             });
             candleSeries = chart.addCandlestickSeries({
                 upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
                 wickUpColor: '#22c55e', wickDownColor: '#ef4444',
             });
-
             volumeSeries = chart.addHistogramSeries({
                 priceFormat: { type: 'volume' },
                 priceScaleId: 'volume',
                 scaleMargins: { top: 0.85, bottom: 0 },
             });
-
-            chart.priceScale('volume').applyOptions({
-                visible: false,
-                scaleMargins: { top: 0.85, bottom: 0 },
-            });
-
-            if (volumeSeries) {
-                volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
-            }
+            chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
+            if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 
             chart.subscribeCrosshairMove((param) => {
-                if (isMagnetEnabled) {
-                    updateMagnetIndicator(param);
-                }
+                if (isMagnetEnabled) updateMagnetIndicator(param);
             });
-
             chart.subscribeClick((param) => {
                 handleChartClick(param);
             });
@@ -1571,10 +1511,7 @@
         startCandleWebSocket(symbol, currentTF);
         updateWatermark();
 
-        if (els.tradesOverlay.classList.contains('active')) {
-            startTradesStream(symbol);
-        }
-
+        if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);
         if (densityEnabled) startDensityUpdates(symbol);
         if (scalpEnabled) startScalpUpdates(symbol);
     }
@@ -1582,7 +1519,6 @@
     async function loadChartData(symbol, tf) {
         if (!chart || !candleSeries) return;
         els.chartTitle.textContent = `${symbol}/USDT`;
-
         try {
             const res = await fetch(`/api/candles/${symbol}/?tf=${tf}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1594,11 +1530,8 @@
             currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
             const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
 
-            candleSeries.applyOptions({
-                priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
-            });
+            candleSeries.applyOptions({ priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove } });
             candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
-
             window.candleData = limitedHistory.map(c => ({ ...c, time: safeTime(c.time) }));
 
             if (limitedHistory[0].volume !== undefined) {
@@ -1619,9 +1552,7 @@
     }
 
     function startTradesStream(symbol) {
-        if (wsTrades) {
-            wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.close(); wsTrades = null;
-        }
+        if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.close(); wsTrades = null; }
         const tradesUrl = `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@trade`;
         wsTrades = new WebSocket(tradesUrl);
         wsTrades.onopen = () => {};
@@ -1635,21 +1566,12 @@
                 const isBuyerMaker = trade.m;
                 const time = new Date(trade.T).toLocaleTimeString('ru-RU', { hour12: false });
                 tradeBuffer.push({ time, price, qty, value, isBuyerMaker });
-
-                if (tradeBuffer.length > 50) {
-                    tradeBuffer.shift();
-                }
-
-                if (els.tradesOverlay.classList.contains('active')) {
-                    updateTradesOverlay();
-                }
-
+                if (tradeBuffer.length > 50) tradeBuffer.shift();
+                if (els.tradesOverlay.classList.contains('active')) updateTradesOverlay();
             } catch (err) { console.warn('Trade parse error:', err); }
         };
         wsTrades.onerror = () => {
-            if (els.tradesOverlayBody) {
-                els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">⚠️ Разрыв связи</div>';
-            }
+            if (els.tradesOverlayBody) els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">⚠️ Разрыв связи</div>';
         };
         wsTrades.onclose = () => {
             setTimeout(() => { if (currentSymbol === symbol && els.tradesOverlay.classList.contains('active')) startTradesStream(symbol); }, 3000);
@@ -1662,11 +1584,8 @@
             sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
         } else {
             sortState.field = field;
-            if (field === 'natr_1m' || field === 'natr_5m') {
-                sortState.direction = 'desc';
-            } else {
-                sortState.direction = 'asc';
-            }
+            if (field === 'natr_1m' || field === 'natr_5m') sortState.direction = 'desc';
+            else sortState.direction = 'asc';
         }
         document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
         const arrow = document.getElementById(`sort-${field}`);
@@ -1716,10 +1635,7 @@
     });
     window.addEventListener('resize', () => {
         if (chart && els.chartWrapper.classList.contains('active')) {
-            chart.applyOptions({
-                width: els.chartWrapper.clientWidth,
-                height: els.chartWrapper.clientHeight
-            });
+            chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
         }
     });
 
@@ -1731,7 +1647,7 @@
         soundEnabled = !soundEnabled;
         const btnModal = document.getElementById('soundToggleModal');
         if (btnModal) {
-            btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+            btnModal.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
             btnModal.classList.toggle('muted', !soundEnabled);
         }
         localStorage.setItem('soundEnabled', soundEnabled);
