@@ -698,19 +698,16 @@
     let magnetIndicator = null;
     let alertLines = [];
 
-    // Загрузка состояния магнита из localStorage
     const savedMagnetState = localStorage.getItem('magnetEnabled');
     if (savedMagnetState !== null) {
         isMagnetEnabled = savedMagnetState === 'true';
     }
 
-    // Загружаем сохранённые настройки RECON
     const savedFutureVol = localStorage.getItem('densityMinVolumeFuture');
     const savedSpotVol = localStorage.getItem('densityMinVolumeSpot');
     if (savedFutureVol) densityMinVolumeFuture = parseInt(savedFutureVol);
     if (savedSpotVol) densityMinVolumeSpot = parseInt(savedSpotVol);
 
-    // Загружаем сохранённые настройки Scalp
     const savedScalpFutureVol = localStorage.getItem('scalpMinVolumeFuture');
     const savedScalpSpotVol = localStorage.getItem('scalpMinVolumeSpot');
     if (savedScalpFutureVol) scalpMinVolumeFuture = parseInt(savedScalpFutureVol);
@@ -911,19 +908,16 @@
     }
 
     function openSettingsModal() {
-        // RECON
         document.getElementById('densityMarketFuture').checked = densityMarkets.future;
         document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
         document.getElementById('densityMinVolumeFuture').value = densityMinVolumeFuture;
         document.getElementById('densityMinVolumeSpot').value = densityMinVolumeSpot;
 
-        // Scalp
         document.getElementById('scalpMarketFuture').checked = scalpMarkets.future;
         document.getElementById('scalpMarketSpot').checked = scalpMarkets.spot;
         document.getElementById('scalpMinVolumeFuture').value = scalpMinVolumeFuture;
         document.getElementById('scalpMinVolumeSpot').value = scalpMinVolumeSpot;
 
-        // Гистограмма
         document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
 
         const soundBtnModal = document.getElementById('soundToggleModal');
@@ -937,7 +931,6 @@
     }
 
     function applySettings() {
-        // ===== RECON настройки =====
         const reconFutureChecked = document.getElementById('densityMarketFuture').checked;
         const reconSpotChecked = document.getElementById('densityMarketSpot').checked;
 
@@ -952,7 +945,6 @@
         localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
         localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
 
-        // ===== Scalp настройки =====
         const scalpFutureChecked = document.getElementById('scalpMarketFuture').checked;
         const scalpSpotChecked = document.getElementById('scalpMarketSpot').checked;
 
@@ -967,7 +959,6 @@
         localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
         localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
 
-        // ===== Гистограмма объёма =====
         volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
         localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
 
@@ -977,7 +968,6 @@
             });
         }
 
-        // Кнопка настроек
         const btn = document.getElementById('settingsBtn');
         if (densityEnabled || scalpEnabled) {
             btn.style.background = '#f0b90b';
@@ -987,9 +977,7 @@
             btn.style.color = '#9ca3af';
         }
 
-        // Перезапуск обновлений
         if (currentSymbol) {
-            // RECON
             if (densityEnabled) {
                 previousDensities = { future: [], spot: [] };
                 startDensityUpdates(currentSymbol);
@@ -1001,7 +989,6 @@
                 clearDensityLines();
             }
 
-            // Scalp
             if (scalpEnabled) {
                 startScalpUpdates(currentSymbol);
             } else {
@@ -1165,7 +1152,6 @@
     }
 
     async function loadScalpDensities(symbol) {
-        // Блокировка повторного вызова
         if (!scalpEnabled || !candleSeries || isScalpLoading) return;
         isScalpLoading = true;
 
@@ -1240,8 +1226,6 @@
         }, 3000);
     }
 
-    // ===== Функции рисовашек =====
-
     function toggleMagnet() {
         isMagnetEnabled = !isMagnetEnabled;
         const btn = document.getElementById('magnetBtn');
@@ -1270,7 +1254,7 @@
         }
 
         if (isAlertModeEnabled) {
-            console.log('🔔 Режим алерта включён (кликни на график)');
+            console.log('🔔 Режим алерта включён');
         } else {
             console.log('🔔 Режим алерта выключен');
         }
@@ -1305,129 +1289,140 @@
     }
 
     function updateMagnetIndicator(param) {
-    if (!isMagnetEnabled || !magnetIndicator) {
-        if (magnetIndicator) magnetIndicator.style.display = 'none';
-        return;
-    }
+        if (!isMagnetEnabled || !magnetIndicator) {
+            if (magnetIndicator) magnetIndicator.style.display = 'none';
+            return;
+        }
 
-    // Если курсор ушёл за пределы графика, скрываем индикатор
-    if (!param.point || !param.time) {
-        magnetIndicator.style.display = 'none';
-        return;
-    }
+        if (!param.point || !param.time) {
+            magnetIndicator.style.display = 'none';
+            return;
+        }
 
-    const candles = window.candleData || [];
-    if (candles.length === 0) return;
+        const candles = window.candleData || [];
+        if (candles.length === 0) return;
 
-    let nearestCandle = null;
-    let minTimeDiff = Infinity;
+        let nearestCandle = null;
+        let minTimeDiff = Infinity;
 
-    for (const candle of candles) {
-        const timeDiff = Math.abs(candle.time - param.time);
-        if (timeDiff < minTimeDiff) {
-            minTimeDiff = timeDiff;
-            nearestCandle = candle;
+        for (const candle of candles) {
+            const timeDiff = Math.abs(candle.time - param.time);
+            if (timeDiff < minTimeDiff) {
+                minTimeDiff = timeDiff;
+                nearestCandle = candle;
+            }
+        }
+
+        if (!nearestCandle) {
+            magnetIndicator.style.display = 'none';
+            return;
+        }
+
+        const priceAtCursor = candleSeries.coordinateToPrice(param.point.y);
+        if (priceAtCursor === null) {
+            magnetIndicator.style.display = 'none';
+            return;
+        }
+
+        const prices = {
+            'open': nearestCandle.open,
+            'high': nearestCandle.high,
+            'low': nearestCandle.low,
+            'close': nearestCandle.close
+        };
+
+        let nearestPoint = 'close';
+        let minPriceDiff = Infinity;
+
+        for (const [point, price] of Object.entries(prices)) {
+            const priceDiff = Math.abs(price - priceAtCursor);
+            if (priceDiff < minPriceDiff) {
+                minPriceDiff = priceDiff;
+                nearestPoint = point;
+            }
+        }
+
+        const magnetPrice = prices[nearestPoint];
+        const y = candleSeries.priceToCoordinate(magnetPrice);
+
+        if (y !== null) {
+            magnetIndicator.style.display = 'block';
+            magnetIndicator.style.left = `${param.point.x - 4}px`;
+            magnetIndicator.style.top = `${y - 4}px`;
         }
     }
-
-    if (!nearestCandle) {
-        magnetIndicator.style.display = 'none';
-        return;
-    }
-
-    // Получаем цену по Y-координате
-    const priceAtCursor = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
-    if (priceAtCursor === null) {
-        magnetIndicator.style.display = 'none';
-        return;
-    }
-
-    const prices = {
-        'open': nearestCandle.open,
-        'high': nearestCandle.high,
-        'low': nearestCandle.low,
-        'close': nearestCandle.close
-    };
-
-    let nearestPoint = 'close';
-    let minPriceDiff = Infinity;
-
-    for (const [point, price] of Object.entries(prices)) {
-        const priceDiff = Math.abs(price - priceAtCursor);
-        if (priceDiff < minPriceDiff) {
-            minPriceDiff = priceDiff;
-            nearestPoint = point;
-        }
-    }
-
-    const magnetPrice = prices[nearestPoint];
-    const y = chart.priceToCoordinate(magnetPrice, candleSeries.priceScale());
-
-    if (y !== null) {
-        magnetIndicator.style.display = 'block';
-        magnetIndicator.style.left = `${param.point.x - 4}px`;
-        magnetIndicator.style.top = `${y - 4}px`;
-    }
-}
 
     function handleChartClick(param) {
-    console.log('🔴 [CLICK] Начало. param:', param);
+        console.log('🔴 [CLICK] Начало');
 
-    if (!isAlertModeEnabled) {
-        console.log('❌ [CLICK] Режим алерта выключен');
-        return;
+        if (!isAlertModeEnabled) {
+            console.log(' Режим алерта выключен');
+            return;
+        }
+
+        if (!candleSeries || !chart) {
+            console.log('❌ График не инициализирован');
+            return;
+        }
+
+        if (!param.point || typeof param.point.y !== 'number') {
+            console.log('❌ Нет точки клика');
+            return;
+        }
+
+        const y = param.point.y;
+        console.log('🟡 Y-координата:', y);
+
+        let price;
+
+        if (typeof candleSeries.coordinateToPrice === 'function') {
+            try {
+                price = candleSeries.coordinateToPrice(y);
+                console.log('🟢 Цена через candleSeries.coordinateToPrice:', price);
+            } catch (e) {
+                console.error('❌ Ошибка candleSeries.coordinateToPrice:', e);
+            }
+        }
+
+        if ((price === null || price === undefined) && typeof chart.coordinateToPrice === 'function') {
+            try {
+                price = chart.coordinateToPrice(y);
+                console.log(' Цена через chart.coordinateToPrice:', price);
+            } catch (e) {
+                console.error('❌ Ошибка chart.coordinateToPrice:', e);
+            }
+        }
+
+        console.log(' Итоговая цена:', price);
+
+        if (!price || isNaN(price) || price === null) {
+            console.log('❌ Не удалось получить цену');
+            return;
+        }
+
+        console.log('🟣 Создаю линию на цене:', price);
+
+        try {
+            const line = candleSeries.createPriceLine({
+                price: price,
+                color: 'rgba(240, 185, 11, 0.9)',
+                lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Dashed,
+                axisLabelVisible: true,
+                axisLabelColor: '#ffffff',
+                axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
+                title: ` ${price.toFixed(currentPrecision)}`
+            });
+
+            console.log('✅ Линия создана!', line);
+            alertLines.push(line);
+            toggleAlertMode();
+            console.log('✅ Готово!');
+
+        } catch (e) {
+            console.error('❌ Ошибка createPriceLine:', e);
+        }
     }
-
-    if (!candleSeries || !chart) {
-        console.log('❌ [CLICK] График не инициализирован');
-        return;
-    }
-
-    if (!param.point || typeof param.point.y !== 'number') {
-        console.log('❌ [CLICK] param.point.y не определён');
-        return;
-    }
-
-    console.log('🟡 [CLICK] Y-координата:', param.point.y);
-
-    // В LC v4 coordinateToPrice принимает строку 'right' или 'left', а не объект
-    let price;
-    try {
-        price = chart.coordinateToPrice(param.point.y, 'right');
-        console.log('🟢 [CLICK] Цена из координаты:', price);
-    } catch (e) {
-        console.error('❌ [CLICK] Ошибка coordinateToPrice:', e);
-        return;
-    }
-
-    if (!price || isNaN(price) || price === null) {
-        console.log('❌ [CLICK] Получена невалидная цена:', price);
-        return;
-    }
-
-    console.log('🔵 [CLICK] Создаю линию на цене:', price);
-    try {
-        const line = candleSeries.createPriceLine({
-            price: price,
-            color: 'rgba(240, 185, 11, 0.9)',
-            lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed,
-            axisLabelVisible: true,
-            axisLabelColor: '#ffffff',
-            axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
-            title: `🔔 ${price.toFixed(currentPrecision)}`
-        });
-
-        console.log('✅ [CLICK] Линия создана!', line);
-        alertLines.push(line);
-
-        toggleAlertMode();
-        console.log('✅ [CLICK] Готово!');
-
-    } catch (e) {
-        console.error('❌ [CLICK] Ошибка createPriceLine:', e);
-    }
-}
 
     function updateWatermark() {
         if (currentSymbol && els.chartWatermark) {
@@ -1557,17 +1552,13 @@
                 volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
             }
 
-            // Подписка на движение мыши (для магнита)
             chart.subscribeCrosshairMove((param) => {
-                console.log('🖱️ Mouse move:', param);
                 if (isMagnetEnabled) {
                     updateMagnetIndicator(param);
                 }
             });
 
-            // Подписка на клик (для алертов)
             chart.subscribeClick((param) => {
-                console.log('👆 Click:', param);
                 handleChartClick(param);
             });
 
@@ -1608,7 +1599,6 @@
             });
             candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
 
-            // Сохраняем данные свечей для магнита
             window.candleData = limitedHistory.map(c => ({ ...c, time: safeTime(c.time) }));
 
             if (limitedHistory[0].volume !== undefined) {
