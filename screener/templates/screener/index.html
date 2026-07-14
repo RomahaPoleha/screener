@@ -407,6 +407,29 @@
             color: #ef4444;
             font-weight: 700;
         }
+
+        .ruler-measurement {
+            position: absolute;
+            background: rgba(240, 185, 11, 0.9);
+            color: #000;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+            white-space: nowrap;
+        }
+
+        .pencil-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+
         @media (max-width: 900px) {
             .main-layout { flex-direction: column; height: auto; }
             .right-panel { width: 100%; height: 400px; border-left: none; border-top: 1px solid #2d3748; }
@@ -436,9 +459,12 @@
 <div class="main-layout">
     <div class="left-panel">
         <div class="chart-area">
-            <div class="drawing-tools-panel">
+            <div class="drawing-tools-panel" id="drawingToolsPanel">
+                <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (CTRL+S)">📈 Трендовая</div>
+                <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (ALT+LEFT)">✏️ Карандаш</div>
+                <div class="tool-btn" id="rulerBtn" onclick="toggleRuler()" title="Линейка (Колесико)">📏 Линейка</div>
                 <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">🧲 Магнит</div>
-                <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт"> Алерт</div>
+                <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (B)"> Алерт</div>
                 <div class="tool-btn" onclick="clearAllDrawings()" title="Очистить">🗑️ Очистить</div>
             </div>
 
@@ -446,10 +472,12 @@
             <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
             <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
             <div id="chart-container"></div>
+            <canvas id="pencilCanvas" class="pencil-canvas"></canvas>
             <div class="chart-watermark" id="chartWatermark">
                 <span class="symbol" id="watermarkSymbol">BTC</span>
                 <span class="tf" id="watermarkTF">1m</span>
             </div>
+            <div id="rulerMeasurement" class="ruler-measurement"></div>
         </div>
     </div>
 
@@ -513,7 +541,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">⚙️ Настройки</h5>
+                <h5 class="modal-title">️ Настройки</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -524,15 +552,42 @@
                     </button>
                 </div>
                 <div class="modal-section">
-                    <div class="modal-section-title">🎨 Инструменты графика</div>
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div class="modal-section-title">🎨 Инструменты рисования</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db; margin-bottom:8px;">
+                            <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <span>Показывать панель инструментов</span>
+                        </label>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
                             <input type="checkbox" id="magnetEnabledCheckbox" onclick="toggleMagnetFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
-                            <span>🧲 Магнит (притягивание к свечам и алертам)</span>
+                            <span>🧲 Магнит</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
                             <input type="checkbox" id="alertModeEnabledCheckbox" onclick="toggleAlertModeFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
-                            <span>🔔 Режим алерта (клик для создания ценовых уровней)</span>
+                            <span> Режим алерта</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
+                            <input type="checkbox" id="trendLineEnabledCheckbox" onclick="toggleTrendLineFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
+                            <span>📈 Трендовая линия</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
+                            <input type="checkbox" id="pencilEnabledCheckbox" onclick="togglePencilFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
+                            <span>️ Карандаш</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #d1d5db;">
+                            <input type="checkbox" id="rulerEnabledCheckbox" onclick="toggleRulerFromCheckbox()" style="accent-color: #f0b90b; width: 16px; height: 16px;">
+                            <span>📏 Линейка</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">📊 Гистограмма объёма</div>
+                    <div style="margin-top:12px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db;">
+                            <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <span>Показывать гистограмму объёма</span>
                         </label>
                     </div>
                 </div>
@@ -597,14 +652,8 @@
                             <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность до 500K<br>
                             <span style="color:#ba55d3;">🟣 Фиолетовый</span> — плотность от 500K<br>
                             <span style="color:#ffffff;"> Белые линии</span> — RECON<br>
-                            <span style="color:#fbbf24;">📊 Label</span> — BI-F объём время
+                            <span style="color:#fbbf24;"> Label</span> — BI-F объём время
                         </div>
-                    </div>
-                    <div style="margin-top:12px;">
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db;">
-                            <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f0b90b; width:16px; height:16px;">
-                            <span>Показывать гистограмму объёма</span>
-                        </label>
                     </div>
                 </div>
             </div>
@@ -644,7 +693,10 @@
         tradesOverlayBody: document.getElementById('tradesOverlayBody'),
         tradesThresholdSlider: document.getElementById('tradesThresholdSlider'),
         tradesThresholdValue: document.getElementById('tradesThresholdValue'),
-        tradesBtn: document.getElementById('tradesBtn')
+        tradesBtn: document.getElementById('tradesBtn'),
+        pencilCanvas: document.getElementById('pencilCanvas'),
+        rulerMeasurement: document.getElementById('rulerMeasurement'),
+        drawingToolsPanel: document.getElementById('drawingToolsPanel')
     };
 
     let allCoins = [];
@@ -689,6 +741,21 @@
     let magnetIndicator = null;
     let alertLines = [];
     let alertData = [];
+
+    let isTrendLineEnabled = false;
+    let trendLineStart = null;
+    let trendLines = [];
+
+    let isPencilEnabled = false;
+    let pencilCtx = null;
+    let isDrawing = false;
+    let lastPencilPoint = null;
+
+    let isRulerEnabled = false;
+    let rulerStart = null;
+    let rulerEnd = null;
+
+    let showDrawingTools = true;
 
     const savedMagnetState = localStorage.getItem('magnetEnabled');
     if (savedMagnetState !== null) {
@@ -975,8 +1042,12 @@
 
         document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
 
+        document.getElementById('showDrawingTools').checked = showDrawingTools;
         document.getElementById('magnetEnabledCheckbox').checked = isMagnetEnabled;
         document.getElementById('alertModeEnabledCheckbox').checked = isAlertModeEnabled;
+        document.getElementById('trendLineEnabledCheckbox').checked = isTrendLineEnabled;
+        document.getElementById('pencilEnabledCheckbox').checked = isPencilEnabled;
+        document.getElementById('rulerEnabledCheckbox').checked = isRulerEnabled;
 
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
@@ -988,12 +1059,32 @@
         modal.show();
     }
 
+    function toggleDrawingToolsVisibility() {
+        showDrawingTools = !showDrawingTools;
+        if (els.drawingToolsPanel) {
+            els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+        }
+        localStorage.setItem('showDrawingTools', showDrawingTools);
+    }
+
     function toggleMagnetFromCheckbox() {
         toggleMagnet();
     }
 
     function toggleAlertModeFromCheckbox() {
         toggleAlertMode();
+    }
+
+    function toggleTrendLineFromCheckbox() {
+        toggleTrendLine();
+    }
+
+    function togglePencilFromCheckbox() {
+        togglePencil();
+    }
+
+    function toggleRulerFromCheckbox() {
+        toggleRuler();
     }
 
     function applySettings() {
@@ -1260,7 +1351,72 @@
         isAlertModeEnabled = !isAlertModeEnabled;
         const btn = document.getElementById('alertBtn');
         if (btn) btn.classList.toggle('active', isAlertModeEnabled);
-        console.log(isAlertModeEnabled ? '🔔 Режим алерта включён' : '🔔 Режим алерта выключен');
+        if (isAlertModeEnabled) {
+            isTrendLineEnabled = false;
+            isPencilEnabled = false;
+            isRulerEnabled = false;
+            updateToolButtons();
+        }
+        console.log(isAlertModeEnabled ? ' Режим алерта включён' : ' Режим алерта выключен');
+    }
+
+    function toggleTrendLine() {
+        isTrendLineEnabled = !isTrendLineEnabled;
+        const btn = document.getElementById('trendLineBtn');
+        if (btn) btn.classList.toggle('active', isTrendLineEnabled);
+        if (isTrendLineEnabled) {
+            isAlertModeEnabled = false;
+            isPencilEnabled = false;
+            isRulerEnabled = false;
+            updateToolButtons();
+            console.log(' Трендовая линия включена');
+        } else {
+            trendLineStart = null;
+            console.log('📈 Трендовая линия выключена');
+        }
+    }
+
+    function togglePencil() {
+        isPencilEnabled = !isPencilEnabled;
+        const btn = document.getElementById('pencilBtn');
+        if (btn) btn.classList.toggle('active', isPencilEnabled);
+        if (isPencilEnabled) {
+            isAlertModeEnabled = false;
+            isTrendLineEnabled = false;
+            isRulerEnabled = false;
+            updateToolButtons();
+            initPencilCanvas();
+            console.log('️ Карандаш включён');
+        } else {
+            isDrawing = false;
+            lastPencilPoint = null;
+            console.log('✏️ Карандаш выключен');
+        }
+    }
+
+    function toggleRuler() {
+        isRulerEnabled = !isRulerEnabled;
+        const btn = document.getElementById('rulerBtn');
+        if (btn) btn.classList.toggle('active', isRulerEnabled);
+        if (isRulerEnabled) {
+            isAlertModeEnabled = false;
+            isTrendLineEnabled = false;
+            isPencilEnabled = false;
+            updateToolButtons();
+            console.log(' Линейка включена');
+        } else {
+            rulerStart = null;
+            rulerEnd = null;
+            els.rulerMeasurement.style.display = 'none';
+            console.log('📏 Линейка выключена');
+        }
+    }
+
+    function updateToolButtons() {
+        document.getElementById('alertBtn')?.classList.toggle('active', isAlertModeEnabled);
+        document.getElementById('trendLineBtn')?.classList.toggle('active', isTrendLineEnabled);
+        document.getElementById('pencilBtn')?.classList.toggle('active', isPencilEnabled);
+        document.getElementById('rulerBtn')?.classList.toggle('active', isRulerEnabled);
     }
 
     function clearAllDrawings() {
@@ -1269,6 +1425,13 @@
         });
         alertLines = [];
         alertData = [];
+        trendLines.forEach(line => {
+            if (candleSeries) { try { candleSeries.removePriceLine(line); } catch(e) {} }
+        });
+        trendLines = [];
+        if (pencilCtx) {
+            pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
+        }
         localStorage.removeItem('alertLines');
         console.log('🗑️ Все рисунки очищены');
     }
@@ -1379,61 +1542,142 @@
         }
     }
 
+    function initPencilCanvas() {
+        if (!chart || !els.pencilCanvas) return;
+        const rect = els.chartWrapper.getBoundingClientRect();
+        els.pencilCanvas.width = rect.width;
+        els.pencilCanvas.height = rect.height;
+        pencilCtx = els.pencilCanvas.getContext('2d');
+        pencilCtx.strokeStyle = '#f0b90b';
+        pencilCtx.lineWidth = 2;
+        pencilCtx.lineCap = 'round';
+    }
+
     function handleChartClick(param) {
-        console.log('🔴 [CLICK] Начало');
-        if (!isAlertModeEnabled) {
-            console.log(' Режим алерта выключен');
-            return;
-        }
-        if (!candleSeries || !chart) {
-            console.log('❌ График не инициализирован');
-            return;
-        }
-        if (!param.point || typeof param.point.y !== 'number') {
-            console.log('❌ Нет точки клика');
-            return;
-        }
+        if (!param.point || typeof param.point.y !== 'number') return;
 
-        const y = param.point.y;
-        console.log(' Y-координата:', y);
+        if (isAlertModeEnabled) {
+            const y = param.point.y;
+            let price = candleSeries.coordinateToPrice(y);
+            if (!price || isNaN(price) || price === null) return;
 
-        let price;
-        if (typeof candleSeries.coordinateToPrice === 'function') {
             try {
-                price = candleSeries.coordinateToPrice(y);
-                console.log('🟢 Цена:', price);
+                const line = candleSeries.createPriceLine({
+                    price: price,
+                    color: 'rgba(240, 185, 11, 0.9)',
+                    lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    axisLabelVisible: true,
+                    axisLabelColor: '#ffffff',
+                    axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
+                    title: ` ${price.toFixed(currentPrecision)}`
+                });
+
+                alertLines.push(line);
+                alertData.push({ price: price, line: line, active: true });
+                console.log('✅ Линия алерта создана! Всего алертов:', alertData.length);
             } catch (e) {
-                console.error(' Ошибка:', e);
+                console.error('❌ Ошибка createPriceLine:', e);
+            }
+        } else if (isTrendLineEnabled) {
+            const y = param.point.y;
+            let price = candleSeries.coordinateToPrice(y);
+            if (!price || isNaN(price) || price === null) return;
+
+            if (!trendLineStart) {
+                trendLineStart = { x: param.point.x, y: y, price: price };
+                console.log(' Первая точка трендовой:', price);
+            } else {
+                try {
+                    const line = candleSeries.createPriceLine({
+                        price: trendLineStart.price,
+                        color: 'rgba(34, 197, 94, 0.8)',
+                        lineWidth: 2,
+                        lineStyle: LightweightCharts.LineStyle.Solid,
+                        axisLabelVisible: true,
+                        axisLabelColor: '#ffffff',
+                        axisLabelBackgroundColor: 'rgba(34, 197, 94, 0.8)',
+                        title: ` TL ${trendLineStart.price.toFixed(currentPrecision)}`
+                    });
+                    trendLines.push(line);
+                    console.log(' Трендовая линия создана');
+                    trendLineStart = null;
+                } catch (e) {
+                    console.error('❌ Ошибка создания трендовой:', e);
+                }
+            }
+        } else if (isRulerEnabled) {
+            const y = param.point.y;
+            let price = candleSeries.coordinateToPrice(y);
+            if (!price || isNaN(price) || price === null) return;
+
+            if (!rulerStart) {
+                rulerStart = { x: param.point.x, y: y, price: price, time: param.time };
+                console.log('📏 Начало измерения:', price);
+            } else {
+                rulerEnd = { x: param.point.x, y: y, price: price, time: param.time };
+                showRulerMeasurement();
+                rulerStart = null;
+                rulerEnd = null;
             }
         }
+    }
 
-        if (!price || isNaN(price) || price === null) {
-            console.log('❌ Не удалось получить цену');
+    function showRulerMeasurement() {
+        if (!rulerStart || !rulerEnd) return;
+
+        const priceDiff = Math.abs(rulerEnd.price - rulerStart.price);
+        const pricePercent = ((priceDiff / rulerStart.price) * 100).toFixed(2);
+
+        let barsCount = 0;
+        if (rulerStart.time && rulerEnd.time) {
+            const candles = window.candleData || [];
+            const startTime = typeof rulerStart.time === 'number' ? rulerStart.time : rulerStart.time.timestamp;
+            const endTime = typeof rulerEnd.time === 'number' ? rulerEnd.time : rulerEnd.time.timestamp;
+            barsCount = Math.abs(Math.floor((endTime - startTime) / getBarDuration()));
+        }
+
+        const measurementText = `📏 ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)} | ${barsCount} баров`;
+
+        const midX = (rulerStart.x + rulerEnd.x) / 2;
+        const midY = (rulerStart.y + rulerEnd.y) / 2;
+
+        els.rulerMeasurement.textContent = measurementText;
+        els.rulerMeasurement.style.left = `${midX - 50}px`;
+        els.rulerMeasurement.style.top = `${midY - 20}px`;
+        els.rulerMeasurement.style.display = 'block';
+
+        setTimeout(() => {
+            els.rulerMeasurement.style.display = 'none';
+        }, 5000);
+    }
+
+    function getBarDuration() {
+        switch(currentTF) {
+            case '1m': return 60;
+            case '5m': return 300;
+            case '15m': return 900;
+            case '30m': return 1800;
+            case '1h': return 3600;
+            case '4h': return 14400;
+            default: return 60;
+        }
+    }
+
+    function handlePencilDraw(param) {
+        if (!isPencilEnabled || !isDrawing || !pencilCtx) return;
+
+        if (!lastPencilPoint) {
+            lastPencilPoint = param.point;
             return;
         }
 
-        console.log('🟣 Создаю линию на цене:', price);
-        try {
-            const line = candleSeries.createPriceLine({
-                price: price,
-                color: 'rgba(240, 185, 11, 0.9)',
-                lineWidth: 2,
-                lineStyle: LightweightCharts.LineStyle.Dashed,
-                axisLabelVisible: true,
-                axisLabelColor: '#ffffff',
-                axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
-                title: ` ${price.toFixed(currentPrecision)}`
-            });
+        pencilCtx.beginPath();
+        pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
+        pencilCtx.lineTo(param.point.x, param.point.y);
+        pencilCtx.stroke();
 
-            alertLines.push(line);
-            alertData.push({ price: price, line: line, active: true });
-            console.log('✅ Линия создана! Всего алертов:', alertData.length);
-
-            toggleAlertMode();
-            console.log('✅ Готово!');
-        } catch (e) {
-            console.error('❌ Ошибка createPriceLine:', e);
-        }
+        lastPencilPoint = param.point;
     }
 
     function updateWatermark() {
@@ -1526,9 +1770,28 @@
 
             chart.subscribeCrosshairMove((param) => {
                 if (isMagnetEnabled) updateMagnetIndicator(param);
+                if (isPencilEnabled && isDrawing) handlePencilDraw(param);
             });
+
             chart.subscribeClick((param) => {
                 handleChartClick(param);
+            });
+
+            els.chartWrapper.addEventListener('mousedown', (e) => {
+                if (isPencilEnabled && e.button === 0) {
+                    isDrawing = true;
+                    initPencilCanvas();
+                }
+            });
+
+            els.chartWrapper.addEventListener('mouseup', () => {
+                isDrawing = false;
+                lastPencilPoint = null;
+            });
+
+            els.chartWrapper.addEventListener('mouseleave', () => {
+                isDrawing = false;
+                lastPencilPoint = null;
             });
 
         } catch (e) {
@@ -1665,6 +1928,21 @@
     window.addEventListener('resize', () => {
         if (chart && els.chartWrapper.classList.contains('active')) {
             chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
+            if (isPencilEnabled) initPencilCanvas();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            toggleTrendLine();
+        }
+        if (e.altKey && e.key === 'ArrowLeft') {
+            e.preventDefault();
+            togglePencil();
+        }
+        if (e.key === 'b' || e.key === 'B') {
+            toggleAlertMode();
         }
     });
 
@@ -1743,6 +2021,14 @@
         }
         document.removeEventListener('click', initSpeech);
     }, { once: true });
+
+    const savedShowDrawingTools = localStorage.getItem('showDrawingTools');
+    if (savedShowDrawingTools !== null) {
+        showDrawingTools = savedShowDrawingTools === 'true';
+        if (els.drawingToolsPanel) {
+            els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+        }
+    }
 
     loadAllData();
     startNatrAutoUpdate();
