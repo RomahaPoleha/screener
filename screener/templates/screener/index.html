@@ -794,17 +794,45 @@
     }
 
     function togglePencil() {
-        isPencilEnabled = !isPencilEnabled;
-        updateToolUI('pencilBtn', isPencilEnabled);
-        if (isPencilEnabled) {
-            isAlertModeEnabled = false; isTrendLineEnabled = false; isRulerEnabled = false;
-            updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('rulerBtn', false);
-            initPencilCanvas();
-        } else {
-            isDrawing = false; lastPencilPoint = null;
-            clearSpecificDrawings('pencil');
+    isPencilEnabled = !isPencilEnabled;
+    updateToolUI('pencilBtn', isPencilEnabled);
+
+    if (isPencilEnabled) {
+        isAlertModeEnabled = false;
+        isTrendLineEnabled = false;
+        isRulerEnabled = false;
+        updateToolUI('alertBtn', false);
+        updateToolUI('trendLineBtn', false);
+        updateToolUI('rulerBtn', false);
+
+        // Отключаем панорамирование графика через левую кнопку мыши
+        if (chart) {
+            chart.applyOptions({
+                handleScroll: {
+                    mouseWheel: true,
+                    pressedMouseMove: false  // ← Это отключает перетаскивание графика
+                }
+            });
         }
+
+        initPencilCanvas();
+    } else {
+        isDrawing = false;
+        lastPencilPoint = null;
+
+        // Возвращаем возможность панорамирования графика
+        if (chart) {
+            chart.applyOptions({
+                handleScroll: {
+                    mouseWheel: true,
+                    pressedMouseMove: true  // ← Возвращаем обратно
+                }
+            });
+        }
+
+        clearSpecificDrawings('pencil');
     }
+}
 
     function toggleRuler() {
         isRulerEnabled = !isRulerEnabled;
