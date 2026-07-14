@@ -1371,43 +1371,54 @@
 }
 
     function handleChartClick(param) {
-    console.log('👆 Raw Click param:', param); // Смотрим, что вообще приходит
+    console.log('1. Клик произошёл. param:', param);
 
     if (!isAlertModeEnabled) {
-        console.log('❌ Режим алерта выключен');
+        console.log('2. ❌ Стоп: Режим алерта выключен. Нажми кнопку "🔔 Алерт"');
         return;
     }
-    if (!candleSeries) {
-        console.log('❌ График (candleSeries) не инициализирован');
-        return;
-    }
-
-    // В LC v4 param.price содержит цену под курсором. Это надёжнее, чем param.point
-    const price = param.price;
-
-    if (!price) {
-        console.log('❌ Не удалось определить цену. Возможно, клик был вне области графика.');
+    if (!candleSeries || !chart) {
+        console.log('2. ❌ Стоп: График (candleSeries) не инициализирован');
         return;
     }
 
-    console.log('✅ Алерт создан на цене:', price);
+    // Пытаемся взять цену напрямую из param. Если нет - вычисляем из Y-координаты
+    let price = param.price;
+    if ((!price || isNaN(price)) && param.point) {
+        price = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
+        console.log('   -> Цена вычислена из Y-координаты:', price);
+    }
 
-    const line = candleSeries.createPriceLine({
-        price: price,
-        color: 'rgba(240, 185, 11, 0.8)',
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
-        axisLabelVisible: true,
-        axisLabelColor: '#f0b90b',
-        axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.3)',
-        title: `🔔 ${price.toFixed(currentPrecision)}` // Используем точность графика
-    });
+    console.log('3. Итоговая цена для линии:', price);
 
-    alertLines.push(line);
-    saveAlerts();
+    if (!price || isNaN(price) || price === null) {
+        console.log('4. ❌ Стоп: Не удалось получить корректную цену. Возможно, клик был по пустому полю.');
+        return;
+    }
 
-    // Выключаем режим алерта после успешного создания
-    toggleAlertMode();
+    console.log('5. Пытаемся создать линию через createPriceLine...');
+    try {
+        const line = candleSeries.createPriceLine({
+            price: price,
+            color: 'rgba(240, 185, 11, 0.9)',
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true,
+            axisLabelColor: '#ffffff',
+            axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
+            title: `🔔 ${price.toFixed(currentPrecision)}`
+        });
+
+        console.log('6. ✅ Линия успешно создана объектом:', line);
+        alertLines.push(line);
+
+        // Выключаем режим после успешного создания
+        toggleAlertMode();
+        console.log('7. Режим алерта выключен автоматически.');
+
+    } catch (e) {
+        console.error('6. ❌ Критическая ошибка при создании линии:', e);
+    }
 }
 
     function updateWatermark() {
