@@ -1257,29 +1257,36 @@
         console.log('🗑️ Все рисунки очищены');
     }
 
-    function createMagnetIndicator() {
-        if (!chart) return;
+        function createMagnetIndicator() {
+        // ИСПРАВЛЕНО: используем els.chartWrapper вместо несуществующего chartWrapper
+        if (!chart || !els.chartWrapper) {
+            console.warn('⚠️ [МАГНИТ] График или контейнер не готовы');
+            return;
+        }
         removeMagnetIndicator();
         magnetIndicator = document.createElement('div');
-        magnetIndicator.className = 'magnet-indicator active';
-        chartWrapper.appendChild(magnetIndicator);
+        magnetIndicator.className = 'magnet-indicator';
+        els.chartWrapper.appendChild(magnetIndicator);
+        console.log('✅ [МАГНИТ] Индикатор успешно добавлен в DOM');
     }
 
     function removeMagnetIndicator() {
         if (magnetIndicator && magnetIndicator.parentNode) {
             magnetIndicator.parentNode.removeChild(magnetIndicator);
             magnetIndicator = null;
+            console.log('🗑️ [МАГНИТ] Индикатор удалён из DOM');
         }
     }
 
-        function updateMagnetIndicator(param) {
-        // 1. Базовые проверки
+    function updateMagnetIndicator(param) {
+        // Добавлен лог для отладки, чтобы видеть, что функция вызывается
+        // console.log('🟡 [МАГНИТ] Движение мыши. Включен:', isMagnetEnabled, 'Элемент существует:', !!magnetIndicator);
+
         if (!isMagnetEnabled || !magnetIndicator) {
             if (magnetIndicator) magnetIndicator.style.display = 'none';
             return;
         }
 
-        // param.point существует, когда мышь над областью графика
         if (!param || !param.point) {
             magnetIndicator.style.display = 'none';
             return;
@@ -1291,13 +1298,13 @@
             return;
         }
 
-        // 2. Надёжно получаем время под курсором (даже если param.time === undefined)
+        // Надёжно получаем время под курсором
         let cursorTime = param.time;
         if (!cursorTime && param.point.x !== undefined) {
             cursorTime = chart.timeScale().coordinateToTime(param.point.x);
         }
 
-        // 3. Находим ближайшую свечу по времени
+        // Находим ближайшую свечу по времени
         let nearestCandle = null;
         let minTimeDiff = Infinity;
 
@@ -1309,7 +1316,6 @@
                     nearestCandle = candle;
                 }
             } else {
-                // Фоллбэк: если время не определилось, берём последнюю свечу
                 nearestCandle = candles[candles.length - 1];
             }
         }
@@ -1319,14 +1325,14 @@
             return;
         }
 
-        // 4. Получаем цену под курсором
+        // Получаем цену под курсором
         const priceAtCursor = candleSeries.coordinateToPrice(param.point.y);
         if (priceAtCursor === null || priceAtCursor === undefined) {
             magnetIndicator.style.display = 'none';
             return;
         }
 
-        // 5. Собираем точки примагничивания (OHLC + Алерты)
+        // Собираем точки примагничивания (OHLC + Алерты)
         const magnetPoints = [
             { type: 'ohlc', price: nearestCandle.open, distance: Math.abs(nearestCandle.open - priceAtCursor) },
             { type: 'ohlc', price: nearestCandle.high, distance: Math.abs(nearestCandle.high - priceAtCursor) },
@@ -1344,22 +1350,19 @@
             });
         });
 
-        // 6. Находим ближайшую точку по цене
+        // Находим ближайшую точку по цене
         magnetPoints.sort((a, b) => a.distance - b.distance);
         const nearestPoint = magnetPoints[0];
 
-        // 7. Вычисляем итоговые координаты для "примагничивания"
-        // Привязываем X к времени свечи, а Y к цене точки (OHLC или алерт)
+        // Вычисляем итоговые координаты для "примагничивания"
         const snapX = chart.timeScale().timeToCoordinate(nearestCandle.time);
         const snapY = candleSeries.priceToCoordinate(nearestPoint.price);
 
         if (snapX !== null && snapY !== null) {
             magnetIndicator.style.display = 'block';
-            // Центрируем индикатор 10x10px (сдвигаем на 5px)
             magnetIndicator.style.left = `${snapX - 5}px`;
             magnetIndicator.style.top = `${snapY - 5}px`;
 
-            // Цвет зависит от типа точки
             if (nearestPoint.type === 'alert') {
                 magnetIndicator.classList.add('alert-magnet');
             } else {
