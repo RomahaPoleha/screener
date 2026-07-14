@@ -420,7 +420,7 @@
     <span class="logo"> Screener</span>
     <div style="margin-left:auto; display:flex; gap:8px;">
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
-        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;"> Крупные сделки</button>
+        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">💰 Крупные сделки</button>
     </div>
 </div>
 
@@ -464,7 +464,7 @@
         <div class="trades-overlay" id="tradesOverlay">
             <div class="trades-overlay-header">
                 <div class="trades-overlay-header-top">
-                    <h5> Крупные сделки</h5>
+                    <h5>💰 Крупные сделки</h5>
                     <button class="trades-overlay-close" onclick="closeTradesOverlay()">✕</button>
                 </div>
                 <div class="trades-threshold-row">
@@ -534,7 +534,7 @@
                 </div>
                 <!-- Секция: RECON -->
                 <div class="modal-section">
-                    <div class="modal-section-title"> RECON — Сырой стакан</div>
+                    <div class="modal-section-title">🔍 RECON — Сырой стакан</div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
                         <div style="display:flex; gap:16px;">
@@ -603,7 +603,7 @@
                             <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность до 500K<br>
                             <span style="color:#ba55d3;">🟣 Фиолетовый</span> — плотность от 500K<br>
                             <span style="color:#ffffff;">⚪ Белые линии</span> — RECON (сырой стакан)<br>
-                            <span style="color:#fbbf24;"> Label</span> — BI-F объём время (1ч 45м)
+                            <span style="color:#fbbf24;">📊 Label</span> — BI-F объём время (1ч 45м)
                         </div>
                     </div>
                     <div style="margin-top:12px;">
@@ -928,7 +928,7 @@
 
         const soundBtnModal = document.getElementById('soundToggleModal');
         if (soundBtnModal) {
-            soundBtnModal.textContent = soundEnabled ? ' Голосовое оповещение' : ' Голосовое оповещение';
+            soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
             soundBtnModal.classList.toggle('muted', !soundEnabled);
         }
 
@@ -1252,13 +1252,12 @@
 
         localStorage.setItem('magnetEnabled', isMagnetEnabled);
 
-        // Создаём или удаляем индикатор
         if (isMagnetEnabled) {
             createMagnetIndicator();
             console.log('🧲 Магнит включён');
         } else {
             removeMagnetIndicator();
-            console.log(' Магнит выключен');
+            console.log('🧲 Магнит выключен');
         }
     }
 
@@ -1273,12 +1272,11 @@
         if (isAlertModeEnabled) {
             console.log('🔔 Режим алерта включён (кликни на график)');
         } else {
-            console.log(' Режим алерта выключен');
+            console.log('🔔 Режим алерта выключен');
         }
     }
 
     function clearAllDrawings() {
-        // Удаляем все алерты
         alertLines.forEach(line => {
             if (candleSeries) {
                 try {
@@ -1287,20 +1285,13 @@
             }
         });
         alertLines = [];
-
-        // Очищаем localStorage
         localStorage.removeItem('alertLines');
-
         console.log('🗑️ Все рисунки очищены');
     }
 
     function createMagnetIndicator() {
         if (!chart) return;
-
-        // Удаляем старый индикатор если есть
         removeMagnetIndicator();
-
-        // Создаём новый
         magnetIndicator = document.createElement('div');
         magnetIndicator.className = 'magnet-indicator active';
         chartWrapper.appendChild(magnetIndicator);
@@ -1314,113 +1305,97 @@
     }
 
     function updateMagnetIndicator(param) {
-    if (!isMagnetEnabled || !magnetIndicator || !param.point || !param.time) {
-        if (magnetIndicator) magnetIndicator.style.display = 'none';
-        return;
-    }
+        if (!isMagnetEnabled || !magnetIndicator || !param.point || !param.time) {
+            if (magnetIndicator) magnetIndicator.style.display = 'none';
+            return;
+        }
 
-    // Находим ближайшую свечу
-    const candles = window.candleData || [];
-    if (candles.length === 0) return;
+        const candles = window.candleData || [];
+        if (candles.length === 0) return;
 
-    // Находим свечу по времени
-    let nearestCandle = null;
-    let minTimeDiff = Infinity;
+        let nearestCandle = null;
+        let minTimeDiff = Infinity;
 
-    for (const candle of candles) {
-        const timeDiff = Math.abs(candle.time - param.time);
-        if (timeDiff < minTimeDiff) {
-            minTimeDiff = timeDiff;
-            nearestCandle = candle;
+        for (const candle of candles) {
+            const timeDiff = Math.abs(candle.time - param.time);
+            if (timeDiff < minTimeDiff) {
+                minTimeDiff = timeDiff;
+                nearestCandle = candle;
+            }
+        }
+
+        if (!nearestCandle) {
+            magnetIndicator.style.display = 'none';
+            return;
+        }
+
+        const priceAtCursor = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
+        if (priceAtCursor === null) {
+            magnetIndicator.style.display = 'none';
+            return;
+        }
+
+        const prices = {
+            'open': nearestCandle.open,
+            'high': nearestCandle.high,
+            'low': nearestCandle.low,
+            'close': nearestCandle.close
+        };
+
+        let nearestPoint = 'close';
+        let minPriceDiff = Infinity;
+
+        for (const [point, price] of Object.entries(prices)) {
+            const priceDiff = Math.abs(price - priceAtCursor);
+            if (priceDiff < minPriceDiff) {
+                minPriceDiff = priceDiff;
+                nearestPoint = point;
+            }
+        }
+
+        const magnetPrice = prices[nearestPoint];
+        const y = chart.priceToCoordinate(magnetPrice, candleSeries.priceScale());
+
+        if (y !== null) {
+            magnetIndicator.style.display = 'block';
+            magnetIndicator.style.left = `${param.point.x - 4}px`;
+            magnetIndicator.style.top = `${y - 4}px`;
         }
     }
 
-    if (!nearestCandle) {
-        magnetIndicator.style.display = 'none';
-        return;
-    }
-
-    // Конвертируем Y координату в цену
-    const priceAtCursor = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
-    if (priceAtCursor === null) {
-        magnetIndicator.style.display = 'none';
-        return;
-    }
-
-    // Определяем ближайшую точку OHLC
-    const prices = {
-        'open': nearestCandle.open,
-        'high': nearestCandle.high,
-        'low': nearestCandle.low,
-        'close': nearestCandle.close
-    };
-
-    let nearestPoint = 'close';
-    let minPriceDiff = Infinity;
-
-    for (const [point, price] of Object.entries(prices)) {
-        const priceDiff = Math.abs(price - priceAtCursor);
-        if (priceDiff < minPriceDiff) {
-            minPriceDiff = priceDiff;
-            nearestPoint = point;
-        }
-    }
-
-    // Показываем индикатор
-    const magnetPrice = prices[nearestPoint];
-    const y = chart.priceToCoordinate(magnetPrice, candleSeries.priceScale());
-
-    if (y !== null) {
-        magnetIndicator.style.display = 'block';
-        magnetIndicator.style.left = `${param.point.x - 4}px`;
-        magnetIndicator.style.top = `${y - 4}px`;
-    }
-}
-
-    // Обработка клика по графику для создания алерта
     function handleChartClick(param) {
-    if (!isAlertModeEnabled || !candleSeries || !param.point) {
-        console.log('❌ Клик не обработан:', {
-            mode: isAlertModeEnabled,
-            series: !!candleSeries,
-            point: !!param.point
+        if (!isAlertModeEnabled || !candleSeries || !param.point) {
+            console.log('❌ Клик не обработан:', {
+                mode: isAlertModeEnabled,
+                series: !!candleSeries,
+                point: !!param.point
+            });
+            return;
+        }
+
+        const price = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
+
+        if (price === null || price === undefined) {
+            console.log('❌ Не удалось получить цену');
+            return;
+        }
+
+        console.log('✅ Алерт создан:', price.toFixed(2));
+
+        const line = candleSeries.createPriceLine({
+            price: price,
+            color: 'rgba(240, 185, 11, 0.8)',
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true,
+            axisLabelColor: '#f0b90b',
+            axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.3)',
+            title: `🔔 ${price.toFixed(2)}`
         });
-        return;
-    }
 
-    // Конвертируем Y координату в цену
-    const price = chart.coordinateToPrice(param.point.y, candleSeries.priceScale());
-
-    if (price === null || price === undefined) {
-        console.log('❌ Не удалось получить цену');
-        return;
-    }
-
-    console.log('✅ Алерт создан:', price.toFixed(2));
-
-    // Создаём горизонтальную линию
-    const line = candleSeries.createPriceLine({
-        price: price,
-        color: 'rgba(240, 185, 11, 0.8)',
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
-        axisLabelVisible: true,
-        axisLabelColor: '#f0b90b',
-        axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.3)',
-        title: `🔔 ${price.toFixed(2)}`
-    });
-
-    alertLines.push(line);
-    saveAlerts();
-
-    // Выключаем режим алерта
-    toggleAlertMode();
-}
-
-    function saveAlerts() {
-        // Упрощённое сохранение - просто количество алертов
-        // Для полноценного нужно хранить price и другие параметры
-        localStorage.setItem('alertLinesCount', alertLines.length);
+        alertLines.push(line);
+        localStorage.setItem('alertLines', JSON.stringify(alertLines.map(l => ({ price: l._price, options: l._options }))));
+        toggleAlertMode();
     }
 
     function updateWatermark() {
@@ -1463,7 +1438,6 @@
             scalpUpdateTimer = null;
         }
 
-        // Очищаем алерты
         clearAllDrawings();
 
         if (wsCandles) {
@@ -1538,14 +1512,9 @@
             });
 
             volumeSeries = chart.addHistogramSeries({
-                priceFormat: {
-                    type: 'volume',
-                },
+                priceFormat: { type: 'volume' },
                 priceScaleId: 'volume',
-                scaleMargins: {
-                    top: 0.85,
-                    bottom: 0,
-                },
+                scaleMargins: { top: 0.85, bottom: 0 },
             });
 
             chart.priceScale('volume').applyOptions({
@@ -1554,24 +1523,27 @@
             });
 
             if (volumeSeries) {
-                volumeSeries.applyOptions({
-                    visible: volumeHistogramEnabled
-                });
+                volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
             }
 
-           // Подписка на движение мыши (для магнита)
-chart.subscribeCrosshairMove((param) => {
-    console.log('🖱️ Mouse move:', param);
-    if (isMagnetEnabled) {
-        updateMagnetIndicator(param);
-    }
-});
+            // Подписка на движение мыши (для магнита)
+            chart.subscribeCrosshairMove((param) => {
+                console.log('🖱️ Mouse move:', param);
+                if (isMagnetEnabled) {
+                    updateMagnetIndicator(param);
+                }
+            });
 
-// Подписка на клик (для алертов)
-chart.subscribeClick((param) => {
-    console.log('👆 Click:', param);
-    handleChartClick(param);
-});
+            // Подписка на клик (для алертов)
+            chart.subscribeClick((param) => {
+                console.log('👆 Click:', param);
+                handleChartClick(param);
+            });
+
+        } catch (e) {
+            console.error('Chart init error:', e);
+            return;
+        }
 
         await loadChartData(symbol, currentTF);
         startCandleWebSocket(symbol, currentTF);
@@ -1736,13 +1708,11 @@ chart.subscribeClick((param) => {
 
     function toggleSound() {
         soundEnabled = !soundEnabled;
-
         const btnModal = document.getElementById('soundToggleModal');
         if (btnModal) {
             btnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
             btnModal.classList.toggle('muted', !soundEnabled);
         }
-
         localStorage.setItem('soundEnabled', soundEnabled);
         if (soundEnabled) speak('Оповещения включены');
     }
@@ -1751,8 +1721,7 @@ chart.subscribeClick((param) => {
 
     function initVoices() {
         const voices = speechSynthesis.getVoices();
-        russianVoice = voices.find(v => v.lang.startsWith('ru')) ||
-                       voices.find(v => v.lang.includes('ru')) || null;
+        russianVoice = voices.find(v => v.lang.startsWith('ru')) || voices.find(v => v.lang.includes('ru')) || null;
     }
 
     if ('speechSynthesis' in window) {
@@ -1789,7 +1758,7 @@ chart.subscribeClick((param) => {
         const currentMinuteKey = now.getHours() * 60 + minutes;
         if (minutes === 55 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
             lastNotifiedMinute = currentMinuteKey;
-            showHourToast(' До нового часа 5 минут');
+            showHourToast('⏰ До нового часа 5 минут');
             speak('До перехода на новый час осталось 5 минут');
         }
         if (minutes === 59 && seconds < 3 && lastNotifiedMinute !== currentMinuteKey) {
