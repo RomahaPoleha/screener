@@ -125,12 +125,7 @@ STATICFILES_DIRS = [
     BASE_DIR / 'screener' / 'static',
 ]
 
-# Настройка для Django 4.2+ (если версия ниже, эту часть STORAGES можно убрать)
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
+
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
 
