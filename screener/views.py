@@ -5,6 +5,8 @@ from django.core.cache import cache
 from django.shortcuts import render
 from django.http import FileResponse, Http404
 import os
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Минимальный объём для фильтрации
 MIN_VOLUME = 200000
