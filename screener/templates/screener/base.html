@@ -8,13 +8,22 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <!-- Вставляем CSS прямо в HTML -->
+    <style>
+        {% include "screener/styles.css" %}
+    </style>
 </head>
 <body>
     {% block content %}{% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{% static 'js/state.js' %}"></script>
-    <script src="{% static 'js/app.js' %}"></script>
+
+    <!-- Вставляем JS прямо в HTML -->
+    <script>
+        {% include "screener/state.js" %}
+    </script>
+    <script>
+        {% include "screener/app.js" %}
+    </script>
 </body>
 </html>
