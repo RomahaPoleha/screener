@@ -26,7 +26,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-local-dev-only-change-in-p
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 
 ALLOWED_HOSTS = ['*']
 
@@ -51,6 +51,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -118,7 +119,18 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [
+    BASE_DIR / 'screener' / 'static',
+]
+
+# Настройка для Django 4.2+ (если версия ниже, эту часть STORAGES можно убрать)
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
 

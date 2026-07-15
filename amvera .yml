@@ -7,6 +7,8 @@ meta:
 build:
   requirementsPath: requirements.txt
   useCache: true
+  preBuild:
+    - python manage.py collectstatic --noinput  # <-- Добавь эти две строки
 
 run:
   command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
