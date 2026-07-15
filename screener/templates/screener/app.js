@@ -1,4 +1,30 @@
 // ==========================================
+// ПРЕДЗАГРУЗКА АУДИО ФАЙЛОВ
+// ==========================================
+const sound5min = new Audio('/api/sound/alert_5min.mp3');
+const sound1min = new Audio('/api/sound/alert_1min.mp3');
+sound5min.preload = 'auto';
+sound1min.preload = 'auto';
+
+function playHourSound(minutesLeft) {
+    if (!soundEnabled) return;
+
+    const sound = minutesLeft === 5 ? sound5min : sound1min;
+
+    // Сбрасываем на начало (если звук уже играл)
+    sound.currentTime = 0;
+
+    // Пытаемся воспроизвести
+    sound.play().catch(err => {
+        console.warn('Не удалось воспроизвести звук:', err);
+        // Fallback на голосовое оповещение
+        speak(minutesLeft === 5
+            ? 'До перехода на новый час осталось 5 минут'
+            : 'Внимание, до перехода на новый час осталась 1 минута');
+    });
+}
+
+// ==========================================
 // УТИЛИТЫ И ФОРМАТИРОВАНИЕ
 // ==========================================
 const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
@@ -222,7 +248,7 @@ function startCandleWebSocket(symbol, tf) {
                     });
                 }
             }
-        } catch (err) { console.error('❌ Ошибка парсинга WS свечи:', err); }
+        } catch (err) { console.error(' Ошибка парсинга WS свечи:', err); }
     };
     wsCandles.onerror = (e) => console.error(' WS свечей ошибка:', e);
     wsCandles.onclose = () => {
@@ -267,7 +293,6 @@ function clearSpecificDrawings(type) {
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
         activeTrendlines = [];
     } else if (type === 'pencil') {
-        // ИЗМЕНЕНО: очищаем массивы штрихов
         pencilStrokes = [];
         currentStroke = null;
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
@@ -390,7 +415,6 @@ function initPencilCanvas() {
     redrawAllPersistentDrawings();
 }
 
-// НОВАЯ ФУНКЦИЯ: перерисовка всех штрихов карандаша в координатах свечей
 function redrawPencilStrokes() {
     if (!pencilCtx || !chart || !candleSeries) return;
 
@@ -399,7 +423,6 @@ function redrawPencilStrokes() {
     pencilCtx.lineCap = 'round';
     pencilCtx.lineJoin = 'round';
 
-    // Рисуем все завершённые штрихи
     pencilStrokes.forEach(stroke => {
         if (stroke.length < 2) return;
         pencilCtx.beginPath();
@@ -424,7 +447,6 @@ function redrawPencilStrokes() {
         pencilCtx.stroke();
     });
 
-    // Рисуем текущий (ещё не завершённый) штрих
     if (currentStroke && currentStroke.length >= 2) {
         pencilCtx.beginPath();
         let started = false;
@@ -523,7 +545,6 @@ function redrawAllPersistentDrawings() {
         drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
     }
 
-    // НОВОЕ: перерисовка штрихов карандаша
     redrawPencilStrokes();
 
     pencilCtx.setLineDash([]);
@@ -566,27 +587,23 @@ function handleChartClick(param) {
     }
 }
 
-// ИЗМЕНЕНО: теперь сохраняем точки в координатах свечей (time, price)
 function handlePencilDraw(param) {
     if (!isPencilEnabled || !isDrawing || !pencilCtx || !param.point) return;
 
     const price = candleSeries.coordinateToPrice(param.point.y);
     const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
 
-    // Если не удалось получить координаты свечи — пропускаем точку
     if (!price || !time) {
         lastPencilPoint = param.point;
         return;
     }
 
-    // Сохраняем точку в координатах свечи (а не пикселях!)
     if (!currentStroke) {
         currentStroke = [{ time, price }];
     } else {
         currentStroke.push({ time, price });
     }
 
-    // Рисуем линию от предыдущей точки к текущей (в пикселях, для мгновенного отображения)
     if (lastPencilPoint) {
         pencilCtx.strokeStyle = '#f0b90b';
         pencilCtx.lineWidth = 2;
@@ -1066,13 +1083,11 @@ async function openChart(symbol) {
             if (e.button === 1) e.preventDefault();
         });
 
-        // ИЗМЕНЕНО: при отпускании мыши сохраняем штрих карандаша
         els.chartWrapper.addEventListener('mouseup', (e) => {
             if (isPencilEnabled && e.button === 0) {
                 isDrawing = false;
                 lastPencilPoint = null;
 
-                // Сохраняем завершённый штрих
                 if (currentStroke && currentStroke.length > 0) {
                     pencilStrokes.push(currentStroke);
                     currentStroke = null;
@@ -1090,13 +1105,11 @@ async function openChart(symbol) {
             }
         });
 
-        // ИЗМЕНЕНО: при выходе мыши за пределы тоже сохраняем штрих
         els.chartWrapper.addEventListener('mouseleave', () => {
             if (isPencilEnabled) {
                 isDrawing = false;
                 lastPencilPoint = null;
 
-                // Сохраняем штрих при выходе мыши за пределы
                 if (currentStroke && currentStroke.length > 0) {
                     pencilStrokes.push(currentStroke);
                     currentStroke = null;
@@ -1221,16 +1234,22 @@ function showHourToast(title) {
     toast.classList.add('show');
     setTimeout(() => { toast.classList.remove('show'); }, 5000);
 }
+
+// ИЗМЕНЕНО: используем MP3 вместо голосовых оповещений
 function checkHourTransition() {
     const now = new Date();
     const currentMinuteKey = now.getHours() * 60 + now.getMinutes();
+
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast(' До нового часа 5 минут'); speak('До перехода на новый час осталось 5 минут');
+        showHourToast('⏰ До нового часа 5 минут');
+        playHourSound(5);  // ← вместо speak()
     }
+
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast('⏰ До нового часа 1 минута'); speak('Внимание, до перехода на новый час осталась 1 минута');
+        showHourToast('⏰ До нового часа 1 минута');
+        playHourSound(1);  // ← вместо speak()
     }
 }
 setInterval(checkHourTransition, 1000);

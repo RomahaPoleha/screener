@@ -3,6 +3,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.shortcuts import render
+from django.http import FileResponse, Http404
+import os
 
 # Минимальный объём для фильтрации
 MIN_VOLUME = 200000
@@ -188,6 +190,29 @@ def api_scalp(request, symbol):
         'market': market,
         'server_time': now
     })
+
+
+
+
+SOUNDS_DIR = BASE_DIR.parent / 'screener' / 'sounds'
+
+
+def api_sound(request, filename):
+    """Отдаёт аудиофайл из папки sounds"""
+    # Защита от path traversal
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise Http404
+
+    filepath = SOUNDS_DIR / filename
+
+    if not filepath.exists():
+        raise Http404(f'Звук не найден: {filename}')
+
+    return FileResponse(
+        open(filepath, 'rb'),
+        content_type='audio/mpeg',
+        as_attachment=False
+    )
 
 def index(request):
     """Главная страница"""
