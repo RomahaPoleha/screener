@@ -1,12 +1,30 @@
 <div class="left-panel">
     <div class="chart-area">
         <div class="drawing-tools-panel" id="drawingToolsPanel">
-            <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (CTRL+S)">📈 Трендовая</div>
-            <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (ALT+LEFT)">✏️ Карандаш</div>
-            <div class="tool-btn" id="rulerBtn" onclick="toggleRuler()" title="Линейка (Зажать колёсико)">📏 Линейка</div>
-            <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">🧲 Магнит</div>
-            <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (B)">🔔 Алерт</div>
-            <div class="tool-btn" onclick="clearAllDrawings()" title="Очистить всё">🗑️ Очистить</div>
+            <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (Ctrl+S)">
+                <span class="tool-icon">📈</span>
+            </div>
+            <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (Alt+←)">
+                <span class="tool-icon">️</span>
+            </div>
+            <div class="tool-btn" id="rulerBtn" onclick="toggleRuler()" title="Линейка (колёсико)">
+                <span class="tool-icon">📏</span>
+            </div>
+
+            <div class="tool-divider"></div>
+
+            <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">
+                <span class="tool-icon">🧲</span>
+            </div>
+            <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (B)">
+                <span class="tool-icon">🔔</span>
+            </div>
+
+            <div class="tool-divider"></div>
+
+            <div class="tool-btn tool-btn-danger" onclick="clearAllDrawings()" title="Очистить всё">
+                <span class="tool-icon">🗑️</span>
+            </div>
         </div>
 
         <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена"></div>
