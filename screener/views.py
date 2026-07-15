@@ -196,7 +196,8 @@ def api_scalp(request, symbol):
 
 
 
-SOUNDS_DIR = BASE_DIR.parent / 'screener' / 'sounds'
+# Путь к папке со звуками (рядом с manage.py)
+SOUNDS_DIR = BASE_DIR / 'sounds'
 
 
 def api_sound(request, filename):
