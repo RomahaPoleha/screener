@@ -1021,45 +1021,99 @@
     }
 
     function showRulerMeasurement(start, end) {
-        if (!start || !end) return;
+    if (!start || !end) return;
 
-        const priceDiff = Math.abs(end.price - start.price);
-        const pricePercent = ((priceDiff / start.price) * 100).toFixed(2);
-        const direction = end.price >= start.price ? '↑' : '↓';
-        const color = end.price >= start.price ? '#22c55e' : '#ef4444';
+    // Основное изменение (как сейчас)
+    const priceDiff = Math.abs(end.price - start.price);
+    const pricePercent = ((priceDiff / start.price) * 100).toFixed(2);
+    const direction = end.price >= start.price ? '↑' : '↓';
+    const color = end.price >= start.price ? '#22c55e' : '#ef4444';
 
-        let barsCount = 0;
-        if (start.time && end.time) {
-            const t1 = typeof start.time === 'number' ? start.time : start.time.timestamp;
-            const t2 = typeof end.time === 'number' ? end.time : end.time.timestamp;
-            const tfSeconds = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
-            barsCount = Math.abs(Math.floor((t2 - t1) / tfSeconds));
-        }
+    // Подсчёт баров
+    let barsCount = 0;
+    if (start.time && end.time) {
+        const t1 = typeof start.time === 'number' ? start.time : start.time.timestamp;
+        const t2 = typeof end.time === 'number' ? end.time : end.time.timestamp;
+        const tfSeconds = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+        barsCount = Math.abs(Math.floor((t2 - t1) / tfSeconds));
+    }
 
-        const formatTime = (t) => {
-            const time = typeof t === 'number' ? t : t.timestamp;
-            const date = new Date(time * 1000);
-            return date.toLocaleString('ru-RU', {
-                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
-            });
-        };
+    // ===== НОВОЕ: Анализ волатильности в диапазоне =====
+    const candles = window.candleData || [];
+    const startTime = typeof start.time === 'number' ? start.time : start.time.timestamp;
+    const endTime = typeof end.time === 'number' ? end.time : end.time.timestamp;
 
-        els.rulerMeasurement.innerHTML = `
-            <div style="font-weight:700; color:${color}; margin-bottom:4px;">
-                ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
+    // Фильтруем свечи в диапазоне
+    const rangeCandles = candles.filter(c => {
+        const candleTime = typeof c.time === 'number' ? c.time : c.time;
+        return candleTime >= Math.min(startTime, endTime) &&
+               candleTime <= Math.max(startTime, endTime);
+    });
+
+    let volatilityPercent = '-';
+    let volatilityValue = '-';
+    let maxPrice = '-';
+    let minPrice = '-';
+
+    if (rangeCandles.length > 0) {
+        // Находим максимум и минимум
+        let highest = -Infinity;
+        let lowest = Infinity;
+
+        rangeCandles.forEach(candle => {
+            if (candle.high > highest) highest = candle.high;
+            if (candle.low < lowest) lowest = candle.low;
+        });
+
+        maxPrice = highest.toFixed(currentPrecision);
+        minPrice = lowest.toFixed(currentPrecision);
+
+        // Считаем волатильность
+        const volatilityDiff = highest - lowest;
+        volatilityValue = volatilityDiff.toFixed(currentPrecision);
+        volatilityPercent = ((volatilityDiff / lowest) * 100).toFixed(2);
+    }
+
+    // Форматируем время
+    const formatTime = (t) => {
+        const time = typeof t === 'number' ? t : t.timestamp;
+        const date = new Date(time * 1000);
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit', month: '2-digit',
+            hour: '2-digit', minute: '2-digit', hour12: false
+        });
+    };
+
+    // ===== Показываем результат =====
+    els.rulerMeasurement.innerHTML = `
+        <div style="font-weight:700; color:${color}; margin-bottom:6px; font-size:12px;">
+            ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
+        </div>
+        <div style="font-size:10px; color:#9ca3af; margin-bottom:6px;">
+            ${barsCount} баров<br>
+            ${formatTime(start.time)} → ${formatTime(end.time)}
+        </div>
+        ${volatilityPercent !== '-' ? `
+        <div style="border-top:1px solid #2d3748; margin:6px -12px -6px -12px; padding:6px 12px 0 12px;">
+            <div style="color:#f0b90b; font-weight:600; font-size:11px; margin-bottom:4px;">
+                📊 Волатильность: ${volatilityPercent}%
             </div>
             <div style="font-size:10px; color:#9ca3af;">
-                ${barsCount} баров<br>
-                ${formatTime(start.time)} → ${formatTime(end.time)}
+                ${volatilityValue} pts<br>
+                <span style="color:#22c55e">Max:</span> ${maxPrice} |
+                <span style="color:#ef4444">Min:</span> ${minPrice}
             </div>
-        `;
+        </div>
+        ` : ''}
+    `;
 
-        const centerX = (start.x + end.x) / 2;
-        const centerY = (start.y + end.y) / 2;
-        els.rulerMeasurement.style.left = `${centerX - 70}px`;
-        els.rulerMeasurement.style.top = `${centerY - 40}px`;
-        els.rulerMeasurement.style.display = 'block';
-    }
+    // Позиционируем тултип в центре прямоугольника
+    const centerX = (start.x + end.x) / 2;
+    const centerY = (start.y + end.y) / 2;
+    els.rulerMeasurement.style.left = `${centerX - 80}px`;
+    els.rulerMeasurement.style.top = `${centerY - 50}px`;
+    els.rulerMeasurement.style.display = 'block';
+}
 
     // ===== МАГНИТ =====
     function createMagnetIndicator() {
