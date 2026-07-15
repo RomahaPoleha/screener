@@ -1,0 +1,93 @@
+<!-- Модальное окно настроек -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
+            <div class="modal-header" style="border-bottom:1px solid #2d3748;">
+                <h5 class="modal-title">⚙️ Настройки</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-section">
+                    <div class="modal-section-title">🔊 Голосовое оповещение</div>
+                    <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
+                         Голосовое оповещение
+                    </button>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">🎨 Инструменты рисования</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db; margin-bottom:8px;">
+                            <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <span>Показывать панель инструментов</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">🔍 RECON — Сырой стакан</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
+                        <div style="display:flex; gap:16px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="densityMarketFuture" style="accent-color:#f0b90b; width:16px; height:16px;"> <span>Futures</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="densityMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;"> <span>Spot</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Futures мин. объём (USDT):</label>
+                            <input type="number" id="densityMinVolumeFuture" value="50000" min="50000" step="10000" style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Spot мин. объём (USDT):</label>
+                            <input type="number" id="densityMinVolumeSpot" value="10000" min="1000" step="10000" style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">🎯 Scalp — Мониторинг плотностей</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Рынки:</label>
+                        <div style="display:flex; gap:16px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="scalpMarketFuture" checked style="accent-color:#f0b90b; width:16px; height:16px;"> <span>Futures</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                                <input type="checkbox" id="scalpMarketSpot" style="accent-color:#f0b90b; width:16px; height:16px;"> <span>Spot</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Futures мин. объём (USDT):</label>
+                            <input type="number" id="scalpMinVolumeFuture" value="200000" min="200000" step="10000" style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#9ca3af; display:block; margin-bottom:8px;">Spot мин. объём (USDT):</label>
+                            <input type="number" id="scalpMinVolumeSpot" value="100000" min="100000" step="10000" style="width:100%; background:#0b0f19; border:1px solid #2d3748; color:#fff; padding:6px 10px; border-radius:4px; font-size:13px;">
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; padding:10px; background:rgba(240, 185, 11, 0.1); border-radius:6px; border:1px solid rgba(240, 185, 11, 0.3);">
+                        <div style="font-size:11px; color:#f0b90b; margin-bottom:6px;">ℹ️ Цветовая схема:</div>
+                        <div style="font-size:11px; color:#9ca3af; line-height:1.6;">
+                            <span style="color:#fbbf24;"> Жёлтый</span> — плотность до 500K<br>
+                            <span style="color:#ba55d3;">🟣 Фиолетовый</span> — плотность от 500K<br>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db;">
+                            <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <span>Показывать гистограмму объёма</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #2d3748;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2d3748; border:none; color:#d1d5db;">Закрыть</button>
+                <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#f0b90b; border:none; color:#000; font-weight:600;">Применить</button>
+            </div>
+        </div>
+    </div>
+</div>

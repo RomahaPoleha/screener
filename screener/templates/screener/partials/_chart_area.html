@@ -1,0 +1,23 @@
+<div class="left-panel">
+    <div class="chart-area">
+        <div class="drawing-tools-panel" id="drawingToolsPanel">
+            <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (CTRL+S)">📈 Трендовая</div>
+            <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (ALT+LEFT)">✏️ Карандаш</div>
+            <div class="tool-btn" id="rulerBtn" onclick="toggleRuler()" title="Линейка (Зажать колёсико)">📏 Линейка</div>
+            <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">🧲 Магнит</div>
+            <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (B)">🔔 Алерт</div>
+            <div class="tool-btn" onclick="clearAllDrawings()" title="Очистить всё">🗑️ Очистить</div>
+        </div>
+
+        <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена"></div>
+        <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
+        <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
+        <div id="chart-container"></div>
+        <canvas id="pencilCanvas" class="pencil-canvas"></canvas>
+        <div class="chart-watermark" id="chartWatermark">
+            <span class="symbol" id="watermarkSymbol">BTC</span>
+            <span class="tf" id="watermarkTF">1m</span>
+        </div>
+        <div id="rulerMeasurement" class="ruler-measurement"></div>
+    </div>
+</div>
