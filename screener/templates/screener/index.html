@@ -520,6 +520,8 @@
     if (savedScalpSpotVol) scalpMinVolumeSpot = parseInt(savedScalpSpotVol);
 
     // ===== Рисовашки =====
+    let isDrawingTrendLine = false; // Флаг: ждем второй клик
+    let trendLinePreview = null;    // Координаты "призрачной" линии (от первой точки до курсора)
     let isMagnetEnabled = false;
     let isAlertModeEnabled = false;
     let magnetIndicator = null;
@@ -789,6 +791,8 @@
             updateToolUI('alertBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
         } else {
             trendLineStart = null;
+            isDrawingTrendLine = false;      // ← ДОБАВИТЬ
+            trendLinePreview = null;
             clearSpecificDrawings('trendlines');
         }
     }
@@ -864,72 +868,105 @@
     }
 
     function redrawAllPersistentDrawings() {
-        if (!pencilCtx || !chart || activeTrendlines.length === 0) return;
-        pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
-        pencilCtx.strokeStyle = '#22c55e';
-        pencilCtx.lineWidth = 2;
-        pencilCtx.setLineDash([5, 5]);
+    if (!pencilCtx || !chart) return;
+    pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
 
-        activeTrendlines.forEach(tl => {
-            const x1 = chart.timeScale().timeToCoordinate(tl.time1);
-            const y1 = candleSeries.priceToCoordinate(tl.price1);
-            const x2 = chart.timeScale().timeToCoordinate(tl.time2);
-            const y2 = candleSeries.priceToCoordinate(tl.price2);
+    // Рисуем зафиксированные зеленые линии
+    pencilCtx.strokeStyle = '#22c55e';
+    pencilCtx.lineWidth = 2;
+    pencilCtx.setLineDash([5, 5]);
 
-            if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-                pencilCtx.beginPath();
-                pencilCtx.moveTo(x1, y1);
-                pencilCtx.lineTo(x2, y2);
-                pencilCtx.stroke();
+    activeTrendlines.forEach(tl => {
+        const x1 = chart.timeScale().timeToCoordinate(tl.time1);
+        const y1 = candleSeries.priceToCoordinate(tl.price1);
+        const x2 = chart.timeScale().timeToCoordinate(tl.time2);
+        const y2 = candleSeries.priceToCoordinate(tl.price2);
+
+        if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+            pencilCtx.beginPath();
+            pencilCtx.moveTo(x1, y1);
+            pencilCtx.lineTo(x2, y2);
+            pencilCtx.stroke();
+        }
+    });
+
+            // Рисуем "призрачную" серую линию от первой точки до курсора
+            if (isDrawingTrendLine && trendLinePreview) {
+                const x1 = chart.timeScale().timeToCoordinate(trendLinePreview.time1);
+                const y1 = candleSeries.priceToCoordinate(trendLinePreview.price1);
+                const x2 = chart.timeScale().timeToCoordinate(trendLinePreview.time2);
+                const y2 = candleSeries.priceToCoordinate(trendLinePreview.price2);
+
+                if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+                    pencilCtx.strokeStyle = 'rgba(156, 163, 175, 0.7)'; // Серый полупрозрачный
+                    pencilCtx.lineWidth = 1.5;
+                    pencilCtx.setLineDash([3, 3]);
+                    pencilCtx.beginPath();
+                    pencilCtx.moveTo(x1, y1);
+                    pencilCtx.lineTo(x2, y2);
+                    pencilCtx.stroke();
+                }
             }
-        });
-        pencilCtx.setLineDash([]);
-    }
+
+            pencilCtx.setLineDash([]);
+        }
 
     function handleChartClick(param) {
-        if (!param.point || typeof param.point.y !== 'number') return;
+    if (!param.point || typeof param.point.y !== 'number') return;
 
-        if (isAlertModeEnabled) {
-            const price = candleSeries.coordinateToPrice(param.point.y);
-            if (!price || isNaN(price)) return;
-            const line = candleSeries.createPriceLine({
-                price: price, color: 'rgba(240, 185, 11, 0.9)', lineWidth: 2,
-                lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
-                axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
-                title: `🔔 ${price.toFixed(currentPrecision)}`
+    if (isAlertModeEnabled) {
+        // ... (код для алертов без изменений)
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        if (!price || isNaN(price)) return;
+        const line = candleSeries.createPriceLine({
+            price: price, color: 'rgba(240, 185, 11, 0.9)', lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
+            axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
+            title: `🔔 ${price.toFixed(currentPrecision)}`
+        });
+        activeAlerts.push({ price: price, line: line, active: true });
+    }
+    else if (isTrendLineEnabled) {
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
+        if (!price || isNaN(price) || !time) return;
+
+        if (!isDrawingTrendLine) {
+            // ПЕРВЫЙ КЛИК: запоминаем начальную точку и включаем режим рисования
+            trendLineStart = { time, price, x: param.point.x, y: param.point.y };
+            isDrawingTrendLine = true;
+            trendLinePreview = {
+                time1: time, price1: price,
+                time2: time, price2: price // Пока линия нулевой длины
+            };
+        } else {
+            // ВТОРОЙ КЛИК: фиксируем линию как зеленую
+            activeTrendlines.push({
+                time1: trendLineStart.time, price1: trendLineStart.price,
+                time2: time, price2: price
             });
-            activeAlerts.push({ price: price, line: line, active: true });
-        }
-        else if (isTrendLineEnabled) {
-            const price = candleSeries.coordinateToPrice(param.point.y);
-            const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
-            if (!price || isNaN(price) || !time) return;
-
-            if (!trendLineStart) {
-                trendLineStart = { time, price, x: param.point.x, y: param.point.y };
-            } else {
-                activeTrendlines.push({
-                    time1: trendLineStart.time, price1: trendLineStart.price,
-                    time2: time, price2: price
-                });
-                trendLineStart = null;
-                redrawAllPersistentDrawings();
-            }
-        }
-        else if (isRulerEnabled) {
-            const price = candleSeries.coordinateToPrice(param.point.y);
-            const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
-            if (!price || isNaN(price) || !time) return;
-
-            if (!rulerStart) {
-                rulerStart = { time, price, x: param.point.x, y: param.point.y };
-            } else {
-                rulerEnd = { time, price, x: param.point.x, y: param.point.y };
-                showRulerMeasurement();
-                rulerStart = null; rulerEnd = null;
-            }
+            // Сбрасываем состояние
+            isDrawingTrendLine = false;
+            trendLineStart = null;
+            trendLinePreview = null;
+            redrawAllPersistentDrawings();
         }
     }
+    else if (isRulerEnabled) {
+        // ... (код для линейки без изменений)
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
+        if (!price || isNaN(price) || !time) return;
+
+        if (!rulerStart) {
+            rulerStart = { time, price, x: param.point.x, y: param.point.y };
+        } else {
+            rulerEnd = { time, price, x: param.point.x, y: param.point.y };
+            showRulerMeasurement();
+            rulerStart = null; rulerEnd = null;
+        }
+    }
+}
 
     function handlePencilDraw(param) {
         if (!isPencilEnabled || !isDrawing || !pencilCtx || !param.point) return;
@@ -1326,9 +1363,20 @@
             if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 
             chart.subscribeCrosshairMove((param) => {
-                if (isMagnetEnabled) updateMagnetIndicator(param);
-                if (isPencilEnabled && isDrawing) handlePencilDraw(param);
-            });
+    if (isMagnetEnabled) updateMagnetIndicator(param);
+    if (isPencilEnabled && isDrawing) handlePencilDraw(param);
+
+    // Обновляем "призрачную" трендовую линию при движении мыши
+        if (isTrendLineEnabled && isDrawingTrendLine && trendLinePreview && param.point) {
+            const price = candleSeries.coordinateToPrice(param.point.y);
+            const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
+            if (price && time) {
+                trendLinePreview.time2 = time;
+                trendLinePreview.price2 = price;
+                redrawAllPersistentDrawings();
+            }
+        }
+    });
             chart.subscribeClick(handleChartClick);
             chart.timeScale().subscribeVisibleTimeRangeChange(redrawAllPersistentDrawings);
             chart.timeScale().subscribeSizeChange(() => { initPencilCanvas(); });
