@@ -45,7 +45,7 @@ function showPriceAlertToast(currentPrice, alertPrice, direction) {
     const toast = document.createElement('div');
     toast.className = 'hour-toast show';
     toast.style.background = 'linear-gradient(135deg, #f0b90b 0%, #f59e0b 100%)';
-    toast.innerHTML = `<div class="toast-icon">🔔</div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
+    toast.innerHTML = `<div class="toast-icon"></div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 5000);
 }
@@ -200,7 +200,6 @@ function startCandleWebSocket(symbol, tf) {
                 };
                 candleSeries.update(candle);
 
-                // Обновляем массив свечей для магнита и линейки в реальном времени
                 if (window.candleData) {
                     const lastCandle = window.candleData[window.candleData.length - 1];
                     if (lastCandle && lastCandle.time === candle.time) {
@@ -264,9 +263,14 @@ function clearSpecificDrawings(type) {
     if (type === 'alerts') {
         activeAlerts.forEach(a => { try { candleSeries.removePriceLine(a.line); } catch(e){} });
         activeAlerts = [];
-    } else if (type === 'trendlines' || type === 'pencil') {
+    } else if (type === 'trendlines') {
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
         activeTrendlines = [];
+    } else if (type === 'pencil') {
+        // ИЗМЕНЕНО: очищаем массивы штрихов
+        pencilStrokes = [];
+        currentStroke = null;
+        if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
     } else if (type === 'ruler') {
         isRulerDragging = false;
         rulerStartPoint = null;
@@ -386,6 +390,65 @@ function initPencilCanvas() {
     redrawAllPersistentDrawings();
 }
 
+// НОВАЯ ФУНКЦИЯ: перерисовка всех штрихов карандаша в координатах свечей
+function redrawPencilStrokes() {
+    if (!pencilCtx || !chart || !candleSeries) return;
+
+    pencilCtx.strokeStyle = '#f0b90b';
+    pencilCtx.lineWidth = 2;
+    pencilCtx.lineCap = 'round';
+    pencilCtx.lineJoin = 'round';
+
+    // Рисуем все завершённые штрихи
+    pencilStrokes.forEach(stroke => {
+        if (stroke.length < 2) return;
+        pencilCtx.beginPath();
+        let started = false;
+
+        for (const point of stroke) {
+            const x = chart.timeScale().timeToCoordinate(point.time);
+            const y = candleSeries.priceToCoordinate(point.price);
+
+            if (x === null || y === null) {
+                started = false;
+                continue;
+            }
+
+            if (!started) {
+                pencilCtx.moveTo(x, y);
+                started = true;
+            } else {
+                pencilCtx.lineTo(x, y);
+            }
+        }
+        pencilCtx.stroke();
+    });
+
+    // Рисуем текущий (ещё не завершённый) штрих
+    if (currentStroke && currentStroke.length >= 2) {
+        pencilCtx.beginPath();
+        let started = false;
+
+        for (const point of currentStroke) {
+            const x = chart.timeScale().timeToCoordinate(point.time);
+            const y = candleSeries.priceToCoordinate(point.price);
+
+            if (x === null || y === null) {
+                started = false;
+                continue;
+            }
+
+            if (!started) {
+                pencilCtx.moveTo(x, y);
+                started = true;
+            } else {
+                pencilCtx.lineTo(x, y);
+            }
+        }
+        pencilCtx.stroke();
+    }
+}
+
 function drawRulerRectangle(start, end) {
     const x1 = chart.timeScale().timeToCoordinate(start.time);
     const y1 = candleSeries.priceToCoordinate(start.price);
@@ -460,6 +523,9 @@ function redrawAllPersistentDrawings() {
         drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
     }
 
+    // НОВОЕ: перерисовка штрихов карандаша
+    redrawPencilStrokes();
+
     pencilCtx.setLineDash([]);
 }
 
@@ -500,17 +566,37 @@ function handleChartClick(param) {
     }
 }
 
+// ИЗМЕНЕНО: теперь сохраняем точки в координатах свечей (time, price)
 function handlePencilDraw(param) {
     if (!isPencilEnabled || !isDrawing || !pencilCtx || !param.point) return;
-    if (!lastPencilPoint) { lastPencilPoint = param.point; return; }
 
-    pencilCtx.strokeStyle = '#f0b90b';
-    pencilCtx.lineWidth = 2;
-    pencilCtx.lineCap = 'round';
-    pencilCtx.beginPath();
-    pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
-    pencilCtx.lineTo(param.point.x, param.point.y);
-    pencilCtx.stroke();
+    const price = candleSeries.coordinateToPrice(param.point.y);
+    const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
+
+    // Если не удалось получить координаты свечи — пропускаем точку
+    if (!price || !time) {
+        lastPencilPoint = param.point;
+        return;
+    }
+
+    // Сохраняем точку в координатах свечи (а не пикселях!)
+    if (!currentStroke) {
+        currentStroke = [{ time, price }];
+    } else {
+        currentStroke.push({ time, price });
+    }
+
+    // Рисуем линию от предыдущей точки к текущей (в пикселях, для мгновенного отображения)
+    if (lastPencilPoint) {
+        pencilCtx.strokeStyle = '#f0b90b';
+        pencilCtx.lineWidth = 2;
+        pencilCtx.lineCap = 'round';
+        pencilCtx.lineJoin = 'round';
+        pencilCtx.beginPath();
+        pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
+        pencilCtx.lineTo(param.point.x, param.point.y);
+        pencilCtx.stroke();
+    }
     lastPencilPoint = param.point;
 }
 
@@ -575,7 +661,7 @@ function showRulerMeasurement(start, end) {
         ${volatilityPercent !== '-' ? `
         <div style="border-top:1px solid #2d3748; margin:6px -12px -6px -12px; padding:6px 12px 0 12px;">
             <div style="color:#f0b90b; font-weight:600; font-size:11px; margin-bottom:4px;">
-                📊 Волатильность: ${volatilityPercent}%
+                 Волатильность: ${volatilityPercent}%
             </div>
             <div style="font-size:10px; color:#9ca3af;">
                 ${volatilityValue} pts<br>
@@ -673,7 +759,7 @@ function openSettingsModal() {
 
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
 
@@ -980,10 +1066,17 @@ async function openChart(symbol) {
             if (e.button === 1) e.preventDefault();
         });
 
+        // ИЗМЕНЕНО: при отпускании мыши сохраняем штрих карандаша
         els.chartWrapper.addEventListener('mouseup', (e) => {
             if (isPencilEnabled && e.button === 0) {
                 isDrawing = false;
                 lastPencilPoint = null;
+
+                // Сохраняем завершённый штрих
+                if (currentStroke && currentStroke.length > 0) {
+                    pencilStrokes.push(currentStroke);
+                    currentStroke = null;
+                }
             }
             if (isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault();
@@ -997,8 +1090,18 @@ async function openChart(symbol) {
             }
         });
 
+        // ИЗМЕНЕНО: при выходе мыши за пределы тоже сохраняем штрих
         els.chartWrapper.addEventListener('mouseleave', () => {
-            if (isPencilEnabled) { isDrawing = false; lastPencilPoint = null; }
+            if (isPencilEnabled) {
+                isDrawing = false;
+                lastPencilPoint = null;
+
+                // Сохраняем штрих при выходе мыши за пределы
+                if (currentStroke && currentStroke.length > 0) {
+                    pencilStrokes.push(currentStroke);
+                    currentStroke = null;
+                }
+            }
             if (isRulerDragging) {
                 isRulerDragging = false;
                 if (rulerStartPoint && rulerCurrentPoint) {
@@ -1123,7 +1226,7 @@ function checkHourTransition() {
     const currentMinuteKey = now.getHours() * 60 + now.getMinutes();
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast('⏰ До нового часа 5 минут'); speak('До перехода на новый час осталось 5 минут');
+        showHourToast(' До нового часа 5 минут'); speak('До перехода на новый час осталось 5 минут');
     }
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
