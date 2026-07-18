@@ -435,7 +435,7 @@ function initPencilCanvas() {
     redrawAllPersistentDrawings();
 }
 
-// Получает время по X, даже в правой части (где rightOffset)
+// Получает время по X (даже в правой части через rightOffset)
 function getTimeByX(x) {
     let time = chart.timeScale().coordinateToTime(x);
     if (time !== null) return time;
@@ -461,6 +461,52 @@ function getTimeByX(x) {
     return lastCandle.time + (barsOffset * secondsPerBar);
 }
 
+// НОВАЯ ФУНКЦИЯ: получает логический индекс бара по X
+function getLogicalIndexByX(x) {
+    const candles = window.candleData || [];
+    if (candles.length === 0) return null;
+
+    const lastCandle = candles[candles.length - 1];
+    const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
+
+    if (lastCandleX === null) return null;
+
+    const visibleRange = chart.timeScale().getVisibleLogicalRange();
+    if (!visibleRange) return null;
+
+    const chartWidth = els.chartWrapper.clientWidth;
+    const barsCount = visibleRange.to - visibleRange.from;
+    const pixelsPerBar = chartWidth / barsCount;
+
+    const lastIndex = candles.length - 1;
+    const barsOffset = (x - lastCandleX) / pixelsPerBar;
+
+    return lastIndex + barsOffset;
+}
+
+// НОВАЯ ФУНКЦИЯ: получает X по логическому индексу
+function getXByLogicalIndex(logicalIndex) {
+    const candles = window.candleData || [];
+    if (candles.length === 0) return null;
+
+    const lastCandle = candles[candles.length - 1];
+    const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
+
+    if (lastCandleX === null) return null;
+
+    const visibleRange = chart.timeScale().getVisibleLogicalRange();
+    if (!visibleRange) return null;
+
+    const chartWidth = els.chartWrapper.clientWidth;
+    const barsCount = visibleRange.to - visibleRange.from;
+    const pixelsPerBar = chartWidth / barsCount;
+
+    const lastIndex = candles.length - 1;
+    const barsOffset = logicalIndex - lastIndex;
+
+    return lastCandleX + (barsOffset * pixelsPerBar);
+}
+
 function redrawPencilStrokes() {
     if (!pencilCtx || !chart || !candleSeries) return;
 
@@ -475,7 +521,10 @@ function redrawPencilStrokes() {
         let started = false;
 
         for (const point of stroke) {
-            const x = chart.timeScale().timeToCoordinate(point.time);
+            let x = chart.timeScale().timeToCoordinate(point.time);
+            if (x === null && point.logicalIndex !== undefined) {
+                x = getXByLogicalIndex(point.logicalIndex);
+            }
             const y = candleSeries.priceToCoordinate(point.price);
 
             if (x === null || y === null) {
@@ -498,7 +547,10 @@ function redrawPencilStrokes() {
         let started = false;
 
         for (const point of currentStroke) {
-            const x = chart.timeScale().timeToCoordinate(point.time);
+            let x = chart.timeScale().timeToCoordinate(point.time);
+            if (x === null && point.logicalIndex !== undefined) {
+                x = getXByLogicalIndex(point.logicalIndex);
+            }
             const y = candleSeries.priceToCoordinate(point.price);
 
             if (x === null || y === null) {
@@ -553,9 +605,15 @@ function redrawAllPersistentDrawings() {
     pencilCtx.setLineDash([5, 5]);
 
     activeTrendlines.forEach(tl => {
-        const x1 = chart.timeScale().timeToCoordinate(tl.time1);
+        let x1 = chart.timeScale().timeToCoordinate(tl.time1);
+        if (x1 === null && tl.logicalIndex1 !== undefined) {
+            x1 = getXByLogicalIndex(tl.logicalIndex1);
+        }
+        let x2 = chart.timeScale().timeToCoordinate(tl.time2);
+        if (x2 === null && tl.logicalIndex2 !== undefined) {
+            x2 = getXByLogicalIndex(tl.logicalIndex2);
+        }
         const y1 = candleSeries.priceToCoordinate(tl.price1);
-        const x2 = chart.timeScale().timeToCoordinate(tl.time2);
         const y2 = candleSeries.priceToCoordinate(tl.price2);
 
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
@@ -567,9 +625,15 @@ function redrawAllPersistentDrawings() {
     });
 
     if (isDrawingTrendLine && trendLinePreview) {
-        const x1 = chart.timeScale().timeToCoordinate(trendLinePreview.time1);
+        let x1 = chart.timeScale().timeToCoordinate(trendLinePreview.time1);
+        if (x1 === null && trendLinePreview.logicalIndex1 !== undefined) {
+            x1 = getXByLogicalIndex(trendLinePreview.logicalIndex1);
+        }
+        let x2 = chart.timeScale().timeToCoordinate(trendLinePreview.time2);
+        if (x2 === null && trendLinePreview.logicalIndex2 !== undefined) {
+            x2 = getXByLogicalIndex(trendLinePreview.logicalIndex2);
+        }
         const y1 = candleSeries.priceToCoordinate(trendLinePreview.price1);
-        const x2 = chart.timeScale().timeToCoordinate(trendLinePreview.time2);
         const y2 = candleSeries.priceToCoordinate(trendLinePreview.price2);
 
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
@@ -614,17 +678,21 @@ function handleChartClick(param) {
     else if (isTrendLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         const time = param.time || getTimeByX(param.point.x);
+        const logicalIndex = getLogicalIndexByX(param.point.x);
 
         if (!price || isNaN(price) || !time) return;
 
         if (!isDrawingTrendLine) {
-            trendLineStart = { time, price, x: param.point.x, y: param.point.y };
+            trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
             isDrawingTrendLine = true;
-            trendLinePreview = { time1: time, price1: price, time2: time, price2: price };
+            trendLinePreview = {
+                time1: time, price1: price, logicalIndex1: logicalIndex,
+                time2: time, price2: price, logicalIndex2: logicalIndex
+            };
         } else {
             activeTrendlines.push({
-                time1: trendLineStart.time, price1: trendLineStart.price,
-                time2: time, price2: price
+                time1: trendLineStart.time, price1: trendLineStart.price, logicalIndex1: trendLineStart.logicalIndex,
+                time2: time, price2: price, logicalIndex2: logicalIndex
             });
             isDrawingTrendLine = false;
             trendLineStart = null;
@@ -639,6 +707,7 @@ function handlePencilDraw(param) {
 
     const price = candleSeries.coordinateToPrice(param.point.y);
     const time = param.time || getTimeByX(param.point.x);
+    const logicalIndex = getLogicalIndexByX(param.point.x);
 
     if (!price || !time) {
         lastPencilPoint = param.point;
@@ -646,9 +715,9 @@ function handlePencilDraw(param) {
     }
 
     if (!currentStroke) {
-        currentStroke = [{ time, price }];
+        currentStroke = [{ time, price, logicalIndex }];
     } else {
-        currentStroke.push({ time, price });
+        currentStroke.push({ time, price, logicalIndex });
     }
 
     if (lastPencilPoint) {
@@ -823,7 +892,7 @@ function openSettingsModal() {
 
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
 
@@ -1080,7 +1149,7 @@ async function openChart(symbol) {
                 timeVisible: true,
                 secondsVisible: false,
                 borderColor: '#2d3748',
-                rightOffset: 50,  // ← Пустое пространство справа для рисования
+                rightOffset: 50,
                 barSpacing: 10
             },
             rightPriceScale: { borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
@@ -1098,9 +1167,11 @@ async function openChart(symbol) {
             if (isTrendLineEnabled && isDrawingTrendLine && trendLinePreview && param.point) {
                 const price = candleSeries.coordinateToPrice(param.point.y);
                 const time = param.time || getTimeByX(param.point.x);
+                const logicalIndex = getLogicalIndexByX(param.point.x);
                 if (price && time) {
                     trendLinePreview.time2 = time;
                     trendLinePreview.price2 = price;
+                    trendLinePreview.logicalIndex2 = logicalIndex;
                     redrawAllPersistentDrawings();
                 }
             }
@@ -1110,7 +1181,7 @@ async function openChart(symbol) {
         chart.timeScale().subscribeSizeChange(() => {
             setTimeout(() => {
                 initPencilCanvas();
-            }, 150);  // ← Увеличенная задержка для корректной перерисовки
+            }, 150);
         });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
@@ -1208,7 +1279,6 @@ async function openChart(symbol) {
     if (scalpEnabled) startScalpUpdates(symbol);
 }
 
-// ИСПРАВЛЕНО: только реальные свечи, без фиктивных
 async function loadChartData(symbol, tf) {
     if (!chart || !candleSeries) return;
     els.chartTitle.textContent = `${symbol}/USDT`;
@@ -1275,7 +1345,7 @@ function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('soundEnabled', soundEnabled);
     const btn = document.getElementById('soundToggleModal');
-    btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+    btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
     btn.classList.toggle('muted', !soundEnabled);
     if (soundEnabled) speak('Оповещения включены');
 }
@@ -1307,13 +1377,13 @@ function checkHourTransition() {
 
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast('⏰ До нового часа 5 минут');
+        showHourToast(' До нового часа 5 минут');
         playHourSound(5);
     }
 
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast(' До нового часа 1 минута');
+        showHourToast('⏰ До нового часа 1 минута');
         playHourSound(1);
     }
 }
@@ -1350,7 +1420,6 @@ els.search.addEventListener('input', (e) => { showSearchDropdown(e.target.value)
 
 document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) hideSearchDropdown(); });
 
-// ИСПРАВЛЕНО: увеличенная задержка для корректной перерисовки
 window.addEventListener('resize', () => {
     if (chart && els.chartWrapper.classList.contains('active')) {
         chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
