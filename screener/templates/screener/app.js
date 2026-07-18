@@ -10,14 +10,10 @@ function playHourSound(minutesLeft) {
     if (!soundEnabled) return;
 
     const sound = minutesLeft === 5 ? sound5min : sound1min;
-
-    // Сбрасываем на начало (если звук уже играл)
     sound.currentTime = 0;
 
-    // Пытаемся воспроизвести
     sound.play().catch(err => {
         console.warn('Не удалось воспроизвести звук:', err);
-        // Fallback на голосовое оповещение
         speak(minutesLeft === 5
             ? 'До перехода на новый час осталось 5 минут'
             : 'Внимание, до перехода на новый час осталась 1 минута');
@@ -71,7 +67,7 @@ function showPriceAlertToast(currentPrice, alertPrice, direction) {
     const toast = document.createElement('div');
     toast.className = 'hour-toast show';
     toast.style.background = 'linear-gradient(135deg, #f0b90b 0%, #f59e0b 100%)';
-    toast.innerHTML = `<div class="toast-icon"></div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
+    toast.innerHTML = `<div class="toast-icon">🔔</div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 5000);
 }
@@ -248,7 +244,7 @@ function startCandleWebSocket(symbol, tf) {
                     });
                 }
             }
-        } catch (err) { console.error(' Ошибка парсинга WS свечи:', err); }
+        } catch (err) { console.error('❌ Ошибка парсинга WS свечи:', err); }
     };
     wsCandles.onerror = (e) => console.error(' WS свечей ошибка:', e);
     wsCandles.onclose = () => {
@@ -290,8 +286,9 @@ function clearSpecificDrawings(type) {
         activeAlerts.forEach(a => { try { candleSeries.removePriceLine(a.line); } catch(e){} });
         activeAlerts = [];
     } else if (type === 'trendlines') {
-        if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
+        // НЕ очищаем canvas, только сбрасываем массив трендовых
         activeTrendlines = [];
+        redrawAllPersistentDrawings();
     } else if (type === 'pencil') {
         pencilStrokes = [];
         currentStroke = null;
@@ -338,17 +335,38 @@ function toggleAlertMode() {
     }
 }
 
+// ИСПРАВЛЕНО: трендовые линии сохраняются, панорамирование восстанавливается
 function toggleTrendLine() {
     isTrendLineEnabled = !isTrendLineEnabled;
     updateToolUI('trendLineBtn', isTrendLineEnabled);
+
     if (isTrendLineEnabled) {
-        isAlertModeEnabled = false; isPencilEnabled = false; isRulerEnabled = false;
-        updateToolUI('alertBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
+        isAlertModeEnabled = false;
+        isPencilEnabled = false;
+        isRulerEnabled = false;
+        updateToolUI('alertBtn', false);
+        updateToolUI('pencilBtn', false);
+        updateToolUI('rulerBtn', false);
+
+        if (chart) {
+            chart.applyOptions({
+                handleScroll: { mouseWheel: true, pressedMouseMove: false }
+            });
+        }
     } else {
         trendLineStart = null;
         isDrawingTrendLine = false;
         trendLinePreview = null;
-        clearSpecificDrawings('trendlines');
+
+        // НЕ очищаем activeTrendlines — линии должны сохраняться!
+
+        if (chart) {
+            chart.applyOptions({
+                handleScroll: { mouseWheel: true, pressedMouseMove: true }
+            });
+        }
+
+        redrawAllPersistentDrawings();
     }
 }
 
@@ -413,6 +431,29 @@ function initPencilCanvas() {
     els.pencilCanvas.height = rect.height;
     pencilCtx = els.pencilCanvas.getContext('2d');
     redrawAllPersistentDrawings();
+}
+
+// НОВАЯ ФУНКЦИЯ: получение времени по X, даже в пустой области
+function getTimeByX(x) {
+    let time = chart.timeScale().coordinateToTime(x);
+    if (time !== null) return time;
+
+    const visibleRange = chart.timeScale().getVisibleLogicalRange();
+    if (!visibleRange) return null;
+
+    const chartWidth = els.chartWrapper.clientWidth;
+    const barsCount = visibleRange.to - visibleRange.from;
+    const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+
+    const lastVisibleX = chartWidth - 60;
+    const lastVisibleTime = chart.timeScale().coordinateToTime(lastVisibleX);
+    if (!lastVisibleTime) return null;
+
+    const pixelsPerBar = chartWidth / barsCount;
+    const barsFromLast = (x - lastVisibleX) / pixelsPerBar;
+    const timeOffset = Math.floor(barsFromLast * secondsPerBar);
+
+    return lastVisibleTime + timeOffset;
 }
 
 function redrawPencilStrokes() {
@@ -550,6 +591,7 @@ function redrawAllPersistentDrawings() {
     pencilCtx.setLineDash([]);
 }
 
+// ИСПРАВЛЕНО: используется getTimeByX для рисования в пустой области
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
     if (isRulerEnabled) return;
@@ -567,7 +609,8 @@ function handleChartClick(param) {
     }
     else if (isTrendLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
-        const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
+        const time = param.time || getTimeByX(param.point.x);
+
         if (!price || isNaN(price) || !time) return;
 
         if (!isDrawingTrendLine) {
@@ -591,7 +634,7 @@ function handlePencilDraw(param) {
     if (!isPencilEnabled || !isDrawing || !pencilCtx || !param.point) return;
 
     const price = candleSeries.coordinateToPrice(param.point.y);
-    const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
+    const time = param.time || getTimeByX(param.point.x);
 
     if (!price || !time) {
         lastPencilPoint = param.point;
@@ -678,7 +721,7 @@ function showRulerMeasurement(start, end) {
         ${volatilityPercent !== '-' ? `
         <div style="border-top:1px solid #2d3748; margin:6px -12px -6px -12px; padding:6px 12px 0 12px;">
             <div style="color:#f0b90b; font-weight:600; font-size:11px; margin-bottom:4px;">
-                 Волатильность: ${volatilityPercent}%
+                📊 Волатильность: ${volatilityPercent}%
             </div>
             <div style="font-size:10px; color:#9ca3af;">
                 ${volatilityValue} pts<br>
@@ -776,7 +819,7 @@ function openSettingsModal() {
 
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
 
@@ -991,7 +1034,7 @@ function copySymbolToClipboard() {
     navigator.clipboard.writeText(`${currentSymbol}USDT`).then(() => {
         els.chartTitle.classList.add('copied'); els.chartTitle.textContent = `✅ ${currentSymbol}USDT скопирован!`;
         setTimeout(() => { els.chartTitle.classList.remove('copied'); els.chartTitle.textContent = `${currentSymbol}/USDT`; }, 1200);
-    }).catch(err => console.error(' Ошибка копирования:', err));
+    }).catch(err => console.error('Ошибка копирования:', err));
 }
 
 function closeChart() {
@@ -1037,13 +1080,14 @@ async function openChart(symbol) {
         chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
         if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 
+        // ИСПРАВЛЕНО: используется getTimeByX для трендовой и карандаша
         chart.subscribeCrosshairMove((param) => {
             if (isMagnetEnabled) updateMagnetIndicator(param);
             if (isPencilEnabled && isDrawing) handlePencilDraw(param);
 
             if (isTrendLineEnabled && isDrawingTrendLine && trendLinePreview && param.point) {
                 const price = candleSeries.coordinateToPrice(param.point.y);
-                const time = param.time || chart.timeScale().coordinateToTime(param.point.x);
+                const time = param.time || getTimeByX(param.point.x);
                 if (price && time) {
                     trendLinePreview.time2 = time;
                     trendLinePreview.price2 = price;
@@ -1209,7 +1253,7 @@ function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('soundEnabled', soundEnabled);
     const btn = document.getElementById('soundToggleModal');
-    btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+    btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
     btn.classList.toggle('muted', !soundEnabled);
     if (soundEnabled) speak('Оповещения включены');
 }
@@ -1235,7 +1279,6 @@ function showHourToast(title) {
     setTimeout(() => { toast.classList.remove('show'); }, 5000);
 }
 
-// ИЗМЕНЕНО: используем MP3 вместо голосовых оповещений
 function checkHourTransition() {
     const now = new Date();
     const currentMinuteKey = now.getHours() * 60 + now.getMinutes();
@@ -1243,13 +1286,13 @@ function checkHourTransition() {
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
         showHourToast('⏰ До нового часа 5 минут');
-        playHourSound(5);  // ← вместо speak()
+        playHourSound(5);
     }
 
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
         showHourToast('⏰ До нового часа 1 минута');
-        playHourSound(1);  // ← вместо speak()
+        playHourSound(1);
     }
 }
 setInterval(checkHourTransition, 1000);
