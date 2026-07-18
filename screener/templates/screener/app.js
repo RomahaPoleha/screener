@@ -286,7 +286,6 @@ function clearSpecificDrawings(type) {
         activeAlerts.forEach(a => { try { candleSeries.removePriceLine(a.line); } catch(e){} });
         activeAlerts = [];
     } else if (type === 'trendlines') {
-        // НЕ очищаем canvas, только сбрасываем массив трендовых
         activeTrendlines = [];
         redrawAllPersistentDrawings();
     } else if (type === 'pencil') {
@@ -335,7 +334,6 @@ function toggleAlertMode() {
     }
 }
 
-// ИСПРАВЛЕНО: трендовые линии сохраняются, панорамирование восстанавливается
 function toggleTrendLine() {
     isTrendLineEnabled = !isTrendLineEnabled;
     updateToolUI('trendLineBtn', isTrendLineEnabled);
@@ -357,8 +355,6 @@ function toggleTrendLine() {
         trendLineStart = null;
         isDrawingTrendLine = false;
         trendLinePreview = null;
-
-        // НЕ очищаем activeTrendlines — линии должны сохраняться!
 
         if (chart) {
             chart.applyOptions({
@@ -389,10 +385,14 @@ function togglePencil() {
     } else {
         isDrawing = false;
         lastPencilPoint = null;
+
+        // НЕ очищаем pencilStrokes — рисунки должны сохраняться!
+
         if (chart) {
             chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
         }
-        clearSpecificDrawings('pencil');
+
+        redrawAllPersistentDrawings();
     }
 }
 
@@ -433,27 +433,30 @@ function initPencilCanvas() {
     redrawAllPersistentDrawings();
 }
 
-// НОВАЯ ФУНКЦИЯ: получение времени по X, даже в пустой области
+// ИСПРАВЛЕНО: работает даже в правой части графика (где нет свечей)
 function getTimeByX(x) {
     let time = chart.timeScale().coordinateToTime(x);
     if (time !== null) return time;
+
+    const candles = window.candleData || [];
+    if (candles.length === 0) return null;
+
+    const lastCandle = candles[candles.length - 1];
+    const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
+
+    if (lastCandleX === null) return null;
 
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange) return null;
 
     const chartWidth = els.chartWrapper.clientWidth;
     const barsCount = visibleRange.to - visibleRange.from;
+    const pixelsPerBar = chartWidth / barsCount;
+
+    const barsOffset = Math.round((x - lastCandleX) / pixelsPerBar);
     const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
 
-    const lastVisibleX = chartWidth - 60;
-    const lastVisibleTime = chart.timeScale().coordinateToTime(lastVisibleX);
-    if (!lastVisibleTime) return null;
-
-    const pixelsPerBar = chartWidth / barsCount;
-    const barsFromLast = (x - lastVisibleX) / pixelsPerBar;
-    const timeOffset = Math.floor(barsFromLast * secondsPerBar);
-
-    return lastVisibleTime + timeOffset;
+    return lastCandle.time + (barsOffset * secondsPerBar);
 }
 
 function redrawPencilStrokes() {
@@ -591,7 +594,6 @@ function redrawAllPersistentDrawings() {
     pencilCtx.setLineDash([]);
 }
 
-// ИСПРАВЛЕНО: используется getTimeByX для рисования в пустой области
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
     if (isRulerEnabled) return;
@@ -1080,7 +1082,6 @@ async function openChart(symbol) {
         chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
         if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 
-        // ИСПРАВЛЕНО: используется getTimeByX для трендовой и карандаша
         chart.subscribeCrosshairMove((param) => {
             if (isMagnetEnabled) updateMagnetIndicator(param);
             if (isPencilEnabled && isDrawing) handlePencilDraw(param);
@@ -1097,7 +1098,11 @@ async function openChart(symbol) {
         });
         chart.subscribeClick(handleChartClick);
         chart.timeScale().subscribeVisibleTimeRangeChange(redrawAllPersistentDrawings);
-        chart.timeScale().subscribeSizeChange(() => { initPencilCanvas(); });
+        chart.timeScale().subscribeSizeChange(() => {
+            setTimeout(() => {
+                initPencilCanvas();
+            }, 50);
+        });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
             if (isPencilEnabled && e.button === 0) {
@@ -1113,7 +1118,7 @@ async function openChart(symbol) {
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
                 const price = candleSeries.coordinateToPrice(y);
-                const time = chart.timeScale().coordinateToTime(x);
+                const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
                 if (price && time) {
                     rulerStartPoint = { time, price, x, y };
                     rulerCurrentPoint = { time, price, x, y };
@@ -1176,7 +1181,7 @@ async function openChart(symbol) {
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
                 const price = candleSeries.coordinateToPrice(y);
-                const time = chart.timeScale().coordinateToTime(x);
+                const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
                 if (price && time) {
                     rulerCurrentPoint = { time, price, x, y };
                     redrawAllPersistentDrawings();
@@ -1328,10 +1333,13 @@ els.search.addEventListener('input', (e) => { showSearchDropdown(e.target.value)
 
 document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) hideSearchDropdown(); });
 
+// ИСПРАВЛЕНО: resize с перерисовкой
 window.addEventListener('resize', () => {
     if (chart && els.chartWrapper.classList.contains('active')) {
         chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
-        if (isPencilEnabled || activeTrendlines.length > 0) initPencilCanvas();
+        setTimeout(() => {
+            initPencilCanvas();
+        }, 100);
     }
 });
 
