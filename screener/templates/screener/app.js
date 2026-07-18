@@ -246,7 +246,7 @@ function startCandleWebSocket(symbol, tf) {
             }
         } catch (err) { console.error('❌ Ошибка парсинга WS свечи:', err); }
     };
-    wsCandles.onerror = (e) => console.error(' WS свечей ошибка:', e);
+    wsCandles.onerror = (e) => console.error('❌ WS свечей ошибка:', e);
     wsCandles.onclose = () => {
         if (currentSymbol === symbol) setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
     };
@@ -271,7 +271,7 @@ function startTradesStream(symbol) {
         } catch (err) { console.warn('Trade parse error:', err); }
     };
     wsTrades.onerror = () => {
-        if (els.tradesOverlayBody) els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">️ Разрыв связи</div>';
+        if (els.tradesOverlayBody) els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">⚠️ Разрыв связи</div>';
     };
     wsTrades.onclose = () => {
         setTimeout(() => { if (currentSymbol === symbol && els.tradesOverlay.classList.contains('active')) startTradesStream(symbol); }, 3000);
@@ -356,6 +356,8 @@ function toggleTrendLine() {
         isDrawingTrendLine = false;
         trendLinePreview = null;
 
+        // НЕ очищаем activeTrendlines — линии сохраняются!
+
         if (chart) {
             chart.applyOptions({
                 handleScroll: { mouseWheel: true, pressedMouseMove: true }
@@ -386,7 +388,7 @@ function togglePencil() {
         isDrawing = false;
         lastPencilPoint = null;
 
-        // НЕ очищаем pencilStrokes — рисунки должны сохраняться!
+        // НЕ очищаем pencilStrokes — рисунки сохраняются!
 
         if (chart) {
             chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
@@ -433,7 +435,7 @@ function initPencilCanvas() {
     redrawAllPersistentDrawings();
 }
 
-// ИСПРАВЛЕНО: работает даже в правой части графика (где нет свечей)
+// Получает время по X, даже в правой части (где rightOffset)
 function getTimeByX(x) {
     let time = chart.timeScale().coordinateToTime(x);
     if (time !== null) return time;
@@ -1070,10 +1072,17 @@ async function openChart(symbol) {
 
     try {
         chart = LightweightCharts.createChart(els.chartWrapper, {
-            width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight,
+            width: els.chartWrapper.clientWidth,
+            height: els.chartWrapper.clientHeight,
             layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
             grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
-            timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#2d3748', rightOffset: 12, barSpacing: 10 },
+            timeScale: {
+                timeVisible: true,
+                secondsVisible: false,
+                borderColor: '#2d3748',
+                rightOffset: 50,  // ← Пустое пространство справа для рисования
+                barSpacing: 10
+            },
             rightPriceScale: { borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
@@ -1101,7 +1110,7 @@ async function openChart(symbol) {
         chart.timeScale().subscribeSizeChange(() => {
             setTimeout(() => {
                 initPencilCanvas();
-            }, 50);
+            }, 150);  // ← Увеличенная задержка для корректной перерисовки
         });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
@@ -1199,6 +1208,7 @@ async function openChart(symbol) {
     if (scalpEnabled) startScalpUpdates(symbol);
 }
 
+// ИСПРАВЛЕНО: только реальные свечи, без фиктивных
 async function loadChartData(symbol, tf) {
     if (!chart || !candleSeries) return;
     els.chartTitle.textContent = `${symbol}/USDT`;
@@ -1214,6 +1224,8 @@ async function loadChartData(symbol, tf) {
         const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
 
         candleSeries.applyOptions({ priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove } });
+
+        // Только реальные свечи
         candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
         window.candleData = limitedHistory.map(c => ({ ...c, time: safeTime(c.time) }));
 
@@ -1223,9 +1235,14 @@ async function loadChartData(symbol, tf) {
                 color: c.close >= c.open ? 'rgba(200, 200, 200, 0.6)' : 'rgba(80, 80, 80, 0.7)'
             })));
         }
+
         chart.timeScale().fitContent();
         chart.timeScale().scrollToPosition(12, false);
-    } catch (err) { els.chartTitle.textContent = `Ошибка: ${err.message}`; console.error('loadChartData error:', err); }
+
+    } catch (err) {
+        els.chartTitle.textContent = `Ошибка: ${err.message}`;
+        console.error('loadChartData error:', err);
+    }
 }
 
 // ==========================================
@@ -1258,7 +1275,7 @@ function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('soundEnabled', soundEnabled);
     const btn = document.getElementById('soundToggleModal');
-    btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+    btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
     btn.classList.toggle('muted', !soundEnabled);
     if (soundEnabled) speak('Оповещения включены');
 }
@@ -1296,7 +1313,7 @@ function checkHourTransition() {
 
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast('⏰ До нового часа 1 минута');
+        showHourToast(' До нового часа 1 минута');
         playHourSound(1);
     }
 }
@@ -1333,13 +1350,13 @@ els.search.addEventListener('input', (e) => { showSearchDropdown(e.target.value)
 
 document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) hideSearchDropdown(); });
 
-// ИСПРАВЛЕНО: resize с перерисовкой
+// ИСПРАВЛЕНО: увеличенная задержка для корректной перерисовки
 window.addEventListener('resize', () => {
     if (chart && els.chartWrapper.classList.contains('active')) {
         chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
         setTimeout(() => {
             initPencilCanvas();
-        }, 100);
+        }, 200);
     }
 });
 
