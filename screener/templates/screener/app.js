@@ -596,43 +596,43 @@ function showRulerMeasurement(start, end) {
     const direction = end.price >= start.price ? '↑' : '↓';
     const color = end.price >= start.price ? '#22c55e' : '#ef4444';
 
-    let barsCount = 0;
-    if (start.time && end.time) {
-        const t1 = typeof start.time === 'number' ? start.time : start.time.timestamp;
-        const t2 = typeof end.time === 'number' ? end.time : end.time.timestamp;
-        const tfSeconds = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
-        barsCount = Math.abs(Math.floor((t2 - t1) / tfSeconds));
-    }
-
     const candles = window.candleData || [];
     const startTime = typeof start.time === 'number' ? start.time : start.time.timestamp;
     const endTime = typeof end.time === 'number' ? end.time : end.time.timestamp;
 
-    // Фильтруем только реальные свечи (не выходящие за пределы данных)
+    // Проверяем, есть ли реальные свечи в диапазоне
     const lastRealCandleTime = candles.length > 0 ? candles[candles.length - 1].time : 0;
-    const rangeCandles = candles.filter(c => {
-        const candleTime = typeof c.time === 'number' ? c.time : c.time;
-        return candleTime >= Math.min(startTime, endTime) &&
-               candleTime <= Math.max(startTime, endTime) &&
-               candleTime <= lastRealCandleTime; // Только реальные свечи
-    });
+    const hasRealData = startTime <= lastRealCandleTime;
 
+    let barsCount = 0;
     let totalVolume = 0;
     let maxPrice = '-';
     let minPrice = '-';
-    let hasData = false;
+    let showFullData = false;
 
-    if (rangeCandles.length > 0) {
-        hasData = true;
-        let highest = -Infinity;
-        let lowest = Infinity;
-        rangeCandles.forEach(candle => {
-            if (candle.high > highest) highest = candle.high;
-            if (candle.low < lowest) lowest = candle.low;
-            totalVolume += candle.volume || 0;
+    if (hasRealData) {
+        const rangeCandles = candles.filter(c => {
+            const candleTime = typeof c.time === 'number' ? c.time : c.time;
+            return candleTime >= Math.min(startTime, endTime) &&
+                   candleTime <= Math.max(startTime, endTime) &&
+                   candleTime <= lastRealCandleTime;
         });
-        maxPrice = highest.toFixed(currentPrecision);
-        minPrice = lowest.toFixed(currentPrecision);
+
+        if (rangeCandles.length > 0) {
+            showFullData = true;
+            const tfSeconds = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+            barsCount = Math.abs(Math.floor((endTime - startTime) / tfSeconds));
+
+            let highest = -Infinity;
+            let lowest = Infinity;
+            rangeCandles.forEach(candle => {
+                if (candle.high > highest) highest = candle.high;
+                if (candle.low < lowest) lowest = candle.low;
+                totalVolume += candle.volume || 0;
+            });
+            maxPrice = highest.toFixed(currentPrecision);
+            minPrice = lowest.toFixed(currentPrecision);
+        }
     }
 
     const formatTime = (t) => {
@@ -645,46 +645,71 @@ function showRulerMeasurement(start, end) {
                            totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
                            totalVolume.toFixed(2);
 
-    // ПОЗИЦИЯ: Слева от курсора (end.x), а не от начала выделения
-    const displayX = end.x - 240; // 240px слева от курсора
+    // ПОЗИЦИЯ: Слева от курсора (end.x)
+    const displayX = end.x - 240;
     const displayY = Math.min(start.y, end.y) - 10;
-
-    // Проверяем, не выходит ли за левую границу
     const finalX = Math.max(10, displayX);
 
-    els.rulerMeasurement.innerHTML = `
-        <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
-            ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
-        </div>
-        <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span style="color:#9ca3af;">Бары:</span>
-                <span style="font-weight:600;">${barsCount}</span>
+    if (showFullData) {
+        // Полные данные (есть свечи в диапазоне)
+        els.rulerMeasurement.innerHTML = `
+            <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
+                ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
             </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span style="color:#9ca3af;">Цена:</span>
-                <span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span style="color:#9ca3af;">Изменение:</span>
-                <span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span style="color:#9ca3af;">Объем:</span>
-                <span style="font-weight:600;">${hasData ? volumeFormatted : 'Нет данных'}</span>
-            </div>
-            <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px;">
-                <div style="display:flex; justify-content:space-between; font-size:10px; color:#9ca3af;">
-                    <span>Max: <span style="color:#22c55e;">${hasData ? maxPrice : '-'}</span></span>
-                    <span>Min: <span style="color:#ef4444;">${hasData ? minPrice : '-'}</span></span>
+            <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#9ca3af;">Бары:</span>
+                    <span style="font-weight:600;">${barsCount}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#9ca3af;">Цена:</span>
+                    <span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#9ca3af;">Изменение:</span>
+                    <span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#9ca3af;">Объем:</span>
+                    <span style="font-weight:600;">${volumeFormatted}</span>
+                </div>
+                <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px;">
+                    <div style="display:flex; justify-content:space-between; font-size:10px; color:#9ca3af;">
+                        <span>Max: <span style="color:#22c55e;">${maxPrice}</span></span>
+                        <span>Min: <span style="color:#ef4444;">${minPrice}</span></span>
+                    </div>
+                </div>
+                <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
+                    ${formatTime(start.time)} → ${formatTime(end.time)}
                 </div>
             </div>
-            <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
-                ${formatTime(start.time)} → ${formatTime(end.time)}
+        `;
+    } else {
+        // Упрощенные данные (правая часть без свечей)
+        els.rulerMeasurement.innerHTML = `
+            <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
+                ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
             </div>
-            ${!hasData ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">️ Правее последних свечей</div>' : ''}
-        </div>
-    `;
+            <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#9ca3af;">Цена:</span>
+                    <span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#9ca3af;">Изменение:</span>
+                    <span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
+                </div>
+                <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px; text-align:center;">
+                    <div style="font-size:9px; color:#f59e0b; font-style:italic;">
+                        ⚠️ Область без данных
+                    </div>
+                </div>
+                <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
+                    ${formatTime(start.time)} → ${formatTime(end.time)}
+                </div>
+            </div>
+        `;
+    }
 
     els.rulerMeasurement.style.left = `${finalX}px`;
     els.rulerMeasurement.style.top = `${Math.max(10, displayY)}px`;
