@@ -603,42 +603,42 @@ function showRulerMeasurement(start, end) {
     const startTime = typeof start.time === 'number' ? start.time : start.time.timestamp;
     const endTime = typeof end.time === 'number' ? end.time : end.time.timestamp;
 
-    // Проверяем, где находятся точки выделения
+    // Проверяем, где находятся точки
     const startInRealArea = startTime <= lastRealTime;
     const endInRealArea = endTime <= lastRealTime;
+    const bothInRealArea = startInRealArea && endInRealArea;
+    const bothInEmptyArea = !startInRealArea && !endInRealArea;
 
     let barsCount = 0;
     let totalVolume = 0;
     let maxPrice = '-';
     let minPrice = '-';
-    let showFullData = false;
+    let hasRealData = false;
 
-    // Если ХОТЯ БЫ ОДНА точка в области реальных свечей
-    if (startInRealArea || endInRealArea) {
-        const rangeStart = Math.min(startTime, endTime);
-        const rangeEnd = Math.max(startTime, endTime);
+    // Считаем данные по реальным свечам в диапазоне (даже если одна точка в пустой зоне)
+    const rangeStart = Math.min(startTime, endTime);
+    const rangeEnd = Math.max(startTime, endTime);
 
-        // Берем только реальные свечи в диапазоне
-        const rangeCandles = candles.filter(c => {
-            const candleTime = typeof c.time === 'number' ? c.time : c.time;
-            return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
+    // Берем только реальные свечи в диапазоне
+    const rangeCandles = candles.filter(c => {
+        const candleTime = typeof c.time === 'number' ? c.time : c.time;
+        return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
+    });
+
+    if (rangeCandles.length > 0) {
+        hasRealData = true;
+        const tfSeconds = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+        barsCount = Math.abs(Math.floor((rangeEnd - rangeStart) / tfSeconds));
+
+        let highest = -Infinity;
+        let lowest = Infinity;
+        rangeCandles.forEach(candle => {
+            if (candle.high > highest) highest = candle.high;
+            if (candle.low < lowest) lowest = candle.low;
+            totalVolume += candle.volume || 0;
         });
-
-        if (rangeCandles.length > 0) {
-            showFullData = true;
-            const tfSeconds = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
-            barsCount = Math.abs(Math.floor((endTime - startTime) / tfSeconds));
-
-            let highest = -Infinity;
-            let lowest = Infinity;
-            rangeCandles.forEach(candle => {
-                if (candle.high > highest) highest = candle.high;
-                if (candle.low < lowest) lowest = candle.low;
-                totalVolume += candle.volume || 0;
-            });
-            maxPrice = highest.toFixed(currentPrecision);
-            minPrice = lowest.toFixed(currentPrecision);
-        }
+        maxPrice = highest.toFixed(currentPrecision);
+        minPrice = lowest.toFixed(currentPrecision);
     }
 
     const formatTime = (t) => {
@@ -655,8 +655,9 @@ function showRulerMeasurement(start, end) {
     const displayX = end.x - 240;
     const displayY = Math.min(start.y, end.y) - 10;
     const finalX = Math.max(10, displayX);
+    const finalY = Math.max(10, displayY);
 
-    if (showFullData) {
+    if (hasRealData) {
         // Полные данные (есть реальные свечи в диапазоне)
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
@@ -688,10 +689,11 @@ function showRulerMeasurement(start, end) {
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
                     ${formatTime(start.time)} → ${formatTime(end.time)}
                 </div>
+                ${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">⚠️ Часть в пустой зоне</div>' : ''}
             </div>
         `;
     } else {
-        // Упрощенные данные (обе точки правее последних свечей)
+        // Упрощенные данные (обе точки в пустой зоне, нет реальных свечей)
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
                 ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
@@ -718,7 +720,7 @@ function showRulerMeasurement(start, end) {
     }
 
     els.rulerMeasurement.style.left = `${finalX}px`;
-    els.rulerMeasurement.style.top = `${Math.max(10, displayY)}px`;
+    els.rulerMeasurement.style.top = `${finalY}px`;
     els.rulerMeasurement.style.display = 'block';
 }
 
