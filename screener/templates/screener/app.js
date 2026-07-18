@@ -597,12 +597,15 @@ function showRulerMeasurement(start, end) {
     const color = end.price >= start.price ? '#22c55e' : '#ef4444';
 
     const candles = window.candleData || [];
+    const lastRealCandle = candles[candles.length - 1];
+    const lastRealTime = lastRealCandle ? lastRealCandle.time : 0;
+
     const startTime = typeof start.time === 'number' ? start.time : start.time.timestamp;
     const endTime = typeof end.time === 'number' ? end.time : end.time.timestamp;
 
-    // Проверяем, есть ли реальные свечи в диапазоне
-    const lastRealCandleTime = candles.length > 0 ? candles[candles.length - 1].time : 0;
-    const hasRealData = startTime <= lastRealCandleTime;
+    // Проверяем, где находятся точки выделения
+    const startInRealArea = startTime <= lastRealTime;
+    const endInRealArea = endTime <= lastRealTime;
 
     let barsCount = 0;
     let totalVolume = 0;
@@ -610,12 +613,15 @@ function showRulerMeasurement(start, end) {
     let minPrice = '-';
     let showFullData = false;
 
-    if (hasRealData) {
+    // Если ХОТЯ БЫ ОДНА точка в области реальных свечей
+    if (startInRealArea || endInRealArea) {
+        const rangeStart = Math.min(startTime, endTime);
+        const rangeEnd = Math.max(startTime, endTime);
+
+        // Берем только реальные свечи в диапазоне
         const rangeCandles = candles.filter(c => {
             const candleTime = typeof c.time === 'number' ? c.time : c.time;
-            return candleTime >= Math.min(startTime, endTime) &&
-                   candleTime <= Math.max(startTime, endTime) &&
-                   candleTime <= lastRealCandleTime;
+            return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
         });
 
         if (rangeCandles.length > 0) {
@@ -651,7 +657,7 @@ function showRulerMeasurement(start, end) {
     const finalX = Math.max(10, displayX);
 
     if (showFullData) {
-        // Полные данные (есть свечи в диапазоне)
+        // Полные данные (есть реальные свечи в диапазоне)
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
                 ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
@@ -685,7 +691,7 @@ function showRulerMeasurement(start, end) {
             </div>
         `;
     } else {
-        // Упрощенные данные (правая часть без свечей)
+        // Упрощенные данные (обе точки правее последних свечей)
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
                 ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
