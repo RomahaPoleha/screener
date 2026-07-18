@@ -8,15 +8,11 @@ sound1min.preload = 'auto';
 
 function playHourSound(minutesLeft) {
     if (!soundEnabled) return;
-
     const sound = minutesLeft === 5 ? sound5min : sound1min;
     sound.currentTime = 0;
-
     sound.play().catch(err => {
         console.warn('Не удалось воспроизвести звук:', err);
-        speak(minutesLeft === 5
-            ? 'До перехода на новый час осталось 5 минут'
-            : 'Внимание, до перехода на новый час осталась 1 минута');
+        speak(minutesLeft === 5 ? 'До перехода на новый час осталось 5 минут' : 'Внимание, до перехода на новый час осталась 1 минута');
     });
 }
 
@@ -221,7 +217,6 @@ function startCandleWebSocket(symbol, tf) {
                     low: parseFloat(k.l), close: parseFloat(k.c), volume: parseFloat(k.v)
                 };
                 candleSeries.update(candle);
-
                 if (window.candleData) {
                     const lastCandle = window.candleData[window.candleData.length - 1];
                     if (lastCandle && lastCandle.time === candle.time) {
@@ -230,13 +225,11 @@ function startCandleWebSocket(symbol, tf) {
                         window.candleData.push(candle);
                     }
                 }
-
                 if (activeAlerts.length > 0) {
                     const prevPrice = lastCandlePrice !== null ? lastCandlePrice : candle.open;
                     checkAlerts(candle.close, prevPrice);
                     lastCandlePrice = candle.close;
                 }
-
                 if (volumeSeries) {
                     volumeSeries.update({
                         time: candle.time, value: candle.volume,
@@ -298,9 +291,7 @@ function clearSpecificDrawings(type) {
         rulerCurrentPoint = null;
         rulerFixedMeasurement = null;
         els.rulerMeasurement.style.display = 'none';
-        if (pencilCtx) {
-            pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
-        }
+        if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
     }
 }
 
@@ -337,33 +328,13 @@ function toggleAlertMode() {
 function toggleTrendLine() {
     isTrendLineEnabled = !isTrendLineEnabled;
     updateToolUI('trendLineBtn', isTrendLineEnabled);
-
     if (isTrendLineEnabled) {
-        isAlertModeEnabled = false;
-        isPencilEnabled = false;
-        isRulerEnabled = false;
-        updateToolUI('alertBtn', false);
-        updateToolUI('pencilBtn', false);
-        updateToolUI('rulerBtn', false);
-
-        if (chart) {
-            chart.applyOptions({
-                handleScroll: { mouseWheel: true, pressedMouseMove: false }
-            });
-        }
+        isAlertModeEnabled = false; isPencilEnabled = false; isRulerEnabled = false;
+        updateToolUI('alertBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
-        trendLineStart = null;
-        isDrawingTrendLine = false;
-        trendLinePreview = null;
-
-        // НЕ очищаем activeTrendlines — линии сохраняются!
-
-        if (chart) {
-            chart.applyOptions({
-                handleScroll: { mouseWheel: true, pressedMouseMove: true }
-            });
-        }
-
+        trendLineStart = null; isDrawingTrendLine = false; trendLinePreview = null;
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
         redrawAllPersistentDrawings();
     }
 }
@@ -371,29 +342,14 @@ function toggleTrendLine() {
 function togglePencil() {
     isPencilEnabled = !isPencilEnabled;
     updateToolUI('pencilBtn', isPencilEnabled);
-
     if (isPencilEnabled) {
-        isAlertModeEnabled = false;
-        isTrendLineEnabled = false;
-        isRulerEnabled = false;
-        updateToolUI('alertBtn', false);
-        updateToolUI('trendLineBtn', false);
-        updateToolUI('rulerBtn', false);
-
-        if (chart) {
-            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
-        }
+        isAlertModeEnabled = false; isTrendLineEnabled = false; isRulerEnabled = false;
+        updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('rulerBtn', false);
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
         initPencilCanvas();
     } else {
-        isDrawing = false;
-        lastPencilPoint = null;
-
-        // НЕ очищаем pencilStrokes — рисунки сохраняются!
-
-        if (chart) {
-            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
-        }
-
+        isDrawing = false; lastPencilPoint = null;
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
         redrawAllPersistentDrawings();
     }
 }
@@ -404,15 +360,10 @@ function toggleRuler() {
     if (isRulerEnabled) {
         isAlertModeEnabled = false; isTrendLineEnabled = false; isPencilEnabled = false;
         updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false);
-
-        if (chart) {
-            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
-        }
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
-        clearSpecificDrawings('ruler');
-        if (chart) {
-            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
-        }
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+        if (!rulerFixedMeasurement) clearSpecificDrawings('ruler');
     }
 }
 
@@ -435,138 +386,80 @@ function initPencilCanvas() {
     redrawAllPersistentDrawings();
 }
 
-// Получает время по X (даже в правой части через rightOffset)
 function getTimeByX(x) {
     let time = chart.timeScale().coordinateToTime(x);
     if (time !== null) return time;
-
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
-
     const lastCandle = candles[candles.length - 1];
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
-
     if (lastCandleX === null) return null;
-
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange) return null;
-
     const chartWidth = els.chartWrapper.clientWidth;
     const barsCount = visibleRange.to - visibleRange.from;
     const pixelsPerBar = chartWidth / barsCount;
-
     const barsOffset = Math.round((x - lastCandleX) / pixelsPerBar);
     const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
-
     return lastCandle.time + (barsOffset * secondsPerBar);
 }
 
-// НОВАЯ ФУНКЦИЯ: получает логический индекс бара по X
 function getLogicalIndexByX(x) {
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
-
     const lastCandle = candles[candles.length - 1];
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
-
     if (lastCandleX === null) return null;
-
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange) return null;
-
     const chartWidth = els.chartWrapper.clientWidth;
     const barsCount = visibleRange.to - visibleRange.from;
     const pixelsPerBar = chartWidth / barsCount;
-
     const lastIndex = candles.length - 1;
     const barsOffset = (x - lastCandleX) / pixelsPerBar;
-
     return lastIndex + barsOffset;
 }
 
-// НОВАЯ ФУНКЦИЯ: получает X по логическому индексу
 function getXByLogicalIndex(logicalIndex) {
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
-
     const lastCandle = candles[candles.length - 1];
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
-
     if (lastCandleX === null) return null;
-
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange) return null;
-
     const chartWidth = els.chartWrapper.clientWidth;
     const barsCount = visibleRange.to - visibleRange.from;
     const pixelsPerBar = chartWidth / barsCount;
-
     const lastIndex = candles.length - 1;
     const barsOffset = logicalIndex - lastIndex;
-
     return lastCandleX + (barsOffset * pixelsPerBar);
 }
 
 function redrawPencilStrokes() {
     if (!pencilCtx || !chart || !candleSeries) return;
-
     pencilCtx.strokeStyle = '#f0b90b';
     pencilCtx.lineWidth = 2;
     pencilCtx.lineCap = 'round';
     pencilCtx.lineJoin = 'round';
 
-    pencilStrokes.forEach(stroke => {
+    const drawStroke = (stroke) => {
         if (stroke.length < 2) return;
         pencilCtx.beginPath();
         let started = false;
-
         for (const point of stroke) {
             let x = chart.timeScale().timeToCoordinate(point.time);
-            if (x === null && point.logicalIndex !== undefined) {
-                x = getXByLogicalIndex(point.logicalIndex);
-            }
+            if (x === null && point.logicalIndex !== undefined) x = getXByLogicalIndex(point.logicalIndex);
             const y = candleSeries.priceToCoordinate(point.price);
-
-            if (x === null || y === null) {
-                started = false;
-                continue;
-            }
-
-            if (!started) {
-                pencilCtx.moveTo(x, y);
-                started = true;
-            } else {
-                pencilCtx.lineTo(x, y);
-            }
+            if (x === null || y === null) { started = false; continue; }
+            if (!started) { pencilCtx.moveTo(x, y); started = true; }
+            else { pencilCtx.lineTo(x, y); }
         }
         pencilCtx.stroke();
-    });
+    };
 
-    if (currentStroke && currentStroke.length >= 2) {
-        pencilCtx.beginPath();
-        let started = false;
-
-        for (const point of currentStroke) {
-            let x = chart.timeScale().timeToCoordinate(point.time);
-            if (x === null && point.logicalIndex !== undefined) {
-                x = getXByLogicalIndex(point.logicalIndex);
-            }
-            const y = candleSeries.priceToCoordinate(point.price);
-
-            if (x === null || y === null) {
-                started = false;
-                continue;
-            }
-
-            if (!started) {
-                pencilCtx.moveTo(x, y);
-                started = true;
-            } else {
-                pencilCtx.lineTo(x, y);
-            }
-        }
-        pencilCtx.stroke();
-    }
+    pencilStrokes.forEach(drawStroke);
+    if (currentStroke && currentStroke.length >= 2) drawStroke(currentStroke);
 }
 
 function drawRulerRectangle(start, end) {
@@ -574,7 +467,6 @@ function drawRulerRectangle(start, end) {
     const y1 = candleSeries.priceToCoordinate(start.price);
     const x2 = chart.timeScale().timeToCoordinate(end.time);
     const y2 = candleSeries.priceToCoordinate(end.price);
-
     if (x1 === null || y1 === null || x2 === null || y2 === null) return;
 
     const isUp = end.price >= start.price;
@@ -588,7 +480,6 @@ function drawRulerRectangle(start, end) {
 
     pencilCtx.fillStyle = color;
     pencilCtx.fillRect(left, top, width, height);
-
     pencilCtx.strokeStyle = borderColor;
     pencilCtx.lineWidth = 1;
     pencilCtx.setLineDash([4, 4]);
@@ -604,59 +495,41 @@ function redrawAllPersistentDrawings() {
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
 
+    const getX = (tl, keyTime, keyIdx) => {
+        let x = chart.timeScale().timeToCoordinate(tl[keyTime]);
+        if (x === null && tl[keyIdx] !== undefined) x = getXByLogicalIndex(tl[keyIdx]);
+        return x;
+    };
+
     activeTrendlines.forEach(tl => {
-        let x1 = chart.timeScale().timeToCoordinate(tl.time1);
-        if (x1 === null && tl.logicalIndex1 !== undefined) {
-            x1 = getXByLogicalIndex(tl.logicalIndex1);
-        }
-        let x2 = chart.timeScale().timeToCoordinate(tl.time2);
-        if (x2 === null && tl.logicalIndex2 !== undefined) {
-            x2 = getXByLogicalIndex(tl.logicalIndex2);
-        }
+        const x1 = getX(tl, 'time1', 'logicalIndex1');
+        const x2 = getX(tl, 'time2', 'logicalIndex2');
         const y1 = candleSeries.priceToCoordinate(tl.price1);
         const y2 = candleSeries.priceToCoordinate(tl.price2);
-
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-            pencilCtx.beginPath();
-            pencilCtx.moveTo(x1, y1);
-            pencilCtx.lineTo(x2, y2);
-            pencilCtx.stroke();
+            pencilCtx.beginPath(); pencilCtx.moveTo(x1, y1); pencilCtx.lineTo(x2, y2); pencilCtx.stroke();
         }
     });
 
     if (isDrawingTrendLine && trendLinePreview) {
-        let x1 = chart.timeScale().timeToCoordinate(trendLinePreview.time1);
-        if (x1 === null && trendLinePreview.logicalIndex1 !== undefined) {
-            x1 = getXByLogicalIndex(trendLinePreview.logicalIndex1);
-        }
-        let x2 = chart.timeScale().timeToCoordinate(trendLinePreview.time2);
-        if (x2 === null && trendLinePreview.logicalIndex2 !== undefined) {
-            x2 = getXByLogicalIndex(trendLinePreview.logicalIndex2);
-        }
+        const x1 = getX(trendLinePreview, 'time1', 'logicalIndex1');
+        const x2 = getX(trendLinePreview, 'time2', 'logicalIndex2');
         const y1 = candleSeries.priceToCoordinate(trendLinePreview.price1);
         const y2 = candleSeries.priceToCoordinate(trendLinePreview.price2);
-
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-            pencilCtx.strokeStyle = 'rgba(156, 163, 175, 0.7)';
-            pencilCtx.lineWidth = 1.5;
-            pencilCtx.setLineDash([3, 3]);
-            pencilCtx.beginPath();
-            pencilCtx.moveTo(x1, y1);
-            pencilCtx.lineTo(x2, y2);
-            pencilCtx.stroke();
+            pencilCtx.strokeStyle = 'rgba(156, 163, 175, 0.7)'; pencilCtx.lineWidth = 1.5; pencilCtx.setLineDash([3, 3]);
+            pencilCtx.beginPath(); pencilCtx.moveTo(x1, y1); pencilCtx.lineTo(x2, y2); pencilCtx.stroke();
         }
     }
 
-    if (isRulerEnabled && isRulerDragging && rulerStartPoint && rulerCurrentPoint) {
+    if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) {
         drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
     }
-
     if (rulerFixedMeasurement) {
         drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
     }
 
     redrawPencilStrokes();
-
     pencilCtx.setLineDash([]);
 }
 
@@ -679,24 +552,18 @@ function handleChartClick(param) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         const time = param.time || getTimeByX(param.point.x);
         const logicalIndex = getLogicalIndexByX(param.point.x);
-
         if (!price || isNaN(price) || !time) return;
 
         if (!isDrawingTrendLine) {
             trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
             isDrawingTrendLine = true;
-            trendLinePreview = {
-                time1: time, price1: price, logicalIndex1: logicalIndex,
-                time2: time, price2: price, logicalIndex2: logicalIndex
-            };
+            trendLinePreview = { time1: time, price1: price, logicalIndex1: logicalIndex, time2: time, price2: price, logicalIndex2: logicalIndex };
         } else {
             activeTrendlines.push({
                 time1: trendLineStart.time, price1: trendLineStart.price, logicalIndex1: trendLineStart.logicalIndex,
                 time2: time, price2: price, logicalIndex2: logicalIndex
             });
-            isDrawingTrendLine = false;
-            trendLineStart = null;
-            trendLinePreview = null;
+            isDrawingTrendLine = false; trendLineStart = null; trendLinePreview = null;
             redrawAllPersistentDrawings();
         }
     }
@@ -704,31 +571,19 @@ function handleChartClick(param) {
 
 function handlePencilDraw(param) {
     if (!isPencilEnabled || !isDrawing || !pencilCtx || !param.point) return;
-
     const price = candleSeries.coordinateToPrice(param.point.y);
     const time = param.time || getTimeByX(param.point.x);
     const logicalIndex = getLogicalIndexByX(param.point.x);
+    if (!price || !time) { lastPencilPoint = param.point; return; }
 
-    if (!price || !time) {
-        lastPencilPoint = param.point;
-        return;
-    }
-
-    if (!currentStroke) {
-        currentStroke = [{ time, price, logicalIndex }];
-    } else {
-        currentStroke.push({ time, price, logicalIndex });
-    }
+    if (!currentStroke) currentStroke = [{ time, price, logicalIndex }];
+    else currentStroke.push({ time, price, logicalIndex });
 
     if (lastPencilPoint) {
-        pencilCtx.strokeStyle = '#f0b90b';
-        pencilCtx.lineWidth = 2;
-        pencilCtx.lineCap = 'round';
-        pencilCtx.lineJoin = 'round';
-        pencilCtx.beginPath();
-        pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
-        pencilCtx.lineTo(param.point.x, param.point.y);
-        pencilCtx.stroke();
+        pencilCtx.strokeStyle = '#f0b90b'; pencilCtx.lineWidth = 2;
+        pencilCtx.lineCap = 'round'; pencilCtx.lineJoin = 'round';
+        pencilCtx.beginPath(); pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
+        pencilCtx.lineTo(param.point.x, param.point.y); pencilCtx.stroke();
     }
     lastPencilPoint = param.point;
 }
@@ -758,8 +613,7 @@ function showRulerMeasurement(start, end) {
         return candleTime >= Math.min(startTime, endTime) && candleTime <= Math.max(startTime, endTime);
     });
 
-    let volatilityPercent = '-';
-    let volatilityValue = '-';
+    let totalVolume = 0;
     let maxPrice = '-';
     let minPrice = '-';
 
@@ -769,12 +623,10 @@ function showRulerMeasurement(start, end) {
         rangeCandles.forEach(candle => {
             if (candle.high > highest) highest = candle.high;
             if (candle.low < lowest) lowest = candle.low;
+            totalVolume += candle.volume || 0;
         });
         maxPrice = highest.toFixed(currentPrecision);
         minPrice = lowest.toFixed(currentPrecision);
-        const volatilityDiff = highest - lowest;
-        volatilityValue = volatilityDiff.toFixed(currentPrecision);
-        volatilityPercent = ((volatilityDiff / lowest) * 100).toFixed(2);
     }
 
     const formatTime = (t) => {
@@ -783,32 +635,48 @@ function showRulerMeasurement(start, end) {
         return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
     };
 
+    const volumeFormatted = totalVolume >= 1000000 ? `${(totalVolume / 1000000).toFixed(2)}M` :
+                           totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
+                           totalVolume.toFixed(2);
+
+    const displayX = Math.min(start.x, end.x) - 230;
+    const displayY = Math.min(start.y, end.y) - 20;
+
     els.rulerMeasurement.innerHTML = `
-        <div style="font-weight:700; color:${color}; margin-bottom:6px; font-size:12px;">
+        <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
             ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
         </div>
-        <div style="font-size:10px; color:#9ca3af; margin-bottom:6px;">
-            ${barsCount} баров<br>
-            ${formatTime(start.time)} → ${formatTime(end.time)}
-        </div>
-        ${volatilityPercent !== '-' ? `
-        <div style="border-top:1px solid #2d3748; margin:6px -12px -6px -12px; padding:6px 12px 0 12px;">
-            <div style="color:#f0b90b; font-weight:600; font-size:11px; margin-bottom:4px;">
-                📊 Волатильность: ${volatilityPercent}%
+        <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:#9ca3af;">Бары:</span>
+                <span style="font-weight:600;">${barsCount}</span>
             </div>
-            <div style="font-size:10px; color:#9ca3af;">
-                ${volatilityValue} pts<br>
-                <span style="color:#22c55e">Max:</span> ${maxPrice} |
-                <span style="color:#ef4444">Min:</span> ${minPrice}
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:#9ca3af;">Цена:</span>
+                <span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:#9ca3af;">Изменение:</span>
+                <span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:#9ca3af;">Объем:</span>
+                <span style="font-weight:600;">${volumeFormatted}</span>
+            </div>
+            <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px;">
+                <div style="display:flex; justify-content:space-between; font-size:10px; color:#9ca3af;">
+                    <span>Max: <span style="color:#22c55e;">${maxPrice}</span></span>
+                    <span>Min: <span style="color:#ef4444;">${minPrice}</span></span>
+                </div>
+            </div>
+            <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
+                ${formatTime(start.time)} → ${formatTime(end.time)}
             </div>
         </div>
-        ` : ''}
     `;
 
-    const centerX = (start.x + end.x) / 2;
-    const centerY = (start.y + end.y) / 2;
-    els.rulerMeasurement.style.left = `${centerX - 80}px`;
-    els.rulerMeasurement.style.top = `${centerY - 50}px`;
+    els.rulerMeasurement.style.left = `${Math.max(10, displayX)}px`;
+    els.rulerMeasurement.style.top = `${Math.max(10, displayY)}px`;
     els.rulerMeasurement.style.display = 'block';
 }
 
@@ -892,7 +760,7 @@ function openSettingsModal() {
 
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : ' Голосовое оповещение';
+        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
 
@@ -1179,17 +1047,29 @@ async function openChart(symbol) {
         chart.subscribeClick(handleChartClick);
         chart.timeScale().subscribeVisibleTimeRangeChange(redrawAllPersistentDrawings);
         chart.timeScale().subscribeSizeChange(() => {
-            setTimeout(() => {
-                initPencilCanvas();
-            }, 150);
+            setTimeout(() => { initPencilCanvas(); }, 150);
         });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
-            if (isPencilEnabled && e.button === 0) {
-                isDrawing = true;
-                initPencilCanvas();
+            // Линейка по левой кнопке (когда включена)
+            if (isRulerEnabled && e.button === 0) {
+                e.preventDefault();
+                rulerFixedMeasurement = null;
+                els.rulerMeasurement.style.display = 'none';
+                const rect = els.chartWrapper.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const price = candleSeries.coordinateToPrice(y);
+                const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
+                if (price && time) {
+                    rulerStartPoint = { time, price, x, y };
+                    rulerCurrentPoint = { time, price, x, y };
+                    isRulerDragging = true;
+                    initPencilCanvas();
+                }
             }
-            if (isRulerEnabled && e.button === 1) {
+            // Линейка по колесику (когда выключена - горячая клавиша)
+            else if (!isRulerEnabled && e.button === 1) {
                 e.preventDefault();
                 e.stopPropagation();
                 rulerFixedMeasurement = null;
@@ -1206,23 +1086,54 @@ async function openChart(symbol) {
                     initPencilCanvas();
                 }
             }
+            // Карандаш по левой кнопке
+            else if (isPencilEnabled && e.button === 0) {
+                isDrawing = true;
+                initPencilCanvas();
+            }
         });
 
         els.chartWrapper.addEventListener('auxclick', (e) => {
             if (e.button === 1) e.preventDefault();
         });
 
+        els.chartWrapper.addEventListener('mousemove', (e) => {
+            if (isRulerDragging && rulerStartPoint) {
+                const rect = els.chartWrapper.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const price = candleSeries.coordinateToPrice(y);
+                const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
+                if (price && time) {
+                    rulerCurrentPoint = { time, price, x, y };
+                    redrawAllPersistentDrawings();
+                    showRulerMeasurement(rulerStartPoint, rulerCurrentPoint);
+                }
+            }
+        });
+
         els.chartWrapper.addEventListener('mouseup', (e) => {
+            // Карандаш
             if (isPencilEnabled && e.button === 0) {
                 isDrawing = false;
                 lastPencilPoint = null;
-
                 if (currentStroke && currentStroke.length > 0) {
                     pencilStrokes.push(currentStroke);
                     currentStroke = null;
                 }
             }
-            if (isRulerEnabled && e.button === 1 && isRulerDragging) {
+            // Линейка по левой кнопке (когда включена)
+            if (isRulerEnabled && e.button === 0 && isRulerDragging) {
+                isRulerDragging = false;
+                if (rulerStartPoint && rulerCurrentPoint) {
+                    rulerFixedMeasurement = { start: { ...rulerStartPoint }, end: { ...rulerCurrentPoint } };
+                    showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
+                }
+                rulerStartPoint = null;
+                rulerCurrentPoint = null;
+            }
+            // Линейка по колесику (горячая клавиша)
+            if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault();
                 isRulerDragging = false;
                 if (rulerStartPoint && rulerCurrentPoint) {
@@ -1238,7 +1149,6 @@ async function openChart(symbol) {
             if (isPencilEnabled) {
                 isDrawing = false;
                 lastPencilPoint = null;
-
                 if (currentStroke && currentStroke.length > 0) {
                     pencilStrokes.push(currentStroke);
                     currentStroke = null;
@@ -1252,20 +1162,6 @@ async function openChart(symbol) {
                 }
                 rulerStartPoint = null;
                 rulerCurrentPoint = null;
-            }
-        });
-
-        els.chartWrapper.addEventListener('mousemove', (e) => {
-            if (isRulerEnabled && isRulerDragging && rulerStartPoint) {
-                const rect = els.chartWrapper.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                const price = candleSeries.coordinateToPrice(y);
-                const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
-                if (price && time) {
-                    rulerCurrentPoint = { time, price, x, y };
-                    redrawAllPersistentDrawings();
-                }
             }
         });
 
@@ -1294,8 +1190,6 @@ async function loadChartData(symbol, tf) {
         const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
 
         candleSeries.applyOptions({ priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove } });
-
-        // Только реальные свечи
         candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
         window.candleData = limitedHistory.map(c => ({ ...c, time: safeTime(c.time) }));
 
@@ -1305,14 +1199,9 @@ async function loadChartData(symbol, tf) {
                 color: c.close >= c.open ? 'rgba(200, 200, 200, 0.6)' : 'rgba(80, 80, 80, 0.7)'
             })));
         }
-
         chart.timeScale().fitContent();
         chart.timeScale().scrollToPosition(12, false);
-
-    } catch (err) {
-        els.chartTitle.textContent = `Ошибка: ${err.message}`;
-        console.error('loadChartData error:', err);
-    }
+    } catch (err) { els.chartTitle.textContent = `Ошибка: ${err.message}`; console.error('loadChartData error:', err); }
 }
 
 // ==========================================
@@ -1374,13 +1263,11 @@ function showHourToast(title) {
 function checkHourTransition() {
     const now = new Date();
     const currentMinuteKey = now.getHours() * 60 + now.getMinutes();
-
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast(' До нового часа 5 минут');
+        showHourToast('⏰ До нового часа 5 минут');
         playHourSound(5);
     }
-
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
         showHourToast('⏰ До нового часа 1 минута');
@@ -1423,9 +1310,7 @@ document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapp
 window.addEventListener('resize', () => {
     if (chart && els.chartWrapper.classList.contains('active')) {
         chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
-        setTimeout(() => {
-            initPencilCanvas();
-        }, 200);
+        setTimeout(() => { initPencilCanvas(); }, 200);
     }
 });
 
