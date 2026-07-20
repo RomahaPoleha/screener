@@ -239,7 +239,7 @@ function startCandleWebSocket(symbol, tf) {
             }
         } catch (err) { console.error('❌ Ошибка парсинга WS свечи:', err); }
     };
-    wsCandles.onerror = (e) => console.error('❌ WS свечей ошибка:', e);
+    wsCandles.onerror = (e) => console.error(' WS свечей ошибка:', e);
     wsCandles.onclose = () => {
         if (currentSymbol === symbol) setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
     };
@@ -544,7 +544,7 @@ function handleChartClick(param) {
             price: price, color: 'rgba(240, 185, 11, 0.9)', lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
-            title: `🔔 ${price.toFixed(currentPrecision)}`
+            title: ` ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
     }
@@ -603,11 +603,9 @@ function showRulerMeasurement(start, end) {
     const startTime = typeof start.time === 'number' ? start.time : start.time.timestamp;
     const endTime = typeof end.time === 'number' ? end.time : end.time.timestamp;
 
-    // Проверяем, где находятся точки
     const startInRealArea = startTime <= lastRealTime;
     const endInRealArea = endTime <= lastRealTime;
     const bothInRealArea = startInRealArea && endInRealArea;
-    const bothInEmptyArea = !startInRealArea && !endInRealArea;
 
     let barsCount = 0;
     let totalVolume = 0;
@@ -615,11 +613,9 @@ function showRulerMeasurement(start, end) {
     let minPrice = '-';
     let hasRealData = false;
 
-    // Считаем данные по реальным свечам в диапазоне (даже если одна точка в пустой зоне)
     const rangeStart = Math.min(startTime, endTime);
     const rangeEnd = Math.max(startTime, endTime);
 
-    // Берем только реальные свечи в диапазоне
     const rangeCandles = candles.filter(c => {
         const candleTime = typeof c.time === 'number' ? c.time : c.time;
         return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
@@ -627,8 +623,8 @@ function showRulerMeasurement(start, end) {
 
     if (rangeCandles.length > 0) {
         hasRealData = true;
-        const tfSeconds = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
-        barsCount = Math.abs(Math.floor((rangeEnd - rangeStart) / tfSeconds));
+        // ИЗМЕНЕНО: Считаем бары по количеству реальных свечей, а не по времени
+        barsCount = rangeCandles.length;
 
         let highest = -Infinity;
         let lowest = Infinity;
@@ -651,14 +647,12 @@ function showRulerMeasurement(start, end) {
                            totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
                            totalVolume.toFixed(2);
 
-    // ПОЗИЦИЯ: Слева от курсора (end.x)
     const displayX = end.x - 240;
     const displayY = Math.min(start.y, end.y) - 10;
     const finalX = Math.max(10, displayX);
     const finalY = Math.max(10, displayY);
 
     if (hasRealData) {
-        // Полные данные (есть реальные свечи в диапазоне)
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
                 ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
@@ -693,7 +687,6 @@ function showRulerMeasurement(start, end) {
             </div>
         `;
     } else {
-        // Упрощенные данные (обе точки в пустой зоне, нет реальных свечей)
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
                 ${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}
@@ -804,7 +797,7 @@ function openSettingsModal() {
 
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtnModal.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
 
@@ -1095,7 +1088,6 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
-            // Линейка по левой кнопке (когда включена)
             if (isRulerEnabled && e.button === 0) {
                 e.preventDefault();
                 rulerFixedMeasurement = null;
@@ -1109,10 +1101,10 @@ async function openChart(symbol) {
                     rulerStartPoint = { time, price, x, y };
                     rulerCurrentPoint = { time, price, x, y };
                     isRulerDragging = true;
+                    isRulerMiddleClickDrag = false; // Левая кнопка - сохраняем
                     initPencilCanvas();
                 }
             }
-            // Линейка по колесику (когда выключена - горячая клавиша)
             else if (!isRulerEnabled && e.button === 1) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1127,10 +1119,10 @@ async function openChart(symbol) {
                     rulerStartPoint = { time, price, x, y };
                     rulerCurrentPoint = { time, price, x, y };
                     isRulerDragging = true;
+                    isRulerMiddleClickDrag = true; // Колесико - временный режим
                     initPencilCanvas();
                 }
             }
-            // Карандаш по левой кнопке
             else if (isPencilEnabled && e.button === 0) {
                 isDrawing = true;
                 initPencilCanvas();
@@ -1157,7 +1149,6 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('mouseup', (e) => {
-            // Карандаш
             if (isPencilEnabled && e.button === 0) {
                 isDrawing = false;
                 lastPencilPoint = null;
@@ -1166,7 +1157,6 @@ async function openChart(symbol) {
                     currentStroke = null;
                 }
             }
-            // Линейка по левой кнопке (когда включена)
             if (isRulerEnabled && e.button === 0 && isRulerDragging) {
                 isRulerDragging = false;
                 if (rulerStartPoint && rulerCurrentPoint) {
@@ -1176,16 +1166,14 @@ async function openChart(symbol) {
                 rulerStartPoint = null;
                 rulerCurrentPoint = null;
             }
-            // Линейка по колесику (горячая клавиша)
+            // ИЗМЕНЕНО: Колесико (временный режим) - всё исчезает при отпускании
             if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault();
                 isRulerDragging = false;
-                if (rulerStartPoint && rulerCurrentPoint) {
-                    rulerFixedMeasurement = { start: { ...rulerStartPoint }, end: { ...rulerCurrentPoint } };
-                    showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
-                }
                 rulerStartPoint = null;
                 rulerCurrentPoint = null;
+                els.rulerMeasurement.style.display = 'none';
+                redrawAllPersistentDrawings();
             }
         });
 
@@ -1200,12 +1188,22 @@ async function openChart(symbol) {
             }
             if (isRulerDragging) {
                 isRulerDragging = false;
-                if (rulerStartPoint && rulerCurrentPoint) {
-                    rulerFixedMeasurement = { start: { ...rulerStartPoint }, end: { ...rulerCurrentPoint } };
-                    showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
+                // Если это было колесико - просто очищаем
+                if (isRulerMiddleClickDrag) {
+                    rulerStartPoint = null;
+                    rulerCurrentPoint = null;
+                    els.rulerMeasurement.style.display = 'none';
+                    redrawAllPersistentDrawings();
+                } else {
+                    // Если левая кнопка (инструмент включен) - сохраняем
+                    if (rulerStartPoint && rulerCurrentPoint) {
+                        rulerFixedMeasurement = { start: { ...rulerStartPoint }, end: { ...rulerCurrentPoint } };
+                        showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
+                    }
+                    rulerStartPoint = null;
+                    rulerCurrentPoint = null;
                 }
-                rulerStartPoint = null;
-                rulerCurrentPoint = null;
+                isRulerMiddleClickDrag = false;
             }
         });
 

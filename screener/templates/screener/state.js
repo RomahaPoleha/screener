@@ -59,13 +59,12 @@ let isDrawingTrendLine = false, trendLinePreview = null;
 let isMagnetEnabled = false, isAlertModeEnabled = false, magnetIndicator = null, activeAlerts = [];
 let isTrendLineEnabled = false, trendLineStart = null, activeTrendlines = [];
 let isPencilEnabled = false, pencilCtx = null, isDrawing = false, lastPencilPoint = null;
-let isRulerEnabled = false, isRulerDragging = false;
+let isRulerEnabled = false, isRulerDragging = false, isRulerMiddleClickDrag = false;
 let rulerStartPoint = null, rulerCurrentPoint = null, rulerFixedMeasurement = null;
 let showDrawingTools = true;
 
-// НОВОЕ: для хранения штрихов карандаша в координатах свечей
-let pencilStrokes = []; // Массив завершённых штрихов. Каждый штрих = [{time, price}, ...]
-let currentStroke = null; // Текущий рисуемый штрих
+let pencilStrokes = [];
+let currentStroke = null;
 
 if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStorage.getItem('magnetEnabled') === 'true';
 if (localStorage.getItem('showDrawingTools') !== null) showDrawingTools = localStorage.getItem('showDrawingTools') === 'true';
