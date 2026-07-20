@@ -402,7 +402,8 @@ function toggleRuler() {
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
-        if (!rulerFixedMeasurement) clearSpecificDrawings('ruler');
+        // При выключении линейки гарантированно очищаем все её следы
+        clearSpecificDrawings('ruler');
     }
 }
 
@@ -1243,7 +1244,7 @@ async function openChart(symbol) {
             }
         });
 
-        els.chartWrapper.addEventListener('mouseup', (e) => {
+               els.chartWrapper.addEventListener('mouseup', (e) => {
             if (isPencilEnabled && e.button === 0) {
                 isDrawing = false;
                 lastPencilPoint = null;
@@ -1252,18 +1253,17 @@ async function openChart(symbol) {
                     currentStroke = null;
                 }
             }
+
+            // ИЗМЕНЕНО: Теперь ЛКМ при включенной линейке просто очищает всё, как колёсико
             if (isRulerEnabled && e.button === 0 && isRulerDragging) {
                 isRulerDragging = false;
-                if (rulerStartPoint && rulerCurrentPoint) {
-                    rulerFixedMeasurement = {
-                        start: { ...rulerStartPoint },
-                        end: { ...rulerCurrentPoint }
-                    };
-                    showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
-                }
                 rulerStartPoint = null;
                 rulerCurrentPoint = null;
+                els.rulerMeasurement.style.display = 'none';
+                redrawAllPersistentDrawings();
             }
+
+            // Колёсико (СКМ)
             if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1275,7 +1275,7 @@ async function openChart(symbol) {
             }
         });
 
-        els.chartWrapper.addEventListener('mouseleave', () => {
+                els.chartWrapper.addEventListener('mouseleave', () => {
             if (isPencilEnabled) {
                 isDrawing = false;
                 lastPencilPoint = null;
@@ -1284,24 +1284,14 @@ async function openChart(symbol) {
                     currentStroke = null;
                 }
             }
+
+            // ИЗМЕНЕНО: При уходе мыши просто сбрасываем всё, без сохранения
             if (isRulerDragging) {
                 isRulerDragging = false;
-                if (isRulerMiddleClickDrag) {
-                    rulerStartPoint = null;
-                    rulerCurrentPoint = null;
-                    els.rulerMeasurement.style.display = 'none';
-                    redrawAllPersistentDrawings();
-                } else {
-                    if (rulerStartPoint && rulerCurrentPoint) {
-                        rulerFixedMeasurement = {
-                            start: { ...rulerStartPoint },
-                            end: { ...rulerCurrentPoint }
-                        };
-                        showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
-                    }
-                    rulerStartPoint = null;
-                    rulerCurrentPoint = null;
-                }
+                rulerStartPoint = null;
+                rulerCurrentPoint = null;
+                els.rulerMeasurement.style.display = 'none';
+                redrawAllPersistentDrawings();
                 isRulerMiddleClickDrag = false;
             }
         });
