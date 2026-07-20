@@ -239,7 +239,7 @@ function startCandleWebSocket(symbol, tf) {
             }
         } catch (err) { console.error('❌ Ошибка парсинга WS свечи:', err); }
     };
-    wsCandles.onerror = (e) => console.error(' WS свечей ошибка:', e);
+    wsCandles.onerror = (e) => console.error('❌ WS свечей ошибка:', e);
     wsCandles.onclose = () => {
         if (currentSymbol === symbol) setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
     };
@@ -281,6 +281,9 @@ function clearSpecificDrawings(type) {
     } else if (type === 'trendlines') {
         activeTrendlines = [];
         redrawAllPersistentDrawings();
+    } else if (type === 'horizontalLines') {
+        activeHorizontalLines.forEach(hl => { try { candleSeries.removePriceLine(hl.line); } catch(e){} });
+        activeHorizontalLines = [];
     } else if (type === 'pencil') {
         pencilStrokes = [];
         currentStroke = null;
@@ -318,8 +321,9 @@ function toggleAlertMode() {
     isAlertModeEnabled = !isAlertModeEnabled;
     updateToolUI('alertBtn', isAlertModeEnabled);
     if (isAlertModeEnabled) {
-        isTrendLineEnabled = false; isPencilEnabled = false; isRulerEnabled = false;
+        isTrendLineEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false;
         updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
+        updateToolUI('horizontalLineBtn', false);
     } else {
         clearSpecificDrawings('alerts');
     }
@@ -329,8 +333,9 @@ function toggleTrendLine() {
     isTrendLineEnabled = !isTrendLineEnabled;
     updateToolUI('trendLineBtn', isTrendLineEnabled);
     if (isTrendLineEnabled) {
-        isAlertModeEnabled = false; isPencilEnabled = false; isRulerEnabled = false;
+        isAlertModeEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false;
         updateToolUI('alertBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
+        updateToolUI('horizontalLineBtn', false);
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
         trendLineStart = null; isDrawingTrendLine = false; trendLinePreview = null;
@@ -339,12 +344,42 @@ function toggleTrendLine() {
     }
 }
 
+// НОВАЯ ФУНКЦИЯ: Горизонтальная линия
+function toggleHorizontalLine() {
+    isHorizontalLineEnabled = !isHorizontalLineEnabled;
+    updateToolUI('horizontalLineBtn', isHorizontalLineEnabled);
+
+    if (isHorizontalLineEnabled) {
+        isAlertModeEnabled = false;
+        isTrendLineEnabled = false;
+        isPencilEnabled = false;
+        isRulerEnabled = false;
+        updateToolUI('alertBtn', false);
+        updateToolUI('trendLineBtn', false);
+        updateToolUI('pencilBtn', false);
+        updateToolUI('rulerBtn', false);
+
+        if (chart) {
+            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
+        }
+    } else {
+        horizontalLinePreview = null;
+
+        if (chart) {
+            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+        }
+
+        redrawAllPersistentDrawings();
+    }
+}
+
 function togglePencil() {
     isPencilEnabled = !isPencilEnabled;
     updateToolUI('pencilBtn', isPencilEnabled);
     if (isPencilEnabled) {
-        isAlertModeEnabled = false; isTrendLineEnabled = false; isRulerEnabled = false;
+        isAlertModeEnabled = false; isTrendLineEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false;
         updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('rulerBtn', false);
+        updateToolUI('horizontalLineBtn', false);
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
         initPencilCanvas();
     } else {
@@ -358,8 +393,9 @@ function toggleRuler() {
     isRulerEnabled = !isRulerEnabled;
     updateToolUI('rulerBtn', isRulerEnabled);
     if (isRulerEnabled) {
-        isAlertModeEnabled = false; isTrendLineEnabled = false; isPencilEnabled = false;
+        isAlertModeEnabled = false; isTrendLineEnabled = false; isPencilEnabled = false; isHorizontalLineEnabled = false;
         updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false);
+        updateToolUI('horizontalLineBtn', false);
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
@@ -370,6 +406,7 @@ function toggleRuler() {
 function clearAllDrawings() {
     clearSpecificDrawings('alerts');
     clearSpecificDrawings('trendlines');
+    clearSpecificDrawings('horizontalLines');
     clearSpecificDrawings('pencil');
     clearSpecificDrawings('ruler');
 }
@@ -544,9 +581,26 @@ function handleChartClick(param) {
             price: price, color: 'rgba(240, 185, 11, 0.9)', lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
-            title: ` ${price.toFixed(currentPrecision)}`
+            title: `🔔 ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
+    }
+    else if (isHorizontalLineEnabled) {
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        if (!price || isNaN(price)) return;
+
+        const line = candleSeries.createPriceLine({
+            price: price,
+            color: 'rgba(34, 197, 94, 0.8)',
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Solid,
+            axisLabelVisible: true,
+            axisLabelColor: '#ffffff',
+            axisLabelBackgroundColor: 'rgba(34, 197, 94, 0.8)',
+            title: ` ${price.toFixed(currentPrecision)}`
+        });
+
+        activeHorizontalLines.push({ price: price, line: line });
     }
     else if (isTrendLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
@@ -623,7 +677,6 @@ function showRulerMeasurement(start, end) {
 
     if (rangeCandles.length > 0) {
         hasRealData = true;
-        // ИЗМЕНЕНО: Считаем бары по количеству реальных свечей, а не по времени
         barsCount = rangeCandles.length;
 
         let highest = -Infinity;
@@ -702,7 +755,7 @@ function showRulerMeasurement(start, end) {
                 </div>
                 <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px; text-align:center;">
                     <div style="font-size:9px; color:#f59e0b; font-style:italic;">
-                        ⚠️ Область без данных
+                        ️ Область без данных
                     </div>
                 </div>
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
@@ -770,8 +823,8 @@ function updateMagnetIndicator(param) {
 
     if (snapX !== null && snapY !== null) {
         magnetIndicator.style.display = 'block';
-        magnetIndicator.style.left = `${snapX - 5}px`;
-        magnetIndicator.style.top = `${snapY - 5}px`;
+        magnetIndicator.style.left = `${snapX - 3}px`;
+        magnetIndicator.style.top = `${snapY - 3}px`;
         magnetIndicator.classList.toggle('alert-magnet', nearest.type === 'alert');
     } else {
         magnetIndicator.style.display = 'none';
@@ -797,7 +850,7 @@ function openSettingsModal() {
 
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
 
@@ -1101,7 +1154,7 @@ async function openChart(symbol) {
                     rulerStartPoint = { time, price, x, y };
                     rulerCurrentPoint = { time, price, x, y };
                     isRulerDragging = true;
-                    isRulerMiddleClickDrag = false; // Левая кнопка - сохраняем
+                    isRulerMiddleClickDrag = false;
                     initPencilCanvas();
                 }
             }
@@ -1119,7 +1172,7 @@ async function openChart(symbol) {
                     rulerStartPoint = { time, price, x, y };
                     rulerCurrentPoint = { time, price, x, y };
                     isRulerDragging = true;
-                    isRulerMiddleClickDrag = true; // Колесико - временный режим
+                    isRulerMiddleClickDrag = true;
                     initPencilCanvas();
                 }
             }
@@ -1166,7 +1219,6 @@ async function openChart(symbol) {
                 rulerStartPoint = null;
                 rulerCurrentPoint = null;
             }
-            // ИЗМЕНЕНО: Колесико (временный режим) - всё исчезает при отпускании
             if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault();
                 isRulerDragging = false;
@@ -1188,14 +1240,12 @@ async function openChart(symbol) {
             }
             if (isRulerDragging) {
                 isRulerDragging = false;
-                // Если это было колесико - просто очищаем
                 if (isRulerMiddleClickDrag) {
                     rulerStartPoint = null;
                     rulerCurrentPoint = null;
                     els.rulerMeasurement.style.display = 'none';
                     redrawAllPersistentDrawings();
                 } else {
-                    // Если левая кнопка (инструмент включен) - сохраняем
                     if (rulerStartPoint && rulerCurrentPoint) {
                         rulerFixedMeasurement = { start: { ...rulerStartPoint }, end: { ...rulerCurrentPoint } };
                         showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
@@ -1360,6 +1410,7 @@ document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key === 's') { e.preventDefault(); toggleTrendLine(); }
     if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); togglePencil(); }
     if (e.key === 'b' || e.key === 'B') { toggleAlertMode(); }
+    if (e.key === 'h' || e.key === 'H') { toggleHorizontalLine(); }
 });
 
 document.addEventListener('click', function initSpeech() {

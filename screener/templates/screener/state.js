@@ -63,6 +63,9 @@ let isRulerEnabled = false, isRulerDragging = false, isRulerMiddleClickDrag = fa
 let rulerStartPoint = null, rulerCurrentPoint = null, rulerFixedMeasurement = null;
 let showDrawingTools = true;
 
+// Горизонтальная линия
+let isHorizontalLineEnabled = false, activeHorizontalLines = [];
+
 let pencilStrokes = [];
 let currentStroke = null;
 

@@ -4,6 +4,9 @@
             <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (Ctrl+S)">
                 <span class="tool-icon">📈</span>
             </div>
+            <div class="tool-btn" id="horizontalLineBtn" onclick="toggleHorizontalLine()" title="Горизонтальная линия (H)">
+                <span class="tool-icon">➖</span>
+            </div>
             <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (Alt+←)">
                 <span class="tool-icon">✏️</span>
             </div>
@@ -28,7 +31,7 @@
         </div>
 
         <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена"></div>
-        <button class="chart-reset-btn" onclick="closeChart()"> Сброс</button>
+        <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
         <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
         <div id="chart-container"></div>
         <canvas id="pencilCanvas" class="pencil-canvas"></canvas>
