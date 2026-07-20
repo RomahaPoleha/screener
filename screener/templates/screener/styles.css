@@ -340,7 +340,9 @@ body {
     border-radius: 6px;
     padding: 10px 12px;
     z-index: 60;
-    pointer-events: none; /* Пропускает клики сквозь себя на график */
+    /* Убедись что блок измерений не перехватывает клики */
+    pointer-events: none;
+    user-select: none;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
     min-width: 200px;

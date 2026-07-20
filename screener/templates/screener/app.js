@@ -1,4 +1,86 @@
 // ==========================================
+// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+// ==========================================
+const els = {
+    search: document.getElementById('searchInput'),
+    vol: document.getElementById('volRange'),
+    change: document.getElementById('changeRange'),
+    volVal: document.getElementById('volVal'),
+    changeVal: document.getElementById('changeVal'),
+    table: document.getElementById('tableBody'),
+    chartWrapper: document.getElementById('chart-container'),
+    chartHint: document.getElementById('chart-hint'),
+    chartTitle: document.getElementById('chart-title'),
+    chartWatermark: document.getElementById('chartWatermark'),
+    watermarkSymbol: document.getElementById('watermarkSymbol'),
+    watermarkTF: document.getElementById('watermarkTF'),
+    coinsCount: document.getElementById('coinsCount'),
+    rightPanel: document.getElementById('rightPanel'),
+    tradesOverlay: document.getElementById('tradesOverlay'),
+    tradesOverlayBody: document.getElementById('tradesOverlayBody'),
+    tradesThresholdSlider: document.getElementById('tradesThresholdSlider'),
+    tradesThresholdValue: document.getElementById('tradesThresholdValue'),
+    tradesBtn: document.getElementById('tradesBtn'),
+    pencilCanvas: document.getElementById('pencilCanvas'),
+    rulerMeasurement: document.getElementById('rulerMeasurement'),
+    drawingToolsPanel: document.getElementById('drawingToolsPanel')
+};
+
+let allCoins = [];
+let natrData = {};
+let chart = null, candleSeries = null, volumeSeries = null;
+let wsTrades = null, wsCandles = null;
+
+let currentPrecision = 2, tradeBuffer = [], currentThreshold = 10000;
+let currentTF = '1m', currentSymbol = '', lastCandlePrice = null;
+
+// RECON
+let densityLines = [], densityEnabled = false;
+let densityMarkets = { future: false, spot: false };
+let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
+let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
+
+// Scalp
+let scalpLines = [], scalpEnabled = false;
+let scalpMarkets = { future: false, spot: false };
+let scalpMinVolumeFuture = 200000, scalpMinVolumeSpot = 100000;
+let scalpUpdateTimer = null, isScalpLoading = false;
+let previousScalpData = { futures: [], spot: [] };
+
+// Volume
+let volumeHistogramEnabled = true;
+if (localStorage.getItem('volumeHistogramEnabled') !== null) {
+    volumeHistogramEnabled = localStorage.getItem('volumeHistogramEnabled') === 'true';
+}
+if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
+if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
+if (localStorage.getItem('scalpMinVolumeFuture')) scalpMinVolumeFuture = parseInt(localStorage.getItem('scalpMinVolumeFuture'));
+if (localStorage.getItem('scalpMinVolumeSpot')) scalpMinVolumeSpot = parseInt(localStorage.getItem('scalpMinVolumeSpot'));
+
+// Drawings
+let isDrawingTrendLine = false, trendLinePreview = null;
+let isMagnetEnabled = false, isAlertModeEnabled = false, magnetIndicator = null, activeAlerts = [];
+let isTrendLineEnabled = false, trendLineStart = null, activeTrendlines = [];
+let isPencilEnabled = false, pencilCtx = null, isDrawing = false, lastPencilPoint = null;
+let isRulerEnabled = false, isRulerDragging = false, isRulerMiddleClickDrag = false;
+let rulerStartPoint = null, rulerCurrentPoint = null, rulerFixedMeasurement = null;
+let showDrawingTools = true;
+
+// Горизонтальная линия
+let isHorizontalLineEnabled = false, activeHorizontalLines = [];
+
+let pencilStrokes = [];
+let currentStroke = null;
+
+if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStorage.getItem('magnetEnabled') === 'true';
+if (localStorage.getItem('showDrawingTools') !== null) showDrawingTools = localStorage.getItem('showDrawingTools') === 'true';
+
+let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+let lastNotifiedMinute = -1, russianVoice = null, audioCtx = null;
+let sortState = { field: null, direction: 'asc' };
+let natrAutoUpdateTimer = null;
+
+// ==========================================
 // ПРЕДЗАГРУЗКА АУДИО ФАЙЛОВ
 // ==========================================
 const sound5min = new Audio('/api/sound/alert_5min.mp3');
@@ -344,7 +426,6 @@ function toggleTrendLine() {
     }
 }
 
-// НОВАЯ ФУНКЦИЯ: Горизонтальная линия
 function toggleHorizontalLine() {
     isHorizontalLineEnabled = !isHorizontalLineEnabled;
     updateToolUI('horizontalLineBtn', isHorizontalLineEnabled);
@@ -500,7 +581,6 @@ function redrawPencilStrokes() {
 }
 
 function drawRulerRectangle(start, end) {
-    // Используем getXByLogicalIndex как fallback для правой зоны
     let x1 = chart.timeScale().timeToCoordinate(start.time);
     if (x1 === null && start.logicalIndex !== undefined) {
         x1 = getXByLogicalIndex(start.logicalIndex);
@@ -590,7 +670,7 @@ function handleChartClick(param) {
             price: price, color: 'rgba(240, 185, 11, 0.9)', lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
-            title: `🔔 ${price.toFixed(currentPrecision)}`
+            title: ` ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
     }
@@ -652,7 +732,7 @@ function handlePencilDraw(param) {
 }
 
 function showRulerMeasurement(start, end) {
-    if (!start || !end) return;
+    if (!start || !end || !candleSeries) return;
 
     const priceDiff = Math.abs(end.price - start.price);
     const pricePercent = ((priceDiff / start.price) * 100).toFixed(2);
@@ -663,11 +743,26 @@ function showRulerMeasurement(start, end) {
     const lastRealCandle = candles[candles.length - 1];
     const lastRealTime = lastRealCandle ? lastRealCandle.time : 0;
 
-    const startTime = typeof start.time === 'number' ? start.time : (start.time ? start.time.timestamp : 0);
-    const endTime = typeof end.time === 'number' ? end.time : (end.time ? end.time.timestamp : 0);
+    const getTimeValue = (point) => {
+        if (!point) return 0;
+        if (typeof point.time === 'number') return point.time;
+        if (point.time && typeof point.time === 'object' && point.time.timestamp) return point.time.timestamp;
+        if (point.logicalIndex !== undefined) {
+            const lastCandle = candles[candles.length - 1];
+            if (lastCandle) {
+                const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+                const indexDiff = point.logicalIndex - (candles.length - 1);
+                return lastCandle.time + (indexDiff * secondsPerBar);
+            }
+        }
+        return 0;
+    };
 
-    const startInRealArea = startTime <= lastRealTime;
-    const endInRealArea = endTime <= lastRealTime;
+    const startTime = getTimeValue(start);
+    const endTime = getTimeValue(end);
+
+    const startInRealArea = startTime <= lastRealTime && startTime > 0;
+    const endInRealArea = endTime <= lastRealTime && endTime > 0;
     const bothInRealArea = startInRealArea && endInRealArea;
 
     let barsCount = 0;
@@ -679,36 +774,37 @@ function showRulerMeasurement(start, end) {
     const rangeStart = Math.min(startTime, endTime);
     const rangeEnd = Math.max(startTime, endTime);
 
-    const rangeCandles = candles.filter(c => {
-        const candleTime = typeof c.time === 'number' ? c.time : (c.time ? c.time.timestamp : 0);
-        return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
-    });
-
-    if (rangeCandles.length > 0) {
-        hasRealData = true;
-        barsCount = rangeCandles.length;
-        let highest = -Infinity;
-        let lowest = Infinity;
-        rangeCandles.forEach(candle => {
-            if (candle.high > highest) highest = candle.high;
-            if (candle.low < lowest) lowest = candle.low;
-            totalVolume += candle.volume || 0;
+    if (rangeStart > 0 && rangeEnd > 0) {
+        const rangeCandles = candles.filter(c => {
+            const candleTime = typeof c.time === 'number' ? c.time : c.time;
+            return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
         });
-        maxPrice = highest.toFixed(currentPrecision);
-        minPrice = lowest.toFixed(currentPrecision);
+
+        if (rangeCandles.length > 0) {
+            hasRealData = true;
+            barsCount = rangeCandles.length;
+            let highest = -Infinity;
+            let lowest = Infinity;
+            rangeCandles.forEach(candle => {
+                if (candle.high > highest) highest = candle.high;
+                if (candle.low < lowest) lowest = candle.low;
+                totalVolume += candle.volume || 0;
+            });
+            maxPrice = highest.toFixed(currentPrecision);
+            minPrice = lowest.toFixed(currentPrecision);
+        }
     }
 
     const formatTime = (t) => {
-        const time = typeof t === 'number' ? t : (t ? t.timestamp : 0);
-        const date = new Date(time * 1000);
+        if (!t || t === 0) return '---';
+        const date = new Date(t * 1000);
         return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
     };
 
     const volumeFormatted = totalVolume >= 1000000 ? `${(totalVolume / 1000000).toFixed(2)}M` :
                            totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
-                           totalVolume.toFixed(2);
+                           totalVolume > 0 ? totalVolume.toFixed(2) : '0';
 
-    // 1. СНАЧАЛА формируем HTML
     if (hasRealData) {
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
@@ -734,7 +830,7 @@ function showRulerMeasurement(start, end) {
                     </div>
                 </div>
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
-                    ${formatTime(start.time)} → ${formatTime(end.time)}
+                    ${formatTime(startTime)} → ${formatTime(endTime)}
                 </div>
                 ${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">⚠️ Часть в пустой зоне</div>' : ''}
             </div>`;
@@ -751,38 +847,28 @@ function showRulerMeasurement(start, end) {
                     <span style="color:#9ca3af;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
                 </div>
                 <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px; text-align:center;">
-                    <div style="font-size:9px; color:#f59e0b; font-style:italic;">⚠️ Область без данных</div>
+                    <div style="font-size:9px; color:#f59e0b; font-style:italic;">️ Зона будущих свечей</div>
                 </div>
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
-                    ${formatTime(start.time)} → ${formatTime(end.time)}
+                    ${formatTime(startTime)} → ${formatTime(endTime)}
                 </div>
             </div>`;
     }
 
-    // 2. РАССЧИТЫВАЕМ координаты СТРОГО СЛЕВА
     const measurementWidth = 230;
     const measurementHeight = 220;
     const chartWidth = els.chartWrapper.clientWidth;
     const chartHeight = els.chartWrapper.clientHeight;
 
-    // Всегда размещаем слева от курсора с отступом 15px
     let displayX = end.x - measurementWidth - 15;
+    if (displayX < 10) displayX = 10;
 
-    // Если не влезает слева, прижимаем к левому краю (но НЕ перебрасываем вправо!)
-    if (displayX < 10) {
-        displayX = 10;
-    }
-
-    // Центрируем по вертикали относительно точки окончания
     let displayY = end.y - (measurementHeight / 2);
-
-    // Ограничиваем по вертикали, чтобы не улетало за границы чарта
     if (displayY < 10) displayY = 10;
     if (displayY + measurementHeight > chartHeight - 10) {
         displayY = chartHeight - measurementHeight - 10;
     }
 
-    // 3. ПРИМЕНЯЕМ стили
     els.rulerMeasurement.style.left = `${displayX}px`;
     els.rulerMeasurement.style.top = `${displayY}px`;
     els.rulerMeasurement.style.display = 'block';
@@ -1161,6 +1247,7 @@ async function openChart(symbol) {
         els.chartWrapper.addEventListener('mousedown', (e) => {
             if (isRulerEnabled && e.button === 0) {
                 e.preventDefault();
+                e.stopPropagation();
                 rulerFixedMeasurement = null;
                 els.rulerMeasurement.style.display = 'none';
                 const rect = els.chartWrapper.getBoundingClientRect();
@@ -1168,15 +1255,17 @@ async function openChart(symbol) {
                 const y = e.clientY - rect.top;
                 const price = candleSeries.coordinateToPrice(y);
                 const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
-                if (price && time) {
-                    rulerStartPoint = { time, price, x, y };
-                    rulerCurrentPoint = { time, price, x, y };
+                const logicalIndex = getLogicalIndexByX(x);
+                if (price && (time || logicalIndex !== null)) {
+                    rulerStartPoint = { time: time || 0, price, x, y, logicalIndex };
+                    rulerCurrentPoint = { time: time || 0, price, x, y, logicalIndex };
                     isRulerDragging = true;
                     isRulerMiddleClickDrag = false;
                     initPencilCanvas();
+                    redrawAllPersistentDrawings();
                 }
             }
-            else if (!isRulerEnabled && e.button === 1) {
+            else if (e.button === 1) {
                 e.preventDefault();
                 e.stopPropagation();
                 rulerFixedMeasurement = null;
@@ -1186,12 +1275,14 @@ async function openChart(symbol) {
                 const y = e.clientY - rect.top;
                 const price = candleSeries.coordinateToPrice(y);
                 const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
-                if (price && time) {
-                    rulerStartPoint = { time, price, x, y };
-                    rulerCurrentPoint = { time, price, x, y };
+                const logicalIndex = getLogicalIndexByX(x);
+                if (price && (time || logicalIndex !== null)) {
+                    rulerStartPoint = { time: time || 0, price, x, y, logicalIndex };
+                    rulerCurrentPoint = { time: time || 0, price, x, y, logicalIndex };
                     isRulerDragging = true;
                     isRulerMiddleClickDrag = true;
                     initPencilCanvas();
+                    redrawAllPersistentDrawings();
                 }
             }
             else if (isPencilEnabled && e.button === 0) {
@@ -1201,7 +1292,10 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('auxclick', (e) => {
-            if (e.button === 1) e.preventDefault();
+            if (e.button === 1) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
         });
 
         els.chartWrapper.addEventListener('mousemove', (e) => {
@@ -1211,8 +1305,15 @@ async function openChart(symbol) {
                 const y = e.clientY - rect.top;
                 const price = candleSeries.coordinateToPrice(y);
                 const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
-                if (price && time) {
-                    rulerCurrentPoint = { time, price, x, y };
+                const logicalIndex = getLogicalIndexByX(x);
+                if (price && (time || logicalIndex !== null)) {
+                    rulerCurrentPoint = {
+                        time: time || 0,
+                        price,
+                        x,
+                        y,
+                        logicalIndex: logicalIndex !== null ? logicalIndex : rulerCurrentPoint.logicalIndex
+                    };
                     redrawAllPersistentDrawings();
                     showRulerMeasurement(rulerStartPoint, rulerCurrentPoint);
                 }
@@ -1231,7 +1332,10 @@ async function openChart(symbol) {
             if (isRulerEnabled && e.button === 0 && isRulerDragging) {
                 isRulerDragging = false;
                 if (rulerStartPoint && rulerCurrentPoint) {
-                    rulerFixedMeasurement = { start: { ...rulerStartPoint }, end: { ...rulerCurrentPoint } };
+                    rulerFixedMeasurement = {
+                        start: { ...rulerStartPoint },
+                        end: { ...rulerCurrentPoint }
+                    };
                     showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
                 }
                 rulerStartPoint = null;
@@ -1239,6 +1343,7 @@ async function openChart(symbol) {
             }
             if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault();
+                e.stopPropagation();
                 isRulerDragging = false;
                 rulerStartPoint = null;
                 rulerCurrentPoint = null;
@@ -1265,7 +1370,10 @@ async function openChart(symbol) {
                     redrawAllPersistentDrawings();
                 } else {
                     if (rulerStartPoint && rulerCurrentPoint) {
-                        rulerFixedMeasurement = { start: { ...rulerStartPoint }, end: { ...rulerCurrentPoint } };
+                        rulerFixedMeasurement = {
+                            start: { ...rulerStartPoint },
+                            end: { ...rulerCurrentPoint }
+                        };
                         showRulerMeasurement(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
                     }
                     rulerStartPoint = null;
@@ -1375,7 +1483,7 @@ function checkHourTransition() {
     const currentMinuteKey = now.getHours() * 60 + now.getMinutes();
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast('⏰ До нового часа 5 минут');
+        showHourToast(' До нового часа 5 минут');
         playHourSound(5);
     }
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
