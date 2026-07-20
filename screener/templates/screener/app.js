@@ -500,10 +500,19 @@ function redrawPencilStrokes() {
 }
 
 function drawRulerRectangle(start, end) {
-    const x1 = chart.timeScale().timeToCoordinate(start.time);
+    // Используем getXByLogicalIndex как fallback для правой зоны
+    let x1 = chart.timeScale().timeToCoordinate(start.time);
+    if (x1 === null && start.logicalIndex !== undefined) {
+        x1 = getXByLogicalIndex(start.logicalIndex);
+    }
     const y1 = candleSeries.priceToCoordinate(start.price);
-    const x2 = chart.timeScale().timeToCoordinate(end.time);
+
+    let x2 = chart.timeScale().timeToCoordinate(end.time);
+    if (x2 === null && end.logicalIndex !== undefined) {
+        x2 = getXByLogicalIndex(end.logicalIndex);
+    }
     const y2 = candleSeries.priceToCoordinate(end.price);
+
     if (x1 === null || y1 === null || x2 === null || y2 === null) return;
 
     const isUp = end.price >= start.price;
@@ -654,8 +663,8 @@ function showRulerMeasurement(start, end) {
     const lastRealCandle = candles[candles.length - 1];
     const lastRealTime = lastRealCandle ? lastRealCandle.time : 0;
 
-    const startTime = typeof start.time === 'number' ? start.time : start.time.timestamp;
-    const endTime = typeof end.time === 'number' ? end.time : end.time.timestamp;
+    const startTime = typeof start.time === 'number' ? start.time : (start.time ? start.time.timestamp : 0);
+    const endTime = typeof end.time === 'number' ? end.time : (end.time ? end.time.timestamp : 0);
 
     const startInRealArea = startTime <= lastRealTime;
     const endInRealArea = endTime <= lastRealTime;
@@ -671,14 +680,13 @@ function showRulerMeasurement(start, end) {
     const rangeEnd = Math.max(startTime, endTime);
 
     const rangeCandles = candles.filter(c => {
-        const candleTime = typeof c.time === 'number' ? c.time : c.time;
+        const candleTime = typeof c.time === 'number' ? c.time : (c.time ? c.time.timestamp : 0);
         return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
     });
 
     if (rangeCandles.length > 0) {
         hasRealData = true;
         barsCount = rangeCandles.length;
-
         let highest = -Infinity;
         let lowest = Infinity;
         rangeCandles.forEach(candle => {
@@ -691,7 +699,7 @@ function showRulerMeasurement(start, end) {
     }
 
     const formatTime = (t) => {
-        const time = typeof t === 'number' ? t : t.timestamp;
+        const time = typeof t === 'number' ? t : (t ? t.timestamp : 0);
         const date = new Date(time * 1000);
         return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
     };
@@ -700,11 +708,7 @@ function showRulerMeasurement(start, end) {
                            totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
                            totalVolume.toFixed(2);
 
-    const displayX = end.x - 240;
-    const displayY = Math.min(start.y, end.y) - 10;
-    const finalX = Math.max(10, displayX);
-    const finalY = Math.max(10, displayY);
-
+    // 1. СНАЧАЛА формируем HTML
     if (hasRealData) {
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
@@ -712,20 +716,16 @@ function showRulerMeasurement(start, end) {
             </div>
             <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Бары:</span>
-                    <span style="font-weight:600;">${barsCount}</span>
+                    <span style="color:#9ca3af;">Бары:</span><span style="font-weight:600;">${barsCount}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Цена:</span>
-                    <span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
+                    <span style="color:#9ca3af;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Изменение:</span>
-                    <span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
+                    <span style="color:#9ca3af;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Объем:</span>
-                    <span style="font-weight:600;">${volumeFormatted}</span>
+                    <span style="color:#9ca3af;">Объем:</span><span style="font-weight:600;">${volumeFormatted}</span>
                 </div>
                 <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px;">
                     <div style="display:flex; justify-content:space-between; font-size:10px; color:#9ca3af;">
@@ -737,8 +737,7 @@ function showRulerMeasurement(start, end) {
                     ${formatTime(start.time)} → ${formatTime(end.time)}
                 </div>
                 ${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">⚠️ Часть в пустой зоне</div>' : ''}
-            </div>
-        `;
+            </div>`;
     } else {
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
@@ -746,27 +745,46 @@ function showRulerMeasurement(start, end) {
             </div>
             <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Цена:</span>
-                    <span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
+                    <span style="color:#9ca3af;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Изменение:</span>
-                    <span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
+                    <span style="color:#9ca3af;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
                 </div>
                 <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px; text-align:center;">
-                    <div style="font-size:9px; color:#f59e0b; font-style:italic;">
-                        ️ Область без данных
-                    </div>
+                    <div style="font-size:9px; color:#f59e0b; font-style:italic;">⚠️ Область без данных</div>
                 </div>
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
                     ${formatTime(start.time)} → ${formatTime(end.time)}
                 </div>
-            </div>
-        `;
+            </div>`;
     }
 
-    els.rulerMeasurement.style.left = `${finalX}px`;
-    els.rulerMeasurement.style.top = `${finalY}px`;
+    // 2. РАССЧИТЫВАЕМ координаты СТРОГО СЛЕВА
+    const measurementWidth = 230;
+    const measurementHeight = 220;
+    const chartWidth = els.chartWrapper.clientWidth;
+    const chartHeight = els.chartWrapper.clientHeight;
+
+    // Всегда размещаем слева от курсора с отступом 15px
+    let displayX = end.x - measurementWidth - 15;
+
+    // Если не влезает слева, прижимаем к левому краю (но НЕ перебрасываем вправо!)
+    if (displayX < 10) {
+        displayX = 10;
+    }
+
+    // Центрируем по вертикали относительно точки окончания
+    let displayY = end.y - (measurementHeight / 2);
+
+    // Ограничиваем по вертикали, чтобы не улетало за границы чарта
+    if (displayY < 10) displayY = 10;
+    if (displayY + measurementHeight > chartHeight - 10) {
+        displayY = chartHeight - measurementHeight - 10;
+    }
+
+    // 3. ПРИМЕНЯЕМ стили
+    els.rulerMeasurement.style.left = `${displayX}px`;
+    els.rulerMeasurement.style.top = `${displayY}px`;
     els.rulerMeasurement.style.display = 'block';
 }
 
