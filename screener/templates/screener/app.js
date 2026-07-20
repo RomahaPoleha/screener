@@ -1,84 +1,6 @@
 // ==========================================
-// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+// app.js (ЧИСТЫЙ, без дублирования переменных из state.js)
 // ==========================================
-const els = {
-    search: document.getElementById('searchInput'),
-    vol: document.getElementById('volRange'),
-    change: document.getElementById('changeRange'),
-    volVal: document.getElementById('volVal'),
-    changeVal: document.getElementById('changeVal'),
-    table: document.getElementById('tableBody'),
-    chartWrapper: document.getElementById('chart-container'),
-    chartHint: document.getElementById('chart-hint'),
-    chartTitle: document.getElementById('chart-title'),
-    chartWatermark: document.getElementById('chartWatermark'),
-    watermarkSymbol: document.getElementById('watermarkSymbol'),
-    watermarkTF: document.getElementById('watermarkTF'),
-    coinsCount: document.getElementById('coinsCount'),
-    rightPanel: document.getElementById('rightPanel'),
-    tradesOverlay: document.getElementById('tradesOverlay'),
-    tradesOverlayBody: document.getElementById('tradesOverlayBody'),
-    tradesThresholdSlider: document.getElementById('tradesThresholdSlider'),
-    tradesThresholdValue: document.getElementById('tradesThresholdValue'),
-    tradesBtn: document.getElementById('tradesBtn'),
-    pencilCanvas: document.getElementById('pencilCanvas'),
-    rulerMeasurement: document.getElementById('rulerMeasurement'),
-    drawingToolsPanel: document.getElementById('drawingToolsPanel')
-};
-
-let allCoins = [];
-let natrData = {};
-let chart = null, candleSeries = null, volumeSeries = null;
-let wsTrades = null, wsCandles = null;
-
-let currentPrecision = 2, tradeBuffer = [], currentThreshold = 10000;
-let currentTF = '1m', currentSymbol = '', lastCandlePrice = null;
-
-// RECON
-let densityLines = [], densityEnabled = false;
-let densityMarkets = { future: false, spot: false };
-let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
-let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
-
-// Scalp
-let scalpLines = [], scalpEnabled = false;
-let scalpMarkets = { future: false, spot: false };
-let scalpMinVolumeFuture = 200000, scalpMinVolumeSpot = 100000;
-let scalpUpdateTimer = null, isScalpLoading = false;
-let previousScalpData = { futures: [], spot: [] };
-
-// Volume
-let volumeHistogramEnabled = true;
-if (localStorage.getItem('volumeHistogramEnabled') !== null) {
-    volumeHistogramEnabled = localStorage.getItem('volumeHistogramEnabled') === 'true';
-}
-if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
-if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
-if (localStorage.getItem('scalpMinVolumeFuture')) scalpMinVolumeFuture = parseInt(localStorage.getItem('scalpMinVolumeFuture'));
-if (localStorage.getItem('scalpMinVolumeSpot')) scalpMinVolumeSpot = parseInt(localStorage.getItem('scalpMinVolumeSpot'));
-
-// Drawings
-let isDrawingTrendLine = false, trendLinePreview = null;
-let isMagnetEnabled = false, isAlertModeEnabled = false, magnetIndicator = null, activeAlerts = [];
-let isTrendLineEnabled = false, trendLineStart = null, activeTrendlines = [];
-let isPencilEnabled = false, pencilCtx = null, isDrawing = false, lastPencilPoint = null;
-let isRulerEnabled = false, isRulerDragging = false, isRulerMiddleClickDrag = false;
-let rulerStartPoint = null, rulerCurrentPoint = null, rulerFixedMeasurement = null;
-let showDrawingTools = true;
-
-// Горизонтальная линия
-let isHorizontalLineEnabled = false, activeHorizontalLines = [];
-
-let pencilStrokes = [];
-let currentStroke = null;
-
-if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStorage.getItem('magnetEnabled') === 'true';
-if (localStorage.getItem('showDrawingTools') !== null) showDrawingTools = localStorage.getItem('showDrawingTools') === 'true';
-
-let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
-let lastNotifiedMinute = -1, russianVoice = null, audioCtx = null;
-let sortState = { field: null, direction: 'asc' };
-let natrAutoUpdateTimer = null;
 
 // ==========================================
 // ПРЕДЗАГРУЗКА АУДИО ФАЙЛОВ
@@ -670,7 +592,7 @@ function handleChartClick(param) {
             price: price, color: 'rgba(240, 185, 11, 0.9)', lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
-            title: ` ${price.toFixed(currentPrecision)}`
+            title: `🔔 ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
     }
@@ -776,7 +698,8 @@ function showRulerMeasurement(start, end) {
 
     if (rangeStart > 0 && rangeEnd > 0) {
         const rangeCandles = candles.filter(c => {
-            const candleTime = typeof c.time === 'number' ? c.time : c.time;
+            // ИСПРАВЛЕНО: корректное извлечение timestamp из объекта или числа
+            const candleTime = typeof c.time === 'number' ? c.time : (c.time && c.time.timestamp ? c.time.timestamp : 0);
             return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
         });
 
@@ -1483,7 +1406,7 @@ function checkHourTransition() {
     const currentMinuteKey = now.getHours() * 60 + now.getMinutes();
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast(' До нового часа 5 минут');
+        showHourToast('⏰ До нового часа 5 минут');
         playHourSound(5);
     }
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
@@ -1497,54 +1420,62 @@ setInterval(checkHourTransition, 1000);
 // ==========================================
 // ИНИЦИАЛИЗАЦИЯ И ОБРАБОТЧИКИ СОБЫТИЙ
 // ==========================================
-els.tradesThresholdSlider.addEventListener('input', (e) => {
-    currentThreshold = parseInt(e.target.value);
-    els.tradesThresholdValue.textContent = fmtThreshold(currentThreshold);
-});
+document.addEventListener('DOMContentLoaded', () => {
+    // Защита от null, если элементы вдруг не загрузились
+    if (!els.tradesThresholdSlider || !els.search) {
+        console.error('❌ Критическая ошибка: DOM-элементы не найдены. Проверьте HTML.');
+        return;
+    }
 
-document.getElementById('chart-title').addEventListener('click', copySymbolToClipboard);
+    els.tradesThresholdSlider.addEventListener('input', (e) => {
+        currentThreshold = parseInt(e.target.value);
+        els.tradesThresholdValue.textContent = fmtThreshold(currentThreshold);
+    });
 
-document.querySelectorAll('.tf-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        const newTF = e.target.dataset.tf;
-        if (newTF === currentTF) return;
-        document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        currentTF = newTF;
-        if (currentSymbol && chart) {
-            loadChartData(currentSymbol, currentTF);
-            startCandleWebSocket(currentSymbol, currentTF);
-            updateWatermark();
+    document.getElementById('chart-title').addEventListener('click', copySymbolToClipboard);
+
+    document.querySelectorAll('.tf-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const newTF = e.target.dataset.tf;
+            if (newTF === currentTF) return;
+            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentTF = newTF;
+            if (currentSymbol && chart) {
+                loadChartData(currentSymbol, currentTF);
+                startCandleWebSocket(currentSymbol, currentTF);
+                updateWatermark();
+            }
+        });
+    });
+
+    els.vol.addEventListener('input', (e) => { els.volVal.innerText = '$' + fmt(e.target.value); applyLocalFilters(); });
+    els.change.addEventListener('input', (e) => { els.changeVal.innerText = e.target.value + '%'; applyLocalFilters(); });
+    els.search.addEventListener('input', (e) => { showSearchDropdown(e.target.value); applyLocalFilters(); });
+
+    document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) hideSearchDropdown(); });
+
+    window.addEventListener('resize', () => {
+        if (chart && els.chartWrapper.classList.contains('active')) {
+            chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
+            setTimeout(() => { initPencilCanvas(); }, 200);
         }
     });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 's') { e.preventDefault(); toggleTrendLine(); }
+        if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); togglePencil(); }
+        if (e.key === 'b' || e.key === 'B') { toggleAlertMode(); }
+        if (e.key === 'h' || e.key === 'H') { toggleHorizontalLine(); }
+    });
+
+    document.addEventListener('click', function initSpeech() {
+        if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+        document.removeEventListener('click', initSpeech);
+    }, { once: true });
+
+    // Запуск приложения
+    els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+    loadAllData();
+    startNatrAutoUpdate();
 });
-
-els.vol.addEventListener('input', (e) => { els.volVal.innerText = '$' + fmt(e.target.value); applyLocalFilters(); });
-els.change.addEventListener('input', (e) => { els.changeVal.innerText = e.target.value + '%'; applyLocalFilters(); });
-els.search.addEventListener('input', (e) => { showSearchDropdown(e.target.value); applyLocalFilters(); });
-
-document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) hideSearchDropdown(); });
-
-window.addEventListener('resize', () => {
-    if (chart && els.chartWrapper.classList.contains('active')) {
-        chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
-        setTimeout(() => { initPencilCanvas(); }, 200);
-    }
-});
-
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 's') { e.preventDefault(); toggleTrendLine(); }
-    if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); togglePencil(); }
-    if (e.key === 'b' || e.key === 'B') { toggleAlertMode(); }
-    if (e.key === 'h' || e.key === 'H') { toggleHorizontalLine(); }
-});
-
-document.addEventListener('click', function initSpeech() {
-    if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
-    document.removeEventListener('click', initSpeech);
-}, { once: true });
-
-// Запуск приложения
-els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
-loadAllData();
-startNatrAutoUpdate();
