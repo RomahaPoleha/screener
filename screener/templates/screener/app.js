@@ -596,7 +596,7 @@ function handleChartClick(param) {
             axisLabelVisible: true,
             axisLabelColor: '#000000',
             axisLabelBackgroundColor: '#f0b90b',
-            title: `🔔 ${price.toFixed(currentPrecision)}`
+            title: ` ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
     }
