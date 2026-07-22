@@ -540,7 +540,7 @@ function redrawAllPersistentDrawings() {
     if (!pencilCtx || !chart) return;
     pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
 
-    pencilCtx.strokeStyle = '#22c55e';
+    pencilCtx.strokeStyle = '#38bdf8';
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
 
@@ -566,7 +566,7 @@ function redrawAllPersistentDrawings() {
         const y1 = candleSeries.priceToCoordinate(trendLinePreview.price1);
         const y2 = candleSeries.priceToCoordinate(trendLinePreview.price2);
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-            pencilCtx.strokeStyle = 'rgba(156, 163, 175, 0.7)'; pencilCtx.lineWidth = 1.5; pencilCtx.setLineDash([3, 3]);
+            pencilCtx.strokeStyle = 'rgba(56, 189, 248, 0.7)'; pencilCtx.lineWidth = 1.5; pencilCtx.setLineDash([3, 3]);
             pencilCtx.beginPath(); pencilCtx.moveTo(x1, y1); pencilCtx.lineTo(x2, y2); pencilCtx.stroke();
         }
     }
@@ -614,11 +614,21 @@ function handleChartClick(param) {
 
         activeHorizontalLines.push({ price: price, line: line });
     }
-    else if (isTrendLineEnabled) {
-        const price = candleSeries.coordinateToPrice(param.point.y);
-        const time = param.time || getTimeByX(param.point.x);
-        const logicalIndex = getLogicalIndexByX(param.point.x);
-        if (!price || isNaN(price) || !time) return;
+    else if (isHorizontalLineEnabled) {
+    const price = candleSeries.coordinateToPrice(param.point.y);
+    if (!price || isNaN(price)) return;
+
+    const line = candleSeries.createPriceLine({
+        price: price,
+        color: '#38bdf8',
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Solid,
+        axisLabelVisible: false,
+        title: ''
+    });
+
+    activeHorizontalLines.push({ price: price, line: line });
+}
 
         if (!isDrawingTrendLine) {
             trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
