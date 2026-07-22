@@ -328,9 +328,8 @@ function toggleAlertMode() {
         isTrendLineEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false;
         updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
         updateToolUI('horizontalLineBtn', false);
-    } else {
-        clearSpecificDrawings('alerts');
     }
+    // Алерты теперь НЕ удаляются при выключении режима!
 }
 
 function toggleTrendLine() {
@@ -590,9 +589,13 @@ function handleChartClick(param) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
         const line = candleSeries.createPriceLine({
-            price: price, color: 'rgba(240, 185, 11, 0.9)', lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
-            axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.8)',
+            price: price,
+            color: '#f0b90b',
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true,
+            axisLabelColor: '#000000',
+            axisLabelBackgroundColor: '#f0b90b',
             title: `🔔 ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
@@ -603,11 +606,11 @@ function handleChartClick(param) {
 
         const line = candleSeries.createPriceLine({
             price: price,
-            color: '#38bdf8',          // Светло-голубой
+            color: '#38bdf8',
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Solid,
-            axisLabelVisible: false,   // БЕЗ белой плашки
-            title: ''                  // БЕЗ текста
+            axisLabelVisible: false,
+            title: ''
         });
 
         activeHorizontalLines.push({ price: price, line: line });
