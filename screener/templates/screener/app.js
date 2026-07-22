@@ -603,32 +603,20 @@ function handleChartClick(param) {
 
         const line = candleSeries.createPriceLine({
             price: price,
-            color: 'rgba(34, 197, 94, 0.8)',
+            color: '#38bdf8',          // Светло-голубой
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Solid,
-            axisLabelVisible: true,
-            axisLabelColor: '#ffffff',
-            axisLabelBackgroundColor: 'rgba(34, 197, 94, 0.8)',
-            title: ` ${price.toFixed(currentPrecision)}`
+            axisLabelVisible: false,   // БЕЗ белой плашки
+            title: ''                  // БЕЗ текста
         });
 
         activeHorizontalLines.push({ price: price, line: line });
     }
-    else if (isHorizontalLineEnabled) {
-    const price = candleSeries.coordinateToPrice(param.point.y);
-    if (!price || isNaN(price)) return;
-
-    const line = candleSeries.createPriceLine({
-        price: price,
-        color: '#38bdf8',
-        lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Solid,
-        axisLabelVisible: false,
-        title: ''
-    });
-
-    activeHorizontalLines.push({ price: price, line: line });
-}
+    else if (isTrendLineEnabled) {
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        const time = param.time || getTimeByX(param.point.x);
+        const logicalIndex = getLogicalIndexByX(param.point.x);
+        if (!price || isNaN(price) || !time) return;
 
         if (!isDrawingTrendLine) {
             trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
