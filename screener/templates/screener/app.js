@@ -67,7 +67,7 @@ function showPriceAlertToast(currentPrice, alertPrice, direction) {
     const toast = document.createElement('div');
     toast.className = 'hour-toast show';
     toast.style.background = 'linear-gradient(135deg, #f0b90b 0%, #f59e0b 100%)';
-    toast.innerHTML = `<div class="toast-icon">🔔</div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
+    toast.innerHTML = `<div class="toast-icon"></div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 5000);
 }
@@ -325,20 +325,19 @@ function toggleAlertMode() {
     isAlertModeEnabled = !isAlertModeEnabled;
     updateToolUI('alertBtn', isAlertModeEnabled);
     if (isAlertModeEnabled) {
-        isTrendLineEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false;
+        isTrendLineEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false; isEraserEnabled = false;
         updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
-        updateToolUI('horizontalLineBtn', false);
+        updateToolUI('horizontalLineBtn', false); updateToolUI('eraserBtn', false);
     }
-    // Алерты теперь НЕ удаляются при выключении режима!
 }
 
 function toggleTrendLine() {
     isTrendLineEnabled = !isTrendLineEnabled;
     updateToolUI('trendLineBtn', isTrendLineEnabled);
     if (isTrendLineEnabled) {
-        isAlertModeEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false;
+        isAlertModeEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false; isEraserEnabled = false;
         updateToolUI('alertBtn', false); updateToolUI('pencilBtn', false); updateToolUI('rulerBtn', false);
-        updateToolUI('horizontalLineBtn', false);
+        updateToolUI('horizontalLineBtn', false); updateToolUI('eraserBtn', false);
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
         trendLineStart = null; isDrawingTrendLine = false; trendLinePreview = null;
@@ -350,27 +349,14 @@ function toggleTrendLine() {
 function toggleHorizontalLine() {
     isHorizontalLineEnabled = !isHorizontalLineEnabled;
     updateToolUI('horizontalLineBtn', isHorizontalLineEnabled);
-
     if (isHorizontalLineEnabled) {
-        isAlertModeEnabled = false;
-        isTrendLineEnabled = false;
-        isPencilEnabled = false;
-        isRulerEnabled = false;
-        updateToolUI('alertBtn', false);
-        updateToolUI('trendLineBtn', false);
-        updateToolUI('pencilBtn', false);
-        updateToolUI('rulerBtn', false);
-
-        if (chart) {
-            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
-        }
+        isAlertModeEnabled = false; isTrendLineEnabled = false; isPencilEnabled = false; isRulerEnabled = false; isEraserEnabled = false;
+        updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false);
+        updateToolUI('rulerBtn', false); updateToolUI('eraserBtn', false);
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
         horizontalLinePreview = null;
-
-        if (chart) {
-            chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
-        }
-
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
         redrawAllPersistentDrawings();
     }
 }
@@ -379,9 +365,9 @@ function togglePencil() {
     isPencilEnabled = !isPencilEnabled;
     updateToolUI('pencilBtn', isPencilEnabled);
     if (isPencilEnabled) {
-        isAlertModeEnabled = false; isTrendLineEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false;
+        isAlertModeEnabled = false; isTrendLineEnabled = false; isRulerEnabled = false; isHorizontalLineEnabled = false; isEraserEnabled = false;
         updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('rulerBtn', false);
-        updateToolUI('horizontalLineBtn', false);
+        updateToolUI('horizontalLineBtn', false); updateToolUI('eraserBtn', false);
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
         initPencilCanvas();
     } else {
@@ -395,14 +381,27 @@ function toggleRuler() {
     isRulerEnabled = !isRulerEnabled;
     updateToolUI('rulerBtn', isRulerEnabled);
     if (isRulerEnabled) {
-        isAlertModeEnabled = false; isTrendLineEnabled = false; isPencilEnabled = false; isHorizontalLineEnabled = false;
+        isAlertModeEnabled = false; isTrendLineEnabled = false; isPencilEnabled = false; isHorizontalLineEnabled = false; isEraserEnabled = false;
         updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false);
-        updateToolUI('horizontalLineBtn', false);
+        updateToolUI('horizontalLineBtn', false); updateToolUI('eraserBtn', false);
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
     } else {
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
-        // При выключении линейки гарантированно очищаем все её следы
         clearSpecificDrawings('ruler');
+    }
+}
+
+function toggleEraser() {
+    isEraserEnabled = !isEraserEnabled;
+    updateToolUI('eraserBtn', isEraserEnabled);
+    if (isEraserEnabled) {
+        isAlertModeEnabled = false; isTrendLineEnabled = false; isPencilEnabled = false;
+        isRulerEnabled = false; isHorizontalLineEnabled = false;
+        updateToolUI('alertBtn', false); updateToolUI('trendLineBtn', false); updateToolUI('pencilBtn', false);
+        updateToolUI('rulerBtn', false); updateToolUI('horizontalLineBtn', false);
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
+    } else {
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
     }
 }
 
@@ -581,10 +580,69 @@ function redrawAllPersistentDrawings() {
     pencilCtx.setLineDash([]);
 }
 
+function pointToLineDistance(px, py, x1, y1, x2, y2) {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+    if (lenSq !== 0) param = dot / lenSq;
+    let xx, yy;
+    if (param < 0) { xx = x1; yy = y1; }
+    else if (param > 1) { xx = x2; yy = y2; }
+    else { xx = x1 + param * C; yy = y1 + param * D; }
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function deleteLineAtPoint(x, y) {
+    const clickPrice = candleSeries.coordinateToPrice(y);
+    if (!clickPrice) return;
+    const threshold = 50;
+
+    for (let i = activeAlerts.length - 1; i >= 0; i--) {
+        const alert = activeAlerts[i];
+        const alertY = candleSeries.priceToCoordinate(alert.price);
+        if (alertY && Math.abs(alertY - y) < threshold) {
+            try { candleSeries.removePriceLine(alert.line); } catch(e) {}
+            activeAlerts.splice(i, 1);
+            return;
+        }
+    }
+
+    for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
+        const hl = activeHorizontalLines[i];
+        const hlY = candleSeries.priceToCoordinate(hl.price);
+        if (hlY && Math.abs(hlY - y) < threshold) {
+            try { candleSeries.removePriceLine(hl.line); } catch(e) {}
+            activeHorizontalLines.splice(i, 1);
+            return;
+        }
+    }
+
+    for (let i = activeTrendlines.length - 1; i >= 0; i--) {
+        const tl = activeTrendlines[i];
+        const x1 = chart.timeScale().timeToCoordinate(tl.time1);
+        const y1 = candleSeries.priceToCoordinate(tl.price1);
+        const x2 = chart.timeScale().timeToCoordinate(tl.time2);
+        const y2 = candleSeries.priceToCoordinate(tl.price2);
+        if (x1 && y1 && x2 && y2) {
+            const distance = pointToLineDistance(x, y, x1, y1, x2, y2);
+            if (distance < threshold) {
+                activeTrendlines.splice(i, 1);
+                redrawAllPersistentDrawings();
+                return;
+            }
+        }
+    }
+}
+
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
 
-    // Режим ластика
     if (isEraserEnabled) {
         deleteLineAtPoint(param.point.x, param.point.y);
         return;
@@ -601,14 +659,13 @@ function handleChartClick(param) {
             lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed,
             axisLabelVisible: true,
-            title: `🔔 ${price.toFixed(currentPrecision)}`
+            title: ` ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
     }
     else if (isHorizontalLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
-
         const line = candleSeries.createPriceLine({
             price: price,
             color: '#38bdf8',
@@ -617,7 +674,6 @@ function handleChartClick(param) {
             axisLabelVisible: false,
             title: ''
         });
-
         activeHorizontalLines.push({ price: price, line: line });
     }
     else if (isTrendLineEnabled) {
@@ -705,7 +761,6 @@ function showRulerMeasurement(start, end) {
 
     if (rangeStart > 0 && rangeEnd > 0) {
         const rangeCandles = candles.filter(c => {
-            // ИСПРАВЛЕНО: корректное извлечение timestamp из объекта или числа
             const candleTime = typeof c.time === 'number' ? c.time : (c.time && c.time.timestamp ? c.time.timestamp : 0);
             return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
         });
@@ -762,7 +817,7 @@ function showRulerMeasurement(start, end) {
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
                     ${formatTime(startTime)} → ${formatTime(endTime)}
                 </div>
-                ${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">⚠️ Часть в пустой зоне</div>' : ''}
+                ${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">️ Часть в пустой зоне</div>' : ''}
             </div>`;
     } else {
         els.rulerMeasurement.innerHTML = `
@@ -1250,7 +1305,7 @@ async function openChart(symbol) {
             }
         });
 
-               els.chartWrapper.addEventListener('mouseup', (e) => {
+        els.chartWrapper.addEventListener('mouseup', (e) => {
             if (isPencilEnabled && e.button === 0) {
                 isDrawing = false;
                 lastPencilPoint = null;
@@ -1260,7 +1315,6 @@ async function openChart(symbol) {
                 }
             }
 
-            // ИЗМЕНЕНО: Теперь ЛКМ при включенной линейке просто очищает всё, как колёсико
             if (isRulerEnabled && e.button === 0 && isRulerDragging) {
                 isRulerDragging = false;
                 rulerStartPoint = null;
@@ -1269,7 +1323,6 @@ async function openChart(symbol) {
                 redrawAllPersistentDrawings();
             }
 
-            // Колёсико (СКМ)
             if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1281,7 +1334,7 @@ async function openChart(symbol) {
             }
         });
 
-                els.chartWrapper.addEventListener('mouseleave', () => {
+        els.chartWrapper.addEventListener('mouseleave', () => {
             if (isPencilEnabled) {
                 isDrawing = false;
                 lastPencilPoint = null;
@@ -1291,7 +1344,6 @@ async function openChart(symbol) {
                 }
             }
 
-            // ИЗМЕНЕНО: При уходе мыши просто сбрасываем всё, без сохранения
             if (isRulerDragging) {
                 isRulerDragging = false;
                 rulerStartPoint = null;
@@ -1371,7 +1423,7 @@ function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('soundEnabled', soundEnabled);
     const btn = document.getElementById('soundToggleModal');
-    btn.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+    btn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
     btn.classList.toggle('muted', !soundEnabled);
     if (soundEnabled) speak('Оповещения включены');
 }
@@ -1407,7 +1459,7 @@ function checkHourTransition() {
     }
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast('⏰ До нового часа 1 минута');
+        showHourToast(' До нового часа 1 минута');
         playHourSound(1);
     }
 }
@@ -1417,7 +1469,6 @@ setInterval(checkHourTransition, 1000);
 // ИНИЦИАЛИЗАЦИЯ И ОБРАБОТЧИКИ СОБЫТИЙ
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Защита от null, если элементы вдруг не загрузились
     if (!els.tradesThresholdSlider || !els.search) {
         console.error('❌ Критическая ошибка: DOM-элементы не найдены. Проверьте HTML.');
         return;
@@ -1463,6 +1514,48 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); togglePencil(); }
         if (e.key === 'b' || e.key === 'B') { toggleAlertMode(); }
         if (e.key === 'h' || e.key === 'H') { toggleHorizontalLine(); }
+
+        if (e.shiftKey && e.key === 'E' && !isEraserEnabled) {
+            e.preventDefault();
+            toggleEraser();
+        }
+        if (e.shiftKey && e.key === 'S' && !isTrendLineEnabled) {
+            e.preventDefault();
+            toggleTrendLine();
+            trendLineHotkeyActive = true;
+        }
+        if (e.shiftKey && e.key === 'D' && !isHorizontalLineEnabled) {
+            e.preventDefault();
+            toggleHorizontalLine();
+            horizontalLineHotkeyActive = true;
+        }
+        if (e.shiftKey && e.key === 'P' && !isPencilEnabled) {
+            e.preventDefault();
+            togglePencil();
+            pencilHotkeyActive = true;
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') {
+            if (isEraserEnabled) {
+                isEraserEnabled = false;
+                updateToolUI('eraserBtn', false);
+                if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+            }
+            if (trendLineHotkeyActive) {
+                toggleTrendLine();
+                trendLineHotkeyActive = false;
+            }
+            if (horizontalLineHotkeyActive) {
+                toggleHorizontalLine();
+                horizontalLineHotkeyActive = false;
+            }
+            if (pencilHotkeyActive) {
+                togglePencil();
+                pencilHotkeyActive = false;
+            }
+        }
     });
 
     document.addEventListener('click', function initSpeech() {
@@ -1470,128 +1563,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('click', initSpeech);
     }, { once: true });
 
-    // Запуск приложения
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
     loadAllData();
     startNatrAutoUpdate();
 });
-
-// Переключение ластика по клику на кнопку
-function toggleEraser() {
-    isEraserEnabled = !isEraserEnabled;
-    updateToolUI('eraserBtn', isEraserEnabled);
-
-    if (isEraserEnabled) {
-        // Отключаем другие инструменты
-        isAlertModeEnabled = false;
-        isTrendLineEnabled = false;
-        isPencilEnabled = false;
-        isRulerEnabled = false;
-        isHorizontalLineEnabled = false;
-        updateToolUI('alertBtn', false);
-        updateToolUI('trendLineBtn', false);
-        updateToolUI('pencilBtn', false);
-        updateToolUI('rulerBtn', false);
-        updateToolUI('horizontalLineBtn', false);
-
-        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
-    } else {
-        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
-    }
-}
-
-// Обработчик горячих клавиш Shift+E
-document.addEventListener('keydown', (e) => {
-    if (e.shiftKey && e.key === 'E' && !isEraserEnabled) {
-        e.preventDefault();
-        toggleEraser();
-    }
-});
-
-document.addEventListener('keyup', (e) => {
-    if (e.key === 'Shift' && isEraserEnabled) {
-        // Проверяем, был ли ластик включен горячей клавишей
-        // Если да - выключаем
-        isEraserEnabled = false;
-        updateToolUI('eraserBtn', false);
-        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
-    }
-});
-
-function deleteLineAtPoint(x, y) {
-    const clickPrice = candleSeries.coordinateToPrice(y);
-    if (!clickPrice) return;
-
-    const threshold = 50; // Пикселей для определения попадания
-
-    // Проверяем алерты
-    for (let i = activeAlerts.length - 1; i >= 0; i--) {
-        const alert = activeAlerts[i];
-        const alertY = candleSeries.priceToCoordinate(alert.price);
-        if (alertY && Math.abs(alertY - y) < threshold) {
-            try { candleSeries.removePriceLine(alert.line); } catch(e) {}
-            activeAlerts.splice(i, 1);
-            return; // Удаляем только одну линию
-        }
-    }
-
-    // Проверяем горизонтальные линии
-    for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
-        const hl = activeHorizontalLines[i];
-        const hlY = candleSeries.priceToCoordinate(hl.price);
-        if (hlY && Math.abs(hlY - y) < threshold) {
-            try { candleSeries.removePriceLine(hl.line); } catch(e) {}
-            activeHorizontalLines.splice(i, 1);
-            return;
-        }
-    }
-
-    // Проверяем трендовые линии (упрощенно - по расстоянию до точек)
-    for (let i = activeTrendlines.length - 1; i >= 0; i--) {
-        const tl = activeTrendlines[i];
-        const x1 = chart.timeScale().timeToCoordinate(tl.time1);
-        const y1 = candleSeries.priceToCoordinate(tl.price1);
-        const x2 = chart.timeScale().timeToCoordinate(tl.time2);
-        const y2 = candleSeries.priceToCoordinate(tl.price2);
-
-        if (x1 && y1 && x2 && y2) {
-            const distance = pointToLineDistance(x, y, x1, y1, x2, y2);
-            if (distance < threshold) {
-                activeTrendlines.splice(i, 1);
-                redrawAllPersistentDrawings();
-                return;
-            }
-        }
-    }
-}
-
-// Функция расстояния от точки до отрезка
-function pointToLineDistance(px, py, x1, y1, x2, y2) {
-    const A = px - x1;
-    const B = py - y1;
-    const C = x2 - x1;
-    const D = y2 - y1;
-
-    const dot = A * C + B * D;
-    const lenSq = C * C + D * D;
-    let param = -1;
-
-    if (lenSq !== 0) param = dot / lenSq;
-
-    let xx, yy;
-
-    if (param < 0) {
-        xx = x1;
-        yy = y1;
-    } else if (param > 1) {
-        xx = x2;
-        yy = y2;
-    } else {
-        xx = x1 + param * C;
-        yy = y1 + param * D;
-    }
-
-    const dx = px - xx;
-    const dy = py - yy;
-    return Math.sqrt(dx * dx + dy * dy);
-}
