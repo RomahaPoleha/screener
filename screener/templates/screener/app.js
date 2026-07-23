@@ -704,25 +704,28 @@ function handleChartClick(param) {
         activeHorizontalLines.push({ price: price, line: line });
     }
     else if (isTrendLineEnabled) {
-    const price = candleSeries.coordinateToPrice(param.point.y);
-    const time = param.time || getTimeByX(param.point.x);
-    const logicalIndex = getLogicalIndexByX(param.point.x);
-    if (!price || isNaN(price) || !time) return;
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        const time = param.time || getTimeByX(param.point.x);
+        const logicalIndex = getLogicalIndexByX(param.point.x);
+        if (!price || isNaN(price) || !time) return;
 
-    if (!isDrawingTrendLine) {
-        trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
-        isDrawingTrendLine = true;
-        trendLinePreview = {
-            time1: time, price1: price, logicalIndex1: logicalIndex,
-            time2: time, price2: price, logicalIndex2: logicalIndex
-        };
-    } else {
-        activeTrendlines.push({
-            time1: trendLineStart.time, price1: trendLineStart.price, logicalIndex1: trendLineStart.logicalIndex,
-            time2: time, price2: price, logicalIndex2: logicalIndex
-        });
-        isDrawingTrendLine = false; trendLineStart = null; trendLinePreview = null;
-        redrawAllPersistentDrawings();
+        if (!isDrawingTrendLine) {
+            trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
+            isDrawingTrendLine = true;
+            trendLinePreview = {
+                time1: time, price1: price, logicalIndex1: logicalIndex,
+                time2: time, price2: price, logicalIndex2: logicalIndex
+            };
+        } else {
+            activeTrendlines.push({
+                time1: trendLineStart.time, price1: trendLineStart.price, logicalIndex1: trendLineStart.logicalIndex,
+                time2: time, price2: price, logicalIndex2: logicalIndex
+            });
+            isDrawingTrendLine = false;
+            trendLineStart = null;
+            trendLinePreview = null;
+            redrawAllPersistentDrawings();
+        }
     }
 }
 
