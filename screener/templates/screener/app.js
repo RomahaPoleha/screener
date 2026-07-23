@@ -464,7 +464,12 @@ function getLogicalIndexByX(x) {
     return lastIndex + barsOffset;
 }
 
-function getXByLogicalIndex(logicalIndex) {
+function getXByTime(time) {
+    // 1. Сначала доверяем библиотеке
+    let x = chart.timeScale().timeToCoordinate(time);
+    if (x !== null) return x;
+
+    // 2. Если null (будущее время), считаем относительно последней свечи
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
 
@@ -472,16 +477,17 @@ function getXByLogicalIndex(logicalIndex) {
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
     if (lastCandleX === null) return null;
 
+    const timeDiff = time - lastCandle.time;
+    const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+    const barsOffset = timeDiff / secondsPerBar;
+
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
-    if (!visibleRange) return null;
+    if (!visibleRange || visibleRange.to === visibleRange.from) return null;
 
     const chartWidth = els.chartWrapper.clientWidth;
-    const barsCount = visibleRange.to - visibleRange.from;
-    const pixelsPerBar = chartWidth / barsCount;
-    const lastIndex = candles.length - 1;
-    const barsOffset = logicalIndex - lastIndex;
+    const pixelsPerLogicalUnit = chartWidth / (visibleRange.to - visibleRange.from);
 
-    return lastCandleX + (barsOffset * pixelsPerBar);
+    return lastCandleX + (barsOffset * pixelsPerLogicalUnit);
 }
 
 function redrawPencilStrokes() {
@@ -495,20 +501,23 @@ function redrawPencilStrokes() {
         if (stroke.length < 2) return;
         pencilCtx.beginPath();
         let started = false;
+
         for (const point of stroke) {
-            let x = null;
-            // Сначала пробуем по logicalIndex
-            if (point.logicalIndex !== undefined) {
-                x = getXByLogicalIndex(point.logicalIndex);
-            }
-            // Fallback на time
-            if (x === null && point.time !== undefined) {
-                x = chart.timeScale().timeToCoordinate(point.time);
-            }
+            // Используем только time, библиотека сама разберётся
+            const x = getXByTime(point.time);
             const y = candleSeries.priceToCoordinate(point.price);
-            if (x === null || y === null) { started = false; continue; }
-            if (!started) { pencilCtx.moveTo(x, y); started = true; }
-            else { pencilCtx.lineTo(x, y); }
+
+            if (x === null || y === null) {
+                started = false;
+                continue;
+            }
+
+            if (!started) {
+                pencilCtx.moveTo(x, y);
+                started = true;
+            } else {
+                pencilCtx.lineTo(x, y);
+            }
         }
         pencilCtx.stroke();
     };
@@ -558,39 +567,36 @@ function redrawAllPersistentDrawings() {
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
 
-    // Вспомогательная функция для получения X по logicalIndex или time
-    const getX = (tl, keyTime, keyIdx) => {
-        // Сначала пробуем по logicalIndex (это надёжнее)
-        if (tl[keyIdx] !== undefined) {
-            return getXByLogicalIndex(tl[keyIdx]);
-        }
-        // Fallback на time
-        if (tl[keyTime] !== undefined) {
-            return chart.timeScale().timeToCoordinate(tl[keyTime]);
-        }
-        return null;
-    };
-
     // Трендовые линии
     activeTrendlines.forEach(tl => {
-        const x1 = getX(tl, 'time1', 'logicalIndex1');
-        const x2 = getX(tl, 'time2', 'logicalIndex2');
+        const x1 = getXByTime(tl.time1);
+        const x2 = getXByTime(tl.time2);
         const y1 = candleSeries.priceToCoordinate(tl.price1);
         const y2 = candleSeries.priceToCoordinate(tl.price2);
+
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-            pencilCtx.beginPath(); pencilCtx.moveTo(x1, y1); pencilCtx.lineTo(x2, y2); pencilCtx.stroke();
+            pencilCtx.beginPath();
+            pencilCtx.moveTo(x1, y1);
+            pencilCtx.lineTo(x2, y2);
+            pencilCtx.stroke();
         }
     });
 
     // Превью трендовой линии (которую сейчас рисуешь)
     if (isDrawingTrendLine && trendLinePreview) {
-        const x1 = getX(trendLinePreview, 'time1', 'logicalIndex1');
-        const x2 = getX(trendLinePreview, 'time2', 'logicalIndex2');
+        const x1 = getXByTime(trendLinePreview.time1);
+        const x2 = getXByTime(trendLinePreview.time2);
         const y1 = candleSeries.priceToCoordinate(trendLinePreview.price1);
         const y2 = candleSeries.priceToCoordinate(trendLinePreview.price2);
+
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-            pencilCtx.strokeStyle = 'rgba(56, 189, 248, 0.7)'; pencilCtx.lineWidth = 1.5; pencilCtx.setLineDash([3, 3]);
-            pencilCtx.beginPath(); pencilCtx.moveTo(x1, y1); pencilCtx.lineTo(x2, y2); pencilCtx.stroke();
+            pencilCtx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+            pencilCtx.lineWidth = 1.5;
+            pencilCtx.setLineDash([3, 3]);
+            pencilCtx.beginPath();
+            pencilCtx.moveTo(x1, y1);
+            pencilCtx.lineTo(x2, y2);
+            pencilCtx.stroke();
         }
     }
 
