@@ -583,6 +583,13 @@ function redrawAllPersistentDrawings() {
 
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
+
+    // Режим ластика
+    if (isEraserEnabled) {
+        deleteLineAtPoint(param.point.x, param.point.y);
+        return;
+    }
+
     if (isRulerEnabled) return;
 
     if (isAlertModeEnabled) {
@@ -1468,3 +1475,123 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAllData();
     startNatrAutoUpdate();
 });
+
+// Переключение ластика по клику на кнопку
+function toggleEraser() {
+    isEraserEnabled = !isEraserEnabled;
+    updateToolUI('eraserBtn', isEraserEnabled);
+
+    if (isEraserEnabled) {
+        // Отключаем другие инструменты
+        isAlertModeEnabled = false;
+        isTrendLineEnabled = false;
+        isPencilEnabled = false;
+        isRulerEnabled = false;
+        isHorizontalLineEnabled = false;
+        updateToolUI('alertBtn', false);
+        updateToolUI('trendLineBtn', false);
+        updateToolUI('pencilBtn', false);
+        updateToolUI('rulerBtn', false);
+        updateToolUI('horizontalLineBtn', false);
+
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
+    } else {
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+    }
+}
+
+// Обработчик горячих клавиш Shift+E
+document.addEventListener('keydown', (e) => {
+    if (e.shiftKey && e.key === 'E' && !isEraserEnabled) {
+        e.preventDefault();
+        toggleEraser();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift' && isEraserEnabled) {
+        // Проверяем, был ли ластик включен горячей клавишей
+        // Если да - выключаем
+        isEraserEnabled = false;
+        updateToolUI('eraserBtn', false);
+        if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+    }
+});
+
+function deleteLineAtPoint(x, y) {
+    const clickPrice = candleSeries.coordinateToPrice(y);
+    if (!clickPrice) return;
+
+    const threshold = 50; // Пикселей для определения попадания
+
+    // Проверяем алерты
+    for (let i = activeAlerts.length - 1; i >= 0; i--) {
+        const alert = activeAlerts[i];
+        const alertY = candleSeries.priceToCoordinate(alert.price);
+        if (alertY && Math.abs(alertY - y) < threshold) {
+            try { candleSeries.removePriceLine(alert.line); } catch(e) {}
+            activeAlerts.splice(i, 1);
+            return; // Удаляем только одну линию
+        }
+    }
+
+    // Проверяем горизонтальные линии
+    for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
+        const hl = activeHorizontalLines[i];
+        const hlY = candleSeries.priceToCoordinate(hl.price);
+        if (hlY && Math.abs(hlY - y) < threshold) {
+            try { candleSeries.removePriceLine(hl.line); } catch(e) {}
+            activeHorizontalLines.splice(i, 1);
+            return;
+        }
+    }
+
+    // Проверяем трендовые линии (упрощенно - по расстоянию до точек)
+    for (let i = activeTrendlines.length - 1; i >= 0; i--) {
+        const tl = activeTrendlines[i];
+        const x1 = chart.timeScale().timeToCoordinate(tl.time1);
+        const y1 = candleSeries.priceToCoordinate(tl.price1);
+        const x2 = chart.timeScale().timeToCoordinate(tl.time2);
+        const y2 = candleSeries.priceToCoordinate(tl.price2);
+
+        if (x1 && y1 && x2 && y2) {
+            const distance = pointToLineDistance(x, y, x1, y1, x2, y2);
+            if (distance < threshold) {
+                activeTrendlines.splice(i, 1);
+                redrawAllPersistentDrawings();
+                return;
+            }
+        }
+    }
+}
+
+// Функция расстояния от точки до отрезка
+function pointToLineDistance(px, py, x1, y1, x2, y2) {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+
+    if (lenSq !== 0) param = dot / lenSq;
+
+    let xx, yy;
+
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+}

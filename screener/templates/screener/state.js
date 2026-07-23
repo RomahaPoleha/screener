@@ -62,7 +62,7 @@ let isPencilEnabled = false, pencilCtx = null, isDrawing = false, lastPencilPoin
 let isRulerEnabled = false, isRulerDragging = false, isRulerMiddleClickDrag = false;
 let rulerStartPoint = null, rulerCurrentPoint = null, rulerFixedMeasurement = null;
 let showDrawingTools = true;
-
+let isEraserEnabled = false;
 // Горизонтальная линия
 let isHorizontalLineEnabled = false, activeHorizontalLines = [];
 
