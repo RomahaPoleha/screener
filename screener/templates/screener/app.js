@@ -1262,10 +1262,17 @@ async function openChart(symbol) {
             }
         });
         chart.subscribeClick(handleChartClick);
+
+        // === ПОДПИСКИ НА ИЗМЕНЕНИЯ (включая ценовую шкалу) ===
         chart.timeScale().subscribeVisibleTimeRangeChange(redrawAllPersistentDrawings);
         chart.timeScale().subscribeVisibleLogicalRangeChange(redrawAllPersistentDrawings);
         chart.timeScale().subscribeSizeChange(() => {
             setTimeout(() => { initPencilCanvas(); }, 150);
+        });
+
+        // ✅ НОВАЯ ПОДПИСКА: перерисовка при растягивании правой ценовой шкалы
+        candleSeries.priceScale().subscribeVisiblePriceRangeChange(() => {
+            setTimeout(() => { initPencilCanvas(); }, 50);
         });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
