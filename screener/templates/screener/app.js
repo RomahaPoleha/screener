@@ -636,6 +636,7 @@ function deleteLineAtPoint(x, y) {
     if (!clickPrice) return;
     const threshold = 50;
 
+    // 1. Проверяем алерты
     for (let i = activeAlerts.length - 1; i >= 0; i--) {
         const alert = activeAlerts[i];
         const alertY = candleSeries.priceToCoordinate(alert.price);
@@ -646,6 +647,7 @@ function deleteLineAtPoint(x, y) {
         }
     }
 
+    // 2. Проверяем горизонтальные линии
     for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
         const hl = activeHorizontalLines[i];
         const hlY = candleSeries.priceToCoordinate(hl.price);
@@ -656,6 +658,7 @@ function deleteLineAtPoint(x, y) {
         }
     }
 
+    // 3. Проверяем трендовые линии
     for (let i = activeTrendlines.length - 1; i >= 0; i--) {
         const tl = activeTrendlines[i];
         const x1 = chart.timeScale().timeToCoordinate(tl.time1);
@@ -668,6 +671,23 @@ function deleteLineAtPoint(x, y) {
                 activeTrendlines.splice(i, 1);
                 redrawAllPersistentDrawings();
                 return;
+            }
+        }
+    }
+
+    // 4. Проверяем карандаш (штрихи)
+    for (let i = pencilStrokes.length - 1; i >= 0; i--) {
+        const stroke = pencilStrokes[i];
+        for (const point of stroke) {
+            const px = getXByTime(point.time);
+            const py = candleSeries.priceToCoordinate(point.price);
+            if (px !== null && py !== null) {
+                const distance = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
+                if (distance < threshold) {
+                    pencilStrokes.splice(i, 1);
+                    redrawAllPersistentDrawings();
+                    return;
+                }
             }
         }
     }
