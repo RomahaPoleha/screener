@@ -426,52 +426,61 @@ function initPencilCanvas() {
 }
 
 function getTimeByX(x) {
+    // Сначала пробуем официальное API
     let time = chart.timeScale().coordinateToTime(x);
     if (time !== null) return time;
+
+    // Fallback: вычисляем через logical index
+    const logicalIndex = getLogicalIndexByX(x);
+    if (logicalIndex === null) return null;
+
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
+
     const lastCandle = candles[candles.length - 1];
-    const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
-    if (lastCandleX === null) return null;
-    const visibleRange = chart.timeScale().getVisibleLogicalRange();
-    if (!visibleRange) return null;
-    const chartWidth = els.chartWrapper.clientWidth;
-    const barsCount = visibleRange.to - visibleRange.from;
-    const pixelsPerBar = chartWidth / barsCount;
-    const barsOffset = Math.round((x - lastCandleX) / pixelsPerBar);
     const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
-    return lastCandle.time + (barsOffset * secondsPerBar);
+    const indexDiff = logicalIndex - (candles.length - 1);
+
+    return lastCandle.time + (indexDiff * secondsPerBar);
 }
 
 function getLogicalIndexByX(x) {
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
+
     const lastCandle = candles[candles.length - 1];
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
     if (lastCandleX === null) return null;
+
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange) return null;
+
     const chartWidth = els.chartWrapper.clientWidth;
     const barsCount = visibleRange.to - visibleRange.from;
     const pixelsPerBar = chartWidth / barsCount;
     const lastIndex = candles.length - 1;
     const barsOffset = (x - lastCandleX) / pixelsPerBar;
+
     return lastIndex + barsOffset;
 }
 
 function getXByLogicalIndex(logicalIndex) {
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
+
     const lastCandle = candles[candles.length - 1];
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
     if (lastCandleX === null) return null;
+
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange) return null;
+
     const chartWidth = els.chartWrapper.clientWidth;
     const barsCount = visibleRange.to - visibleRange.from;
     const pixelsPerBar = chartWidth / barsCount;
     const lastIndex = candles.length - 1;
     const barsOffset = logicalIndex - lastIndex;
+
     return lastCandleX + (barsOffset * pixelsPerBar);
 }
 
@@ -487,8 +496,15 @@ function redrawPencilStrokes() {
         pencilCtx.beginPath();
         let started = false;
         for (const point of stroke) {
-            let x = chart.timeScale().timeToCoordinate(point.time);
-            if (x === null && point.logicalIndex !== undefined) x = getXByLogicalIndex(point.logicalIndex);
+            let x = null;
+            // Сначала пробуем по logicalIndex
+            if (point.logicalIndex !== undefined) {
+                x = getXByLogicalIndex(point.logicalIndex);
+            }
+            // Fallback на time
+            if (x === null && point.time !== undefined) {
+                x = chart.timeScale().timeToCoordinate(point.time);
+            }
             const y = candleSeries.priceToCoordinate(point.price);
             if (x === null || y === null) { started = false; continue; }
             if (!started) { pencilCtx.moveTo(x, y); started = true; }
@@ -542,12 +558,20 @@ function redrawAllPersistentDrawings() {
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
 
+    // Вспомогательная функция для получения X по logicalIndex или time
     const getX = (tl, keyTime, keyIdx) => {
-        let x = chart.timeScale().timeToCoordinate(tl[keyTime]);
-        if (x === null && tl[keyIdx] !== undefined) x = getXByLogicalIndex(tl[keyIdx]);
-        return x;
+        // Сначала пробуем по logicalIndex (это надёжнее)
+        if (tl[keyIdx] !== undefined) {
+            return getXByLogicalIndex(tl[keyIdx]);
+        }
+        // Fallback на time
+        if (tl[keyTime] !== undefined) {
+            return chart.timeScale().timeToCoordinate(tl[keyTime]);
+        }
+        return null;
     };
 
+    // Трендовые линии
     activeTrendlines.forEach(tl => {
         const x1 = getX(tl, 'time1', 'logicalIndex1');
         const x2 = getX(tl, 'time2', 'logicalIndex2');
@@ -558,6 +582,7 @@ function redrawAllPersistentDrawings() {
         }
     });
 
+    // Превью трендовой линии (которую сейчас рисуешь)
     if (isDrawingTrendLine && trendLinePreview) {
         const x1 = getX(trendLinePreview, 'time1', 'logicalIndex1');
         const x2 = getX(trendLinePreview, 'time2', 'logicalIndex2');
@@ -569,6 +594,7 @@ function redrawAllPersistentDrawings() {
         }
     }
 
+    // Линейка
     if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) {
         drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
     }
@@ -576,6 +602,7 @@ function redrawAllPersistentDrawings() {
         drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
     }
 
+    // Карандаш
     redrawPencilStrokes();
     pencilCtx.setLineDash([]);
 }
@@ -677,23 +704,25 @@ function handleChartClick(param) {
         activeHorizontalLines.push({ price: price, line: line });
     }
     else if (isTrendLineEnabled) {
-        const price = candleSeries.coordinateToPrice(param.point.y);
-        const time = param.time || getTimeByX(param.point.x);
-        const logicalIndex = getLogicalIndexByX(param.point.x);
-        if (!price || isNaN(price) || !time) return;
+    const price = candleSeries.coordinateToPrice(param.point.y);
+    const time = param.time || getTimeByX(param.point.x);
+    const logicalIndex = getLogicalIndexByX(param.point.x);
+    if (!price || isNaN(price) || !time) return;
 
-        if (!isDrawingTrendLine) {
-            trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
-            isDrawingTrendLine = true;
-            trendLinePreview = { time1: time, price1: price, logicalIndex1: logicalIndex, time2: time, price2: price, logicalIndex2: logicalIndex };
-        } else {
-            activeTrendlines.push({
-                time1: trendLineStart.time, price1: trendLineStart.price, logicalIndex1: trendLineStart.logicalIndex,
-                time2: time, price2: price, logicalIndex2: logicalIndex
-            });
-            isDrawingTrendLine = false; trendLineStart = null; trendLinePreview = null;
-            redrawAllPersistentDrawings();
-        }
+    if (!isDrawingTrendLine) {
+        trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
+        isDrawingTrendLine = true;
+        trendLinePreview = {
+            time1: time, price1: price, logicalIndex1: logicalIndex,
+            time2: time, price2: price, logicalIndex2: logicalIndex
+        };
+    } else {
+        activeTrendlines.push({
+            time1: trendLineStart.time, price1: trendLineStart.price, logicalIndex1: trendLineStart.logicalIndex,
+            time2: time, price2: price, logicalIndex2: logicalIndex
+        });
+        isDrawingTrendLine = false; trendLineStart = null; trendLinePreview = null;
+        redrawAllPersistentDrawings();
     }
 }
 
@@ -1225,6 +1254,7 @@ async function openChart(symbol) {
         });
         chart.subscribeClick(handleChartClick);
         chart.timeScale().subscribeVisibleTimeRangeChange(redrawAllPersistentDrawings);
+        chart.timeScale().subscribeVisibleLogicalRangeChange(redrawAllPersistentDrawings);
         chart.timeScale().subscribeSizeChange(() => {
             setTimeout(() => { initPencilCanvas(); }, 150);
         });
