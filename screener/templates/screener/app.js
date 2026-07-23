@@ -1270,10 +1270,22 @@ async function openChart(symbol) {
             setTimeout(() => { initPencilCanvas(); }, 150);
         });
 
-        // ✅ ГАРАНТИРОВАННАЯ ПЕРЕРИСОВКА ПРИ ЛЮБОМ ЗУМЕ (включая вертикальный)
+        // ✅ ИСПРАВЛЕННЫЙ СЛУШАТЕЛЬ ЗУМА (убирает "кривую" перерисовку и мерцание)
+        let isRedrawScheduled = false;
         els.chartWrapper.addEventListener('wheel', () => {
-            requestAnimationFrame(redrawAllPersistentDrawings);
+            if (!isRedrawScheduled) {
+                isRedrawScheduled = true;
+                requestAnimationFrame(() => {
+                    redrawAllPersistentDrawings();
+                    isRedrawScheduled = false;
+                });
+            }
         }, { passive: true });
+
+        // ✅ Дополнительная гарантия: перерисовка после отпускания мыши (конец перетаскивания шкалы)
+        els.chartWrapper.addEventListener('mouseup', () => {
+            requestAnimationFrame(redrawAllPersistentDrawings);
+        });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
             if (isRulerEnabled && e.button === 0) {
@@ -1348,35 +1360,6 @@ async function openChart(symbol) {
                     redrawAllPersistentDrawings();
                     showRulerMeasurement(rulerStartPoint, rulerCurrentPoint);
                 }
-            }
-        });
-
-        els.chartWrapper.addEventListener('mouseup', (e) => {
-            if (isPencilEnabled && e.button === 0) {
-                isDrawing = false;
-                lastPencilPoint = null;
-                if (currentStroke && currentStroke.length > 0) {
-                    pencilStrokes.push(currentStroke);
-                    currentStroke = null;
-                }
-            }
-
-            if (isRulerEnabled && e.button === 0 && isRulerDragging) {
-                isRulerDragging = false;
-                rulerStartPoint = null;
-                rulerCurrentPoint = null;
-                els.rulerMeasurement.style.display = 'none';
-                redrawAllPersistentDrawings();
-            }
-
-            if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
-                e.preventDefault();
-                e.stopPropagation();
-                isRulerDragging = false;
-                rulerStartPoint = null;
-                rulerCurrentPoint = null;
-                els.rulerMeasurement.style.display = 'none';
-                redrawAllPersistentDrawings();
             }
         });
 
