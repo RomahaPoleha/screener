@@ -86,14 +86,23 @@ function checkAlerts(currentPrice, prevPrice) {
             playAlertSound();
             showPriceAlertToast(currentPrice, alert.price, direction);
 
-            // 2. 🚨 ИЗМЕНЕНИЕ: Меняем стиль линии на полупрозрачный и точечный
-            alert.line.applyOptions({
-                color: 'rgba(240, 185, 11, 0.3)', // Полупрозрачный жёлтый (30% непрозрачности)
+            // 2. 🚨 Пересоздаём линию с полупрозрачным стилем и тусклой заливкой
+            try {
+                candleSeries.removePriceLine(alert.line);
+            } catch(e) {}
+
+            const fadedLine = candleSeries.createPriceLine({
+                price: alert.price,
+                color: 'rgba(240, 185, 11, 0.3)',           // Бледная линия
                 lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Dotted // Точечный стиль для отработавших
+                lineStyle: LightweightCharts.LineStyle.Dotted, // Точечный стиль
+                axisLabelVisible: true,
+                axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.2)', // Тусклая заливка справа
+                axisLabelColor: 'rgba(255, 255, 255, 0.4)',          // Полупрозрачный текст
+                title: ` ${alert.price.toFixed(currentPrecision)}`
             });
 
-            // 3. Помечаем как неактивный (чтобы не срабатывал повторно)
+            alert.line = fadedLine;
             alert.active = false;
         }
     });
