@@ -82,23 +82,21 @@ function checkAlerts(currentPrice, prevPrice) {
         if (crossedAbove || crossedBelow) {
             const direction = crossedAbove ? 'вверх ↑' : 'вниз ↓';
 
-            // 1. Воспроизводим звук и показываем уведомление
             playAlertSound();
             showPriceAlertToast(currentPrice, alert.price, direction);
 
-            // 2. 🚨 Пересоздаём линию с полупрозрачным стилем и тусклой заливкой
             try {
                 candleSeries.removePriceLine(alert.line);
             } catch(e) {}
 
             const fadedLine = candleSeries.createPriceLine({
                 price: alert.price,
-                color: 'rgba(240, 185, 11, 0.3)',           // Бледная линия
+                color: 'rgba(240, 185, 11, 0.3)', // Полупрозрачный жёлтый
                 lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Dotted, // Точечный стиль
+                lineStyle: LightweightCharts.LineStyle.Dotted,
                 axisLabelVisible: true,
-                axisLabelBackgroundColor: 'rgba(240, 185, 11, 0.2)', // Тусклая заливка справа
-                axisLabelColor: 'rgba(255, 255, 255, 0.4)',          // Полупрозрачный текст
+                // Мы НЕ указываем axisLabelBackgroundColor и axisLabelColor.
+                // Библиотека сама автоматически возьмёт цвет из 'color' для фона плашки!
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
 
