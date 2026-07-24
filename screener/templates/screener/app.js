@@ -75,12 +75,25 @@ function showPriceAlertToast(currentPrice, alertPrice, direction) {
 function checkAlerts(currentPrice, prevPrice) {
     activeAlerts.forEach((alert) => {
         if (!alert.active) return;
+
         const crossedAbove = (prevPrice < alert.price && currentPrice >= alert.price);
         const crossedBelow = (prevPrice > alert.price && currentPrice <= alert.price);
+
         if (crossedAbove || crossedBelow) {
             const direction = crossedAbove ? 'вверх ↑' : 'вниз ↓';
+
+            // 1. Воспроизводим звук и показываем уведомление
             playAlertSound();
             showPriceAlertToast(currentPrice, alert.price, direction);
+
+            // 2. 🚨 ИЗМЕНЕНИЕ: Меняем стиль линии на полупрозрачный и точечный
+            alert.line.applyOptions({
+                color: 'rgba(240, 185, 11, 0.3)', // Полупрозрачный жёлтый (30% непрозрачности)
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Dotted // Точечный стиль для отработавших
+            });
+
+            // 3. Помечаем как неактивный (чтобы не срабатывал повторно)
             alert.active = false;
         }
     });
