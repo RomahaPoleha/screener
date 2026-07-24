@@ -527,16 +527,11 @@ function redrawPencilStrokes() {
 }
 
 function drawRulerRectangle(start, end) {
-    let x1 = chart.timeScale().timeToCoordinate(start.time);
-    if (x1 === null && start.logicalIndex !== undefined) {
-        x1 = getXByLogicalIndex(start.logicalIndex);
-    }
+    // Используем getXByTime вместо getXByLogicalIndex — он корректно работает и в зоне будущего
+    const x1 = getXByTime(start.time);
     const y1 = candleSeries.priceToCoordinate(start.price);
 
-    let x2 = chart.timeScale().timeToCoordinate(end.time);
-    if (x2 === null && end.logicalIndex !== undefined) {
-        x2 = getXByLogicalIndex(end.logicalIndex);
-    }
+    const x2 = getXByTime(end.time);
     const y2 = candleSeries.priceToCoordinate(end.price);
 
     if (x1 === null || y1 === null || x2 === null || y2 === null) return;
