@@ -111,16 +111,19 @@ def init_order_book_sync(symbol, market='futures', exchange='binance'):
             bids = {float(price): float(qty) for price, qty in result.get('b', [])}
             asks = {float(price): float(qty) for price, qty in result.get('a', [])}
 
+        initial_ts = {float(price): time.time() - 200 for price in bids}
+        initial_ts.update({float(price): time.time() - 200 for price in asks})
+
         # Сохраняем в нужные словари
         if exchange == 'binance' and market == 'futures':
             futures_order_books[symbol] = {'bids': bids, 'asks': asks}
-            futures_density_timestamps[symbol] = {}
+            futures_density_timestamps[symbol] = initial_ts
         elif exchange == 'binance' and market == 'spot':
             spot_order_books[symbol] = {'bids': bids, 'asks': asks}
-            spot_density_timestamps[symbol] = {}
+            spot_density_timestamps[symbol] = initial_ts
         elif exchange == 'bybit' and market == 'futures':
             bybit_futures_order_books[symbol] = {'bids': bids, 'asks': asks}
-            bybit_futures_density_timestamps[symbol] = {}
+            bybit_futures_density_timestamps[symbol] = initial_ts
 
         sync_to_cache_sync(symbol, market, exchange)
         return True
