@@ -42,7 +42,11 @@ let scalpLines = [], scalpEnabled = false;
 let scalpMarkets = { future: false, spot: false };
 let scalpMinVolumeFuture = 200000, scalpMinVolumeSpot = 100000;
 let scalpUpdateTimer = null, isScalpLoading = false;
-let previousScalpData = { futures: [], spot: [] };
+let previousScalpData = { futures: [], spot: [], bybit_futures: [] }; // <-- ДОБАВЛЕНО bybit_futures
+
+// Bybit Scalp (НОВЫЕ ПЕРЕМЕННЫЕ)
+let scalpBybitMarkets = { future: localStorage.getItem('scalpBybitFuture') === 'true' };
+let scalpMinVolumeBybitFuture = parseInt(localStorage.getItem('scalpMinVolumeBybitFuture')) || 200000;
 
 // Volume
 let volumeHistogramEnabled = true;
@@ -66,7 +70,6 @@ let isEraserEnabled = false;
 let trendLineHotkeyActive = false;
 let horizontalLineHotkeyActive = false;
 let pencilHotkeyActive = false;
-// Горизонтальная линия
 let isHorizontalLineEnabled = false, activeHorizontalLines = [];
 
 let pencilStrokes = [];

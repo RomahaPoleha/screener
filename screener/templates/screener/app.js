@@ -1,13 +1,6 @@
 // ==========================================
-// app.js (ЧИСТЫЙ, с поддержкой Binance и Bybit Scalp)
+// app.js (ЧИСТЫЙ, использует переменные из state.js)
 // ==========================================
-
-// ==========================================
-// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ (Bybit)
-// ==========================================
-let scalpBybitMarkets = { future: localStorage.getItem('scalpBybitFuture') === 'true' };
-let scalpMinVolumeBybitFuture = parseInt(localStorage.getItem('scalpMinVolumeBybitFuture')) || 200000;
-let previousScalpData = { binance_futures: [], bybit_futures: [] };
 
 // ==========================================
 // ПРЕДЗАГРУЗКА АУДИО ФАЙЛОВ
@@ -82,29 +75,18 @@ function showPriceAlertToast(currentPrice, alertPrice, direction) {
 function checkAlerts(currentPrice, prevPrice) {
     activeAlerts.forEach((alert) => {
         if (!alert.active) return;
-
         const crossedAbove = (prevPrice < alert.price && currentPrice >= alert.price);
         const crossedBelow = (prevPrice > alert.price && currentPrice <= alert.price);
-
         if (crossedAbove || crossedBelow) {
             const direction = crossedAbove ? 'вверх ↑' : 'вниз ↓';
-
             playAlertSound();
             showPriceAlertToast(currentPrice, alert.price, direction);
-
-            try {
-                candleSeries.removePriceLine(alert.line);
-            } catch(e) {}
-
+            try { candleSeries.removePriceLine(alert.line); } catch(e) {}
             const fadedLine = candleSeries.createPriceLine({
-                price: alert.price,
-                color: 'rgba(240, 185, 11, 0.3)',
-                lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Dotted,
-                axisLabelVisible: true,
+                price: alert.price, color: 'rgba(240, 185, 11, 0.3)', lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true,
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
-
             alert.line = fadedLine;
             alert.active = false;
         }
@@ -503,7 +485,6 @@ function redrawPencilStrokes() {
     pencilCtx.lineWidth = 2;
     pencilCtx.lineCap = 'round';
     pencilCtx.lineJoin = 'round';
-
     const drawStroke = (stroke) => {
         if (stroke.length < 2) return;
         pencilCtx.beginPath();
@@ -549,7 +530,6 @@ function redrawAllPersistentDrawings() {
     pencilCtx.strokeStyle = '#38bdf8';
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
-
     activeTrendlines.forEach(tl => {
         const x1 = getXByTime(tl.time1);
         const x2 = getXByTime(tl.time2);
@@ -559,7 +539,6 @@ function redrawAllPersistentDrawings() {
             pencilCtx.beginPath(); pencilCtx.moveTo(x1, y1); pencilCtx.lineTo(x2, y2); pencilCtx.stroke();
         }
     });
-
     if (isDrawingTrendLine && trendLinePreview) {
         const x1 = getXByTime(trendLinePreview.time1);
         const x2 = getXByTime(trendLinePreview.time2);
@@ -572,7 +551,6 @@ function redrawAllPersistentDrawings() {
             pencilCtx.beginPath(); pencilCtx.moveTo(x1, y1); pencilCtx.lineTo(x2, y2); pencilCtx.stroke();
         }
     }
-
     if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
     if (rulerFixedMeasurement) drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
     redrawPencilStrokes();
@@ -594,7 +572,6 @@ function deleteLineAtPoint(x, y) {
     const clickPrice = candleSeries.coordinateToPrice(y);
     if (!clickPrice) return;
     const threshold = 50;
-
     for (let i = activeAlerts.length - 1; i >= 0; i--) {
         const alert = activeAlerts[i];
         const alertY = candleSeries.priceToCoordinate(alert.price);
@@ -638,7 +615,6 @@ function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
     if (isEraserEnabled) { deleteLineAtPoint(param.point.x, param.point.y); return; }
     if (isRulerEnabled) return;
-
     if (isAlertModeEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
@@ -723,7 +699,6 @@ function showRulerMeasurement(start, end) {
     }
     const formatTime = (t) => { if (!t || t === 0) return '---'; return new Date(t * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }); };
     const volumeFormatted = totalVolume >= 1000000 ? `${(totalVolume / 1000000).toFixed(2)}M` : totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` : totalVolume > 0 ? totalVolume.toFixed(2) : '0';
-
     if (hasRealData) {
         els.rulerMeasurement.innerHTML = `<div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}</div><div style="font-size:11px; color:#d1d5db; line-height:1.6;"><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#9ca3af;">Бары:</span><span style="font-weight:600;">${barsCount}</span></div><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#9ca3af;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span></div><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#9ca3af;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span></div><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#9ca3af;">Объем:</span><span style="font-weight:600;">${volumeFormatted}</span></div><div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px;"><div style="display:flex; justify-content:space-between; font-size:10px; color:#9ca3af;"><span>Max: <span style="color:#22c55e;">${maxPrice}</span></span><span>Min: <span style="color:#ef4444;">${minPrice}</span></span></div></div><div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">${formatTime(startTime)} → ${formatTime(endTime)}</div>${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">️ Часть в пустой зоне</div>' : ''}</div>`;
     } else {
@@ -787,9 +762,11 @@ function openSettingsModal() {
     document.getElementById('scalpMinVolumeFuture').value = scalpMinVolumeFuture;
     document.getElementById('scalpMinVolumeSpot').value = scalpMinVolumeSpot;
 
-    // Bybit настройки
-    document.getElementById('scalpBybitFuture').checked = scalpBybitMarkets.future;
-    document.getElementById('scalpMinVolumeBybitFuture').value = scalpMinVolumeBybitFuture; // ИСПРАВЛЕНО
+    // 👇 НАСТРОЙКИ BYBIT 👇
+    if (document.getElementById('scalpBybitFuture')) {
+        document.getElementById('scalpBybitFuture').checked = scalpBybitMarkets.future;
+        document.getElementById('scalpMinVolumeBybitFuture').value = scalpMinVolumeBybitFuture;
+    }
 
     document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
     document.getElementById('showDrawingTools').checked = showDrawingTools;
@@ -818,11 +795,13 @@ function applySettings() {
     localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
     localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
 
-    // ИСПРАВЛЕНО: убираем 'let', обновляем глобальные переменные
-    scalpBybitMarkets = { future: document.getElementById('scalpBybitFuture').checked };
-    scalpMinVolumeBybitFuture = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeBybitFuture').value) || 200000);
-    localStorage.setItem('scalpBybitFuture', scalpBybitMarkets.future);
-    localStorage.setItem('scalpMinVolumeBybitFuture', scalpMinVolumeBybitFuture);
+    // 👇 СОХРАНЕНИЕ НАСТРОЕК BYBIT 👇
+    if (document.getElementById('scalpBybitFuture')) {
+        scalpBybitMarkets = { future: document.getElementById('scalpBybitFuture').checked };
+        scalpMinVolumeBybitFuture = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeBybitFuture').value) || 200000);
+        localStorage.setItem('scalpBybitFuture', scalpBybitMarkets.future);
+        localStorage.setItem('scalpMinVolumeBybitFuture', scalpMinVolumeBybitFuture);
+    }
 
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
@@ -841,8 +820,10 @@ function applySettings() {
         else { if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; } clearDensityLines(); }
 
         if (scalpEnabled) {
-            // ИСПРАВЛЕНО: убираем 'let', обновляем глобальную переменную
-            previousScalpData = { binance_futures: [], bybit_futures: [] };
+            // 👇 БЕЗОПАСНАЯ ОЧИСТКА БЕЗ ПЕРЕЗАПИСИ ОБЪЕКТА 👇
+            previousScalpData.futures = [];
+            previousScalpData.spot = [];
+            previousScalpData.bybit_futures = [];
             startScalpUpdates(currentSymbol);
         } else {
             if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
@@ -859,7 +840,6 @@ async function loadDensities(symbol) {
     if (densityMarkets.future) marketsToLoad.push('future');
     if (densityMarkets.spot) marketsToLoad.push('spot');
     const allNewData = {};
-
     for (const market of marketsToLoad) {
         try {
             const url = market === 'future' ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=1000` : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=1000`;
@@ -879,14 +859,12 @@ async function loadDensities(symbol) {
             allNewData[market] = densities.slice(0, 20);
         } catch (e) { console.error(`Densities error (${market}):`, e); allNewData[market] = previousDensities[market] || []; }
     }
-
     for (const market of marketsToLoad) {
         const newData = allNewData[market] || [];
         const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
         const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
         if (currentData !== prevData) { hasChanges = true; previousDensities[market] = newData; }
     }
-
     if (!hasChanges) return;
     clearDensityLines();
     for (const market of marketsToLoad) {
@@ -912,66 +890,86 @@ async function loadScalpDensities(symbol) {
     if (!scalpEnabled || !candleSeries || isScalpLoading) return;
     isScalpLoading = true;
     try {
-        const allNewData = {};
+        const marketsToLoad = [];
+        if (scalpMarkets.future) marketsToLoad.push('futures');
+        if (scalpMarkets.spot) marketsToLoad.push('spot');
+
+        const allNewData = { futures: [], spot: [], bybit_futures: [] };
         let hasChanges = false;
 
-        // Binance Futures
-        if (scalpMarkets.future) {
-            const minVol = scalpMinVolumeFuture;
+        for (const market of marketsToLoad) {
+            const minVol = market === 'futures' ? scalpMinVolumeFuture : scalpMinVolumeSpot;
             try {
-                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=futures`);
-                if (res.ok) {
-                    const data = await res.json();
-                    allNewData['binance_futures'] = (data.densities || []).filter(d => d.exchange === 'binance');
+                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=${market}`);
+                if (!res.ok) continue;
+                const data = await res.json();
+                const rawDensities = data.densities || [];
+
+                // Разделяем данные на Binance и Bybit
+                const binanceDensities = rawDensities.filter(d => d.exchange === 'binance');
+                allNewData[market] = binanceDensities;
+
+                if (market === 'futures' && scalpBybitMarkets.future) {
+                    // Для Bybit применяем его собственный минимальный объём
+                    const bybitDensities = rawDensities.filter(d => d.exchange === 'bybit' && d.volume >= scalpMinVolumeBybitFuture);
+                    allNewData['bybit_futures'] = bybitDensities;
                 }
-            } catch (e) {
-                console.error(`Scalp load error (binance futures):`, e);
-                allNewData['binance_futures'] = previousScalpData['binance_futures'] || [];
-            }
+            } catch (e) { console.error(`Scalp load error (${market}):`, e); }
         }
 
-        // Bybit Futures
-        if (scalpBybitMarkets.future) {
-            const minVol = scalpMinVolumeBybitFuture;
-            try {
-                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=futures`);
-                if (res.ok) {
-                    const data = await res.json();
-                    allNewData['bybit_futures'] = (data.densities || []).filter(d => d.exchange === 'bybit');
-                }
-            } catch (e) {
-                console.error(`Scalp load error (bybit futures):`, e);
-                allNewData['bybit_futures'] = previousScalpData['bybit_futures'] || [];
-            }
-        }
-
-        // Проверяем изменения
-        for (const key of ['binance_futures', 'bybit_futures']) {
-            const newData = allNewData[key] || [];
-            const prevData = previousScalpData[key] || [];
+        // Проверка изменений для Binance
+        for (const market of ['futures', 'spot']) {
+            if (!allNewData[market]) continue;
+            const newData = allNewData[market];
+            const prevData = previousScalpData[market] || [];
             const currentSignature = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
             const prevSignature = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
-            if (currentSignature !== prevSignature) { hasChanges = true; previousScalpData[key] = newData; }
+            if (currentSignature !== prevSignature) { hasChanges = true; previousScalpData[market] = newData; }
         }
 
-        if (!hasChanges) return;
+        // Проверка изменений для Bybit
+        if (scalpBybitMarkets.future && allNewData['bybit_futures']) {
+            const newData = allNewData['bybit_futures'];
+            const prevData = previousScalpData['bybit_futures'] || [];
+            const currentSignature = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
+            const prevSignature = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
+            if (currentSignature !== prevSignature) { hasChanges = true; previousScalpData['bybit_futures'] = newData; }
+        }
+
+        if (!hasChanges) { isScalpLoading = false; return; }
         clearScalpLines();
 
-        // Рисуем линии
-        for (const [sourceKey, exchangeName] of [['binance_futures', 'binance'], ['bybit_futures', 'bybit']]) {
-            const densities = allNewData[sourceKey] || [];
-            densities.forEach(d => {
+        // Рисуем линии Binance
+        for (const market of ['futures', 'spot']) {
+            if (!allNewData[market]) continue;
+            allNewData[market].forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
                 const ageText = formatAge(ageSeconds);
                 const volumeText = formatVolumeText(d.volume);
-                const exchangeLabel = exchangeName === 'bybit' ? 'By' : 'Bi';
-
+                const prefix = market === 'futures' ? 'Bi-F' : 'Bi-S';
                 const volumeNum = parseFloat(d.volume) || 0;
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
                 const line = candleSeries.createPriceLine({
                     price: d.price, color: lineColor, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true, axisLabelColor: '#000000', axisLabelBackgroundColor: lineColor,
-                    title: `${exchangeLabel} ${volumeText} ${ageText}`
+                    title: `${prefix} ${volumeText} ${ageText}`
+                });
+                scalpLines.push(line);
+            });
+        }
+
+        // Рисуем линии Bybit
+        if (scalpBybitMarkets.future && allNewData['bybit_futures']) {
+            allNewData['bybit_futures'].forEach(d => {
+                const ageSeconds = d.age_seconds || 0;
+                const ageText = formatAge(ageSeconds);
+                const volumeText = formatVolumeText(d.volume);
+                const volumeNum = parseFloat(d.volume) || 0;
+                const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
+                const line = candleSeries.createPriceLine({
+                    price: d.price, color: lineColor, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true, axisLabelColor: '#000000', axisLabelBackgroundColor: lineColor,
+                    title: `By-F ${volumeText} ${ageText}`
                 });
                 scalpLines.push(line);
             });
@@ -979,6 +977,7 @@ async function loadScalpDensities(symbol) {
     } catch (err) { console.error('Scalp load error:', err); }
     finally { isScalpLoading = false; }
 }
+
 function clearScalpLines() { scalpLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} }); scalpLines = []; }
 function startScalpUpdates(symbol) {
     if (scalpUpdateTimer) clearInterval(scalpUpdateTimer);
@@ -1009,7 +1008,11 @@ function closeChart() {
     if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
     previousDensities = { future: [], spot: [] };
     clearScalpLines();
-    previousScalpData = { binance_futures: [], bybit_futures: [] };
+    // 👇 БЕЗОПАСНАЯ ОЧИСТКА 👇
+    previousScalpData.futures = [];
+    previousScalpData.spot = [];
+    previousScalpData.bybit_futures = [];
+
     if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
@@ -1024,9 +1027,14 @@ async function openChart(symbol) {
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
-    clearScalpLines(); previousScalpData = { binance_futures: [], bybit_futures: [] }; if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
-    await new Promise(resolve => setTimeout(resolve, 150));
+    clearScalpLines();
+    // 👇 БЕЗОПАСНАЯ ОЧИСТКА 👇
+    previousScalpData.futures = [];
+    previousScalpData.spot = [];
+    previousScalpData.bybit_futures = [];
+    if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 
+    await new Promise(resolve => setTimeout(resolve, 150));
     currentSymbol = symbol;
     els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
     tradeBuffer = []; lastCandlePrice = null;
@@ -1096,7 +1104,6 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); e.stopPropagation(); } });
-
         els.chartWrapper.addEventListener('mousemove', (e) => {
             if (isRulerDragging && rulerStartPoint) {
                 const rect = els.chartWrapper.getBoundingClientRect(); const x = e.clientX - rect.left; const y = e.clientY - rect.top;
@@ -1107,7 +1114,6 @@ async function openChart(symbol) {
                 }
             }
         });
-
         els.chartWrapper.addEventListener('mouseup', (e) => {
             if (isPencilEnabled && e.button === 0) {
                 isDrawing = false; lastPencilPoint = null;
@@ -1120,12 +1126,10 @@ async function openChart(symbol) {
                 e.preventDefault(); e.stopPropagation(); isRulerDragging = false; rulerStartPoint = null; rulerCurrentPoint = null; els.rulerMeasurement.style.display = 'none'; redrawAllPersistentDrawings();
             }
         });
-
         els.chartWrapper.addEventListener('mouseleave', () => {
             if (isPencilEnabled) { isDrawing = false; lastPencilPoint = null; if (currentStroke && currentStroke.length > 0) { pencilStrokes.push(currentStroke); currentStroke = null; } }
             if (isRulerDragging) { isRulerDragging = false; rulerStartPoint = null; rulerCurrentPoint = null; els.rulerMeasurement.style.display = 'none'; redrawAllPersistentDrawings(); isRulerMiddleClickDrag = false; }
         });
-
     } catch (e) { console.error('Chart init error:', e); return; }
 
     await loadChartData(symbol, currentTF);
