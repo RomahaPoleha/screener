@@ -673,14 +673,15 @@ function deleteLineAtPoint(x, y) {
         }
     }
 
-    // 3. Проверяем трендовые линии
+    // 3. Проверяем трендовые линии (используем getXByTime для зоны будущего)
     for (let i = activeTrendlines.length - 1; i >= 0; i--) {
         const tl = activeTrendlines[i];
-        const x1 = chart.timeScale().timeToCoordinate(tl.time1);
+        const x1 = getXByTime(tl.time1);
         const y1 = candleSeries.priceToCoordinate(tl.price1);
-        const x2 = chart.timeScale().timeToCoordinate(tl.time2);
+        const x2 = getXByTime(tl.time2);
         const y2 = candleSeries.priceToCoordinate(tl.price2);
-        if (x1 && y1 && x2 && y2) {
+
+        if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
             const distance = pointToLineDistance(x, y, x1, y1, x2, y2);
             if (distance < threshold) {
                 activeTrendlines.splice(i, 1);
