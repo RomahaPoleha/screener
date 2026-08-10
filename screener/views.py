@@ -181,7 +181,8 @@ def api_scalp(request, symbol):
             'volume': volume,
             'side': side,
             'age_seconds': round(age_seconds, 1),
-            'market': market
+            'market': market,
+            'exchange': item.get('exchange', 'binance')  # ← ДОБАВИТЬ ЭТУ СТРОКУ
         })
 
     densities.sort(key=lambda x: x['volume'], reverse=True)
