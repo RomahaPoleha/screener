@@ -1181,19 +1181,22 @@ async function loadScalpDensities(symbol) {
         if (!hasChanges) return;
         clearScalpLines();
 
-        for (const market of marketsToLoad) {
+         for (const market of marketsToLoad) {
             const densities = allNewData[market] || [];
             densities.forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
                 const ageText = formatAge(ageSeconds);
                 const volumeText = formatVolumeText(d.volume);
-                const prefix = market === 'futures' ? 'BI-F' : 'BI-S';
+
+                // 🚨 НОВАЯ ЛОГИКА: читаем биржу из данных. Если bybit -> 'By', иначе 'Bi'
+                const exchangeLabel = (d.exchange === 'bybit') ? 'By' : 'Bi';
+
                 const volumeNum = parseFloat(d.volume) || 0;
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
                 const line = candleSeries.createPriceLine({
                     price: d.price, color: lineColor, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true, axisLabelColor: '#000000', axisLabelBackgroundColor: lineColor,
-                    title: `${prefix} ${volumeText} ${ageText}`
+                    title: `${exchangeLabel} ${volumeText} ${ageText}` // <-- Используем новую метку
                 });
                 scalpLines.push(line);
             });
