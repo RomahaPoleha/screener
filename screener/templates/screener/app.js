@@ -1187,10 +1187,7 @@ async function loadScalpDensities(symbol) {
                 const ageSeconds = d.age_seconds || 0;
                 const ageText = formatAge(ageSeconds);
                 const volumeText = formatVolumeText(d.volume);
-
-                // 👇 ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ: если есть поле bybit, ставим By-F, иначе по умолчанию Bi-F / Bi-S 👇
-                const prefix = d.exchange === 'bybit' ? 'By-F' : (market === 'futures' ? 'Bi-F' : 'Bi-S');
-
+                const prefix = market === 'futures' ? 'BI-F' : 'BI-S';
                 const volumeNum = parseFloat(d.volume) || 0;
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
                 const line = candleSeries.createPriceLine({

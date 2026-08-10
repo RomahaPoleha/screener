@@ -1,348 +1,593 @@
 """
-Async Scalp Monitor — Binance + Bybit (Futures)
-WebSocket + Django cache. Асинхронная архитектура.
+Scalp Monitor — мониторинг плотностей в реальном времени
+WebSocket + Django cache. Futures + Spot. Топ-100.
+Асинхронная обработка через очередь.
 """
-import asyncio
+import json
 import time
-import orjson as json
-import websockets
-import os
+import threading
 import traceback
+import requests
+import websocket
+from queue import Queue, Empty
 from logging.handlers import RotatingFileHandler
 from django.core.cache import cache
 import ccxt
+import os
 
-# === КОНФИГУРАЦИЯ ===
+# Минимальный объём для записи в кэш (USDT)
 GLOBAL_MIN_VOLUME = 10000
+
+# Минимальное время жизни плотности (секунды)
 MIN_AGE_SECONDS = 180
+
+# Количество монет для мониторинга
+TOP_SYMBOLS_COUNT = 100
+
+# TTL кэша (15 минут)
 CACHE_TTL = 900
 
-# Binance
-BINANCE_FUTURES_WS = "wss://fstream.binance.com/ws"
-BINANCE_FUTURES_REST = "https://fapi.binance.com/fapi/v1/depth"
-BINANCE_SPOT_WS = "wss://stream.binance.com:9443/ws"
-BINANCE_SPOT_REST = "https://api.binance.com/api/v3/depth"
+# Максимальный размер очереди сообщений
+MAX_QUEUE_SIZE = 50000
 
-# Bybit (пока только Futures для теста)
-BYBIT_FUTURES_WS = "wss://stream.bybit.com/v5/public/linear"
-BYBIT_FUTURES_REST = "https://api.bybit.com/v5/market/orderbook?category=linear&symbol={}USDT"
+# URLs для разных рынков
+FUTURES_WS_URL = "wss://fstream.binance.com/ws"
+FUTURES_REST_URL = "https://fapi.binance.com/fapi/v1/depth"
 
-# === ЛОГИРОВАНИЕ ===
+SPOT_WS_URL = "wss://stream.binance.com:9443/ws"
+SPOT_REST_URL = "https://api.binance.com/api/v3/depth"
+
+# Настройка логов
 LOG_DIR = '/app/data'
 LOG_FILE = os.path.join(LOG_DIR, 'scalp_monitor.log')
+
 os.makedirs(LOG_DIR, exist_ok=True)
 
-_logger = __import__('logging').getLogger('scalp_monitor')
-_logger.setLevel(__import__('logging').INFO)
-_handler = RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
-_handler.setFormatter(__import__('logging').Formatter('%(asctime)s - %(message)s'))
-_logger.addHandler(_handler)
-_logger.addHandler(__import__('logging').StreamHandler())
+_scalp_logger = __import__('logging').getLogger('scalp_monitor')
+_scalp_logger.setLevel(__import__('logging').INFO)
+
+_rotating_handler = RotatingFileHandler(
+    LOG_FILE,
+    maxBytes=10 * 1024 * 1024,
+    backupCount=5,
+    encoding='utf-8'
+)
+_rotating_handler.setFormatter(__import__('logging').Formatter('%(asctime)s - %(message)s'))
+_scalp_logger.addHandler(_rotating_handler)
+
+_console_handler = __import__('logging').StreamHandler()
+_console_handler.setFormatter(__import__('logging').Formatter('%(message)s'))
+_scalp_logger.addHandler(_console_handler)
+
 
 def log(msg):
-    _logger.info(msg)
+    _scalp_logger.info(msg)
 
-# === ГЛОБАЛЬНОЕ СОСТОЯНИЕ ===
-futures_order_books = {}
-futures_density_timestamps = {}
-spot_order_books = {}
-spot_density_timestamps = {}
-bybit_futures_order_books = {}
-bybit_futures_density_timestamps = {}
-last_sync_time = {}
-shutdown_event = asyncio.Event()
-
-# Списки символов
-futures_symbols = []
-spot_symbols = []
-bybit_futures_symbols = []
 
 def is_valid_symbol(symbol):
-    if '-' in symbol or len(symbol) < 2 or len(symbol) > 15:
+    if '-' in symbol:
         return False
-    return symbol.replace('_', '').isalnum()
+    if len(symbol) < 2 or len(symbol) > 15:
+        return False
+    if not symbol.replace('_', '').isalnum():
+        return False
+    return True
 
-def get_top_symbols(limit, market='futures', exchange='binance'):
-    """Получает топ монет через CCXT"""
+
+def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures'):
+    """Получает топ монет для указанного рынка"""
+    log(f"🔥 get_top_symbols() СТАРТ для {market}")
     try:
-        if exchange == 'binance':
-            ccxt_market = 'future' if market == 'futures' else 'spot'
-            ex = ccxt.binance({'enableRateLimit': True, 'timeout': 10000, 'options': {'defaultType': ccxt_market}})
-        else: # bybit
-            ex = ccxt.bybit({'enableRateLimit': True, 'timeout': 10000, 'options': {'defaultType': 'linear'}})
+        # Маппинг для CCXT
+        ccxt_market = 'future' if market == 'futures' else 'spot'
 
-        tickers = ex.fetch_tickers()
+        exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'timeout': 10000,
+            'options': {'defaultType': ccxt_market}  # ← ИСПРАВЛЕНО
+        })
+        tickers = exchange.fetch_tickers()
+
         symbols_with_volume = []
         for symbol, data in tickers.items():
-            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '').replace('USDT', '')
+            if ':USDT' not in symbol and not symbol.endswith('/USDT'):
+                continue
+
+            volume = data.get('quoteVolume') or 0
+            if volume < 1000000:
+                continue
+
+            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
+
             if not is_valid_symbol(clean_symbol):
                 continue
-            volume = data.get('quoteVolume') or 0
-            if volume > 0:
-                symbols_with_volume.append((clean_symbol, volume))
+
+            symbols_with_volume.append((clean_symbol, volume))
 
         symbols_with_volume.sort(key=lambda x: x[1], reverse=True)
         symbols = [s[0] for s in symbols_with_volume[:limit]]
-        log(f"✅ {exchange} {market}: Найдено {len(symbols)} монет")
+
+        log(f"✅ {market} Топ-{limit}: найдено {len(symbols)} монет")
         return symbols
+
     except Exception as e:
-        log(f"❌ Ошибка get_top_symbols({exchange} {market}): {e}")
+        log(f"❌ Ошибка в get_top_symbols({market}): {e}")
+        log(traceback.format_exc())
         return []
 
-def init_order_book_sync(symbol, market='futures', exchange='binance'):
-    """Инициализация стакана с защитой от банов"""
-    try:
-        if exchange == 'binance':
-            url = f"{BINANCE_FUTURES_REST if market == 'futures' else BINANCE_SPOT_REST}?symbol={symbol}USDT&limit=1000"
-        else:
-            url = BYBIT_FUTURES_REST.format(symbol)
 
-        res = __import__('requests').get(url, timeout=10)
+# Глобальное состояние для Futures
+futures_order_books = {}
+futures_density_timestamps = {}
+futures_order_books_lock = threading.Lock()
+futures_symbols = []
+futures_message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
+
+# Глобальное состояние для Spot
+spot_order_books = {}
+spot_density_timestamps = {}
+spot_order_books_lock = threading.Lock()
+spot_symbols = []
+spot_message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
+
+shutdown_event = threading.Event()
+last_sync_time = {}
+
+
+def init_order_book(symbol, market='futures'):
+    """Инициализация стакана для конкретного рынка"""
+    try:
+        if market == 'futures':
+            url = f"{FUTURES_REST_URL}?symbol={symbol}USDT&limit=1000"
+            order_books = futures_order_books
+            timestamps = futures_density_timestamps
+            lock = futures_order_books_lock
+        else:
+            url = f"{SPOT_REST_URL}?symbol={symbol}USDT&limit=1000"
+            order_books = spot_order_books
+            timestamps = spot_density_timestamps
+            lock = spot_order_books_lock
+
+        res = requests.get(url, timeout=10)
         if not res.ok:
+            log(f"⚠️ {market} {symbol}: HTTP {res.status_code}")
             return False
 
         data = res.json()
+        bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
+        asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
 
-        if exchange == 'binance':
-            bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
-            asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
-        else: # bybit
-            result = data.get('result', {})
-            bids = {float(price): float(qty) for price, qty in result.get('b', [])}
-            asks = {float(price): float(qty) for price, qty in result.get('a', [])}
+        with lock:
+            order_books[symbol] = {'bids': bids, 'asks': asks}
+            timestamps[symbol] = {}
 
-        initial_ts = {float(price): time.time() - 200 for price in bids}
-        initial_ts.update({float(price): time.time() - 200 for price in asks})
+        sync_to_cache(symbol, market)
 
-        # Сохраняем в нужные словари
-        if exchange == 'binance' and market == 'futures':
-            futures_order_books[symbol] = {'bids': bids, 'asks': asks}
-            futures_density_timestamps[symbol] = initial_ts
-        elif exchange == 'binance' and market == 'spot':
-            spot_order_books[symbol] = {'bids': bids, 'asks': asks}
-            spot_density_timestamps[symbol] = initial_ts
-        elif exchange == 'bybit' and market == 'futures':
-            bybit_futures_order_books[symbol] = {'bids': bids, 'asks': asks}
-            bybit_futures_density_timestamps[symbol] = initial_ts
-
-        sync_to_cache_sync(symbol, market, exchange)
+        log(f"✅ {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
         return True
+
     except Exception as e:
-        log(f"❌ init_order_book({exchange} {market} {symbol}): {e}")
+        log(f"❌ init_order_book({market} {symbol}): {e}")
         return False
 
-def sync_to_cache_sync(symbol, market='futures', exchange='binance'):
-    """Синхронная запись в кэш"""
+
+def sync_to_cache(symbol, market='futures'):
+    """Синхронизация стакана в Redis"""
     try:
-        if exchange == 'binance' and market == 'futures':
-            order_books, timestamps = futures_order_books, futures_density_timestamps
-        elif exchange == 'binance' and market == 'spot':
-            order_books, timestamps = spot_order_books, spot_density_timestamps
+        if market == 'futures':
+            order_books = futures_order_books
+            timestamps = futures_density_timestamps
+            lock = futures_order_books_lock
         else:
-            order_books, timestamps = bybit_futures_order_books, bybit_futures_density_timestamps
-            market = 'bybit_futures' # Уникальный ключ для фронта, если нужно, или оставим 'futures'
+            order_books = spot_order_books
+            timestamps = spot_density_timestamps
+            lock = spot_order_books_lock
 
-        book = order_books.get(symbol, {})
-        ts = timestamps.get(symbol, {})
-        if not book:
-            return
+        with lock:
+            book = order_books.get(symbol, {})
+            ts = timestamps.get(symbol, {})
+            if not book:
+                return
 
-        # Для совместимости с текущим views.py используем ключ 'futures' для обоих,
-        # либо можно сделать 'bybit_futures'. Пока оставим 'futures', но добавим пометку в данные.
-        key = f"scalp:futures:{symbol}"
+        key = f"scalp:{market}:{symbol}"
         now = time.time()
+
         densities = []
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
+
                 if volume < GLOBAL_MIN_VOLUME:
                     continue
+
                 if price in ts:
-                    if (now - ts[price]) < MIN_AGE_SECONDS:
+                    age = now - ts[price]
+                    if age < MIN_AGE_SECONDS:
                         continue
                 else:
                     ts[price] = now
                     continue
 
                 densities.append({
-                    'price': price, 'volume': volume, 'side': side_name,
-                    'timestamp': ts[price], 'exchange': exchange # Добавили биржу для ясности
+                    'price': price,
+                    'volume': volume,
+                    'side': side_name,
+                    'timestamp': ts[price]
                 })
 
+        # Логируем для BTC и ETH
+        if symbol in ['BTC', 'ETH']:
+            log(f"📊 {market} sync_to_cache({symbol}): {len(densities)} плотностей, всего уровней: {len(book.get('bids', {})) + len(book.get('asks', {}))}")
+
         cache.set(key, densities, CACHE_TTL)
-        timestamps[symbol] = ts
+
+        with lock:
+            timestamps[symbol] = ts
+
     except Exception as e:
-        log(f"❌ sync_to_cache({exchange} {market} {symbol}): {e}")
+        log(f"❌ sync_to_cache({market} {symbol}): {e}")
+        log(traceback.format_exc())
 
-def update_order_book_sync(symbol, bids_delta, asks_delta, market='futures', exchange='binance'):
-    """Обновление стакана"""
+
+def update_order_book(symbol, bids_delta, asks_delta, market='futures'):
+    """Обновление стакана данными из WebSocket"""
+    global last_sync_time
+
     try:
-        if exchange == 'binance' and market == 'futures':
-            order_books, timestamps = futures_order_books, futures_density_timestamps
-        elif exchange == 'binance' and market == 'spot':
-            order_books, timestamps = spot_order_books, spot_density_timestamps
+        if market == 'futures':
+            order_books = futures_order_books
+            timestamps = futures_density_timestamps
+            lock = futures_order_books_lock
         else:
-            order_books, timestamps = bybit_futures_order_books, bybit_futures_density_timestamps
-            market = 'bybit_futures'
+            order_books = spot_order_books
+            timestamps = spot_density_timestamps
+            lock = spot_order_books_lock
 
-        if symbol not in order_books:
-            return
+        # Логируем первые 5 вызовов для каждой монеты
+        if not hasattr(update_order_book, 'call_counts'):
+            update_order_book.call_counts = {}
 
-        book = order_books[symbol]
-        ts = timestamps.get(symbol, {})
-        changed = False
+        key = f"{market}:{symbol}"
+        if key not in update_order_book.call_counts:
+            update_order_book.call_counts[key] = 0
+        update_order_book.call_counts[key] += 1
 
-        for price_str, qty_str in bids_delta:
-            price, qty = float(price_str), float(qty_str)
-            if qty == 0:
-                if price in book['bids']: del book['bids'][price]; ts.pop(price, None); changed = True
-            else:
-                book['bids'][price] = qty
-                if price not in ts: ts[price] = time.time()
-                changed = True
+        if update_order_book.call_counts[key] <= 3:
+            log(f"🔄 {market} update_order_book({symbol}) вызов #{update_order_book.call_counts[key]}: {len(bids_delta)} bids, {len(asks_delta)} asks")
 
-        for price_str, qty_str in asks_delta:
-            price, qty = float(price_str), float(qty_str)
-            if qty == 0:
-                if price in book['asks']: del book['asks'][price]; ts.pop(price, None); changed = True
-            else:
-                book['asks'][price] = qty
-                if price not in ts: ts[price] = time.time()
-                changed = True
+        with lock:
+            if symbol not in order_books:
+                log(f"⚠️ {market} update_order_book({symbol}): нет в order_books")
+                return
+
+            book = order_books[symbol]
+            ts = timestamps.get(symbol, {})
+            changed = False
+
+            for price_str, qty_str in bids_delta:
+                price = float(price_str)
+                qty = float(qty_str)
+
+                if qty == 0:
+                    if price in book['bids']:
+                        del book['bids'][price]
+                        if price in ts:
+                            del ts[price]
+                        changed = True
+                else:
+                    book['bids'][price] = qty
+                    if price not in ts:
+                        ts[price] = time.time()
+                    changed = True
+
+            for price_str, qty_str in asks_delta:
+                price = float(price_str)
+                qty = float(qty_str)
+
+                if qty == 0:
+                    if price in book['asks']:
+                        del book['asks'][price]
+                        if price in ts:
+                            del ts[price]
+                        changed = True
+                else:
+                    book['asks'][price] = qty
+                    if price not in ts:
+                        ts[price] = time.time()
+                    changed = True
 
         if changed:
-            key = f"{exchange}:{market}:{symbol}"
+            # Rate limiting: не чаще раза в 3 секунды
             now = time.time()
-            if key not in last_sync_time or (now - last_sync_time[key]) >= 2:
-                sync_to_cache_sync(symbol, market, exchange)
+            if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
+                sync_to_cache(symbol, market)
                 last_sync_time[key] = now
+                if symbol == 'BTC':
+                    log(f"✅ {market} update_order_book({symbol}): changed=True, вызван sync_to_cache")
+            else:
+                if symbol == 'BTC' and update_order_book.call_counts[key] <= 10:
+                    log(f"⏱️ {market} update_order_book({symbol}): пропуск sync_to_cache (слишком часто)")
 
     except Exception as e:
-        log(f"❌ update_order_book({exchange} {market} {symbol}): {e}")
+        log(f"❌ update_order_book({market} {symbol}): {e}")
+        log(traceback.format_exc())
 
-async def run_websocket(market='futures', exchange='binance'):
-    """Асинхронный обработчик WebSocket"""
-    if exchange == 'binance':
-        url = BINANCE_FUTURES_WS if market == 'futures' else BINANCE_SPOT_WS
-        symbols = futures_symbols if market == 'futures' else spot_symbols
+
+def process_message_queue(market='futures'):
+    """Обработка очереди сообщений для конкретного рынка"""
+    log(f"🔄 {market} Процессор очереди сообщений запущен")
+
+    if market == 'futures':
+        message_queue = futures_message_queue
     else:
-        url = BYBIT_FUTURES_WS
-        symbols = bybit_futures_symbols
-
-    if not symbols:
-        log(f"⚠️ {exchange} {market}: Нет символов. Пропускаем.")
-        return
-
-    if exchange == 'binance':
-        streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols]
-        subscribe_msg = {"method": "SUBSCRIBE", "params": streams, "id": 1}
-    else:
-        args = [f"orderbook.50.{s}USDT" for s in symbols]
-        subscribe_msg = {"op": "subscribe", "args": args}
-
-    log(f"🔌 {exchange} {market}: Подключаемся к {len(symbols)} символам...")
+        message_queue = spot_message_queue
 
     while not shutdown_event.is_set():
         try:
-            async with websockets.connect(url, ping_interval=20, ping_timeout=30) as ws:
-                log(f"✅ {exchange} {market}: WebSocket соединён")
-                await ws.send(json.dumps(subscribe_msg).decode('utf-8'))
-                log(f"📤 {exchange} {market}: Подписка отправлена")
+            message = message_queue.get(timeout=1)
+            data = json.loads(message)
 
-                async for message in ws:
-                    if shutdown_event.is_set():
-                        break
+            # Формат 1: с обёрткой data (для /stream?streams=...)
+            if 'data' in data:
+                stream_data = data['data']
+                symbol = stream_data.get('s', '')
+                if symbol.endswith('USDT'):
+                    symbol = symbol[:-4]
+                bids = stream_data.get('b', [])
+                asks = stream_data.get('a', [])
 
-                    data = json.loads(message)
-                    symbol, bids, asks = None, [], []
+            # Формат 2: прямое сообщение (для /ws + SUBSCRIBE)
+            elif 's' in data:
+                symbol = data.get('s', '')
+                if symbol.endswith('USDT'):
+                    symbol = symbol[:-4]
+                bids = data.get('b', [])
+                asks = data.get('a', [])
+            else:
+                continue
 
-                    if exchange == 'binance':
-                        if 'data' in data:
-                            d = data['data']
-                            sym = d.get('s', '')
-                            symbol = sym[:-4] if sym.endswith('USDT') else sym
-                            bids, asks = d.get('b', []), d.get('a', [])
-                        elif 's' in data:
-                            sym = data.get('s', '')
-                            symbol = sym[:-4] if sym.endswith('USDT') else sym
-                            bids, asks = data.get('b', []), data.get('a', [])
-                    else: # bybit
-                        if data.get('topic', '').startswith('orderbook') and data.get('type') == 'delta':
-                            sym = data['topic'].split('.')[2]
-                            symbol = sym[:-4] if sym.endswith('USDT') else sym
-                            d = data.get('data', {})
-                            bids, asks = d.get('b', []), d.get('a', [])
+            if bids or asks:
+                update_order_book(symbol, bids, asks, market)
 
-                    if symbol and (bids or asks):
-                        update_order_book_sync(symbol, bids, asks, market, exchange)
-
-        except websockets.exceptions.ConnectionClosed as e:
-            log(f"⚠️ {exchange} {market}: Соединение закрыто (code={e.code}). Переподключение...")
+        except Empty:
+            continue
         except Exception as e:
-            log(f"❌ {exchange} {market}: Ошибка: {e}")
+            log(f"❌ {market} Ошибка обработки сообщения: {e}")
+            log(traceback.format_exc())
 
-        if not shutdown_event.is_set():
-            await asyncio.sleep(3)
 
-async def main_loop():
-    global futures_symbols, spot_symbols, bybit_futures_symbols
-    log("🚀 Async Scalp Monitor запущен (Binance + Bybit)!")
-
-    loop = asyncio.get_event_loop()
-
-    # 1. Получаем символы
-    futures_symbols = await loop.run_in_executor(None, get_top_symbols, 100, 'futures', 'binance')
-    spot_symbols = await loop.run_in_executor(None, get_top_symbols, 100, 'spot', 'binance')
-    bybit_futures_symbols = await loop.run_in_executor(None, get_top_symbols, 20, 'futures', 'bybit') # Только 20 для теста
-
-    # 2. Инициализация стаканов
-    log("🔄 Инициализация стаканов...")
-    init_tasks = []
-
-    for sym in futures_symbols:
-        init_tasks.append(loop.run_in_executor(None, init_order_book_sync, sym, 'futures', 'binance'))
-    for sym in spot_symbols:
-        init_tasks.append(loop.run_in_executor(None, init_order_book_sync, sym, 'spot', 'binance'))
-    for sym in bybit_futures_symbols:
-        init_tasks.append(loop.run_in_executor(None, init_order_book_sync, sym, 'futures', 'bybit'))
-
-    # Выполняем с ограничением параллельности (semaphore), чтобы не получить бан
-    semaphore = asyncio.Semaphore(10)
-    async def bounded_init(coro):
-        async with semaphore:
-            return await coro
-
-    results = await asyncio.gather(*[bounded_init(t) for t in init_tasks])
-    success_count = sum(1 for r in results if r)
-    log(f"✅ Инициализация завершена. Успешно: {success_count}/{len(init_tasks)}")
-
-    # 3. Запуск WebSocket
-    ws_tasks = []
-    if futures_symbols:
-        ws_tasks.append(asyncio.create_task(run_websocket('futures', 'binance')))
-    if spot_symbols:
-        ws_tasks.append(asyncio.create_task(run_websocket('spot', 'binance')))
-    # if bybit_futures_symbols:
-    #     ws_tasks.append(asyncio.create_task(run_websocket('futures', 'bybit')))
-
-    log("🎯 WebSocket потоки запущены")
-
-    # 4. Heartbeat
-    while not shutdown_event.is_set():
-        await asyncio.sleep(30)
-        log(f"💓 Heartbeat: Binance F:{len(futures_symbols)} S:{len(spot_symbols)} | Bybit F:{len(bybit_futures_symbols)}")
-
-def start_scalp_monitor():
-    log("🔧 Запуск Scalp Monitor...")
+def on_message(ws, message, market='futures'):
+    """WebSocket только складывает сообщения в очередь"""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(main_loop())
+        if market == 'futures':
+            message_queue = futures_message_queue
+        else:
+            message_queue = spot_message_queue
+
+        # Логируем первые 5 сообщений
+        if not hasattr(ws, 'message_count'):
+            ws.message_count = 0
+        ws.message_count += 1
+
+        if ws.message_count <= 5:
+            log(f"📨 {market} Сообщение #{ws.message_count}: {message[:200]}...")
+
+        if ws.message_count % 1000 == 0:
+            log(f"📨 {market} Обработано {ws.message_count} сообщений, очередь: {message_queue.qsize()}")
+
+        try:
+            message_queue.put_nowait(message)
+        except:
+            pass
+
     except Exception as e:
-        log(f"❌ Критическая ошибка запуска: {e}")
+        log(f"❌ {market} on_message: {e}")
+
+
+def on_error(ws, error, market='futures'):
+    log(f"❌ {market} WebSocket ошибка: {error}")
+    log("🔄 Переподключение через 5 секунд...")
+    time.sleep(5)
+
+    if shutdown_event.is_set():
+        return
+
+    try:
+        if market == 'futures':
+            url = FUTURES_WS_URL
+        else:
+            url = SPOT_WS_URL
+
+        new_ws = websocket.WebSocketApp(
+            url,
+            on_open=lambda ws: on_open(ws, market),
+            on_message=lambda ws, msg: on_message(ws, msg, market),
+            on_error=lambda ws, err: on_error(ws, err, market),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
+        )
+        new_ws.symbols = ws.symbols
+        new_ws.run_forever(ping_interval=20, ping_timeout=10)
+
+    except Exception as e:
+        log(f"❌ {market} Ошибка переподключения: {e}")
+
+
+def on_close(ws, close_status_code, close_msg, market='futures'):
+    log(f"⚠️ {market} WebSocket закрыт: code={close_status_code}, msg={close_msg}")
+    log("🔄 Переподключение через 5 секунд...")
+    time.sleep(5)
+
+    if shutdown_event.is_set():
+        return
+
+    try:
+        if market == 'futures':
+            url = FUTURES_WS_URL
+        else:
+            url = SPOT_WS_URL
+
+        new_ws = websocket.WebSocketApp(
+            url,
+            on_open=lambda ws: on_open(ws, market),
+            on_message=lambda ws, msg: on_message(ws, msg, market),
+            on_error=lambda ws, err: on_error(ws, err, market),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
+        )
+        new_ws.symbols = ws.symbols
+        new_ws.run_forever(ping_interval=20, ping_timeout=10)
+
+    except Exception as e:
+        log(f"❌ {market} Ошибка переподключения: {e}")
+
+
+def on_open(ws, market='futures'):
+    log(f"✅ {market} WebSocket открыт: {len(ws.symbols)} символов")
+
+    streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
+    subscribe_msg = {
+        "method": "SUBSCRIBE",
+        "params": streams,
+        "id": 1
+    }
+    ws.send(json.dumps(subscribe_msg))
+    log(f"✅ {market} Подписка отправлена: {len(streams)} стримов")
+
+
+def start_websocket(symbols_list, market='futures'):
+    """Запуск WebSocket для конкретного рынка"""
+    try:
+        if market == 'futures':
+            url = FUTURES_WS_URL
+        else:
+            url = SPOT_WS_URL
+
+        log(f"🔌 {market} Подключение WebSocket для {len(symbols_list)} символов...")
+
+        ws = websocket.WebSocketApp(
+            url,
+            on_open=lambda ws: on_open(ws, market),
+            on_message=lambda ws, msg: on_message(ws, msg, market),
+            on_error=lambda ws, err: on_error(ws, err, market),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
+        )
+        ws.symbols = symbols_list
+
+        log(f"🚀 {market} Запуск ws.run_forever()...")
+        ws.run_forever(ping_interval=20, ping_timeout=10)
+
+    except Exception as e:
+        log(f"❌ {market} Ошибка в start_websocket: {e}")
         log(traceback.format_exc())
 
+
+def scalp_monitor_loop():
+    """Основной цикл мониторинга"""
+    global futures_symbols, spot_symbols
+
+    log("🚀 Scalp Monitor запущен (асинхронный)!")
+    log(f"📝 Лог-файл: {LOG_FILE}")
+    log(f"⏱️ Минимальный возраст: {MIN_AGE_SECONDS} сек")
+    log(f"📊 Мониторинг топ-{TOP_SYMBOLS_COUNT} монет для Futures и Spot")
+    time.sleep(5)
+
+    # Запускаем процессоры очередей
+    futures_processor_thread = threading.Thread(
+        target=lambda: process_message_queue('futures'),
+        name='Futures-Queue-Processor',
+        daemon=True
+    )
+    futures_processor_thread.start()
+    log(f"✅ Futures процессор очереди запущен")
+
+    spot_processor_thread = threading.Thread(
+        target=lambda: process_message_queue('spot'),
+        name='Spot-Queue-Processor',
+        daemon=True
+    )
+    spot_processor_thread.start()
+    log(f"✅ Spot процессор очереди запущен")
+
+    # Получаем топ монет для обоих рынков
+    futures_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'futures')
+    spot_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'spot')
+
+    if not futures_symbols and not spot_symbols:
+        log("️ Нет символов для мониторинга")
+        return
+
+    # Инициализация стаканов Futures
+    if futures_symbols:
+        log(f"🔄 Futures инициализация стаканов для {len(futures_symbols)} символов...")
+        for idx, symbol in enumerate(futures_symbols, 1):
+            init_order_book(symbol, 'futures')
+            time.sleep(0.05)
+            if idx % 20 == 0:
+                log(f"  Futures прогресс: {idx}/{len(futures_symbols)}")
+        log(f"✅ Futures все стаканы инициализированы")
+
+    # Инициализация стаканов Spot
+    if spot_symbols:
+        log(f"🔄 Spot инициализация стаканов для {len(spot_symbols)} символов...")
+        for idx, symbol in enumerate(spot_symbols, 1):
+            init_order_book(symbol, 'spot')
+            time.sleep(0.05)
+            if idx % 20 == 0:
+                log(f"  Spot прогресс: {idx}/{len(spot_symbols)}")
+        log(f"✅ Spot все стаканы инициализированы")
+
+    # Запуск WebSocket для Futures
+    if futures_symbols:
+        futures_ws_thread = threading.Thread(
+            target=lambda: start_websocket(futures_symbols, 'futures'),
+            name='Futures-WebSocket',
+            daemon=True
+        )
+        futures_ws_thread.start()
+        log(f"✅ Futures WebSocket поток запущен")
+
+    # Запуск WebSocket для Spot
+    if spot_symbols:
+        spot_ws_thread = threading.Thread(
+            target=lambda: start_websocket(spot_symbols, 'spot'),
+            name='Spot-WebSocket',
+            daemon=True
+        )
+        spot_ws_thread.start()
+        log(f"✅ Spot WebSocket поток запущен")
+
+    heartbeat_counter = 0
+    empty_queue_count = 0
+
+    while not shutdown_event.is_set():
+        heartbeat_counter += 1
+        if heartbeat_counter % 6 == 0:
+            futures_qsize = futures_message_queue.qsize()
+            spot_qsize = spot_message_queue.qsize()
+            log(f"💓 Scalp Monitor: heartbeat (цикл {heartbeat_counter}), Futures очередь: {futures_qsize}, Spot очередь: {spot_qsize}")
+
+            if futures_qsize == 0 and spot_qsize == 0:
+                empty_queue_count += 1
+                if empty_queue_count >= 3:
+                    log(f"⚠️ Обе очереди пусты {empty_queue_count} раз!")
+            else:
+                empty_queue_count = 0
+
+        if shutdown_event.wait(timeout=10):
+            break
+
+
+def start_scalp_monitor():
+    log("🔧 Вызов start_scalp_monitor()...")
+    thread = threading.Thread(
+        target=scalp_monitor_loop,
+        name='Scalp-Monitor',
+        daemon=True
+    )
+    thread.start()
+    log(f"✅ Scalp Monitor поток запущен (PID: {thread.ident})")
+
+
 def stop_scalp_monitor():
-    log("🛑 Остановка Scalp Monitor...")
+    log(" Остановка Scalp Monitor...")
     shutdown_event.set()
