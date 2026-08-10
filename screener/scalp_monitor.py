@@ -323,8 +323,8 @@ async def main_loop():
         ws_tasks.append(asyncio.create_task(run_websocket('futures', 'binance')))
     if spot_symbols:
         ws_tasks.append(asyncio.create_task(run_websocket('spot', 'binance')))
-    if bybit_futures_symbols:
-        ws_tasks.append(asyncio.create_task(run_websocket('futures', 'bybit')))
+    # if bybit_futures_symbols:
+    #     ws_tasks.append(asyncio.create_task(run_websocket('futures', 'bybit')))
 
     log("🎯 WebSocket потоки запущены")
 

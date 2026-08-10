@@ -4,7 +4,6 @@ from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.shortcuts import render
 from django.http import FileResponse, Http404
-import os
 from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -142,13 +141,13 @@ def api_scalp(request, symbol):
     import time
 
     min_volume = int(request.GET.get('min_volume', 10000))
-    market = request.GET.get('market', 'futures')  # ← ДОБАВИТЬ
+    market = request.GET.get('market', 'futures')
 
     # Валидация market
     if market not in ['futures', 'spot']:
         market = 'futures'
 
-    key = f"scalp:{market}:{symbol.upper()}"  # ← ИЗМЕНИТЬ КЛЮЧ
+    key = f"scalp:{market}:{symbol.upper()}"
     data = cache.get(key)
 
     if not data:
@@ -182,7 +181,7 @@ def api_scalp(request, symbol):
             'side': side,
             'age_seconds': round(age_seconds, 1),
             'market': market,
-            'exchange': item.get('exchange', 'binance')  # ← ДОБАВИТЬ ЭТУ СТРОКУ
+            'exchange': item.get('exchange', 'binance')
         })
 
     densities.sort(key=lambda x: x['volume'], reverse=True)
