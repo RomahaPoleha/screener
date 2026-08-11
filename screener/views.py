@@ -151,7 +151,7 @@ def api_scalp(request, symbol):
         limit_per_exchange = 50
 
     # защита от слишком большого limit
-    limit_per_exchange = max(1, min(limit_per_exchange, 200))
+    limit_per_exchange = max(1, min(limit_per_exchange, 50))
 
     market = request.GET.get('market', 'futures')
 
