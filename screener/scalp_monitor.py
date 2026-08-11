@@ -22,7 +22,7 @@ GLOBAL_MIN_VOLUME = 10000
 MIN_AGE_SECONDS = 180
 
 # Количество монет для мониторинга
-TOP_SYMBOLS_COUNT = 100
+TOP_SYMBOLS_COUNT = 30
 
 # TTL кэша (15 минут)
 CACHE_TTL = 900
@@ -75,39 +75,50 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures'):
-    """Получает топ монет для указанного рынка"""
-    log(f"🔥 get_top_symbols() СТАРТ для {market}")
+    """Получает топ монет по рейтингу: Объем * |Изменение %|"""
+    log(f"🔥 get_top_symbols() СТАРТ для {market} (лимит: {limit})")
     try:
-        # Маппинг для CCXT
         ccxt_market = 'future' if market == 'futures' else 'spot'
-
         exchange = ccxt.binance({
             'enableRateLimit': True,
             'timeout': 10000,
-            'options': {'defaultType': ccxt_market}  # ← ИСПРАВЛЕНО
+            'options': {'defaultType': ccxt_market}
         })
         tickers = exchange.fetch_tickers()
 
-        symbols_with_volume = []
+        symbols_with_score = []
+        # Черный список стейблкоинов
+        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
+
         for symbol, data in tickers.items():
             if ':USDT' not in symbol and not symbol.endswith('/USDT'):
                 continue
 
-            volume = data.get('quoteVolume') or 0
-            if volume < 1000000:
-                continue
-
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
+
+            # Пропускаем стейблкоины
+            if clean_symbol in stablecoins:
+                continue
 
             if not is_valid_symbol(clean_symbol):
                 continue
 
-            symbols_with_volume.append((clean_symbol, volume))
+            volume = data.get('quoteVolume') or 0
+            percentage = data.get('percentage') or 0
 
-        symbols_with_volume.sort(key=lambda x: x[1], reverse=True)
-        symbols = [s[0] for s in symbols_with_volume[:limit]]
+            # Профессиональная формула рейтинга
+            score = volume * abs(percentage)
 
-        log(f"✅ {market} Топ-{limit}: найдено {len(symbols)} монет")
+            if score > 0:
+                symbols_with_score.append((clean_symbol, score))
+
+        # Сортируем по рейтингу (убывание)
+        symbols_with_score.sort(key=lambda x: x[1], reverse=True)
+
+        # Берем только топ-N
+        symbols = [s[0] for s in symbols_with_score[:limit]]
+
+        log(f"✅ {market} Топ-{limit} по рейтингу: найдено {len(symbols)} монет")
         return symbols
 
     except Exception as e:
@@ -138,12 +149,12 @@ def init_order_book(symbol, market='futures'):
     """Инициализация стакана для конкретного рынка"""
     try:
         if market == 'futures':
-            url = f"{FUTURES_REST_URL}?symbol={symbol}USDT&limit=1000"
+            url = f"{FUTURES_REST_URL}?symbol={symbol}USDT&limit=100"
             order_books = futures_order_books
             timestamps = futures_density_timestamps
             lock = futures_order_books_lock
         else:
-            url = f"{SPOT_REST_URL}?symbol={symbol}USDT&limit=1000"
+            url = f"{SPOT_REST_URL}?symbol={symbol}USDT&limit=100"
             order_books = spot_order_books
             timestamps = spot_density_timestamps
             lock = spot_order_books_lock
