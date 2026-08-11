@@ -352,67 +352,84 @@ def update_order_book(symbol, bids_delta, asks_delta, market='futures', exchange
         log(traceback.format_exc())
 
 
-def process_message_queue(market='futures'):
-    """Обработка очереди сообщений для конкретного рынка"""
-    log(f"🔄 {market} Процессор очереди сообщений запущен")
+def process_message_queue(market='futures', exchange='binance'):
+    """Обработка очереди сообщений для конкретного рынка и биржи"""
+    log(f"🔄 {exchange} {market} Процессор очереди сообщений запущен")
 
-    if market == 'futures':
-        message_queue = futures_message_queue
-    else:
-        message_queue = spot_message_queue
+    if exchange == 'binance':
+        if market == 'futures':
+            message_queue = futures_message_queue
+        else:
+            message_queue = spot_message_queue
+    else:  # bybit
+        message_queue = bybit_futures_message_queue
 
     while not shutdown_event.is_set():
         try:
             message = message_queue.get(timeout=1)
             data = json.loads(message)
 
-            # Формат 1: с обёрткой data (для /stream?streams=...)
-            if 'data' in data:
-                stream_data = data['data']
-                symbol = stream_data.get('s', '')
-                if symbol.endswith('USDT'):
-                    symbol = symbol[:-4]
-                bids = stream_data.get('b', [])
-                asks = stream_data.get('a', [])
-
-            # Формат 2: прямое сообщение (для /ws + SUBSCRIBE)
-            elif 's' in data:
-                symbol = data.get('s', '')
-                if symbol.endswith('USDT'):
-                    symbol = symbol[:-4]
-                bids = data.get('b', [])
-                asks = data.get('a', [])
-            else:
-                continue
+            if exchange == 'binance':
+                # Формат 1: с обёрткой data (для /stream?streams=...)
+                if 'data' in data:
+                    stream_data = data['data']
+                    symbol = stream_data.get('s', '')
+                    if symbol.endswith('USDT'):
+                        symbol = symbol[:-4]
+                    bids = stream_data.get('b', [])
+                    asks = stream_data.get('a', [])
+                # Формат 2: прямое сообщение (для /ws + SUBSCRIBE)
+                elif 's' in data:
+                    symbol = data.get('s', '')
+                    if symbol.endswith('USDT'):
+                        symbol = symbol[:-4]
+                    bids = data.get('b', [])
+                    asks = data.get('a', [])
+                else:
+                    continue
+            else:  # bybit
+                # Bybit v5 API формат
+                topic = data.get('topic', '')
+                if topic.startswith('orderbook'):
+                    sym = topic.split('.')[2]
+                    symbol = sym[:-4] if sym.endswith('USDT') else sym
+                    msg_type = data.get('type', '')
+                    d = data.get('data', {})
+                    bids = d.get('b', [])
+                    asks = d.get('a', [])
+                else:
+                    continue
 
             if bids or asks:
-                update_order_book(symbol, bids, asks, market)
+                update_order_book(symbol, bids, asks, market, exchange)
 
         except Empty:
             continue
         except Exception as e:
-            log(f"❌ {market} Ошибка обработки сообщения: {e}")
+            log(f"❌ {exchange} {market} Ошибка обработки сообщения: {e}")
             log(traceback.format_exc())
 
 
-def on_message(ws, message, market='futures'):
+def on_message(ws, message, market='futures', exchange='binance'):
     """WebSocket только складывает сообщения в очередь"""
     try:
-        if market == 'futures':
-            message_queue = futures_message_queue
-        else:
-            message_queue = spot_message_queue
+        if exchange == 'binance':
+            if market == 'futures':
+                message_queue = futures_message_queue
+            else:
+                message_queue = spot_message_queue
+        else:  # bybit
+            message_queue = bybit_futures_message_queue
 
-        # Логируем первые 5 сообщений
         if not hasattr(ws, 'message_count'):
             ws.message_count = 0
         ws.message_count += 1
 
         if ws.message_count <= 5:
-            log(f"📨 {market} Сообщение #{ws.message_count}: {message[:200]}...")
+            log(f"📨 {exchange} {market} Сообщение #{ws.message_count}: {message[:200]}...")
 
         if ws.message_count % 1000 == 0:
-            log(f"📨 {market} Обработано {ws.message_count} сообщений, очередь: {message_queue.qsize()}")
+            log(f"📨 {exchange} {market} Обработано {ws.message_count} сообщений, очередь: {message_queue.qsize()}")
 
         try:
             message_queue.put_nowait(message)
@@ -420,11 +437,11 @@ def on_message(ws, message, market='futures'):
             pass
 
     except Exception as e:
-        log(f"❌ {market} on_message: {e}")
+        log(f"❌ {exchange} {market} on_message: {e}")
 
 
-def on_error(ws, error, market='futures'):
-    log(f"❌ {market} WebSocket ошибка: {error}")
+def on_error(ws, error, market='futures', exchange='binance'):
+    log(f"❌ {exchange} {market} WebSocket ошибка: {error}")
     log("🔄 Переподключение через 5 секунд...")
     time.sleep(5)
 
@@ -432,27 +449,30 @@ def on_error(ws, error, market='futures'):
         return
 
     try:
-        if market == 'futures':
-            url = FUTURES_WS_URL
-        else:
-            url = SPOT_WS_URL
+        if exchange == 'binance':
+            if market == 'futures':
+                url = FUTURES_WS_URL
+            else:
+                url = SPOT_WS_URL
+        else:  # bybit
+            url = BYBIT_FUTURES_WS_URL
 
         new_ws = websocket.WebSocketApp(
             url,
-            on_open=lambda ws: on_open(ws, market),
-            on_message=lambda ws, msg: on_message(ws, msg, market),
-            on_error=lambda ws, err: on_error(ws, err, market),
-            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
+            on_open=lambda ws: on_open(ws, market, exchange),
+            on_message=lambda ws, msg: on_message(ws, msg, market, exchange),
+            on_error=lambda ws, err: on_error(ws, err, market, exchange),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market, exchange)
         )
         new_ws.symbols = ws.symbols
         new_ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
-        log(f"❌ {market} Ошибка переподключения: {e}")
+        log(f"❌ {exchange} {market} Ошибка переподключения: {e}")
 
 
-def on_close(ws, close_status_code, close_msg, market='futures'):
-    log(f"⚠️ {market} WebSocket закрыт: code={close_status_code}, msg={close_msg}")
+def on_close(ws, close_status_code, close_msg, market='futures', exchange='binance'):
+    log(f"⚠️ {exchange} {market} WebSocket закрыт: code={close_status_code}, msg={close_msg}")
     log("🔄 Переподключение через 5 секунд...")
     time.sleep(5)
 
@@ -460,62 +480,76 @@ def on_close(ws, close_status_code, close_msg, market='futures'):
         return
 
     try:
-        if market == 'futures':
-            url = FUTURES_WS_URL
-        else:
-            url = SPOT_WS_URL
+        if exchange == 'binance':
+            if market == 'futures':
+                url = FUTURES_WS_URL
+            else:
+                url = SPOT_WS_URL
+        else:  # bybit
+            url = BYBIT_FUTURES_WS_URL
 
         new_ws = websocket.WebSocketApp(
             url,
-            on_open=lambda ws: on_open(ws, market),
-            on_message=lambda ws, msg: on_message(ws, msg, market),
-            on_error=lambda ws, err: on_error(ws, err, market),
-            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
+            on_open=lambda ws: on_open(ws, market, exchange),
+            on_message=lambda ws, msg: on_message(ws, msg, market, exchange),
+            on_error=lambda ws, err: on_error(ws, err, market, exchange),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market, exchange)
         )
         new_ws.symbols = ws.symbols
         new_ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
-        log(f"❌ {market} Ошибка переподключения: {e}")
+        log(f"❌ {exchange} {market} Ошибка переподключения: {e}")
 
 
-def on_open(ws, market='futures'):
-    log(f"✅ {market} WebSocket открыт: {len(ws.symbols)} символов")
+def on_open(ws, market='futures', exchange='binance'):
+    log(f"✅ {exchange} {market} WebSocket открыт: {len(ws.symbols)} символов")
 
-    streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
-    subscribe_msg = {
-        "method": "SUBSCRIBE",
-        "params": streams,
-        "id": 1
-    }
+    if exchange == 'binance':
+        streams = [f"{s.lower()}usdt@depth@100ms" for s in ws.symbols]
+        subscribe_msg = {
+            "method": "SUBSCRIBE",
+            "params": streams,
+            "id": 1
+        }
+    else:  # bybit
+        args = [f"orderbook.50.{s}USDT" for s in ws.symbols]
+        subscribe_msg = {
+            "op": "subscribe",
+            "args": args
+        }
+
     ws.send(json.dumps(subscribe_msg))
-    log(f"✅ {market} Подписка отправлена: {len(streams)} стримов")
+    log(f"✅ {exchange} {market} Подписка отправлена: {len(subscribe_msg.get('params', subscribe_msg.get('args', [])))} стримов")
 
 
-def start_websocket(symbols_list, market='futures'):
-    """Запуск WebSocket для конкретного рынка"""
+def start_websocket(symbols_list, market='futures', exchange='binance'):
+    """Запуск WebSocket для конкретного рынка и биржи"""
     try:
-        if market == 'futures':
-            url = FUTURES_WS_URL
-        else:
-            url = SPOT_WS_URL
+        if exchange == 'binance':
+            if market == 'futures':
+                url = FUTURES_WS_URL
+            else:
+                url = SPOT_WS_URL
+        else:  # bybit
+            url = BYBIT_FUTURES_WS_URL
 
-        log(f"🔌 {market} Подключение WebSocket для {len(symbols_list)} символов...")
+        log(f"🔌 {exchange} {market} Подключение WebSocket для {len(symbols_list)} символов...")
 
         ws = websocket.WebSocketApp(
             url,
-            on_open=lambda ws: on_open(ws, market),
-            on_message=lambda ws, msg: on_message(ws, msg, market),
-            on_error=lambda ws, err: on_error(ws, err, market),
-            on_close=lambda ws, code, msg: on_close(ws, code, msg, market)
+            on_open=lambda ws: on_open(ws, market, exchange),
+            on_message=lambda ws, msg: on_message(ws, msg, market, exchange),
+            on_error=lambda ws, err: on_error(ws, err, market, exchange),
+            on_close=lambda ws, code, msg: on_close(ws, code, msg, market, exchange)
         )
         ws.symbols = symbols_list
 
-        log(f"🚀 {market} Запуск ws.run_forever()...")
+        log(f"🚀 {exchange} {market} Запуск ws.run_forever()...")
         ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
-        log(f"❌ {market} Ошибка в start_websocket: {e}")
+        log(f"❌ {exchange} {market} Ошибка в start_websocket: {e}")
         log(traceback.format_exc())
 
 
@@ -546,9 +580,19 @@ def scalp_monitor_loop():
     spot_processor_thread.start()
     log(f"✅ Spot процессор очереди запущен")
 
+    bybit_processor_thread = threading.Thread(
+        target=lambda: process_message_queue('futures', 'bybit'),
+        name='Bybit-Queue-Processor',
+        daemon=True
+    )
+    bybit_processor_thread.start()
+    log(f"✅ Bybit Futures процессор очереди запущен")
+
     # Получаем топ монет для обоих рынков
-    futures_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'futures')
-    spot_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'spot')
+    # Получаем топ монет для всех рынков и бирж
+    futures_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'futures', 'binance')
+    spot_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'spot', 'binance')
+    bybit_futures_symbols = get_top_symbols(TOP_SYMBOLS_COUNT, 'futures', 'bybit')
 
     if not futures_symbols and not spot_symbols:
         log("️ Нет символов для мониторинга")
@@ -574,6 +618,16 @@ def scalp_monitor_loop():
                 log(f"  Spot прогресс: {idx}/{len(spot_symbols)}")
         log(f"✅ Spot все стаканы инициализированы")
 
+        # Инициализация стаканов Bybit Futures
+    if bybit_futures_symbols:
+        log(f"🔄 Bybit Futures инициализация стаканов для {len(bybit_futures_symbols)} символов...")
+        for idx, symbol in enumerate(bybit_futures_symbols, 1):
+            init_order_book(symbol, 'futures', 'bybit')
+            time.sleep(0.05)
+            if idx % 20 == 0:
+                log(f"  Bybit Futures прогресс: {idx}/{len(bybit_futures_symbols)}")
+        log(f"✅ Bybit Futures все стаканы инициализированы")
+
     # Запуск WebSocket для Futures
     if futures_symbols:
         futures_ws_thread = threading.Thread(
@@ -593,6 +647,15 @@ def scalp_monitor_loop():
         )
         spot_ws_thread.start()
         log(f"✅ Spot WebSocket поток запущен")
+
+    if bybit_futures_symbols:
+        bybit_ws_thread = threading.Thread(
+            target=lambda: start_websocket(bybit_futures_symbols, 'futures', 'bybit'),
+            name='Bybit-WebSocket',
+            daemon=True
+        )
+        bybit_ws_thread.start()
+        log(f"✅ Bybit Futures WebSocket поток запущен")
 
     heartbeat_counter = 0
     empty_queue_count = 0
