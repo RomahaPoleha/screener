@@ -167,8 +167,6 @@ def api_scalp(request, symbol):
     }
 
     for exchange in ['binance', 'bybit']:
-        if exchange == 'bybit' and market != 'futures':
-            continue
 
         if exchange == 'bybit':
             key = f"scalp:{market}:bybit:{symbol_upper}"

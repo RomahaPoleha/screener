@@ -38,7 +38,7 @@ def start_scalp_monitor():
 
     try:
         from .binance_monitor import start_binance_monitor
-        from .bybit_monitor import start_bybit_monitor
+        from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
 
         # Запуск Binance Monitor
         binance_thread = threading.Thread(
@@ -47,16 +47,25 @@ def start_scalp_monitor():
             daemon=True
         )
         binance_thread.start()
-        log(f"✅ Binance Monitor поток запущен")
+        log("✅ Binance Monitor поток запущен")
 
-        # Запуск Bybit Monitor
+        # Запуск Bybit Futures Monitor
         bybit_thread = threading.Thread(
             target=lambda: start_bybit_monitor(log),
-            name='Bybit-Monitor',
+            name='Bybit-Futures-Monitor',
             daemon=True
         )
         bybit_thread.start()
-        log(f"✅ Bybit Monitor поток запущен")
+        log("✅ Bybit Futures Monitor поток запущен")
+
+        # Запуск Bybit Spot Monitor
+        bybit_spot_thread = threading.Thread(
+            target=lambda: start_bybit_spot_monitor(log),
+            name='Bybit-Spot-Monitor',
+            daemon=True
+        )
+        bybit_spot_thread.start()
+        log("✅ Bybit Spot Monitor поток запущен")
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
