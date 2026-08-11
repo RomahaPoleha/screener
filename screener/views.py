@@ -140,28 +140,47 @@ def api_scalp(request, symbol):
     """API: плотности из Redis (Binance + Bybit)"""
     import time
 
-    min_volume = int(request.GET.get('min_volume', 10000))
+    try:
+        min_volume = int(request.GET.get('min_volume', 10000))
+    except ValueError:
+        min_volume = 10000
+
+    try:
+        limit_per_exchange = int(request.GET.get('limit', 50))
+    except ValueError:
+        limit_per_exchange = 50
+
+    # защита от слишком большого limit
+    limit_per_exchange = max(1, min(limit_per_exchange, 200))
+
     market = request.GET.get('market', 'futures')
 
     if market not in ['futures', 'spot']:
         market = 'futures'
 
-    densities = []
     now = time.time()
+    symbol_upper = symbol.upper()
 
-    # Читаем данные из обоих ключей: Binance и Bybit
+    result_by_exchange = {
+        'binance': [],
+        'bybit': [],
+    }
+
     for exchange in ['binance', 'bybit']:
         if exchange == 'bybit' and market != 'futures':
-            continue  # Bybit только для futures
+            continue
 
         if exchange == 'bybit':
-            key = f"scalp:{market}:bybit:{symbol.upper()}"
+            key = f"scalp:{market}:bybit:{symbol_upper}"
         else:
-            key = f"scalp:{market}:{symbol.upper()}"
+            key = f"scalp:{market}:{symbol_upper}"
 
         data = cache.get(key)
+
         if not data:
             continue
+
+        exchange_densities = []
 
         for item in data:
             try:
@@ -177,7 +196,7 @@ def api_scalp(request, symbol):
             if volume < min_volume:
                 continue
 
-            densities.append({
+            exchange_densities.append({
                 'price': price,
                 'volume': volume,
                 'side': side,
@@ -186,15 +205,28 @@ def api_scalp(request, symbol):
                 'exchange': item.get('exchange', exchange)
             })
 
+        exchange_densities.sort(key=lambda x: x['volume'], reverse=True)
+
+        result_by_exchange[exchange] = exchange_densities[:limit_per_exchange]
+
+    densities = result_by_exchange['binance'] + result_by_exchange['bybit']
     densities.sort(key=lambda x: x['volume'], reverse=True)
 
     return JsonResponse({
-        'symbol': symbol.upper(),
-        'densities': densities[:500],
+        'symbol': symbol_upper,
+        'densities': densities,
         'market': market,
-        'server_time': now
+        'server_time': now,
+        'counts': {
+            'binance': len(result_by_exchange['binance']),
+            'bybit': len(result_by_exchange['bybit']),
+            'total': len(densities),
+        },
+        'by_exchange': {
+            'binance': result_by_exchange['binance'],
+            'bybit': result_by_exchange['bybit'],
+        }
     })
-
 
 
 
