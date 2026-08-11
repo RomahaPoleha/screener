@@ -649,30 +649,31 @@ def on_open_spot(ws):
     ws.send(json.dumps(subscribe_msg))
 
 def start_websocket(symbols_list, log_func=print):
-    """Запуск WebSocket"""
+    """Запуск WebSocket Bybit Futures"""
     try:
-        def custom_ping():
-            return json.dumps({"op": "ping"})
-
-        def on_pong(ws, message):
-            pass  # Игнорируем pong ответы
-
         ws = websocket.WebSocketApp(
             BYBIT_FUTURES_WS_URL,
             on_open=lambda ws: on_open(ws),
             on_message=lambda ws, msg: on_message(ws, msg),
             on_error=lambda ws, err: log_func(f"❌ bybit WebSocket ошибка: {err}"),
-            on_close=lambda ws, code, msg: log_func(f"⚠️ bybit WebSocket закрыт: {code} {msg}"),
-            on_pong=on_pong
+            on_close=lambda ws, code, msg: log_func(f"⚠️ bybit WebSocket закрыт: {code} {msg}")
         )
+
         ws.symbols = symbols_list
 
-        # ✅ КРИТИЧНО: custom_ping для Bybit v5
-        ws.run_forever(
-            ping_interval=20,
-            ping_timeout=10,
-            custom_ping=custom_ping
-        )
+        def heartbeat():
+            while True:
+                time.sleep(15)
+
+                try:
+                    if ws.sock and ws.sock.connected:
+                        ws.send(json.dumps({"op": "ping"}))
+                except Exception:
+                    break
+
+        threading.Thread(target=heartbeat, daemon=True).start()
+
+        ws.run_forever(ping_interval=20, ping_timeout=10)
 
     except Exception as e:
         log_func(f"❌ Ошибка в start_websocket(bybit): {e}")
