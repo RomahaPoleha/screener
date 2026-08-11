@@ -190,7 +190,7 @@ def api_scalp(request, symbol):
 
     return JsonResponse({
         'symbol': symbol.upper(),
-        'densities': densities[:50],
+        'densities': densities[:500],
         'market': market,
         'server_time': now
     })
