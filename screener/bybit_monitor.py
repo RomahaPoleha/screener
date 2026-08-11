@@ -19,7 +19,7 @@ bybit_futures_message_queue = Queue(maxsize=50000)
 
 # URLs
 BYBIT_FUTURES_WS_URL = "wss://stream.bybit.com/v5/public/linear"
-BYBIT_FUTURES_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=linear&s
+BYBIT_FUTURES_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=linear&symbol={}USDT&limit=50"
 
 # Rate limiting
 last_sync_time = {}
