@@ -19,7 +19,7 @@ bybit_futures_message_queue = Queue(maxsize=50000)
 
 # URLs
 BYBIT_FUTURES_WS_URL = "wss://stream.bybit.com/v5/public/linear"
-BYBIT_FUTURES_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=linear&symbol={}USDT"
+BYBIT_FUTURES_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=linear&s
 
 # Rate limiting
 last_sync_time = {}
@@ -82,31 +82,90 @@ def get_top_symbols(limit=30):
 
 
 def init_order_book(symbol, log_func=print):
-    """Инициализация стакана"""
+    """Инициализация стакана Bybit"""
     try:
         url = BYBIT_FUTURES_REST_URL.format(symbol)
+
         order_books = bybit_futures_order_books
         timestamps = bybit_futures_density_timestamps
         lock = bybit_futures_order_books_lock
 
-        res = requests.get(url, timeout=10)
+        res = requests.get(
+            url,
+            timeout=10,
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+
         if not res.ok:
             log_func(f"⚠️ bybit {symbol}: HTTP {res.status_code}")
             return False
 
-        data = res.json()
-        result = data.get('result', {})
-        bids = {float(price): float(qty) for price, qty in result.get('b', [])}
-        asks = {float(price): float(qty) for price, qty in result.get('a', [])}
+        try:
+            data = res.json()
+        except Exception:
+            log_func(f"⚠️ bybit {symbol}: не JSON ответ: {res.text[:200]}")
+            return False
+
+        if data.get('retCode') != 0:
+            log_func(
+                f"⚠️ bybit {symbol}: retCode={data.get('retCode')} "
+                f"retMsg={data.get('retMsg')}"
+            )
+            return False
+
+        result = data.get('result') or {}
+
+        raw_bids = result.get('b') or []
+        raw_asks = result.get('a') or []
+
+        bids = {}
+        asks = {}
+
+        for row in raw_bids:
+            try:
+                price = float(row[0])
+                qty = float(row[1])
+
+                if price > 0 and qty > 0:
+                    bids[price] = qty
+
+            except Exception:
+                continue
+
+        for row in raw_asks:
+            try:
+                price = float(row[0])
+                qty = float(row[1])
+
+                if price > 0 and qty > 0:
+                    asks[price] = qty
+
+            except Exception:
+                continue
+
+        if not bids and not asks:
+            log_func(f"⚠️ bybit {symbol}: пустой стакан в REST ответе")
+            return False
 
         with lock:
-            order_books[symbol] = {'bids': bids, 'asks': asks}
+            order_books[symbol] = {
+                'bids': bids,
+                'asks': asks
+            }
             timestamps[symbol] = {}
 
         sync_to_cache(symbol, log_func)
 
-        log_func(f"✅ bybit futures Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
+        log_func(
+            f"✅ bybit futures Стакан {symbol}: "
+            f"{len(bids)} bids, {len(asks)} asks"
+        )
+
         return True
+
+    except requests.exceptions.Timeout:
+        log_func(f"❌ init_order_book(bybit {symbol}): timeout")
+        return False
 
     except Exception as e:
         log_func(f"❌ init_order_book(bybit {symbol}): {e}")
@@ -228,7 +287,6 @@ def update_order_book(symbol, bids_delta, asks_delta, log_func=print):
 
 
 def process_message_queue(log_func=print):
-    """Обработка очереди сообщений"""
     message_queue = bybit_futures_message_queue
 
     while True:
@@ -239,20 +297,29 @@ def process_message_queue(log_func=print):
             topic = data.get('topic', '')
             msg_type = data.get('type', '')
 
-            # Игнорируем snapshot, обрабатываем только delta
+            if not topic.startswith('orderbook'):
+                continue
+
+            sym = topic.split('.')[2]
+            symbol = sym[:-4] if sym.endswith('USDT') else sym
+            d = data.get('data', {})
+            bids = d.get('b', [])
+            asks = d.get('a', [])
+
+            # ✅ Обрабатываем snapshot как полную перезапись стакана
             if msg_type == 'snapshot':
+                order_books = bybit_futures_order_books
+                lock = bybit_futures_order_books_lock
+                with lock:
+                    order_books[symbol] = {
+                        'bids': {float(p): float(q) for p, q in bids},
+                        'asks': {float(p): float(q) for p, q in asks}
+                    }
+                sync_to_cache(symbol, log_func)
                 continue
 
-            if topic.startswith('orderbook') and msg_type == 'delta':
-                sym = topic.split('.')[2]
-                symbol = sym[:-4] if sym.endswith('USDT') else sym
-                d = data.get('data', {})
-                bids = d.get('b', [])
-                asks = d.get('a', [])
-            else:
-                continue
-
-            if bids or asks:
+            # Delta обрабатываем как обычно
+            if msg_type == 'delta' and (bids or asks):
                 update_order_book(symbol, bids, asks, log_func)
 
         except Empty:
@@ -283,16 +350,28 @@ def on_open(ws):
 def start_websocket(symbols_list, log_func=print):
     """Запуск WebSocket"""
     try:
+        def custom_ping():
+            return json.dumps({"op": "ping"})
+
+        def on_pong(ws, message):
+            pass  # Игнорируем pong ответы
+
         ws = websocket.WebSocketApp(
             BYBIT_FUTURES_WS_URL,
             on_open=lambda ws: on_open(ws),
             on_message=lambda ws, msg: on_message(ws, msg),
-            on_error=lambda ws, err: print(f"❌ bybit WebSocket ошибка: {err}"),
-            on_close=lambda ws, code, msg: print(f"⚠️ bybit WebSocket закрыт: {code}")
+            on_error=lambda ws, err: log_func(f"❌ bybit WebSocket ошибка: {err}"),
+            on_close=lambda ws, code, msg: log_func(f"⚠️ bybit WebSocket закрыт: {code} {msg}"),
+            on_pong=on_pong
         )
         ws.symbols = symbols_list
 
-        ws.run_forever(ping_interval=20, ping_timeout=10)
+        # ✅ КРИТИЧНО: custom_ping для Bybit v5
+        ws.run_forever(
+            ping_interval=20,
+            ping_timeout=10,
+            custom_ping=custom_ping
+        )
 
     except Exception as e:
         log_func(f"❌ Ошибка в start_websocket(bybit): {e}")
