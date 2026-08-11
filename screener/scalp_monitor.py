@@ -36,6 +36,16 @@ FUTURES_REST_URL = "https://fapi.binance.com/fapi/v1/depth"
 
 SPOT_WS_URL = "wss://stream.binance.com:9443/ws"
 SPOT_REST_URL = "https://api.binance.com/api/v3/depth"
+# Bybit Futures
+BYBIT_FUTURES_WS_URL = "wss://stream.bybit.com/v5/public/linear"
+BYBIT_FUTURES_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=linear&symbol={}USDT"
+
+# Глобальное состояние для Bybit Futures
+bybit_futures_order_books = {}
+bybit_futures_density_timestamps = {}
+bybit_futures_order_books_lock = threading.Lock()
+bybit_futures_symbols = []
+bybit_futures_message_queue = Queue(maxsize=MAX_QUEUE_SIZE)
 
 # Настройка логов
 LOG_DIR = '/app/data'
@@ -74,20 +84,26 @@ def is_valid_symbol(symbol):
     return True
 
 
-def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures'):
+def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures', exchange='binance'):
     """Получает топ монет по рейтингу: Объем * |Изменение %|"""
-    log(f"🔥 get_top_symbols() СТАРТ для {market} (лимит: {limit})")
+    log(f"🔥 get_top_symbols() СТАРТ для {exchange} {market} (лимит: {limit})")
     try:
-        ccxt_market = 'future' if market == 'futures' else 'spot'
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': ccxt_market}
-        })
-        tickers = exchange.fetch_tickers()
+        if exchange == 'binance':
+            ccxt_market = 'future' if market == 'futures' else 'spot'
+            ex = ccxt.binance({
+                'enableRateLimit': True,
+                'timeout': 10000,
+                'options': {'defaultType': ccxt_market}
+            })
+        else:  # bybit
+            ex = ccxt.bybit({
+                'enableRateLimit': True,
+                'timeout': 10000,
+                'options': {'defaultType': 'linear'}
+            })
 
+        tickers = ex.fetch_tickers()
         symbols_with_score = []
-        # Черный список стейблкоинов
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
         for symbol, data in tickers.items():
@@ -96,7 +112,6 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures'):
 
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
 
-            # Пропускаем стейблкоины
             if clean_symbol in stablecoins:
                 continue
 
@@ -105,24 +120,19 @@ def get_top_symbols(limit=TOP_SYMBOLS_COUNT, market='futures'):
 
             volume = data.get('quoteVolume') or 0
             percentage = data.get('percentage') or 0
-
-            # Профессиональная формула рейтинга
             score = volume * abs(percentage)
 
             if score > 0:
                 symbols_with_score.append((clean_symbol, score))
 
-        # Сортируем по рейтингу (убывание)
         symbols_with_score.sort(key=lambda x: x[1], reverse=True)
-
-        # Берем только топ-N
         symbols = [s[0] for s in symbols_with_score[:limit]]
 
-        log(f"✅ {market} Топ-{limit} по рейтингу: найдено {len(symbols)} монет")
+        log(f"✅ {exchange} {market} Топ-{limit} по рейтингу: найдено {len(symbols)} монет")
         return symbols
 
     except Exception as e:
-        log(f"❌ Ошибка в get_top_symbols({market}): {e}")
+        log(f"❌ Ошибка в get_top_symbols({exchange} {market}): {e}")
         log(traceback.format_exc())
         return []
 
@@ -145,54 +155,71 @@ shutdown_event = threading.Event()
 last_sync_time = {}
 
 
-def init_order_book(symbol, market='futures'):
-    """Инициализация стакана для конкретного рынка"""
+def init_order_book(symbol, market='futures', exchange='binance'):
+    """Инициализация стакана для конкретного рынка и биржи"""
     try:
-        if market == 'futures':
-            url = f"{FUTURES_REST_URL}?symbol={symbol}USDT&limit=100"
-            order_books = futures_order_books
-            timestamps = futures_density_timestamps
-            lock = futures_order_books_lock
-        else:
-            url = f"{SPOT_REST_URL}?symbol={symbol}USDT&limit=100"
-            order_books = spot_order_books
-            timestamps = spot_density_timestamps
-            lock = spot_order_books_lock
+        if exchange == 'binance':
+            if market == 'futures':
+                url = f"{FUTURES_REST_URL}?symbol={symbol}USDT&limit=100"
+                order_books = futures_order_books
+                timestamps = futures_density_timestamps
+                lock = futures_order_books_lock
+            else:
+                url = f"{SPOT_REST_URL}?symbol={symbol}USDT&limit=100"
+                order_books = spot_order_books
+                timestamps = spot_density_timestamps
+                lock = spot_order_books_lock
+        else:  # bybit
+            url = BYBIT_FUTURES_REST_URL.format(symbol)
+            order_books = bybit_futures_order_books
+            timestamps = bybit_futures_density_timestamps
+            lock = bybit_futures_order_books_lock
 
         res = requests.get(url, timeout=10)
         if not res.ok:
-            log(f"⚠️ {market} {symbol}: HTTP {res.status_code}")
+            log(f"⚠️ {exchange} {market} {symbol}: HTTP {res.status_code}")
             return False
 
         data = res.json()
-        bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
-        asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
+
+        if exchange == 'binance':
+            bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
+            asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
+        else:  # bybit
+            result = data.get('result', {})
+            bids = {float(price): float(qty) for price, qty in result.get('b', [])}
+            asks = {float(price): float(qty) for price, qty in result.get('a', [])}
 
         with lock:
             order_books[symbol] = {'bids': bids, 'asks': asks}
             timestamps[symbol] = {}
 
-        sync_to_cache(symbol, market)
+        sync_to_cache(symbol, market, exchange)
 
-        log(f"✅ {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
+        log(f"✅ {exchange} {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
         return True
 
     except Exception as e:
-        log(f"❌ init_order_book({market} {symbol}): {e}")
+        log(f"❌ init_order_book({exchange} {market} {symbol}): {e}")
         return False
 
 
-def sync_to_cache(symbol, market='futures'):
+def sync_to_cache(symbol, market='futures', exchange='binance'):
     """Синхронизация стакана в Redis"""
     try:
-        if market == 'futures':
-            order_books = futures_order_books
-            timestamps = futures_density_timestamps
-            lock = futures_order_books_lock
-        else:
-            order_books = spot_order_books
-            timestamps = spot_density_timestamps
-            lock = spot_order_books_lock
+        if exchange == 'binance':
+            if market == 'futures':
+                order_books = futures_order_books
+                timestamps = futures_density_timestamps
+                lock = futures_order_books_lock
+            else:
+                order_books = spot_order_books
+                timestamps = spot_density_timestamps
+                lock = spot_order_books_lock
+        else:  # bybit
+            order_books = bybit_futures_order_books
+            timestamps = bybit_futures_density_timestamps
+            lock = bybit_futures_order_books_lock
 
         with lock:
             book = order_books.get(symbol, {})
@@ -200,9 +227,13 @@ def sync_to_cache(symbol, market='futures'):
             if not book:
                 return
 
-        key = f"scalp:{market}:{symbol}"
-        now = time.time()
+        # Отдельный ключ для Bybit
+        if exchange == 'bybit':
+            key = f"scalp:{market}:bybit:{symbol}"
+        else:
+            key = f"scalp:{market}:{symbol}"
 
+        now = time.time()
         densities = []
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
@@ -224,12 +255,9 @@ def sync_to_cache(symbol, market='futures'):
                     'price': price,
                     'volume': volume,
                     'side': side_name,
-                    'timestamp': ts[price]
+                    'timestamp': ts[price],
+                    'exchange': exchange
                 })
-
-        # Логируем для BTC и ETH
-        if symbol in ['BTC', 'ETH']:
-            log(f"📊 {market} sync_to_cache({symbol}): {len(densities)} плотностей, всего уровней: {len(book.get('bids', {})) + len(book.get('asks', {}))}")
 
         cache.set(key, densities, CACHE_TTL)
 
@@ -237,39 +265,44 @@ def sync_to_cache(symbol, market='futures'):
             timestamps[symbol] = ts
 
     except Exception as e:
-        log(f"❌ sync_to_cache({market} {symbol}): {e}")
+        log(f"❌ sync_to_cache({exchange} {market} {symbol}): {e}")
         log(traceback.format_exc())
 
 
-def update_order_book(symbol, bids_delta, asks_delta, market='futures'):
+def update_order_book(symbol, bids_delta, asks_delta, market='futures', exchange='binance'):
     """Обновление стакана данными из WebSocket"""
     global last_sync_time
 
     try:
-        if market == 'futures':
-            order_books = futures_order_books
-            timestamps = futures_density_timestamps
-            lock = futures_order_books_lock
-        else:
-            order_books = spot_order_books
-            timestamps = spot_density_timestamps
-            lock = spot_order_books_lock
+        if exchange == 'binance':
+            if market == 'futures':
+                order_books = futures_order_books
+                timestamps = futures_density_timestamps
+                lock = futures_order_books_lock
+            else:
+                order_books = spot_order_books
+                timestamps = spot_density_timestamps
+                lock = spot_order_books_lock
+        else:  # bybit
+            order_books = bybit_futures_order_books
+            timestamps = bybit_futures_density_timestamps
+            lock = bybit_futures_order_books_lock
 
-        # Логируем первые 5 вызовов для каждой монеты
         if not hasattr(update_order_book, 'call_counts'):
             update_order_book.call_counts = {}
 
-        key = f"{market}:{symbol}"
+        key = f"{exchange}:{market}:{symbol}"
         if key not in update_order_book.call_counts:
             update_order_book.call_counts[key] = 0
         update_order_book.call_counts[key] += 1
 
         if update_order_book.call_counts[key] <= 3:
-            log(f"🔄 {market} update_order_book({symbol}) вызов #{update_order_book.call_counts[key]}: {len(bids_delta)} bids, {len(asks_delta)} asks")
+            log(f"🔄 {exchange} {market} update_order_book({symbol}) вызов #{update_order_book.call_counts[key]}")
 
         with lock:
             if symbol not in order_books:
-                log(f"⚠️ {market} update_order_book({symbol}): нет в order_books")
+                if update_order_book.call_counts[key] <= 3:
+                    log(f"⚠️ {exchange} {market} update_order_book({symbol}): нет в order_books")
                 return
 
             book = order_books[symbol]
@@ -309,19 +342,13 @@ def update_order_book(symbol, bids_delta, asks_delta, market='futures'):
                     changed = True
 
         if changed:
-            # Rate limiting: не чаще раза в 3 секунды
             now = time.time()
             if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
-                sync_to_cache(symbol, market)
+                sync_to_cache(symbol, market, exchange)
                 last_sync_time[key] = now
-                if symbol == 'BTC':
-                    log(f"✅ {market} update_order_book({symbol}): changed=True, вызван sync_to_cache")
-            else:
-                if symbol == 'BTC' and update_order_book.call_counts[key] <= 10:
-                    log(f"⏱️ {market} update_order_book({symbol}): пропуск sync_to_cache (слишком часто)")
 
     except Exception as e:
-        log(f"❌ update_order_book({market} {symbol}): {e}")
+        log(f"❌ update_order_book({exchange} {market} {symbol}): {e}")
         log(traceback.format_exc())
 
 
