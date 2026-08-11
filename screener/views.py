@@ -213,6 +213,7 @@ def api_scalp(request, symbol):
     densities.sort(key=lambda x: x['volume'], reverse=True)
 
     return JsonResponse({
+        'version': 'api_scalp_v2',
         'symbol': symbol_upper,
         'densities': densities,
         'market': market,
