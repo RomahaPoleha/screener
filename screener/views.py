@@ -137,52 +137,54 @@ def api_natr(request):
 
 @require_http_methods(["GET"])
 def api_scalp(request, symbol):
-    """API: плотности из Redis"""
+    """API: плотности из Redis (Binance + Bybit)"""
     import time
 
     min_volume = int(request.GET.get('min_volume', 10000))
-    market = request.GET.get('market', 'futures')  # ← ДОБАВИТЬ
+    market = request.GET.get('market', 'futures')
 
-    # Валидация market
     if market not in ['futures', 'spot']:
         market = 'futures'
-
-    key = f"scalp:{market}:{symbol.upper()}"  # ← ИЗМЕНИТЬ КЛЮЧ
-    data = cache.get(key)
-
-    if not data:
-        return JsonResponse({
-            'symbol': symbol.upper(),
-            'densities': [],
-            'market': market,
-            'server_time': time.time()
-        })
 
     densities = []
     now = time.time()
 
-    for item in data:
-        try:
-            price = item['price']
-            volume = item['volume']
-            timestamp = item['timestamp']
-            side = item['side']
-        except (KeyError, TypeError):
+    # Читаем данные из обоих ключей: Binance и Bybit
+    for exchange in ['binance', 'bybit']:
+        if exchange == 'bybit' and market != 'futures':
+            continue  # Bybit только для futures
+
+        if exchange == 'bybit':
+            key = f"scalp:{market}:bybit:{symbol.upper()}"
+        else:
+            key = f"scalp:{market}:{symbol.upper()}"
+
+        data = cache.get(key)
+        if not data:
             continue
 
-        age_seconds = now - timestamp
+        for item in data:
+            try:
+                price = item['price']
+                volume = item['volume']
+                timestamp = item['timestamp']
+                side = item['side']
+            except (KeyError, TypeError):
+                continue
 
-        if volume < min_volume:
-            continue
+            age_seconds = now - timestamp
 
-        densities.append({
-            'price': price,
-            'volume': volume,
-            'side': side,
-            'age_seconds': round(age_seconds, 1),
-            'market': market,
-            'exchange': item.get('exchange', 'binance')
-        })
+            if volume < min_volume:
+                continue
+
+            densities.append({
+                'price': price,
+                'volume': volume,
+                'side': side,
+                'age_seconds': round(age_seconds, 1),
+                'market': market,
+                'exchange': item.get('exchange', exchange)
+            })
 
     densities.sort(key=lambda x: x['volume'], reverse=True)
 
