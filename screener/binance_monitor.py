@@ -34,7 +34,7 @@ SPOT_REST_URL = "https://api.binance.com/api/v3/depth"
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 5
+MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 
 

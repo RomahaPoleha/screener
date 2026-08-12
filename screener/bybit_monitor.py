@@ -35,7 +35,7 @@ BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&s
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 5
+MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 
 
@@ -366,12 +366,6 @@ def sync_to_cache(symbol, log_func=print):
                     'exchange': 'bybit'
                 })
 
-        log_func(
-            f"📊 sync_to_cache(bybit futures {symbol}): "
-            f"bids={total_bids}, asks={total_asks}, ts_count={len(ts)}, "
-            f"filtered_vol={filtered_by_volume}, filtered_age={filtered_by_age}, "
-            f"saved={len(densities)}"
-        )
 
         cache.set(key, densities, CACHE_TTL)
 
