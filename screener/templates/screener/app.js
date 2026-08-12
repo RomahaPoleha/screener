@@ -91,12 +91,10 @@ function checkAlerts(currentPrice, prevPrice) {
 
             const fadedLine = candleSeries.createPriceLine({
                 price: alert.price,
-                color: 'rgba(240, 185, 11, 0.3)', // Полупрозрачный жёлтый
+                color: 'rgba(240, 185, 11, 0.3)',
                 lineWidth: 1,
                 lineStyle: LightweightCharts.LineStyle.Dotted,
                 axisLabelVisible: true,
-                // Мы НЕ указываем axisLabelBackgroundColor и axisLabelColor.
-                // Библиотека сама автоматически возьмёт цвет из 'color' для фона плашки!
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
 
@@ -446,11 +444,9 @@ function initPencilCanvas() {
 }
 
 function getTimeByX(x) {
-    // Сначала пробуем официальное API
     let time = chart.timeScale().coordinateToTime(x);
     if (time !== null) return time;
 
-    // Fallback: вычисляем через logical index
     const logicalIndex = getLogicalIndexByX(x);
     if (logicalIndex === null) return null;
 
@@ -485,11 +481,9 @@ function getLogicalIndexByX(x) {
 }
 
 function getXByTime(time) {
-    // 1. Сначала доверяем библиотеке
     let x = chart.timeScale().timeToCoordinate(time);
     if (x !== null) return x;
 
-    // 2. Если null (будущее время), считаем относительно последней свечи
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
 
@@ -523,7 +517,6 @@ function redrawPencilStrokes() {
         let started = false;
 
         for (const point of stroke) {
-            // Используем только time, библиотека сама разберётся
             const x = getXByTime(point.time);
             const y = candleSeries.priceToCoordinate(point.price);
 
@@ -547,7 +540,6 @@ function redrawPencilStrokes() {
 }
 
 function drawRulerRectangle(start, end) {
-    // Используем getXByTime вместо getXByLogicalIndex — он корректно работает и в зоне будущего
     const x1 = getXByTime(start.time);
     const y1 = candleSeries.priceToCoordinate(start.price);
 
@@ -582,7 +574,6 @@ function redrawAllPersistentDrawings() {
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
 
-    // Трендовые линии
     activeTrendlines.forEach(tl => {
         const x1 = getXByTime(tl.time1);
         const x2 = getXByTime(tl.time2);
@@ -597,7 +588,6 @@ function redrawAllPersistentDrawings() {
         }
     });
 
-    // Превью трендовой линии (которую сейчас рисуешь)
     if (isDrawingTrendLine && trendLinePreview) {
         const x1 = getXByTime(trendLinePreview.time1);
         const x2 = getXByTime(trendLinePreview.time2);
@@ -615,7 +605,6 @@ function redrawAllPersistentDrawings() {
         }
     }
 
-    // Линейка
     if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) {
         drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
     }
@@ -623,7 +612,6 @@ function redrawAllPersistentDrawings() {
         drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
     }
 
-    // Карандаш
     redrawPencilStrokes();
     pencilCtx.setLineDash([]);
 }
@@ -651,7 +639,6 @@ function deleteLineAtPoint(x, y) {
     if (!clickPrice) return;
     const threshold = 50;
 
-    // 1. Проверяем алерты
     for (let i = activeAlerts.length - 1; i >= 0; i--) {
         const alert = activeAlerts[i];
         const alertY = candleSeries.priceToCoordinate(alert.price);
@@ -662,7 +649,6 @@ function deleteLineAtPoint(x, y) {
         }
     }
 
-    // 2. Проверяем горизонтальные линии
     for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
         const hl = activeHorizontalLines[i];
         const hlY = candleSeries.priceToCoordinate(hl.price);
@@ -673,7 +659,6 @@ function deleteLineAtPoint(x, y) {
         }
     }
 
-    // 3. Проверяем трендовые линии (используем getXByTime для зоны будущего)
     for (let i = activeTrendlines.length - 1; i >= 0; i--) {
         const tl = activeTrendlines[i];
         const x1 = getXByTime(tl.time1);
@@ -691,7 +676,6 @@ function deleteLineAtPoint(x, y) {
         }
     }
 
-    // 4. Проверяем карандаш (штрихи)
     for (let i = pencilStrokes.length - 1; i >= 0; i--) {
         const stroke = pencilStrokes[i];
         for (const point of stroke) {
@@ -1008,6 +992,10 @@ function openSettingsModal() {
     document.getElementById('scalpMinVolumeFuture').value = scalpMinVolumeFuture;
     document.getElementById('scalpMinVolumeSpot').value = scalpMinVolumeSpot;
 
+    // === BYBIT SCALP: установка чекбоксов бирж ===
+    document.getElementById('exchangeBinance').checked = scalpExchanges.binance !== false;
+    document.getElementById('exchangeBybit').checked = scalpExchanges.bybit !== false;
+
     document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
     document.getElementById('showDrawingTools').checked = showDrawingTools;
 
@@ -1036,6 +1024,13 @@ function applySettings() {
         future: document.getElementById('scalpMarketFuture').checked,
         spot: document.getElementById('scalpMarketSpot').checked
     };
+    // === BYBIT SCALP: сохранение настроек бирж ===
+    scalpExchanges = {
+        binance: document.getElementById('exchangeBinance').checked,
+        bybit: document.getElementById('exchangeBybit').checked
+    };
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
     scalpMinVolumeFuture = Math.max(200000, parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000);
     scalpMinVolumeSpot = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000);
     scalpEnabled = scalpMarkets.future || scalpMarkets.spot;
@@ -1160,7 +1155,7 @@ async function loadScalpDensities(symbol) {
         for (const market of marketsToLoad) {
             const minVol = market === 'futures' ? scalpMinVolumeFuture : scalpMinVolumeSpot;
             try {
-                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=${market}`);
+                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=${market}&limit=50`);
                 if (!res.ok) continue;
                 const data = await res.json();
                 allNewData[market] = data.densities || [];
@@ -1173,8 +1168,9 @@ async function loadScalpDensities(symbol) {
         for (const market of marketsToLoad) {
             const newData = allNewData[market] || [];
             const prevData = previousScalpData[market] || [];
-            const currentSignature = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
-            const prevSignature = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side })));
+            // === BYBIT SCALP: в сигнатуре учитываем биржу ===
+            const currentSignature = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
+            const prevSignature = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
             if (currentSignature !== prevSignature) { hasChanges = true; previousScalpData[market] = newData; }
         }
 
@@ -1183,11 +1179,22 @@ async function loadScalpDensities(symbol) {
 
         for (const market of marketsToLoad) {
             const densities = allNewData[market] || [];
-            densities.forEach(d => {
+
+            // === BYBIT SCALP: фильтр по включённым биржам ===
+            const filteredDensities = densities.filter(d => {
+                const exchange = d.exchange || 'binance';
+                return scalpExchanges[exchange] !== false;
+            });
+
+            filteredDensities.forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
                 const ageText = formatAge(ageSeconds);
                 const volumeText = formatVolumeText(d.volume);
-                const prefix = market === 'futures' ? 'BI-F' : 'BI-S';
+                const exchange = d.exchange || 'binance';
+                // === BYBIT SCALP: префикс BI для binance, BY для bybit ===
+                const exchangePrefix = exchange === 'bybit' ? 'BY' : 'BI';
+                const marketSuffix = market === 'futures' ? 'F' : 'S';
+                const prefix = `${exchangePrefix}-${marketSuffix}`;
                 const volumeNum = parseFloat(d.volume) || 0;
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
                 const line = candleSeries.createPriceLine({
@@ -1299,18 +1306,14 @@ async function openChart(symbol) {
         });
         chart.subscribeClick(handleChartClick);
 
-        // === ПОДПИСКИ НА ИЗМЕНЕНИЯ ===
         chart.timeScale().subscribeVisibleTimeRangeChange(redrawAllPersistentDrawings);
         chart.timeScale().subscribeVisibleLogicalRangeChange(redrawAllPersistentDrawings);
         chart.timeScale().subscribeSizeChange(() => {
             setTimeout(() => { initPencilCanvas(); }, 150);
         });
 
-        // ✅ ПЛАВНАЯ ПЕРЕРИСОВКА ПРИ ВЕРТИКАЛЬНОМ ЗУМЕ (как у горизонтального)
-        // Когда пользователь тянет ценовую шкалу, мышь движется — используем это
         let isRedrawScheduled = false;
         els.chartWrapper.addEventListener('mousemove', () => {
-            // Перерисовка только если есть что перерисовывать (активные рисунки)
             if (activeTrendlines.length > 0 || pencilStrokes.length > 0 || rulerFixedMeasurement) {
                 if (!isRedrawScheduled) {
                     isRedrawScheduled = true;

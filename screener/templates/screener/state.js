@@ -40,6 +40,7 @@ let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 // Scalp
 let scalpLines = [], scalpEnabled = false;
 let scalpMarkets = { future: false, spot: false };
+let scalpExchanges = { binance: true, bybit: true };  // ← добавить эту строку
 let scalpMinVolumeFuture = 200000, scalpMinVolumeSpot = 100000;
 let scalpUpdateTimer = null, isScalpLoading = false;
 let previousScalpData = { futures: [], spot: [] };
@@ -53,6 +54,7 @@ if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = par
 if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
 if (localStorage.getItem('scalpMinVolumeFuture')) scalpMinVolumeFuture = parseInt(localStorage.getItem('scalpMinVolumeFuture'));
 if (localStorage.getItem('scalpMinVolumeSpot')) scalpMinVolumeSpot = parseInt(localStorage.getItem('scalpMinVolumeSpot'));
+if (localStorage.getItem('scalpExchanges')) scalpExchanges = JSON.parse(localStorage.getItem('scalpExchanges'));
 
 // Drawings
 let isDrawingTrendLine = false, trendLinePreview = null;
