@@ -253,3 +253,29 @@ def api_sound(request, filename):
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
+
+@require_http_methods(["GET"])
+def api_scalp_debug(request, symbol):
+    """Временная диагностика кэша для scalp"""
+    symbol_upper = symbol.upper()
+
+    keys = {
+        'binance_futures': f"scalp:futures:{symbol_upper}",
+        'bybit_futures': f"scalp:futures:bybit:{symbol_upper}",
+        'binance_spot': f"scalp:spot:{symbol_upper}",
+        'bybit_spot': f"scalp:spot:bybit:{symbol_upper}",
+    }
+
+    result = {}
+
+    for name, key in keys.items():
+        data = cache.get(key)
+
+        result[name] = {
+            'key': key,
+            'exists': data is not None,
+            'count': len(data) if data else 0,
+            'sample': data[:3] if data else []
+        }
+
+    return JsonResponse(result)
