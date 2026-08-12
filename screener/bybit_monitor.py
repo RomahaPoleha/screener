@@ -543,6 +543,7 @@ def update_spot_order_book(symbol, bids_delta, asks_delta, log_func=print):
 
 
 def process_message_queue(log_func=print):
+    """Обработка очереди сообщений Bybit Futures"""
     message_queue = bybit_futures_message_queue
 
     while True:
@@ -556,32 +557,76 @@ def process_message_queue(log_func=print):
             if not topic.startswith('orderbook'):
                 continue
 
-            sym = topic.split('.')[2]
+            parts = topic.split('.')
+
+            if len(parts) < 3:
+                continue
+
+            sym = parts[2]
             symbol = sym[:-4] if sym.endswith('USDT') else sym
+
             d = data.get('data', {})
             bids = d.get('b', [])
             asks = d.get('a', [])
 
-            # ✅ Обрабатываем snapshot как полную перезапись стакана
             if msg_type == 'snapshot':
                 order_books = bybit_futures_order_books
+                timestamps = bybit_futures_density_timestamps
                 lock = bybit_futures_order_books_lock
+
+                new_bids = {}
+                new_asks = {}
+
+                for price_str, qty_str in bids:
+                    try:
+                        price = float(price_str)
+                        qty = float(qty_str)
+
+                        if price > 0 and qty > 0:
+                            new_bids[price] = qty
+
+                    except Exception:
+                        continue
+
+                for price_str, qty_str in asks:
+                    try:
+                        price = float(price_str)
+                        qty = float(qty_str)
+
+                        if price > 0 and qty > 0:
+                            new_asks[price] = qty
+
+                    except Exception:
+                        continue
+
                 with lock:
+                    old_ts = timestamps.get(symbol, {})
+                    new_ts = {}
+
+                    for price in new_bids:
+                        if price in old_ts:
+                            new_ts[price] = old_ts[price]
+
+                    for price in new_asks:
+                        if price in old_ts:
+                            new_ts[price] = old_ts[price]
+
                     order_books[symbol] = {
-                        'bids': {float(p): float(q) for p, q in bids},
-                        'asks': {float(p): float(q) for p, q in asks}
+                        'bids': new_bids,
+                        'asks': new_asks
                     }
+                    timestamps[symbol] = new_ts
+
                 sync_to_cache(symbol, log_func)
                 continue
 
-            # Delta обрабатываем как обычно
             if msg_type == 'delta' and (bids or asks):
                 update_order_book(symbol, bids, asks, log_func)
 
         except Empty:
             continue
         except Exception as e:
-            log_func(f"❌ bybit Ошибка обработки сообщения: {e}")
+            log_func(f"❌ bybit futures Ошибка обработки сообщения: {e}")
 
 
 def process_spot_message_queue(log_func=print):
