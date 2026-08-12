@@ -702,34 +702,45 @@ def on_open_spot(ws):
     ws.send(json.dumps(subscribe_msg))
 
 def start_websocket(symbols_list, log_func=print):
-    """Запуск WebSocket Bybit Futures"""
-    try:
-        ws = websocket.WebSocketApp(
-            BYBIT_FUTURES_WS_URL,
-            on_open=lambda ws: on_open(ws),
-            on_message=lambda ws, msg: on_message(ws, msg),
-            on_error=lambda ws, err: log_func(f"❌ bybit WebSocket ошибка: {err}"),
-            on_close=lambda ws, code, msg: log_func(f"⚠️ bybit WebSocket закрыт: {code} {msg}")
-        )
+    """Запуск WebSocket Bybit Futures с переподключением"""
+    while True:
+        ws = None
+        stop_event = threading.Event()
 
-        ws.symbols = symbols_list
+        try:
+            ws = websocket.WebSocketApp(
+                BYBIT_FUTURES_WS_URL,
+                on_open=lambda ws: on_open(ws),
+                on_message=lambda ws, msg: on_message(ws, msg),
+                on_error=lambda ws, err: log_func(f"❌ bybit futures WebSocket ошибка: {err}"),
+                on_close=lambda ws, code, msg: log_func(f"⚠️ bybit futures WebSocket закрыт: {code} {msg}")
+            )
 
-        def heartbeat():
-            while True:
-                time.sleep(15)
+            ws.symbols = symbols_list
 
-                try:
-                    if ws.sock and ws.sock.connected:
-                        ws.send(json.dumps({"op": "ping"}))
-                except Exception:
-                    break
+            def heartbeat():
+                while not stop_event.is_set():
+                    time.sleep(15)
 
-        threading.Thread(target=heartbeat, daemon=True).start()
+                    try:
+                        if ws and ws.sock and ws.sock.connected:
+                            ws.send(json.dumps({"op": "ping"}))
+                    except Exception as e:
+                        log_func(f"❌ bybit futures heartbeat: {e}")
+                        break
 
-        ws.run_forever(ping_interval=20, ping_timeout=10)
+            threading.Thread(target=heartbeat, daemon=True).start()
 
-    except Exception as e:
-        log_func(f"❌ Ошибка в start_websocket(bybit): {e}")
+            ws.run_forever(ping_interval=20, ping_timeout=10)
+
+        except Exception as e:
+            log_func(f"❌ Ошибка в start_websocket(bybit futures): {e}")
+
+        finally:
+            stop_event.set()
+
+        log_func("🔁 Bybit futures WebSocket переподключение через 3 секунды...")
+        time.sleep(3)
 
 
 def start_spot_websocket(symbols_list, log_func=print):
