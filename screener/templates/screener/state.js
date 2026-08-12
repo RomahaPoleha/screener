@@ -54,7 +54,13 @@ if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = par
 if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
 if (localStorage.getItem('scalpMinVolumeFuture')) scalpMinVolumeFuture = parseInt(localStorage.getItem('scalpMinVolumeFuture'));
 if (localStorage.getItem('scalpMinVolumeSpot')) scalpMinVolumeSpot = parseInt(localStorage.getItem('scalpMinVolumeSpot'));
-if (localStorage.getItem('scalpExchanges')) scalpExchanges = JSON.parse(localStorage.getItem('scalpExchanges'));
+if (localStorage.getItem('scalpExchanges')) {
+    try {
+        scalpExchanges = JSON.parse(localStorage.getItem('scalpExchanges'));
+    } catch(e) {
+        console.warn('⚠️ scalpExchanges в localStorage повреждён, используем значения по умолчанию');
+    }
+}
 
 // Drawings
 let isDrawingTrendLine = false, trendLinePreview = null;
