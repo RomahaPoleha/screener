@@ -35,7 +35,7 @@ BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&s
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 180
+MIN_AGE_SECONDS = 5
 CACHE_TTL = 900
 
 
@@ -323,6 +323,7 @@ def sync_to_cache(symbol, log_func=print):
             book = order_books.get(symbol, {})
             ts = timestamps.get(symbol, {})
             if not book:
+                log_func(f"⚠️ sync_to_cache(bybit futures {symbol}): пустой стакан в памяти")
                 return
 
         key = f"scalp:futures:bybit:{symbol}"
@@ -331,16 +332,24 @@ def sync_to_cache(symbol, log_func=print):
         densities = []
         is_first_load = len(ts) == 0
 
+        # Временная диагностика
+        total_bids = len(book.get('bids', {}))
+        total_asks = len(book.get('asks', {}))
+        filtered_by_volume = 0
+        filtered_by_age = 0
+
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
                 if volume < 10000:
+                    filtered_by_volume += 1
                     continue
 
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
+                        filtered_by_age += 1
                         continue
                 else:
                     if is_first_load:
@@ -357,13 +366,20 @@ def sync_to_cache(symbol, log_func=print):
                     'exchange': 'bybit'
                 })
 
+        log_func(
+            f"📊 sync_to_cache(bybit futures {symbol}): "
+            f"bids={total_bids}, asks={total_asks}, ts_count={len(ts)}, "
+            f"filtered_vol={filtered_by_volume}, filtered_age={filtered_by_age}, "
+            f"saved={len(densities)}"
+        )
+
         cache.set(key, densities, CACHE_TTL)
 
         with lock:
             timestamps[symbol] = ts
 
     except Exception as e:
-        log_func(f"❌ sync_to_cache(bybit {symbol}): {e}")
+        log_func(f"❌ sync_to_cache(bybit futures {symbol}): {e}")
 
 
 def sync_spot_to_cache(symbol, log_func=print):
