@@ -62,6 +62,9 @@ def get_top_symbols(limit=30):
         symbols_with_score = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
+        # Минимальный объём для ликвидности (в USDT)
+        MIN_LIQUIDITY_VOLUME = 10_000_000  # $10M
+
         for symbol, data in tickers.items():
             if ':USDT' not in symbol and not symbol.endswith('/USDT'):
                 continue
@@ -76,7 +79,14 @@ def get_top_symbols(limit=30):
 
             volume = data.get('quoteVolume') or 0
             percentage = data.get('percentage') or 0
-            score = volume * abs(percentage)
+
+            # Фильтр по ликвидности
+            if volume < MIN_LIQUIDITY_VOLUME:
+                continue
+
+            # Ограничиваем влияние волатильности
+            volatility_factor = min(abs(percentage), 5.0)
+            score = volume * volatility_factor
 
             if score > 0:
                 symbols_with_score.append((clean_symbol, score))
@@ -103,6 +113,9 @@ def get_top_spot_symbols(limit=30):
         symbols_with_score = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
+        # Минимальный объём для ликвидности (в USDT)
+        MIN_LIQUIDITY_VOLUME = 10_000_000  # $10M
+
         for symbol, data in tickers.items():
             if not symbol.endswith('/USDT'):
                 continue
@@ -117,7 +130,14 @@ def get_top_spot_symbols(limit=30):
 
             volume = data.get('quoteVolume') or 0
             percentage = data.get('percentage') or 0
-            score = volume * abs(percentage)
+
+            # Фильтр по ликвидности
+            if volume < MIN_LIQUIDITY_VOLUME:
+                continue
+
+            # Ограничиваем влияние волатильности
+            volatility_factor = min(abs(percentage), 5.0)
+            score = volume * volatility_factor
 
             if score > 0:
                 symbols_with_score.append((clean_symbol, score))
