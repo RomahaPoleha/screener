@@ -35,7 +35,7 @@ BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&s
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 180
+MIN_AGE_SECONDS = 10
 CACHE_TTL = 900
 
 
