@@ -152,7 +152,7 @@ def get_top_spot_symbols(limit=30):
         return []
 
 def init_order_book(symbol, log_func=print):
-    """Инициализация стакана Bybit"""
+    """Инициализация стакана Bybit Futures. Возвращает количество плотностей."""
     try:
         url = BYBIT_FUTURES_REST_URL.format(symbol)
 
@@ -160,31 +160,23 @@ def init_order_book(symbol, log_func=print):
         timestamps = bybit_futures_density_timestamps
         lock = bybit_futures_order_books_lock
 
-        res = requests.get(
-            url,
-            timeout=10,
-            headers={'User-Agent': 'Mozilla/5.0'}
-        )
+        res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
 
         if not res.ok:
             log_func(f"⚠️ bybit {symbol}: HTTP {res.status_code}")
-            return False
+            return 0
 
         try:
             data = res.json()
         except Exception:
             log_func(f"⚠️ bybit {symbol}: не JSON ответ: {res.text[:200]}")
-            return False
+            return 0
 
         if data.get('retCode') != 0:
-            log_func(
-                f"⚠️ bybit {symbol}: retCode={data.get('retCode')} "
-                f"retMsg={data.get('retMsg')}"
-            )
-            return False
+            log_func(f"⚠️ bybit {symbol}: retCode={data.get('retCode')} retMsg={data.get('retMsg')}")
+            return 0
 
         result = data.get('result') or {}
-
         raw_bids = result.get('b') or []
         raw_asks = result.get('a') or []
 
@@ -195,10 +187,8 @@ def init_order_book(symbol, log_func=print):
             try:
                 price = float(row[0])
                 qty = float(row[1])
-
                 if price > 0 and qty > 0:
                     bids[price] = qty
-
             except Exception:
                 continue
 
@@ -206,40 +196,34 @@ def init_order_book(symbol, log_func=print):
             try:
                 price = float(row[0])
                 qty = float(row[1])
-
                 if price > 0 and qty > 0:
                     asks[price] = qty
-
             except Exception:
                 continue
 
         if not bids and not asks:
             log_func(f"⚠️ bybit {symbol}: пустой стакан в REST ответе")
-            return False
+            return 0
 
         with lock:
-            order_books[symbol] = {
-                'bids': bids,
-                'asks': asks
-            }
+            order_books[symbol] = {'bids': bids, 'asks': asks}
             timestamps[symbol] = {}
 
-        sync_to_cache(symbol, log_func)
+        saved_count = sync_to_cache(symbol, log_func)
 
         log_func(
             f"✅ bybit futures Стакан {symbol}: "
-            f"{len(bids)} bids, {len(asks)} asks"
+            f"{len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}"
         )
 
-        return True
+        return saved_count
 
     except requests.exceptions.Timeout:
         log_func(f"❌ init_order_book(bybit {symbol}): timeout")
-        return False
-
+        return 0
     except Exception as e:
         log_func(f"❌ init_order_book(bybit {symbol}): {e}")
-        return False
+        return 0
 
 
 def init_spot_order_book(symbol, log_func=print):
@@ -333,7 +317,7 @@ def init_spot_order_book(symbol, log_func=print):
         return False
 
 def sync_to_cache(symbol, log_func=print):
-    """Синхронизация стакана в Redis"""
+    """Синхронизация стакана в Redis. Возвращает количество сохранённых плотностей."""
     try:
         order_books = bybit_futures_order_books
         timestamps = bybit_futures_density_timestamps
@@ -343,8 +327,7 @@ def sync_to_cache(symbol, log_func=print):
             book = order_books.get(symbol, {})
             ts = timestamps.get(symbol, {})
             if not book:
-                log_func(f"⚠️ sync_to_cache(bybit futures {symbol}): пустой стакан в памяти")
-                return
+                return 0
 
         key = f"scalp:futures:bybit:{symbol}"
         now = time.time()
@@ -352,24 +335,16 @@ def sync_to_cache(symbol, log_func=print):
         densities = []
         is_first_load = len(ts) == 0
 
-        # Временная диагностика
-        total_bids = len(book.get('bids', {}))
-        total_asks = len(book.get('asks', {}))
-        filtered_by_volume = 0
-        filtered_by_age = 0
-
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
                 if volume < 10000:
-                    filtered_by_volume += 1
                     continue
 
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
-                        filtered_by_age += 1
                         continue
                 else:
                     if is_first_load:
@@ -386,14 +361,16 @@ def sync_to_cache(symbol, log_func=print):
                     'exchange': 'bybit'
                 })
 
-
         cache.set(key, densities, CACHE_TTL)
 
         with lock:
             timestamps[symbol] = ts
 
+        return len(densities)
+
     except Exception as e:
-        log_func(f"❌ sync_to_cache(bybit futures {symbol}): {e}")
+        log_func(f"❌ sync_to_cache(bybit {symbol}): {e}")
+        return 0
 
 
 def sync_spot_to_cache(symbol, log_func=print):
@@ -862,33 +839,44 @@ def start_spot_websocket(symbols_list, log_func=print):
 
 
 def start_bybit_monitor(log_func=print):
-    """Запуск мониторинга Bybit"""
+    """Запуск мониторинга Bybit Futures с валидацией монет"""
     global bybit_futures_symbols
 
     log_func("🚀 Запуск Bybit Monitor...")
 
-    # Запускаем процессор очереди
     threading.Thread(
         target=lambda: process_message_queue(log_func),
         daemon=True
     ).start()
 
-    # Получаем топ монет
-    bybit_futures_symbols = get_top_symbols(30)
+    # Берём кандидатов с запасом
+    candidates = get_top_symbols(60)
+    active_symbols = []
+    TARGET = 30
 
-    # Инициализация стаканов
-    for symbol in bybit_futures_symbols:
-        init_order_book(symbol, log_func)
+    for symbol in candidates:
+        if len(active_symbols) >= TARGET:
+            break
+
+        saved_count = init_order_book(symbol, log_func)
+
+        if saved_count > 0:
+            active_symbols.append(symbol)
+            log_func(f"✅ bybit futures {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ bybit futures {symbol}: пропущен (нет плотностей > $10K)")
+
         time.sleep(0.05)
 
-    # Запуск WebSocket
+    bybit_futures_symbols = active_symbols
+
     if bybit_futures_symbols:
         threading.Thread(
             target=lambda: start_websocket(bybit_futures_symbols, log_func),
             daemon=True
         ).start()
 
-    log_func("✅ Bybit Monitor запущен")
+    log_func(f"✅ Bybit Monitor запущен. Активных монет: {len(bybit_futures_symbols)}")
 
 def start_bybit_spot_monitor(log_func=print):
     """Запуск мониторинга Bybit Spot"""
