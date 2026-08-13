@@ -26,16 +26,16 @@ bybit_spot_message_queue = Queue(maxsize=50000)
 
 # URLs
 BYBIT_FUTURES_WS_URL = "wss://stream.bybit.com/v5/public/linear"
-BYBIT_FUTURES_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=linear&symbol={}USDT&limit=50"
+BYBIT_FUTURES_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=linear&symbol={}USDT&limit=200"
 # URLs для Bybit Spot
 BYBIT_SPOT_WS_URL = "wss://stream.bybit.com/v5/public/spot"
-BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&symbol={}USDT&limit=50"
+BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&symbol={}USDT&limit=200"
 
 # Rate limiting
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 10
+MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 
 
@@ -720,7 +720,7 @@ def on_message(ws, message):
 def on_open(ws):
     print(f"✅ bybit futures WebSocket открыт: {len(ws.symbols)} символов")
 
-    args = [f"orderbook.50.{s}USDT" for s in ws.symbols]
+    args = [f"orderbook.200.{s}USDT" for s in ws.symbols]
     subscribe_msg = {
         "op": "subscribe",
         "args": args
@@ -731,7 +731,7 @@ def on_open(ws):
 def on_open_spot(ws):
     print(f"✅ bybit spot WebSocket открыт: {len(ws.symbols)} символов")
 
-    args = [f"orderbook.50.{s}USDT" for s in ws.symbols]
+    args = [f"orderbook.200.{s}USDT" for s in ws.symbols]
 
     subscribe_msg = {
         "op": "subscribe",
