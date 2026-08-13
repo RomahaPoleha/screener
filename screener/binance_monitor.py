@@ -10,19 +10,20 @@ from queue import Queue, Empty
 from django.core.cache import cache
 import ccxt
 
-# Глобальное состояние для Futures
-futures_order_books = {}
-futures_density_timestamps = {}
-futures_order_books_lock = threading.Lock()
+# ==========================================
+# ГЛОБАЛЬНОЕ СОСТОЯНИЕ (единые имена!)
+# ==========================================
+binance_futures_order_books = {}
+binance_futures_density_timestamps = {}
+binance_futures_order_books_lock = threading.Lock()
 futures_symbols = []
-futures_message_queue = Queue(maxsize=50000)
+binance_futures_message_queue = Queue(maxsize=50000)
 
-# Глобальное состояние для Spot
-spot_order_books = {}
-spot_density_timestamps = {}
-spot_order_books_lock = threading.Lock()
+binance_spot_order_books = {}
+binance_spot_density_timestamps = {}
+binance_spot_order_books_lock = threading.Lock()
 spot_symbols = []
-spot_message_queue = Queue(maxsize=50000)
+binance_spot_message_queue = Queue(maxsize=50000)
 
 # URLs
 FUTURES_WS_URL = "wss://fstream.binance.com/ws"
@@ -34,7 +35,7 @@ SPOT_REST_URL = "https://api.binance.com/api/v3/depth"
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 180
+MIN_AGE_SECONDS = 10
 CACHE_TTL = 900
 
 
@@ -62,8 +63,7 @@ def get_top_symbols(limit=30, market='futures'):
         symbols_with_score = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
-        # Минимальный объём для ликвидности (в USDT)
-        MIN_LIQUIDITY_VOLUME = 10_000_000  # $10M
+        MIN_LIQUIDITY_VOLUME = 10_000_000
 
         for symbol, data in tickers.items():
             if ':USDT' not in symbol and not symbol.endswith('/USDT'):
@@ -80,11 +80,9 @@ def get_top_symbols(limit=30, market='futures'):
             volume = data.get('quoteVolume') or 0
             percentage = data.get('percentage') or 0
 
-            # Фильтр по ликвидности
             if volume < MIN_LIQUIDITY_VOLUME:
                 continue
 
-            # Ограничиваем влияние волатильности
             volatility_factor = min(abs(percentage), 5.0)
             score = volume * volatility_factor
 
@@ -110,7 +108,14 @@ def init_order_book(symbol, market, log_func=print):
             'timeout': 10000,
             'options': {'defaultType': ccxt_market}
         })
-        ob = exchange.fetch_order_book(symbol, limit=100)
+        exchange.load_markets()
+
+        if market == 'futures':
+            ccxt_symbol = f"{symbol}/USDT:USDT"
+        else:
+            ccxt_symbol = f"{symbol}/USDT"
+
+        ob = exchange.fetch_order_book(ccxt_symbol, limit=100)
 
         if market == 'futures':
             order_books = binance_futures_order_books
@@ -151,6 +156,7 @@ def init_order_book(symbol, market, log_func=print):
     except Exception as e:
         log_func(f"❌ init_order_book(binance {market} {symbol}): {e}")
         return 0
+
 
 def sync_to_cache(symbol, market, log_func=print):
     """Синхронизация стакана в Redis. Возвращает количество плотностей."""
@@ -220,13 +226,13 @@ def update_order_book(symbol, bids_delta, asks_delta, market='futures', log_func
 
     try:
         if market == 'futures':
-            order_books = futures_order_books
-            timestamps = futures_density_timestamps
-            lock = futures_order_books_lock
+            order_books = binance_futures_order_books
+            timestamps = binance_futures_density_timestamps
+            lock = binance_futures_order_books_lock
         else:
-            order_books = spot_order_books
-            timestamps = spot_density_timestamps
-            lock = spot_order_books_lock
+            order_books = binance_spot_order_books
+            timestamps = binance_spot_density_timestamps
+            lock = binance_spot_order_books_lock
 
         with lock:
             if symbol not in order_books:
@@ -282,9 +288,9 @@ def update_order_book(symbol, bids_delta, asks_delta, market='futures', log_func
 def process_message_queue(market='futures', log_func=print):
     """Обработка очереди сообщений"""
     if market == 'futures':
-        message_queue = futures_message_queue
+        message_queue = binance_futures_message_queue
     else:
-        message_queue = spot_message_queue
+        message_queue = binance_spot_message_queue
 
     while True:
         try:
@@ -320,9 +326,9 @@ def on_message(ws, message, market='futures'):
     """WebSocket только складывает сообщения в очередь"""
     try:
         if market == 'futures':
-            message_queue = futures_message_queue
+            message_queue = binance_futures_message_queue
         else:
-            message_queue = spot_message_queue
+            message_queue = binance_spot_message_queue
 
         message_queue.put_nowait(message)
     except Exception as e:
@@ -370,8 +376,14 @@ def start_binance_monitor(log_func=print):
 
     log_func("🚀 Запуск Binance Monitor...")
 
+    # Запуск ДВУХ потоков обработки очереди
     threading.Thread(
-        target=lambda: process_message_queue(log_func),
+        target=lambda: process_message_queue('futures', log_func),
+        daemon=True
+    ).start()
+
+    threading.Thread(
+        target=lambda: process_message_queue('spot', log_func),
         daemon=True
     ).start()
 
