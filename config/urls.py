@@ -26,5 +26,5 @@ urlpatterns = [
     path('api/natr/', views.api_natr, name='api_natr'),
     path('api/scalp/<str:symbol>/', views.api_scalp, name='api_scalp'),
     path('api/sound/<str:filename>/', views.api_sound, name='api_sound'),
-    path('api/scalp-debug/<str:symbol>/', views.api_scalp_debug),
+    path('api/scalp-active/', views.api_scalp_active),
 ]

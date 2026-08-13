@@ -279,3 +279,37 @@ def api_scalp_debug(request, symbol):
         }
 
     return JsonResponse(result)
+
+@require_http_methods(["GET"])
+def api_scalp_active(request):
+    """Возвращает монеты, у которых сейчас есть плотности"""
+    from . import binance_monitor
+    from . import bybit_monitor
+
+    active = {}
+
+    # Собираем все мониторимые символы
+    all_symbols = set()
+    all_symbols.update(binance_monitor.futures_symbols or [])
+    all_symbols.update(binance_monitor.spot_symbols or [])
+    all_symbols.update(bybit_monitor.bybit_futures_symbols or [])
+    all_symbols.update(bybit_monitor.bybit_spot_symbols or [])
+
+    for symbol in all_symbols:
+        keys = [
+            f"scalp:futures:{symbol}",
+            f"scalp:futures:bybit:{symbol}",
+            f"scalp:spot:{symbol}",
+            f"scalp:spot:bybit:{symbol}",
+        ]
+
+        total_count = 0
+        for key in keys:
+            data = cache.get(key)
+            if data:
+                total_count += len(data)
+
+        if total_count > 0:
+            active[symbol] = total_count
+
+    return JsonResponse({'active': active})
