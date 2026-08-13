@@ -227,7 +227,7 @@ def init_order_book(symbol, log_func=print):
 
 
 def init_spot_order_book(symbol, log_func=print):
-    """Инициализация стакана Bybit Spot"""
+    """Инициализация стакана Bybit Spot. Возвращает количество плотностей."""
     try:
         url = BYBIT_SPOT_REST_URL.format(symbol)
 
@@ -235,31 +235,23 @@ def init_spot_order_book(symbol, log_func=print):
         timestamps = bybit_spot_density_timestamps
         lock = bybit_spot_order_books_lock
 
-        res = requests.get(
-            url,
-            timeout=10,
-            headers={'User-Agent': 'Mozilla/5.0'}
-        )
+        res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
 
         if not res.ok:
             log_func(f"⚠️ bybit spot {symbol}: HTTP {res.status_code}")
-            return False
+            return 0
 
         try:
             data = res.json()
         except Exception:
             log_func(f"⚠️ bybit spot {symbol}: не JSON ответ: {res.text[:200]}")
-            return False
+            return 0
 
         if data.get('retCode') != 0:
-            log_func(
-                f"⚠️ bybit spot {symbol}: retCode={data.get('retCode')} "
-                f"retMsg={data.get('retMsg')}"
-            )
-            return False
+            log_func(f"⚠️ bybit spot {symbol}: retCode={data.get('retCode')} retMsg={data.get('retMsg')}")
+            return 0
 
         result = data.get('result') or {}
-
         raw_bids = result.get('b') or []
         raw_asks = result.get('a') or []
 
@@ -270,10 +262,8 @@ def init_spot_order_book(symbol, log_func=print):
             try:
                 price = float(row[0])
                 qty = float(row[1])
-
                 if price > 0 and qty > 0:
                     bids[price] = qty
-
             except Exception:
                 continue
 
@@ -281,40 +271,34 @@ def init_spot_order_book(symbol, log_func=print):
             try:
                 price = float(row[0])
                 qty = float(row[1])
-
                 if price > 0 and qty > 0:
                     asks[price] = qty
-
             except Exception:
                 continue
 
         if not bids and not asks:
             log_func(f"⚠️ bybit spot {symbol}: пустой стакан в REST ответе")
-            return False
+            return 0
 
         with lock:
-            order_books[symbol] = {
-                'bids': bids,
-                'asks': asks
-            }
+            order_books[symbol] = {'bids': bids, 'asks': asks}
             timestamps[symbol] = {}
 
-        sync_spot_to_cache(symbol, log_func)
+        saved_count = sync_spot_to_cache(symbol, log_func)
 
         log_func(
             f"✅ bybit spot Стакан {symbol}: "
-            f"{len(bids)} bids, {len(asks)} asks"
+            f"{len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}"
         )
 
-        return True
+        return saved_count
 
     except requests.exceptions.Timeout:
         log_func(f"❌ init_spot_order_book(bybit spot {symbol}): timeout")
-        return False
-
+        return 0
     except Exception as e:
         log_func(f"❌ init_spot_order_book(bybit spot {symbol}): {e}")
-        return False
+        return 0
 
 def sync_to_cache(symbol, log_func=print):
     """Синхронизация стакана в Redis. Возвращает количество сохранённых плотностей."""
@@ -374,7 +358,7 @@ def sync_to_cache(symbol, log_func=print):
 
 
 def sync_spot_to_cache(symbol, log_func=print):
-    """Синхронизация стакана Bybit Spot в Redis"""
+    """Синхронизация стакана Bybit Spot в Redis. Возвращает количество плотностей."""
     try:
         order_books = bybit_spot_order_books
         timestamps = bybit_spot_density_timestamps
@@ -384,7 +368,7 @@ def sync_spot_to_cache(symbol, log_func=print):
             book = order_books.get(symbol, {})
             ts = timestamps.get(symbol, {})
             if not book:
-                return
+                return 0
 
         key = f"scalp:spot:bybit:{symbol}"
         now = time.time()
@@ -423,8 +407,11 @@ def sync_spot_to_cache(symbol, log_func=print):
         with lock:
             timestamps[symbol] = ts
 
+        return len(densities)
+
     except Exception as e:
         log_func(f"❌ sync_spot_to_cache(bybit spot {symbol}): {e}")
+        return 0
 
 
 def update_order_book(symbol, bids_delta, asks_delta, log_func=print):
@@ -879,7 +866,7 @@ def start_bybit_monitor(log_func=print):
     log_func(f"✅ Bybit Monitor запущен. Активных монет: {len(bybit_futures_symbols)}")
 
 def start_bybit_spot_monitor(log_func=print):
-    """Запуск мониторинга Bybit Spot"""
+    """Запуск мониторинга Bybit Spot с валидацией монет"""
     global bybit_spot_symbols
 
     log_func("🚀 Запуск Bybit Spot Monitor...")
@@ -889,11 +876,26 @@ def start_bybit_spot_monitor(log_func=print):
         daemon=True
     ).start()
 
-    bybit_spot_symbols = get_top_spot_symbols(30)
+    # Берём кандидатов с запасом
+    candidates = get_top_spot_symbols(60)
+    active_symbols = []
+    TARGET = 30
 
-    for symbol in bybit_spot_symbols:
-        init_spot_order_book(symbol, log_func)
+    for symbol in candidates:
+        if len(active_symbols) >= TARGET:
+            break
+
+        saved_count = init_spot_order_book(symbol, log_func)
+
+        if saved_count > 0:
+            active_symbols.append(symbol)
+            log_func(f"✅ bybit spot {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ bybit spot {symbol}: пропущен (нет плотностей > $10K)")
+
         time.sleep(0.05)
+
+    bybit_spot_symbols = active_symbols
 
     if bybit_spot_symbols:
         threading.Thread(
@@ -901,7 +903,7 @@ def start_bybit_spot_monitor(log_func=print):
             daemon=True
         ).start()
 
-    log_func("✅ Bybit Spot Monitor запущен")
+    log_func(f"✅ Bybit Spot Monitor запущен. Активных монет: {len(bybit_spot_symbols)}")
 
 
 def on_message_spot(ws, message):

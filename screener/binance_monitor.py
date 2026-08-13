@@ -101,64 +101,78 @@ def get_top_symbols(limit=30, market='futures'):
         return []
 
 
-def init_order_book(symbol, market='futures', log_func=print):
-    """Инициализация стакана"""
+def init_order_book(symbol, market, log_func=print):
+    """Инициализация стакана Binance. Возвращает количество плотностей."""
     try:
+        ccxt_market = 'future' if market == 'futures' else 'spot'
+        exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'timeout': 10000,
+            'options': {'defaultType': ccxt_market}
+        })
+        ob = exchange.fetch_order_book(symbol, limit=100)
+
         if market == 'futures':
-            url = f"{FUTURES_REST_URL}?symbol={symbol}USDT&limit=100"
-            order_books = futures_order_books
-            timestamps = futures_density_timestamps
-            lock = futures_order_books_lock
+            order_books = binance_futures_order_books
+            timestamps = binance_futures_density_timestamps
+            lock = binance_futures_order_books_lock
         else:
-            url = f"{SPOT_REST_URL}?symbol={symbol}USDT&limit=100"
-            order_books = spot_order_books
-            timestamps = spot_density_timestamps
-            lock = spot_order_books_lock
+            order_books = binance_spot_order_books
+            timestamps = binance_spot_density_timestamps
+            lock = binance_spot_order_books_lock
 
-        res = requests.get(url, timeout=10)
-        if not res.ok:
-            log_func(f"⚠️ {market} {symbol}: HTTP {res.status_code}")
-            return False
+        bids = {}
+        for price, qty in ob.get('bids', []):
+            if price > 0 and qty > 0:
+                bids[price] = qty
 
-        data = res.json()
-        bids = {float(price): float(qty) for price, qty in data.get('bids', [])}
-        asks = {float(price): float(qty) for price, qty in data.get('asks', [])}
+        asks = {}
+        for price, qty in ob.get('asks', []):
+            if price > 0 and qty > 0:
+                asks[price] = qty
+
+        if not bids and not asks:
+            log_func(f"⚠️ binance {market} {symbol}: пустой стакан")
+            return 0
 
         with lock:
             order_books[symbol] = {'bids': bids, 'asks': asks}
             timestamps[symbol] = {}
 
-        sync_to_cache(symbol, market, log_func)
+        saved_count = sync_to_cache(symbol, market, log_func)
 
-        log_func(f"✅ binance {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks")
-        return True
+        log_func(
+            f"✅ binance {market} Стакан {symbol}: "
+            f"{len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}"
+        )
+
+        return saved_count
 
     except Exception as e:
-        log_func(f"❌ init_order_book({market} {symbol}): {e}")
-        return False
+        log_func(f"❌ init_order_book(binance {market} {symbol}): {e}")
+        return 0
 
-
-def sync_to_cache(symbol, market='futures', log_func=print):
-    """Синхронизация стакана в Redis"""
+def sync_to_cache(symbol, market, log_func=print):
+    """Синхронизация стакана в Redis. Возвращает количество плотностей."""
     try:
         if market == 'futures':
-            order_books = futures_order_books
-            timestamps = futures_density_timestamps
-            lock = futures_order_books_lock
+            order_books = binance_futures_order_books
+            timestamps = binance_futures_density_timestamps
+            lock = binance_futures_order_books_lock
+            key = f"scalp:futures:{symbol}"
         else:
-            order_books = spot_order_books
-            timestamps = spot_density_timestamps
-            lock = spot_order_books_lock
+            order_books = binance_spot_order_books
+            timestamps = binance_spot_density_timestamps
+            lock = binance_spot_order_books_lock
+            key = f"scalp:spot:{symbol}"
 
         with lock:
             book = order_books.get(symbol, {})
             ts = timestamps.get(symbol, {})
             if not book:
-                return
+                return 0
 
-        key = f"scalp:{market}:{symbol}"
         now = time.time()
-
         densities = []
         is_first_load = len(ts) == 0
 
@@ -193,8 +207,11 @@ def sync_to_cache(symbol, market='futures', log_func=print):
         with lock:
             timestamps[symbol] = ts
 
+        return len(densities)
+
     except Exception as e:
-        log_func(f"❌ sync_to_cache({market} {symbol}): {e}")
+        log_func(f"❌ sync_to_cache(binance {market} {symbol}): {e}")
+        return 0
 
 
 def update_order_book(symbol, bids_delta, asks_delta, market='futures', log_func=print):
@@ -348,36 +365,58 @@ def start_websocket(symbols_list, market='futures', log_func=print):
 
 
 def start_binance_monitor(log_func=print):
-    """Запуск мониторинга Binance"""
+    """Запуск мониторинга Binance с валидацией монет"""
     global futures_symbols, spot_symbols
 
     log_func("🚀 Запуск Binance Monitor...")
 
-    # Запускаем процессоры очередей
     threading.Thread(
-        target=lambda: process_message_queue('futures', log_func),
+        target=lambda: process_message_queue(log_func),
         daemon=True
     ).start()
 
-    threading.Thread(
-        target=lambda: process_message_queue('spot', log_func),
-        daemon=True
-    ).start()
+    TARGET = 30
 
-    # Получаем топ монет
-    futures_symbols = get_top_symbols(30, 'futures')
-    spot_symbols = get_top_symbols(30, 'spot')
+    # --- Futures ---
+    futures_candidates = get_top_symbols(60, 'futures')
+    active_futures = []
 
-    # Инициализация стаканов
-    for symbol in futures_symbols:
-        init_order_book(symbol, 'futures', log_func)
+    for symbol in futures_candidates:
+        if len(active_futures) >= TARGET:
+            break
+
+        saved_count = init_order_book(symbol, 'futures', log_func)
+
+        if saved_count > 0:
+            active_futures.append(symbol)
+            log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ binance futures {symbol}: пропущен (нет плотностей > $10K)")
+
         time.sleep(0.05)
 
-    for symbol in spot_symbols:
-        init_order_book(symbol, 'spot', log_func)
+    futures_symbols = active_futures
+
+    # --- Spot ---
+    spot_candidates = get_top_symbols(60, 'spot')
+    active_spot = []
+
+    for symbol in spot_candidates:
+        if len(active_spot) >= TARGET:
+            break
+
+        saved_count = init_order_book(symbol, 'spot', log_func)
+
+        if saved_count > 0:
+            active_spot.append(symbol)
+            log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ binance spot {symbol}: пропущен (нет плотностей > $10K)")
+
         time.sleep(0.05)
 
-    # Запуск WebSocket
+    spot_symbols = active_spot
+
     if futures_symbols:
         threading.Thread(
             target=lambda: start_websocket(futures_symbols, 'futures', log_func),
@@ -390,4 +429,4 @@ def start_binance_monitor(log_func=print):
             daemon=True
         ).start()
 
-    log_func("✅ Binance Monitor запущен")
+    log_func(f"✅ Binance Monitor запущен. Futures: {len(futures_symbols)}, Spot: {len(spot_symbols)}")
