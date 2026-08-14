@@ -35,6 +35,10 @@ BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&s
 bybit_futures_ws_stop_event = threading.Event()
 bybit_futures_ws_instance = None
 
+# Управление WebSocket для Bybit Spot
+bybit_spot_ws_stop_event = threading.Event()
+bybit_spot_ws_instance = None
+
 # Rate limiting
 last_sync_time = {}
 
@@ -793,8 +797,10 @@ def start_websocket(symbols_list, log_func=print):
         time.sleep(3)
 
 def start_spot_websocket(symbols_list, log_func=print):
-    """Запуск WebSocket Bybit Spot с переподключением"""
-    while True:
+    """Запуск WebSocket Bybit Spot с переподключением и поддержкой остановки"""
+    global bybit_spot_ws_stop_event, bybit_spot_ws_instance
+
+    while not bybit_spot_ws_stop_event.is_set():
         ws = None
         stop_event = threading.Event()
 
@@ -808,11 +814,11 @@ def start_spot_websocket(symbols_list, log_func=print):
             )
 
             ws.symbols = symbols_list
+            bybit_spot_ws_instance = ws
 
             def heartbeat():
                 while not stop_event.is_set():
                     time.sleep(15)
-
                     try:
                         if ws and ws.sock and ws.sock.connected:
                             ws.send(json.dumps({"op": "ping"}))
@@ -829,6 +835,11 @@ def start_spot_websocket(symbols_list, log_func=print):
 
         finally:
             stop_event.set()
+            bybit_spot_ws_instance = None
+
+        if bybit_spot_ws_stop_event.is_set():
+            log_func("🛑 Bybit spot WebSocket остановлен для обновления списка")
+            break
 
         log_func("🔁 Bybit spot WebSocket переподключение через 3 секунды...")
         time.sleep(3)
@@ -1002,9 +1013,96 @@ def start_bybit_spot_monitor(log_func=print):
 
     log_func(f"✅ Bybit Spot Monitor запущен. Активных монет: {len(bybit_spot_symbols)}")
 
+    threading.Thread(
+        target=lambda: periodic_bybit_spot_refresh(log_func),
+        daemon=True
+    ).start()
+
+def refresh_bybit_spot_symbols(log_func=print):
+    """Частичная ротация списка монет Bybit Spot"""
+    global bybit_spot_symbols, bybit_spot_ws_stop_event, bybit_spot_ws_instance
+
+    log_func("🔄 Обновление списка Bybit Spot...")
+
+    old_symbols = set(bybit_spot_symbols)
+
+    candidates = get_top_spot_symbols(60)
+
+    new_active = []
+    TARGET = 30
+
+    for symbol in candidates:
+        if len(new_active) >= TARGET:
+            break
+
+        if symbol in old_symbols:
+            new_active.append(symbol)
+            continue
+
+        saved_count = init_spot_order_book(symbol, log_func)
+
+        if saved_count > 0:
+            new_active.append(symbol)
+            log_func(f"✅ bybit spot {symbol}: добавлен (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ bybit spot {symbol}: пропущен (нет плотностей > $10K)")
+
+        time.sleep(0.05)
+
+    new_symbols = set(new_active)
+
+    removed = old_symbols - new_symbols
+    added = new_symbols - old_symbols
+
+    if removed:
+        with bybit_spot_order_books_lock:
+            for symbol in removed:
+                bybit_spot_order_books.pop(symbol, None)
+                bybit_spot_density_timestamps.pop(symbol, None)
+
+        log_func(f"🗑️ bybit spot удалены: {', '.join(sorted(removed))}")
+
+    bybit_spot_symbols = new_active
+
+    if removed or added:
+        log_func(f"🔄 bybit spot: добавлено {len(added)}, удалено {len(removed)}")
+
+        bybit_spot_ws_stop_event.set()
+
+        if bybit_spot_ws_instance:
+            try:
+                bybit_spot_ws_instance.close()
+            except Exception:
+                pass
+
+        time.sleep(2)
+
+        bybit_spot_ws_stop_event.clear()
+
+        if bybit_spot_symbols:
+            threading.Thread(
+                target=lambda: start_spot_websocket(bybit_spot_symbols, log_func),
+                daemon=True
+            ).start()
+    else:
+        log_func("✅ bybit spot: список не изменился")
+
+
+def periodic_bybit_spot_refresh(log_func=print):
+    """Периодическое обновление списка монет Bybit Spot"""
+    REFRESH_INTERVAL = 300  # 5 минут
+
+    while True:
+        time.sleep(REFRESH_INTERVAL)
+        try:
+            refresh_bybit_spot_symbols(log_func)
+        except Exception as e:
+            log_func(f"❌ Ошибка при обновлении списка Bybit Spot: {e}")
+
+
 def periodic_bybit_futures_refresh(log_func=print):
     """Периодическое обновление списка монет каждые 30 минут"""
-    REFRESH_INTERVAL = 300  # 30 минут в секундах
+    REFRESH_INTERVAL = 1800  # 30 минут в секундах
 
     while True:
         time.sleep(REFRESH_INTERVAL)
