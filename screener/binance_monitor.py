@@ -30,6 +30,13 @@ FUTURES_REST_URL = "https://fapi.binance.com/fapi/v1/depth"
 SPOT_WS_URL = "wss://stream.binance.com:9443/ws"
 SPOT_REST_URL = "https://api.binance.com/api/v3/depth"
 
+# Управление WebSocket для обновления списка
+binance_futures_ws_stop_event = threading.Event()
+binance_futures_ws_instance = None
+binance_spot_ws_stop_event = threading.Event()
+binance_spot_ws_instance = None
+
+
 # Rate limiting
 last_sync_time = {}
 
@@ -347,26 +354,54 @@ def on_open(ws, market='futures'):
 
 
 def start_websocket(symbols_list, market='futures', log_func=print):
-    """Запуск WebSocket"""
-    try:
-        if market == 'futures':
-            url = FUTURES_WS_URL
-        else:
-            url = SPOT_WS_URL
+    """Запуск WebSocket Binance с переподключением и поддержкой остановки"""
+    global binance_futures_ws_stop_event, binance_futures_ws_instance
+    global binance_spot_ws_stop_event, binance_spot_ws_instance
 
-        ws = websocket.WebSocketApp(
-            url,
-            on_open=lambda ws: on_open(ws, market),
-            on_message=lambda ws, msg: on_message(ws, msg, market),
-            on_error=lambda ws, err: print(f"❌ {market} WebSocket ошибка: {err}"),
-            on_close=lambda ws, code, msg: print(f"⚠️ {market} WebSocket закрыт: {code}")
-        )
-        ws.symbols = symbols_list
+    if market == 'futures':
+        url = FUTURES_WS_URL
+        stop_event_global = binance_futures_ws_stop_event
+    else:
+        url = SPOT_WS_URL
+        stop_event_global = binance_spot_ws_stop_event
 
-        ws.run_forever(ping_interval=20, ping_timeout=10)
+    while not stop_event_global.is_set():
+        ws = None
+        stop_event = threading.Event()
 
-    except Exception as e:
-        log_func(f"❌ Ошибка в start_websocket: {e}")
+        try:
+            ws = websocket.WebSocketApp(
+                url,
+                on_open=lambda ws: on_open(ws, market),
+                on_message=lambda ws, msg: on_message(ws, msg, market),
+                on_error=lambda ws, err: log_func(f"❌ binance {market} WebSocket ошибка: {err}"),
+                on_close=lambda ws, code, msg: log_func(f"⚠️ binance {market} WebSocket закрыт: {code}")
+            )
+            ws.symbols = symbols_list
+
+            if market == 'futures':
+                binance_futures_ws_instance = ws
+            else:
+                binance_spot_ws_instance = ws
+
+            ws.run_forever(ping_interval=20, ping_timeout=10)
+
+        except Exception as e:
+            log_func(f"❌ Ошибка в start_websocket(binance {market}): {e}")
+
+        finally:
+            stop_event.set()
+            if market == 'futures':
+                binance_futures_ws_instance = None
+            else:
+                binance_spot_ws_instance = None
+
+        if stop_event_global.is_set():
+            log_func(f"🛑 Binance {market} WebSocket остановлен для обновления списка")
+            break
+
+        log_func(f"🔁 Binance {market} WebSocket переподключение через 3 секунды...")
+        time.sleep(3)
 
 
 def start_binance_monitor(log_func=print):
@@ -441,3 +476,152 @@ def start_binance_monitor(log_func=print):
         ).start()
 
     log_func(f"✅ Binance Monitor запущен. Futures: {len(futures_symbols)}, Spot: {len(spot_symbols)}")
+
+    threading.Thread(
+        target=lambda: periodic_binance_refresh(log_func),
+        daemon=True
+    ).start()
+
+def refresh_binance_futures_symbols(log_func=print):
+    """Частичная ротация списка монет Binance Futures"""
+    global futures_symbols, binance_futures_ws_stop_event, binance_futures_ws_instance
+
+    log_func("🔄 Обновление списка Binance Futures...")
+
+    old_symbols = set(futures_symbols)
+    candidates = get_top_symbols(60, 'futures')
+
+    new_active = []
+    TARGET = 30
+
+    for symbol in candidates:
+        if len(new_active) >= TARGET:
+            break
+
+        if symbol in old_symbols:
+            new_active.append(symbol)
+            continue
+
+        saved_count = init_order_book(symbol, 'futures', log_func)
+
+        if saved_count > 0:
+            new_active.append(symbol)
+            log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ binance futures {symbol}: пропущен (нет плотностей > $10K)")
+
+        time.sleep(0.05)
+
+    new_symbols = set(new_active)
+    removed = old_symbols - new_symbols
+    added = new_symbols - old_symbols
+
+    if removed:
+        with binance_futures_order_books_lock:
+            for symbol in removed:
+                binance_futures_order_books.pop(symbol, None)
+                binance_futures_density_timestamps.pop(symbol, None)
+        log_func(f"🗑️ binance futures удалены: {', '.join(sorted(removed))}")
+
+    futures_symbols = new_active
+
+    if removed or added:
+        log_func(f"🔄 binance futures: добавлено {len(added)}, удалено {len(removed)}")
+
+        binance_futures_ws_stop_event.set()
+
+        if binance_futures_ws_instance:
+            try:
+                binance_futures_ws_instance.close()
+            except Exception:
+                pass
+
+        time.sleep(2)
+        binance_futures_ws_stop_event.clear()
+
+        if futures_symbols:
+            threading.Thread(
+                target=lambda: start_websocket(futures_symbols, 'futures', log_func),
+                daemon=True
+            ).start()
+    else:
+        log_func("✅ binance futures: список не изменился")
+
+
+def refresh_binance_spot_symbols(log_func=print):
+    """Частичная ротация списка монет Binance Spot"""
+    global spot_symbols, binance_spot_ws_stop_event, binance_spot_ws_instance
+
+    log_func("🔄 Обновление списка Binance Spot...")
+
+    old_symbols = set(spot_symbols)
+    candidates = get_top_symbols(60, 'spot')
+
+    new_active = []
+    TARGET = 30
+
+    for symbol in candidates:
+        if len(new_active) >= TARGET:
+            break
+
+        if symbol in old_symbols:
+            new_active.append(symbol)
+            continue
+
+        saved_count = init_order_book(symbol, 'spot', log_func)
+
+        if saved_count > 0:
+            new_active.append(symbol)
+            log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ binance spot {symbol}: пропущен (нет плотностей > $10K)")
+
+        time.sleep(0.05)
+
+    new_symbols = set(new_active)
+    removed = old_symbols - new_symbols
+    added = new_symbols - old_symbols
+
+    if removed:
+        with binance_spot_order_books_lock:
+            for symbol in removed:
+                binance_spot_order_books.pop(symbol, None)
+                binance_spot_density_timestamps.pop(symbol, None)
+        log_func(f"🗑️ binance spot удалены: {', '.join(sorted(removed))}")
+
+    spot_symbols = new_active
+
+    if removed or added:
+        log_func(f"🔄 binance spot: добавлено {len(added)}, удалено {len(removed)}")
+
+        binance_spot_ws_stop_event.set()
+
+        if binance_spot_ws_instance:
+            try:
+                binance_spot_ws_instance.close()
+            except Exception:
+                pass
+
+        time.sleep(2)
+        binance_spot_ws_stop_event.clear()
+
+        if spot_symbols:
+            threading.Thread(
+                target=lambda: start_websocket(spot_symbols, 'spot', log_func),
+                daemon=True
+            ).start()
+    else:
+        log_func("✅ binance spot: список не изменился")
+
+
+def periodic_binance_refresh(log_func=print):
+    """Периодическое обновление списка монет Binance"""
+    REFRESH_INTERVAL = 300  # 5 минут
+
+    while True:
+        time.sleep(REFRESH_INTERVAL)
+        try:
+            refresh_binance_futures_symbols(log_func)
+            refresh_binance_spot_symbols(log_func)
+        except Exception as e:
+            log_func(f"❌ Ошибка при обновлении списка Binance: {e}")
