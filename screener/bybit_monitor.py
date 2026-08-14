@@ -1090,7 +1090,7 @@ def refresh_bybit_spot_symbols(log_func=print):
 
 def periodic_bybit_spot_refresh(log_func=print):
     """Периодическое обновление списка монет Bybit Spot"""
-    REFRESH_INTERVAL = 300  # 5 минут
+    REFRESH_INTERVAL = 1800  # 5 минут
 
     while True:
         time.sleep(REFRESH_INTERVAL)

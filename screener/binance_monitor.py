@@ -616,7 +616,7 @@ def refresh_binance_spot_symbols(log_func=print):
 
 def periodic_binance_refresh(log_func=print):
     """Периодическое обновление списка монет Binance"""
-    REFRESH_INTERVAL = 300  # 5 минут
+    REFRESH_INTERVAL = 1800  # 5 минут
 
     while True:
         time.sleep(REFRESH_INTERVAL)
