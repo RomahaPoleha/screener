@@ -1,5 +1,5 @@
 // ==========================================
-// app.js (ЧИСТЫЙ, без дублирования переменных из state.js)
+// app.js
 // ==========================================
 
 // ==========================================
@@ -75,29 +75,18 @@ function showPriceAlertToast(currentPrice, alertPrice, direction) {
 function checkAlerts(currentPrice, prevPrice) {
     activeAlerts.forEach((alert) => {
         if (!alert.active) return;
-
         const crossedAbove = (prevPrice < alert.price && currentPrice >= alert.price);
         const crossedBelow = (prevPrice > alert.price && currentPrice <= alert.price);
-
         if (crossedAbove || crossedBelow) {
             const direction = crossedAbove ? 'вверх ↑' : 'вниз ↓';
-
             playAlertSound();
             showPriceAlertToast(currentPrice, alert.price, direction);
-
-            try {
-                candleSeries.removePriceLine(alert.line);
-            } catch(e) {}
-
+            try { candleSeries.removePriceLine(alert.line); } catch(e) {}
             const fadedLine = candleSeries.createPriceLine({
-                price: alert.price,
-                color: 'rgba(240, 185, 11, 0.3)',
-                lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Dotted,
-                axisLabelVisible: true,
+                price: alert.price, color: 'rgba(240, 185, 11, 0.3)', lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true,
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
-
             alert.line = fadedLine;
             alert.active = false;
         }
@@ -446,61 +435,47 @@ function initPencilCanvas() {
 function getTimeByX(x) {
     let time = chart.timeScale().coordinateToTime(x);
     if (time !== null) return time;
-
     const logicalIndex = getLogicalIndexByX(x);
     if (logicalIndex === null) return null;
-
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
-
     const lastCandle = candles[candles.length - 1];
     const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
     const indexDiff = logicalIndex - (candles.length - 1);
-
     return lastCandle.time + (indexDiff * secondsPerBar);
 }
 
 function getLogicalIndexByX(x) {
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
-
     const lastCandle = candles[candles.length - 1];
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
     if (lastCandleX === null) return null;
-
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange) return null;
-
     const chartWidth = els.chartWrapper.clientWidth;
     const barsCount = visibleRange.to - visibleRange.from;
     const pixelsPerBar = chartWidth / barsCount;
     const lastIndex = candles.length - 1;
     const barsOffset = (x - lastCandleX) / pixelsPerBar;
-
     return lastIndex + barsOffset;
 }
 
 function getXByTime(time) {
     let x = chart.timeScale().timeToCoordinate(time);
     if (x !== null) return x;
-
     const candles = window.candleData || [];
     if (candles.length === 0) return null;
-
     const lastCandle = candles[candles.length - 1];
     const lastCandleX = chart.timeScale().timeToCoordinate(lastCandle.time);
     if (lastCandleX === null) return null;
-
     const timeDiff = time - lastCandle.time;
     const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
     const barsOffset = timeDiff / secondsPerBar;
-
     const visibleRange = chart.timeScale().getVisibleLogicalRange();
     if (!visibleRange || visibleRange.to === visibleRange.from) return null;
-
     const chartWidth = els.chartWrapper.clientWidth;
     const pixelsPerLogicalUnit = chartWidth / (visibleRange.to - visibleRange.from);
-
     return lastCandleX + (barsOffset * pixelsPerLogicalUnit);
 }
 
@@ -510,31 +485,19 @@ function redrawPencilStrokes() {
     pencilCtx.lineWidth = 2;
     pencilCtx.lineCap = 'round';
     pencilCtx.lineJoin = 'round';
-
     const drawStroke = (stroke) => {
         if (stroke.length < 2) return;
         pencilCtx.beginPath();
         let started = false;
-
         for (const point of stroke) {
             const x = getXByTime(point.time);
             const y = candleSeries.priceToCoordinate(point.price);
-
-            if (x === null || y === null) {
-                started = false;
-                continue;
-            }
-
-            if (!started) {
-                pencilCtx.moveTo(x, y);
-                started = true;
-            } else {
-                pencilCtx.lineTo(x, y);
-            }
+            if (x === null || y === null) { started = false; continue; }
+            if (!started) { pencilCtx.moveTo(x, y); started = true; }
+            else { pencilCtx.lineTo(x, y); }
         }
         pencilCtx.stroke();
     };
-
     pencilStrokes.forEach(drawStroke);
     if (currentStroke && currentStroke.length >= 2) drawStroke(currentStroke);
 }
@@ -542,21 +505,16 @@ function redrawPencilStrokes() {
 function drawRulerRectangle(start, end) {
     const x1 = getXByTime(start.time);
     const y1 = candleSeries.priceToCoordinate(start.price);
-
     const x2 = getXByTime(end.time);
     const y2 = candleSeries.priceToCoordinate(end.price);
-
     if (x1 === null || y1 === null || x2 === null || y2 === null) return;
-
     const isUp = end.price >= start.price;
     const color = isUp ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)';
     const borderColor = isUp ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)';
-
     const left = Math.min(x1, x2);
     const top = Math.min(y1, y2);
     const width = Math.abs(x2 - x1);
     const height = Math.abs(y2 - y1);
-
     pencilCtx.fillStyle = color;
     pencilCtx.fillRect(left, top, width, height);
     pencilCtx.strokeStyle = borderColor;
@@ -569,17 +527,14 @@ function drawRulerRectangle(start, end) {
 function redrawAllPersistentDrawings() {
     if (!pencilCtx || !chart) return;
     pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
-
     pencilCtx.strokeStyle = '#38bdf8';
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
-
     activeTrendlines.forEach(tl => {
         const x1 = getXByTime(tl.time1);
         const x2 = getXByTime(tl.time2);
         const y1 = candleSeries.priceToCoordinate(tl.price1);
         const y2 = candleSeries.priceToCoordinate(tl.price2);
-
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
             pencilCtx.beginPath();
             pencilCtx.moveTo(x1, y1);
@@ -587,13 +542,11 @@ function redrawAllPersistentDrawings() {
             pencilCtx.stroke();
         }
     });
-
     if (isDrawingTrendLine && trendLinePreview) {
         const x1 = getXByTime(trendLinePreview.time1);
         const x2 = getXByTime(trendLinePreview.time2);
         const y1 = candleSeries.priceToCoordinate(trendLinePreview.price1);
         const y2 = candleSeries.priceToCoordinate(trendLinePreview.price2);
-
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
             pencilCtx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
             pencilCtx.lineWidth = 1.5;
@@ -604,23 +557,14 @@ function redrawAllPersistentDrawings() {
             pencilCtx.stroke();
         }
     }
-
-    if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) {
-        drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
-    }
-    if (rulerFixedMeasurement) {
-        drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
-    }
-
+    if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
+    if (rulerFixedMeasurement) drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
     redrawPencilStrokes();
     pencilCtx.setLineDash([]);
 }
 
 function pointToLineDistance(px, py, x1, y1, x2, y2) {
-    const A = px - x1;
-    const B = py - y1;
-    const C = x2 - x1;
-    const D = y2 - y1;
+    const A = px - x1; const B = py - y1; const C = x2 - x1; const D = y2 - y1;
     const dot = A * C + B * D;
     const lenSq = C * C + D * D;
     let param = -1;
@@ -629,8 +573,7 @@ function pointToLineDistance(px, py, x1, y1, x2, y2) {
     if (param < 0) { xx = x1; yy = y1; }
     else if (param > 1) { xx = x2; yy = y2; }
     else { xx = x1 + param * C; yy = y1 + param * D; }
-    const dx = px - xx;
-    const dy = py - yy;
+    const dx = px - xx; const dy = py - yy;
     return Math.sqrt(dx * dx + dy * dy);
 }
 
@@ -638,7 +581,6 @@ function deleteLineAtPoint(x, y) {
     const clickPrice = candleSeries.coordinateToPrice(y);
     if (!clickPrice) return;
     const threshold = 50;
-
     for (let i = activeAlerts.length - 1; i >= 0; i--) {
         const alert = activeAlerts[i];
         const alertY = candleSeries.priceToCoordinate(alert.price);
@@ -648,7 +590,6 @@ function deleteLineAtPoint(x, y) {
             return;
         }
     }
-
     for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
         const hl = activeHorizontalLines[i];
         const hlY = candleSeries.priceToCoordinate(hl.price);
@@ -658,14 +599,12 @@ function deleteLineAtPoint(x, y) {
             return;
         }
     }
-
     for (let i = activeTrendlines.length - 1; i >= 0; i--) {
         const tl = activeTrendlines[i];
         const x1 = getXByTime(tl.time1);
         const y1 = candleSeries.priceToCoordinate(tl.price1);
         const x2 = getXByTime(tl.time2);
         const y2 = candleSeries.priceToCoordinate(tl.price2);
-
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
             const distance = pointToLineDistance(x, y, x1, y1, x2, y2);
             if (distance < threshold) {
@@ -675,7 +614,6 @@ function deleteLineAtPoint(x, y) {
             }
         }
     }
-
     for (let i = pencilStrokes.length - 1; i >= 0; i--) {
         const stroke = pencilStrokes[i];
         for (const point of stroke) {
@@ -695,23 +633,14 @@ function deleteLineAtPoint(x, y) {
 
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
-
-    if (isEraserEnabled) {
-        deleteLineAtPoint(param.point.x, param.point.y);
-        return;
-    }
-
+    if (isEraserEnabled) { deleteLineAtPoint(param.point.x, param.point.y); return; }
     if (isRulerEnabled) return;
-
     if (isAlertModeEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
         const line = candleSeries.createPriceLine({
-            price: price,
-            color: '#f0b90b',
-            lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed,
-            axisLabelVisible: true,
+            price: price, color: '#f0b90b', lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             title: ` ${price.toFixed(currentPrecision)}`
         });
         activeAlerts.push({ price: price, line: line, active: true });
@@ -720,12 +649,8 @@ function handleChartClick(param) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
         const line = candleSeries.createPriceLine({
-            price: price,
-            color: '#38bdf8',
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Solid,
-            axisLabelVisible: false,
-            title: ''
+            price: price, color: '#38bdf8', lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: false, title: ''
         });
         activeHorizontalLines.push({ price: price, line: line });
     }
@@ -734,14 +659,10 @@ function handleChartClick(param) {
         const time = param.time || getTimeByX(param.point.x);
         const logicalIndex = getLogicalIndexByX(param.point.x);
         if (!price || isNaN(price) || !time) return;
-
         if (!isDrawingTrendLine) {
             trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
             isDrawingTrendLine = true;
-            trendLinePreview = {
-                time1: time, price1: price, logicalIndex1: logicalIndex,
-                time2: time, price2: price, logicalIndex2: logicalIndex
-            };
+            trendLinePreview = { time1: time, price1: price, logicalIndex1: logicalIndex, time2: time, price2: price, logicalIndex2: logicalIndex };
         } else {
             activeTrendlines.push({
                 time1: trendLineStart.time, price1: trendLineStart.price, logicalIndex1: trendLineStart.logicalIndex,
@@ -761,10 +682,8 @@ function handlePencilDraw(param) {
     const time = param.time || getTimeByX(param.point.x);
     const logicalIndex = getLogicalIndexByX(param.point.x);
     if (!price || !time) { lastPencilPoint = param.point; return; }
-
     if (!currentStroke) currentStroke = [{ time, price, logicalIndex }];
     else currentStroke.push({ time, price, logicalIndex });
-
     if (lastPencilPoint) {
         pencilCtx.strokeStyle = '#f0b90b'; pencilCtx.lineWidth = 2;
         pencilCtx.lineCap = 'round'; pencilCtx.lineJoin = 'round';
@@ -776,16 +695,13 @@ function handlePencilDraw(param) {
 
 function showRulerMeasurement(start, end) {
     if (!start || !end || !candleSeries) return;
-
     const priceDiff = Math.abs(end.price - start.price);
     const pricePercent = ((priceDiff / start.price) * 100).toFixed(2);
     const direction = end.price >= start.price ? '↑' : '↓';
     const color = end.price >= start.price ? '#22c55e' : '#ef4444';
-
     const candles = window.candleData || [];
     const lastRealCandle = candles[candles.length - 1];
     const lastRealTime = lastRealCandle ? lastRealCandle.time : 0;
-
     const getTimeValue = (point) => {
         if (!point) return 0;
         if (typeof point.time === 'number') return point.time;
@@ -800,29 +716,23 @@ function showRulerMeasurement(start, end) {
         }
         return 0;
     };
-
     const startTime = getTimeValue(start);
     const endTime = getTimeValue(end);
-
     const startInRealArea = startTime <= lastRealTime && startTime > 0;
     const endInRealArea = endTime <= lastRealTime && endTime > 0;
     const bothInRealArea = startInRealArea && endInRealArea;
-
     let barsCount = 0;
     let totalVolume = 0;
     let maxPrice = '-';
     let minPrice = '-';
     let hasRealData = false;
-
     const rangeStart = Math.min(startTime, endTime);
     const rangeEnd = Math.max(startTime, endTime);
-
     if (rangeStart > 0 && rangeEnd > 0) {
         const rangeCandles = candles.filter(c => {
             const candleTime = typeof c.time === 'number' ? c.time : (c.time && c.time.timestamp ? c.time.timestamp : 0);
             return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
         });
-
         if (rangeCandles.length > 0) {
             hasRealData = true;
             barsCount = rangeCandles.length;
@@ -837,17 +747,14 @@ function showRulerMeasurement(start, end) {
             minPrice = lowest.toFixed(currentPrecision);
         }
     }
-
     const formatTime = (t) => {
         if (!t || t === 0) return '---';
         const date = new Date(t * 1000);
         return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
     };
-
     const volumeFormatted = totalVolume >= 1000000 ? `${(totalVolume / 1000000).toFixed(2)}M` :
                            totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
                            totalVolume > 0 ? totalVolume.toFixed(2) : '0';
-
     if (hasRealData) {
         els.rulerMeasurement.innerHTML = `
             <div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">
@@ -897,21 +804,15 @@ function showRulerMeasurement(start, end) {
                 </div>
             </div>`;
     }
-
     const measurementWidth = 230;
     const measurementHeight = 220;
     const chartWidth = els.chartWrapper.clientWidth;
     const chartHeight = els.chartWrapper.clientHeight;
-
     let displayX = end.x - measurementWidth - 15;
     if (displayX < 10) displayX = 10;
-
     let displayY = end.y - (measurementHeight / 2);
     if (displayY < 10) displayY = 10;
-    if (displayY + measurementHeight > chartHeight - 10) {
-        displayY = chartHeight - measurementHeight - 10;
-    }
-
+    if (displayY + measurementHeight > chartHeight - 10) displayY = chartHeight - measurementHeight - 10;
     els.rulerMeasurement.style.left = `${displayX}px`;
     els.rulerMeasurement.style.top = `${displayY}px`;
     els.rulerMeasurement.style.display = 'block';
@@ -940,19 +841,15 @@ function updateMagnetIndicator(param) {
     }
     const candles = window.candleData || [];
     if (candles.length === 0) return;
-
     let cursorTime = param.time || chart.timeScale().coordinateToTime(param.point.x);
     let nearestCandle = candles[candles.length - 1];
     let minTimeDiff = Infinity;
-
     for (const candle of candles) {
         const timeDiff = Math.abs(candle.time - cursorTime);
         if (timeDiff < minTimeDiff) { minTimeDiff = timeDiff; nearestCandle = candle; }
     }
-
     const priceAtCursor = candleSeries.coordinateToPrice(param.point.y);
     if (priceAtCursor === null || priceAtCursor === undefined) return;
-
     const magnetPoints = [
         { type: 'ohlc', price: nearestCandle.open, distance: Math.abs(nearestCandle.open - priceAtCursor) },
         { type: 'ohlc', price: nearestCandle.high, distance: Math.abs(nearestCandle.high - priceAtCursor) },
@@ -962,12 +859,10 @@ function updateMagnetIndicator(param) {
     activeAlerts.forEach(a => {
         if (a.active) magnetPoints.push({ type: 'alert', price: a.price, distance: Math.abs(a.price - priceAtCursor) });
     });
-
     magnetPoints.sort((a, b) => a.distance - b.distance);
     const nearest = magnetPoints[0];
     const snapX = chart.timeScale().timeToCoordinate(nearestCandle.time);
     const snapY = candleSeries.priceToCoordinate(nearest.price);
-
     if (snapX !== null && snapY !== null) {
         magnetIndicator.style.display = 'block';
         magnetIndicator.style.left = `${snapX - 3}px`;
@@ -979,32 +874,20 @@ function updateMagnetIndicator(param) {
 }
 
 // ==========================================
-// НАСТРОЙКИ И RECON/SCALP
+// НАСТРОЙКИ (основное окно)
 // ==========================================
 function openSettingsModal() {
     document.getElementById('densityMarketFuture').checked = densityMarkets.future;
     document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
     document.getElementById('densityMinVolumeFuture').value = densityMinVolumeFuture;
     document.getElementById('densityMinVolumeSpot').value = densityMinVolumeSpot;
-
-    document.getElementById('scalpMarketFuture').checked = scalpMarkets.future;
-    document.getElementById('scalpMarketSpot').checked = scalpMarkets.spot;
-    document.getElementById('scalpMinVolumeFuture').value = scalpMinVolumeFuture;
-    document.getElementById('scalpMinVolumeSpot').value = scalpMinVolumeSpot;
-
-    // === BYBIT SCALP: установка чекбоксов бирж ===
-    document.getElementById('exchangeBinance').checked = scalpExchanges.binance !== false;
-    document.getElementById('exchangeBybit').checked = scalpExchanges.bybit !== false;
-
     document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
     document.getElementById('showDrawingTools').checked = showDrawingTools;
-
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
         soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
-
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
     modal.show();
 }
@@ -1019,23 +902,6 @@ function applySettings() {
     densityEnabled = densityMarkets.future || densityMarkets.spot;
     localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
     localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
-
-    scalpMarkets = {
-        future: document.getElementById('scalpMarketFuture').checked,
-        spot: document.getElementById('scalpMarketSpot').checked
-    };
-    // === BYBIT SCALP: сохранение настроек бирж ===
-    scalpExchanges = {
-        binance: document.getElementById('exchangeBinance').checked,
-        bybit: document.getElementById('exchangeBybit').checked
-    };
-    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
-    scalpMinVolumeFuture = Math.max(200000, parseInt(document.getElementById('scalpMinVolumeFuture').value) || 200000);
-    scalpMinVolumeSpot = Math.max(100000, parseInt(document.getElementById('scalpMinVolumeSpot').value) || 100000);
-    scalpEnabled = scalpMarkets.future || scalpMarkets.spot;
-    localStorage.setItem('scalpMinVolumeFuture', scalpMinVolumeFuture);
-    localStorage.setItem('scalpMinVolumeSpot', scalpMinVolumeSpot);
 
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
@@ -1061,7 +927,7 @@ function applySettings() {
             clearDensityLines();
         }
         if (scalpEnabled) {
-            previousScalpData = { futures: [], spot: [] };
+            previousScalpData = {};
             startScalpUpdates(currentSymbol);
         } else {
             if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
@@ -1071,6 +937,9 @@ function applySettings() {
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
 
+// ==========================================
+// RECON — сырой стакан
+// ==========================================
 async function loadDensities(symbol) {
     if (!densityEnabled || !candleSeries) return;
     let hasChanges = false;
@@ -1078,7 +947,6 @@ async function loadDensities(symbol) {
     if (densityMarkets.future) marketsToLoad.push('future');
     if (densityMarkets.spot) marketsToLoad.push('spot');
     const allNewData = {};
-
     for (const market of marketsToLoad) {
         try {
             const url = market === 'future'
@@ -1106,14 +974,12 @@ async function loadDensities(symbol) {
             allNewData[market] = previousDensities[market] || [];
         }
     }
-
     for (const market of marketsToLoad) {
         const newData = allNewData[market] || [];
         const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
         const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
         if (currentData !== prevData) { hasChanges = true; previousDensities[market] = newData; }
     }
-
     if (!hasChanges) return;
     clearDensityLines();
     for (const market of marketsToLoad) {
@@ -1142,59 +1008,58 @@ function startDensityUpdates(symbol) {
     }, 3000);
 }
 
+// ==========================================
+// SCALP — плотности с бирж (по настройкам каждой биржи)
+// ==========================================
 async function loadScalpDensities(symbol) {
     if (!scalpEnabled || !candleSeries || isScalpLoading) return;
     isScalpLoading = true;
     try {
-        const marketsToLoad = [];
-        if (scalpMarkets.future) marketsToLoad.push('futures');
-        if (scalpMarkets.spot) marketsToLoad.push('spot');
+        const loadList = [];
+        for (const exId in scalpExchanges) {
+            const ex = scalpExchanges[exId];
+            if (!ex.enabled) continue;
+            if (ex.markets.futures) loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
+            if (ex.markets.spot)    loadList.push({ exchange: exId, market: 'spot',    minVol: ex.minVolumeSpot });
+        }
+        if (loadList.length === 0) {
+            if (scalpLines.length > 0) clearScalpLines();
+            return;
+        }
         const allNewData = {};
         let hasChanges = false;
-
-        for (const market of marketsToLoad) {
-            const minVol = market === 'futures' ? scalpMinVolumeFuture : scalpMinVolumeSpot;
+        for (const item of loadList) {
+            const key = `${item.exchange}|${item.market}`;
             try {
-                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${minVol}&market=${market}&limit=50`);
+                const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`);
                 if (!res.ok) continue;
                 const data = await res.json();
-                allNewData[market] = data.densities || [];
+                const filtered = (data.densities || []).filter(d => (d.exchange || 'binance') === item.exchange);
+                allNewData[key] = filtered;
             } catch (e) {
-                console.error(`Scalp load error (${market}):`, e);
-                allNewData[market] = previousScalpData[market] || [];
+                console.error(`Scalp load error (${key}):`, e);
+                allNewData[key] = previousScalpData[key] || [];
             }
         }
-
-        for (const market of marketsToLoad) {
-            const newData = allNewData[market] || [];
-            const prevData = previousScalpData[market] || [];
-            // === BYBIT SCALP: в сигнатуре учитываем биржу ===
-            const currentSignature = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
-            const prevSignature = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
-            if (currentSignature !== prevSignature) { hasChanges = true; previousScalpData[market] = newData; }
+        for (const key in allNewData) {
+            const newData = allNewData[key];
+            const prevData = previousScalpData[key] || [];
+            const curSig = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
+            const prevSig = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
+            if (curSig !== prevSig) { hasChanges = true; previousScalpData[key] = newData; }
         }
-
         if (!hasChanges) return;
         clearScalpLines();
-
-        for (const market of marketsToLoad) {
-            const densities = allNewData[market] || [];
-
-            // === BYBIT SCALP: фильтр по включённым биржам ===
-            const filteredDensities = densities.filter(d => {
-                const exchange = d.exchange || 'binance';
-                return scalpExchanges[exchange] !== false;
-            });
-
-            filteredDensities.forEach(d => {
+        for (const key in allNewData) {
+            const [exchange, market] = key.split('|');
+            const densities = allNewData[key];
+            const exchangePrefix = exchange === 'bybit' ? 'BY' : 'BI';
+            const marketSuffix = market === 'futures' ? 'F' : 'S';
+            const prefix = `${exchangePrefix}-${marketSuffix}`;
+            densities.forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
                 const ageText = formatAge(ageSeconds);
                 const volumeText = formatVolumeText(d.volume);
-                const exchange = d.exchange || 'binance';
-                // === BYBIT SCALP: префикс BI для binance, BY для bybit ===
-                const exchangePrefix = exchange === 'bybit' ? 'BY' : 'BI';
-                const marketSuffix = market === 'futures' ? 'F' : 'S';
-                const prefix = `${exchangePrefix}-${marketSuffix}`;
                 const volumeNum = parseFloat(d.volume) || 0;
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
                 const line = candleSeries.createPriceLine({
@@ -1221,6 +1086,90 @@ function startScalpUpdates(symbol) {
 }
 
 // ==========================================
+// ОТДЕЛЬНОЕ ОКНО SCALP НАСТРОЕК
+// ==========================================
+function openScalpSettingsModal() {
+    const container = document.getElementById('scalpExchangesContainer');
+    container.innerHTML = EXCHANGES_CONFIG.map(ex => {
+        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+        return `
+            <div class="exchange-card" style="background:#1a2238; border:1px solid #2d3748; border-radius:10px; padding:14px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:18px;">${ex.icon}</span>
+                        <span style="font-weight:700; color:${ex.color}; font-size:15px;">${ex.name}</span>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#d1d5db;">
+                        <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} style="accent-color:${ex.color}; width:16px; height:16px;">
+                        <span>Включить</span>
+                    </label>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div style="background:#0b0f19; border:1px solid #2d3748; border-radius:6px; padding:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#d1d5db; margin-bottom:8px;">
+                            <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                            <span>Futures</span>
+                        </label>
+                        <label style="font-size:10px; color:#9ca3af; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
+                            style="width:100%; background:#151b2b; border:1px solid #2d3748; color:#fff; padding:5px 8px; border-radius:4px; font-size:12px;">
+                    </div>
+                    <div style="background:#0b0f19; border:1px solid #2d3748; border-radius:6px; padding:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#d1d5db; margin-bottom:8px;">
+                            <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                            <span>Spot</span>
+                        </label>
+                        <label style="font-size:10px; color:#9ca3af; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
+                            style="width:100%; background:#151b2b; border:1px solid #2d3748; color:#fff; padding:5px 8px; border-radius:4px; font-size:12px;">
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+    const modal = new bootstrap.Modal(document.getElementById('scalpSettingsModal'));
+    modal.show();
+}
+
+function applyScalpSettings() {
+    for (const ex of EXCHANGES_CONFIG) {
+        const enabledEl = document.getElementById(`scalpEnabled_${ex.id}`);
+        const futuresEl = document.getElementById(`scalpFutures_${ex.id}`);
+        const spotEl    = document.getElementById(`scalpSpot_${ex.id}`);
+        const minFE     = document.getElementById(`scalpMinFutures_${ex.id}`);
+        const minSE     = document.getElementById(`scalpMinSpot_${ex.id}`);
+        scalpExchanges[ex.id] = {
+            enabled: enabledEl.checked,
+            markets: { futures: futuresEl.checked, spot: spotEl.checked },
+            minVolumeFutures: Math.max(10000, parseInt(minFE.value) || 300000),
+            minVolumeSpot:    Math.max(10000, parseInt(minSE.value) || 200000),
+        };
+    }
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+    scalpEnabled = EXCHANGES_CONFIG.some(ex => {
+        const cfg = scalpExchanges[ex.id];
+        return cfg && cfg.enabled && (cfg.markets.futures || cfg.markets.spot);
+    });
+    const btn = document.getElementById('settingsBtn');
+    if (btn) {
+        if (densityEnabled || scalpEnabled) {
+            btn.style.background = '#f0b90b'; btn.style.color = '#000';
+        } else {
+            btn.style.background = '#2d3748'; btn.style.color = '#9ca3af';
+        }
+    }
+    if (currentSymbol) {
+        previousScalpData = {};
+        if (scalpEnabled) {
+            startScalpUpdates(currentSymbol);
+        } else {
+            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+            clearScalpLines();
+        }
+    }
+    bootstrap.Modal.getInstance(document.getElementById('scalpSettingsModal')).hide();
+}
+
+// ==========================================
 // ГРАФИК И УПРАВЛЕНИЕ
 // ==========================================
 function updateWatermark() {
@@ -1244,7 +1193,7 @@ function closeChart() {
     if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
     previousDensities = { future: [], spot: [] };
     clearScalpLines();
-    previousScalpData = { futures: [], spot: [] };
+    previousScalpData = {};
     if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
@@ -1259,7 +1208,7 @@ async function openChart(symbol) {
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
-    clearScalpLines(); previousScalpData = { futures: [], spot: [] }; if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+    clearScalpLines(); previousScalpData = {}; if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
     await new Promise(resolve => setTimeout(resolve, 150));
 
     currentSymbol = symbol;
@@ -1273,13 +1222,7 @@ async function openChart(symbol) {
             height: els.chartWrapper.clientHeight,
             layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
             grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
-            timeScale: {
-                timeVisible: true,
-                secondsVisible: false,
-                borderColor: '#2d3748',
-                rightOffset: 50,
-                barSpacing: 10
-            },
+            timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#2d3748', rightOffset: 50, barSpacing: 10 },
             rightPriceScale: { borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
@@ -1291,7 +1234,6 @@ async function openChart(symbol) {
         chart.subscribeCrosshairMove((param) => {
             if (isMagnetEnabled) updateMagnetIndicator(param);
             if (isPencilEnabled && isDrawing) handlePencilDraw(param);
-
             if (isTrendLineEnabled && isDrawingTrendLine && trendLinePreview && param.point) {
                 const price = candleSeries.coordinateToPrice(param.point.y);
                 const time = param.time || getTimeByX(param.point.x);
@@ -1305,30 +1247,23 @@ async function openChart(symbol) {
             }
         });
         chart.subscribeClick(handleChartClick);
-
         chart.timeScale().subscribeVisibleTimeRangeChange(redrawAllPersistentDrawings);
         chart.timeScale().subscribeVisibleLogicalRangeChange(redrawAllPersistentDrawings);
-        chart.timeScale().subscribeSizeChange(() => {
-            setTimeout(() => { initPencilCanvas(); }, 150);
-        });
+        chart.timeScale().subscribeSizeChange(() => { setTimeout(() => { initPencilCanvas(); }, 150); });
 
         let isRedrawScheduled = false;
         els.chartWrapper.addEventListener('mousemove', () => {
             if (activeTrendlines.length > 0 || pencilStrokes.length > 0 || rulerFixedMeasurement) {
                 if (!isRedrawScheduled) {
                     isRedrawScheduled = true;
-                    requestAnimationFrame(() => {
-                        redrawAllPersistentDrawings();
-                        isRedrawScheduled = false;
-                    });
+                    requestAnimationFrame(() => { redrawAllPersistentDrawings(); isRedrawScheduled = false; });
                 }
             }
         }, { passive: true });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
             if (isRulerEnabled && e.button === 0) {
-                e.preventDefault();
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 rulerFixedMeasurement = null;
                 els.rulerMeasurement.style.display = 'none';
                 const rect = els.chartWrapper.getBoundingClientRect();
@@ -1347,8 +1282,7 @@ async function openChart(symbol) {
                 }
             }
             else if (e.button === 1) {
-                e.preventDefault();
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 rulerFixedMeasurement = null;
                 els.rulerMeasurement.style.display = 'none';
                 const rect = els.chartWrapper.getBoundingClientRect();
@@ -1373,10 +1307,7 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('auxclick', (e) => {
-            if (e.button === 1) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
+            if (e.button === 1) { e.preventDefault(); e.stopPropagation(); }
         });
 
         els.chartWrapper.addEventListener('mousemove', (e) => {
@@ -1389,10 +1320,7 @@ async function openChart(symbol) {
                 const logicalIndex = getLogicalIndexByX(x);
                 if (price && (time || logicalIndex !== null)) {
                     rulerCurrentPoint = {
-                        time: time || 0,
-                        price,
-                        x,
-                        y,
+                        time: time || 0, price, x, y,
                         logicalIndex: logicalIndex !== null ? logicalIndex : rulerCurrentPoint.logicalIndex
                     };
                     redrawAllPersistentDrawings();
@@ -1410,7 +1338,6 @@ async function openChart(symbol) {
                     currentStroke = null;
                 }
             }
-
             if (isRulerEnabled && e.button === 0 && isRulerDragging) {
                 isRulerDragging = false;
                 rulerStartPoint = null;
@@ -1418,10 +1345,8 @@ async function openChart(symbol) {
                 els.rulerMeasurement.style.display = 'none';
                 redrawAllPersistentDrawings();
             }
-
             if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
-                e.preventDefault();
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 isRulerDragging = false;
                 rulerStartPoint = null;
                 rulerCurrentPoint = null;
@@ -1439,7 +1364,6 @@ async function openChart(symbol) {
                     currentStroke = null;
                 }
             }
-
             if (isRulerDragging) {
                 isRulerDragging = false;
                 rulerStartPoint = null;
@@ -1468,16 +1392,13 @@ async function loadChartData(symbol, tf) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const history = await res.json();
         if (!history || history.length === 0) throw new Error('Пустая история');
-
         const limitedHistory = history.slice(-500);
         const firstPrice = limitedHistory[0].close;
         currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
         const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
-
         candleSeries.applyOptions({ priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove } });
         candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
         window.candleData = limitedHistory.map(c => ({ ...c, time: safeTime(c.time) }));
-
         if (limitedHistory[0].volume !== undefined) {
             volumeSeries.setData(limitedHistory.map(c => ({
                 time: safeTime(c.time), value: c.volume,
@@ -1610,26 +1531,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); togglePencil(); }
         if (e.key === 'b' || e.key === 'B') { toggleAlertMode(); }
         if (e.key === 'h' || e.key === 'H') { toggleHorizontalLine(); }
-
-        if (e.shiftKey && e.key === 'E' && !isEraserEnabled) {
-            e.preventDefault();
-            toggleEraser();
-        }
-        if (e.shiftKey && e.key === 'S' && !isTrendLineEnabled) {
-            e.preventDefault();
-            toggleTrendLine();
-            trendLineHotkeyActive = true;
-        }
-        if (e.shiftKey && e.key === 'D' && !isHorizontalLineEnabled) {
-            e.preventDefault();
-            toggleHorizontalLine();
-            horizontalLineHotkeyActive = true;
-        }
-        if (e.shiftKey && e.key === 'P' && !isPencilEnabled) {
-            e.preventDefault();
-            togglePencil();
-            pencilHotkeyActive = true;
-        }
+        if (e.shiftKey && e.key === 'E' && !isEraserEnabled) { e.preventDefault(); toggleEraser(); }
+        if (e.shiftKey && e.key === 'S' && !isTrendLineEnabled) { e.preventDefault(); toggleTrendLine(); trendLineHotkeyActive = true; }
+        if (e.shiftKey && e.key === 'D' && !isHorizontalLineEnabled) { e.preventDefault(); toggleHorizontalLine(); horizontalLineHotkeyActive = true; }
+        if (e.shiftKey && e.key === 'P' && !isPencilEnabled) { e.preventDefault(); togglePencil(); pencilHotkeyActive = true; }
     });
 
     document.addEventListener('keyup', (e) => {
@@ -1639,18 +1544,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateToolUI('eraserBtn', false);
                 if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
             }
-            if (trendLineHotkeyActive) {
-                toggleTrendLine();
-                trendLineHotkeyActive = false;
-            }
-            if (horizontalLineHotkeyActive) {
-                toggleHorizontalLine();
-                horizontalLineHotkeyActive = false;
-            }
-            if (pencilHotkeyActive) {
-                togglePencil();
-                pencilHotkeyActive = false;
-            }
+            if (trendLineHotkeyActive) { toggleTrendLine(); trendLineHotkeyActive = false; }
+            if (horizontalLineHotkeyActive) { toggleHorizontalLine(); horizontalLineHotkeyActive = false; }
+            if (pencilHotkeyActive) { togglePencil(); pencilHotkeyActive = false; }
         }
     });
 
@@ -1660,6 +1556,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { once: true });
 
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+
+    // Кнопки Scalp окна
+    const openScalpBtn = document.getElementById('openScalpSettingsBtn');
+    if (openScalpBtn) openScalpBtn.addEventListener('click', openScalpSettingsModal);
+    const applyScalpBtn = document.getElementById('applyScalpSettingsBtn');
+    if (applyScalpBtn) applyScalpBtn.addEventListener('click', applyScalpSettings);
+
     loadAllData();
     startNatrAutoUpdate();
 });

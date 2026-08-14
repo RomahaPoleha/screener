@@ -37,13 +37,43 @@ let densityMarkets = { future: false, spot: false };
 let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
 let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 
-// Scalp
+// ==========================================
+// SCALP — настройки по биржам
+// ==========================================
 let scalpLines = [], scalpEnabled = false;
-let scalpMarkets = { future: false, spot: false };
-let scalpExchanges = { binance: true, bybit: true };  // ← добавить эту строку
-let scalpMinVolumeFuture = 200000, scalpMinVolumeSpot = 100000;
 let scalpUpdateTimer = null, isScalpLoading = false;
-let previousScalpData = { futures: [], spot: [] };
+let previousScalpData = {};
+
+// Конфигурация бирж (легко расширяется — добавь строку)
+const EXCHANGES_CONFIG = [
+    { id: 'binance', name: 'Binance', icon: '🟡', color: '#f0b90b' },
+    { id: 'bybit',   name: 'Bybit',   icon: '🟠', color: '#f7931a' },
+];
+
+// Текущие настройки каждой биржи
+let scalpExchanges = {
+    binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
+};
+
+// Миграция старых значений из localStorage
+if (localStorage.getItem('scalpExchanges')) {
+    try {
+        const old = JSON.parse(localStorage.getItem('scalpExchanges'));
+        if (typeof old.binance === 'boolean' || typeof old.bybit === 'boolean') {
+            for (const id of ['binance', 'bybit']) {
+                if (scalpExchanges[id]) scalpExchanges[id].enabled = old[id] !== false;
+            }
+        } else if (old.binance && typeof old.binance === 'object') {
+            for (const id of ['binance', 'bybit']) {
+                if (old[id]) scalpExchanges[id] = { ...scalpExchanges[id], ...old[id] };
+            }
+        }
+    } catch(e) { console.warn('⚠️ scalpExchanges повреждён'); }
+}
+
+// Вычисляем scalpEnabled при загрузке
+scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
 
 // Volume
 let volumeHistogramEnabled = true;
@@ -52,15 +82,6 @@ if (localStorage.getItem('volumeHistogramEnabled') !== null) {
 }
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
 if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
-if (localStorage.getItem('scalpMinVolumeFuture')) scalpMinVolumeFuture = parseInt(localStorage.getItem('scalpMinVolumeFuture'));
-if (localStorage.getItem('scalpMinVolumeSpot')) scalpMinVolumeSpot = parseInt(localStorage.getItem('scalpMinVolumeSpot'));
-if (localStorage.getItem('scalpExchanges')) {
-    try {
-        scalpExchanges = JSON.parse(localStorage.getItem('scalpExchanges'));
-    } catch(e) {
-        console.warn('⚠️ scalpExchanges в localStorage повреждён, используем значения по умолчанию');
-    }
-}
 
 // Drawings
 let isDrawingTrendLine = false, trendLinePreview = null;
@@ -74,7 +95,6 @@ let isEraserEnabled = false;
 let trendLineHotkeyActive = false;
 let horizontalLineHotkeyActive = false;
 let pencilHotkeyActive = false;
-// Горизонтальная линия
 let isHorizontalLineEnabled = false, activeHorizontalLines = [];
 
 let pencilStrokes = [];
