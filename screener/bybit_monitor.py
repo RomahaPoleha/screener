@@ -1004,7 +1004,7 @@ def start_bybit_spot_monitor(log_func=print):
 
 def periodic_bybit_futures_refresh(log_func=print):
     """Периодическое обновление списка монет каждые 30 минут"""
-    REFRESH_INTERVAL = 1800  # 30 минут в секундах
+    REFRESH_INTERVAL = 300  # 30 минут в секундах
 
     while True:
         time.sleep(REFRESH_INTERVAL)
