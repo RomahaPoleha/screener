@@ -46,8 +46,8 @@ let previousScalpData = {};
 
 // Конфигурация бирж (легко расширяется — добавь строку)
 const EXCHANGES_CONFIG = [
-    { id: 'binance', name: 'Binance', icon: '🟡', color: '#f0b90b' },
-    { id: 'bybit',   name: 'Bybit',   icon: '🟠', color: '#f7931a' },
+    { id: 'binance', name: 'Binance', domain: 'binance.com', color: '#f0b90b' },
+    { id: 'bybit',   name: 'Bybit',   domain: 'bybit.com',   color: '#f7931a' },
 ];
 
 // Текущие настройки каждой биржи

@@ -1096,7 +1096,12 @@ function openScalpSettingsModal() {
             <div class="exchange-card" style="background:#1a2238; border:1px solid #2d3748; border-radius:10px; padding:14px;">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:18px;">${ex.icon}</span>
+                        <span style="position:relative; width:26px; height:26px; display:inline-block;">
+                                <span style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-weight:700; color:${ex.color}; font-size:14px;">${ex.name[0]}</span>
+                                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=64"
+                                     onerror="this.style.display='none'"
+                                     style="position:relative; width:26px; height:26px; border-radius:6px;">
+                            </span>
                         <span style="font-weight:700; color:${ex.color}; font-size:15px;">${ex.name}</span>
                     </div>
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#d1d5db;">
