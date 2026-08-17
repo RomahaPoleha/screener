@@ -8,7 +8,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Минимальный объём для фильтрации
-MIN_VOLUME = 200000
+MIN_VOLUME = 100_000
 
 
 def get_symbols_from_tickers():

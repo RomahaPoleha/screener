@@ -56,7 +56,7 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=30, market='futures'):
-    """Получает топ монет для указанного рынка"""
+    """Отбор: объём 24ч > $100K, NATR(5m) >= 0.3, сортировка по NATR по убыванию"""
     try:
         ccxt_market = 'future' if market == 'futures' else 'spot'
         exchange = ccxt.binance({
@@ -66,10 +66,11 @@ def get_top_symbols(limit=30, market='futures'):
         })
         tickers = exchange.fetch_tickers()
 
-        symbols_with_score = []
+        candidates = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
-        MIN_LIQUIDITY_VOLUME = 10_000_000
+        MIN_VOLUME_24H = 100_000
+        MIN_NATR = 0.3
 
         for symbol, data in tickers.items():
             if ':USDT' not in symbol and not symbol.endswith('/USDT'):
@@ -79,26 +80,23 @@ def get_top_symbols(limit=30, market='futures'):
 
             if clean_symbol in stablecoins:
                 continue
-
             if not is_valid_symbol(clean_symbol):
                 continue
 
             volume = data.get('quoteVolume') or 0
-            percentage = data.get('percentage') or 0
-
-            if volume < MIN_LIQUIDITY_VOLUME:
+            if volume < MIN_VOLUME_24H:
                 continue
 
-            volatility_factor = min(abs(percentage), 5.0)
-            score = volume * volatility_factor
+            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
+            natr = natr_data.get('natr_5m14') or 0
 
-            if score > 0:
-                symbols_with_score.append((clean_symbol, score))
+            if natr < MIN_NATR:
+                continue
 
-        symbols_with_score.sort(key=lambda x: x[1], reverse=True)
-        symbols = [s[0] for s in symbols_with_score[:limit]]
+            candidates.append((clean_symbol, natr))
 
-        return symbols
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return [s[0] for s in candidates[:limit]]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_symbols({market}): {e}")
