@@ -54,11 +54,19 @@ def get_top_symbols(limit=30):
         })
         tickers = exchange.fetch_tickers()
 
+        print(f"🔍 OKX: получено {len(tickers)} тикеров")
+
         candidates = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
         MIN_VOLUME_24H = 100_000
         MIN_NATR = 0.3
+
+        passed_volume = 0
+        passed_valid = 0
+        passed_stable = 0
+        has_natr = 0
+        passed_natr = 0
 
         for symbol, data in tickers.items():
             if not symbol.endswith('/USDT:USDT'):
@@ -67,27 +75,45 @@ def get_top_symbols(limit=30):
             clean_symbol = symbol.replace('/USDT:USDT', '')
 
             if clean_symbol in stablecoins:
+                passed_stable += 1
                 continue
+
             if not is_valid_symbol(clean_symbol):
+                passed_valid += 1
                 continue
 
             volume = data.get('quoteVolume') or 0
             if volume < MIN_VOLUME_24H:
+                passed_volume += 1
                 continue
 
             natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
             natr = natr_data.get('natr_5m14') or 0
 
+            if natr > 0:
+                has_natr += 1
+
             if natr < MIN_NATR:
                 continue
 
+            passed_natr += 1
             candidates.append((clean_symbol, natr))
+
+        print(f"📊 OKX статистика отбора:")
+        print(f"  - Отсеяно как stablecoins: {passed_stable}")
+        print(f"  - Отсеяно как невалидные: {passed_valid}")
+        print(f"  - Отсеяно по объёму (<{MIN_VOLUME_24H}): {passed_volume}")
+        print(f"  - Имеют NATR: {has_natr}")
+        print(f"  - Прошли фильтр NATR (>={MIN_NATR}): {passed_natr}")
+        print(f"  - Итого кандидатов: {len(candidates)}")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in candidates[:limit]]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_symbols(okx): {e}")
+        import traceback
+        print(traceback.format_exc())
         return []
 
 
