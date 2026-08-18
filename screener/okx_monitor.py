@@ -45,7 +45,7 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=30):
-    """Отбор: объём 24ч > $100K, NATR(5m) >= 0.3, по убыванию NATR"""
+    """Отбор: объём 24ч > $100K, NATR временно отключён для теста"""
     try:
         exchange = ccxt.okx({
             'enableRateLimit': True,
@@ -60,13 +60,11 @@ def get_top_symbols(limit=30):
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
         MIN_VOLUME_24H = 100_000
-        MIN_NATR = 0.3
+        # MIN_NATR = 0.3  # ВРЕМЕННО ОТКЛЮЧЁН ДЛЯ ТЕСТА
 
-        passed_volume = 0
-        passed_valid = 0
         passed_stable = 0
-        has_natr = 0
-        passed_natr = 0
+        passed_valid = 0
+        passed_volume = 0
 
         for symbol, data in tickers.items():
             if not symbol.endswith('/USDT:USDT'):
@@ -87,26 +85,20 @@ def get_top_symbols(limit=30):
                 passed_volume += 1
                 continue
 
-            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
-            natr = natr_data.get('natr_5m14') or 0
+            # NATR пока не проверяем — берём всех кто прошёл объём
+            # Для сортировки используем объём вместо NATR
+            candidates.append((clean_symbol, volume))
 
-            if natr > 0:
-                has_natr += 1
-
-            if natr < MIN_NATR:
-                continue
-
-            passed_natr += 1
-            candidates.append((clean_symbol, natr))
-
-        print(f"📊 OKX статистика отбора:")
+        print(f"📊 OKX статистика отбора (без NATR):")
         print(f"  - Отсеяно как stablecoins: {passed_stable}")
         print(f"  - Отсеяно как невалидные: {passed_valid}")
         print(f"  - Отсеяно по объёму (<{MIN_VOLUME_24H}): {passed_volume}")
-        print(f"  - Имеют NATR: {has_natr}")
-        print(f"  - Прошли фильтр NATR (>={MIN_NATR}): {passed_natr}")
         print(f"  - Итого кандидатов: {len(candidates)}")
 
+        if candidates:
+            print(f"  - Первые 5: {[c[0] for c in candidates[:5]]}")
+
+        # Сортируем по объёму (раз NATR нет)
         candidates.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in candidates[:limit]]
 
