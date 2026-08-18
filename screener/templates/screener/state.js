@@ -58,21 +58,27 @@ let scalpExchanges = {
     okx: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
 };
 
-// Миграция старых значений из localStorage
-if (localStorage.getItem('scalpExchanges')) {
-    try {
-        const old = JSON.parse(localStorage.getItem('scalpExchanges'));
-        if (typeof old.binance === 'boolean' || typeof old.bybit === 'boolean') {
-            for (const id of ['binance', 'bybit']) {
-                if (scalpExchanges[id]) scalpExchanges[id].enabled = old[id] !== false;
-            }
-        } else if (old.binance && typeof old.binance === 'object') {
-            for (const id of ['binance', 'bybit']) {
-                if (old[id]) scalpExchanges[id] = { ...scalpExchanges[id], ...old[id] };
+// Миграция любого старого формата + подхват сохранённых значений
+try {
+    const saved = JSON.parse(localStorage.getItem('scalpExchanges') || 'null');
+    if (saved && typeof saved === 'object') {
+        for (const id of Object.keys(scalpExchanges)) {
+            const s = saved[id];
+            if (!s) continue;
+            if (typeof s === 'boolean') {
+                scalpExchanges[id].enabled = s;
+            } else if (typeof s === 'object') {
+                scalpExchanges[id].enabled = s.enabled !== false;
+                if (s.markets) {
+                    scalpExchanges[id].markets.futures = !!s.markets.futures;
+                    scalpExchanges[id].markets.spot    = !!s.markets.spot;
+                }
+                if (Number(s.minVolumeFutures) > 0) scalpExchanges[id].minVolumeFutures = Number(s.minVolumeFutures);
+                if (Number(s.minVolumeSpot)    > 0) scalpExchanges[id].minVolumeSpot    = Number(s.minVolumeSpot);
             }
         }
-    } catch(e) { console.warn('⚠️ scalpExchanges повреждён'); }
-}
+    }
+} catch(e) { console.warn('⚠️ scalpExchanges повреждён'); }
 
 // Вычисляем scalpEnabled при загрузке
 scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
