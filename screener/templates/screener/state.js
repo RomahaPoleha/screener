@@ -48,12 +48,14 @@ let previousScalpData = {};
 const EXCHANGES_CONFIG = [
     { id: 'binance', name: 'Binance', domain: 'binance.com', color: '#f0b90b' },
     { id: 'bybit',   name: 'Bybit',   domain: 'bybit.com',   color: '#f7931a' },
+    { id: 'okx',     name: 'OKX',     domain: 'okx.com',     color: '#ffffff' },
 ];
 
 // Текущие настройки каждой биржи
 let scalpExchanges = {
     binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    okx: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
 };
 
 // Миграция старых значений из localStorage

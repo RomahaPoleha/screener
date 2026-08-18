@@ -137,7 +137,7 @@ def api_natr(request):
 
 @require_http_methods(["GET"])
 def api_scalp(request, symbol):
-    """API: плотности из Redis (Binance + Bybit)"""
+    """API: плотности из Redis (Binance + Bybit + OKX)"""
     import time
 
     try:
@@ -150,36 +150,29 @@ def api_scalp(request, symbol):
     except ValueError:
         limit_per_exchange = 50
 
-    # защита от слишком большого limit
     limit_per_exchange = max(1, min(limit_per_exchange, 50))
 
     market = request.GET.get('market', 'futures')
-
     if market not in ['futures', 'spot']:
         market = 'futures'
 
     now = time.time()
     symbol_upper = symbol.upper()
 
-    result_by_exchange = {
-        'binance': [],
-        'bybit': [],
-    }
+    EXCHANGES = ['binance', 'bybit', 'okx']
+    result_by_exchange = {ex: [] for ex in EXCHANGES}
 
-    for exchange in ['binance', 'bybit']:
-
-        if exchange == 'bybit':
-            key = f"scalp:{market}:bybit:{symbol_upper}"
-        else:
+    for exchange in EXCHANGES:
+        if exchange == 'binance':
             key = f"scalp:{market}:{symbol_upper}"
+        else:
+            key = f"scalp:{market}:{exchange}:{symbol_upper}"
 
         data = cache.get(key)
-
         if not data:
             continue
 
         exchange_densities = []
-
         for item in data:
             try:
                 price = item['price']
@@ -189,8 +182,6 @@ def api_scalp(request, symbol):
             except (KeyError, TypeError):
                 continue
 
-            age_seconds = now - timestamp
-
             if volume < min_volume:
                 continue
 
@@ -198,33 +189,27 @@ def api_scalp(request, symbol):
                 'price': price,
                 'volume': volume,
                 'side': side,
-                'age_seconds': round(age_seconds, 1),
+                'age_seconds': round(now - timestamp, 1),
                 'market': market,
                 'exchange': item.get('exchange', exchange)
             })
 
         exchange_densities.sort(key=lambda x: x['volume'], reverse=True)
-
         result_by_exchange[exchange] = exchange_densities[:limit_per_exchange]
 
-    densities = result_by_exchange['binance'] + result_by_exchange['bybit']
+    densities = []
+    for ex in EXCHANGES:
+        densities += result_by_exchange[ex]
     densities.sort(key=lambda x: x['volume'], reverse=True)
 
     return JsonResponse({
-        'version': 'api_scalp_v2',
+        'version': 'api_scalp_v3',
         'symbol': symbol_upper,
         'densities': densities,
         'market': market,
         'server_time': now,
-        'counts': {
-            'binance': len(result_by_exchange['binance']),
-            'bybit': len(result_by_exchange['bybit']),
-            'total': len(densities),
-        },
-        'by_exchange': {
-            'binance': result_by_exchange['binance'],
-            'bybit': result_by_exchange['bybit'],
-        }
+        'counts': {ex: len(result_by_exchange[ex]) for ex in EXCHANGES} | {'total': len(densities)},
+        'by_exchange': {ex: result_by_exchange[ex] for ex in EXCHANGES},
     })
 
 
