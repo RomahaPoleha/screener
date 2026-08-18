@@ -38,7 +38,8 @@ def start_scalp_monitor():
 
     try:
         from .binance_monitor import start_binance_monitor
-        from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
+        # from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
+        from .okx_monitor import start_okx_monitor
 
         # Запуск Binance Monitor
         binance_thread = threading.Thread(
@@ -49,23 +50,32 @@ def start_scalp_monitor():
         binance_thread.start()
         log("✅ Binance Monitor поток запущен")
 
-        # Запуск Bybit Futures Monitor
-        bybit_thread = threading.Thread(
-            target=lambda: start_bybit_monitor(log),
-            name='Bybit-Futures-Monitor',
+        # Запуск OKX Futures Monitor (временно вместо Bybit)
+        okx_thread = threading.Thread(
+            target=lambda: start_okx_monitor(log),
+            name='OKX-Futures-Monitor',
             daemon=True
         )
-        bybit_thread.start()
-        log("✅ Bybit Futures Monitor поток запущен")
+        okx_thread.start()
+        log("✅ OKX Futures Monitor поток запущен")
 
-        # Запуск Bybit Spot Monitor
-        bybit_spot_thread = threading.Thread(
-            target=lambda: start_bybit_spot_monitor(log),
-            name='Bybit-Spot-Monitor',
-            daemon=True
-        )
-        bybit_spot_thread.start()
-        log("✅ Bybit Spot Monitor поток запущен")
+        # # Запуск Bybit Futures Monitor (ВРЕМЕННО ОТКЛЮЧЁН)
+        # bybit_thread = threading.Thread(
+        #     target=lambda: start_bybit_monitor(log),
+        #     name='Bybit-Futures-Monitor',
+        #     daemon=True
+        # )
+        # bybit_thread.start()
+        # log("✅ Bybit Futures Monitor поток запущен")
+
+        # # Запуск Bybit Spot Monitor (ВРЕМЕННО ОТКЛЮЧЁН)
+        # bybit_spot_thread = threading.Thread(
+        #     target=lambda: start_bybit_spot_monitor(log),
+        #     name='Bybit-Spot-Monitor',
+        #     daemon=True
+        # )
+        # bybit_spot_thread.start()
+        # log("✅ Bybit Spot Monitor поток запущен")
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
