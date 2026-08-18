@@ -45,7 +45,7 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=30):
-    """Отбор: объём 24ч > $100K, NATR временно отключён для теста"""
+    """Отбор: объём 24ч > $100K (пересчитан в USDT), NATR >= 0.3"""
     try:
         exchange = ccxt.okx({
             'enableRateLimit': True,
@@ -53,59 +53,52 @@ def get_top_symbols(limit=30):
             'options': {'defaultType': 'swap'}
         })
         tickers = exchange.fetch_tickers()
-
         print(f"🔍 OKX: получено {len(tickers)} тикеров")
 
         candidates = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
-
         MIN_VOLUME_24H = 100_000
-        # MIN_NATR = 0.3  # ВРЕМЕННО ОТКЛЮЧЁН ДЛЯ ТЕСТА
+        MIN_NATR = 0.3
 
-        passed_stable = 0
-        passed_valid = 0
         passed_volume = 0
+        has_natr = 0
 
         for symbol, data in tickers.items():
             if not symbol.endswith('/USDT:USDT'):
                 continue
-
             clean_symbol = symbol.replace('/USDT:USDT', '')
 
             if clean_symbol in stablecoins:
-                passed_stable += 1
                 continue
-
             if not is_valid_symbol(clean_symbol):
-                passed_valid += 1
                 continue
 
-            volume = data.get('quoteVolume') or 0
+            # OKX swap: volCcy24h в базовой валюте → умножаем на цену = USDT
+            info = data.get('info', {}) or {}
+            last = float(data.get('last') or 0)
+            vol_ccy = float(info.get('volCcy24h') or 0)
+            volume = vol_ccy * last
+
             if volume < MIN_VOLUME_24H:
                 passed_volume += 1
                 continue
 
-            # NATR пока не проверяем — берём всех кто прошёл объём
-            # Для сортировки используем объём вместо NATR
-            candidates.append((clean_symbol, volume))
+            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
+            natr = natr_data.get('natr_5m14') or 0
+            if natr > 0:
+                has_natr += 1
+            if natr < MIN_NATR:
+                continue
 
-        print(f"📊 OKX статистика отбора (без NATR):")
-        print(f"  - Отсеяно как stablecoins: {passed_stable}")
-        print(f"  - Отсеяно как невалидные: {passed_valid}")
-        print(f"  - Отсеяно по объёму (<{MIN_VOLUME_24H}): {passed_volume}")
-        print(f"  - Итого кандидатов: {len(candidates)}")
+            candidates.append((clean_symbol, natr))
 
-        if candidates:
-            print(f"  - Первые 5: {[c[0] for c in candidates[:5]]}")
+        print(f"📊 OKX: отсеяно по объёму {passed_volume}, имеют NATR {has_natr}, кандидатов {len(candidates)}")
 
-        # Сортируем по объёму (раз NATR нет)
         candidates.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in candidates[:limit]]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_symbols(okx): {e}")
-        import traceback
-        print(traceback.format_exc())
         return []
 
 
