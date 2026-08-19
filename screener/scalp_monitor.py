@@ -50,6 +50,7 @@ def start_scalp_monitor():
         binance_thread.start()
         log("✅ Binance Monitor поток запущен")
 
+
         # Gate Futures
         threading.Thread(
             target=lambda: start_gate_monitor(log),
