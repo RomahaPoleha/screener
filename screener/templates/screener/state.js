@@ -49,6 +49,7 @@ const EXCHANGES_CONFIG = [
     { id: 'binance', name: 'Binance', domain: 'binance.com', color: '#f0b90b' },
     { id: 'bybit',   name: 'Bybit',   domain: 'bybit.com',   color: '#f7931a' },
     { id: 'okx',     name: 'OKX',     domain: 'okx.com',     color: '#ffffff' },
+    { id: 'gate',    name: 'Gate.io',  domain: 'gate.io',     color: '#2354e6' },
 ];
 
 // Текущие настройки каждой биржи

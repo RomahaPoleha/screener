@@ -1053,7 +1053,7 @@ async function loadScalpDensities(symbol) {
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
             const densities = allNewData[key];
-            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK' };
+            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G' };
             const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
             const marketSuffix = market === 'futures' ? 'F' : 'S';
             const prefix = `${exchangePrefix}-${marketSuffix}`;
