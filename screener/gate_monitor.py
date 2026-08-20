@@ -66,55 +66,72 @@ def is_valid_symbol(symbol):
 # ОБОБЩЁННАЯ ЛОГИКА СКАЧАНИЯ ТОПА МОНЕТ
 # ==========================================
 
-def get_top_symbols(limit=30):
-    """Отбор futures монет Gate: объём 24ч > $100K"""
-    return _get_top_symbols_generic(limit, market='swap')
+def get_top_symbols(limit=30, log_func=print):
+    return _get_top_symbols_generic(limit, market='swap', log_func=log_func)
 
 
-def get_top_spot_symbols(limit=30):
-    """Отбор spot монет Gate: объём 24ч > $100K"""
-    return _get_top_symbols_generic(limit, market='spot')
+def get_top_spot_symbols(limit=30, log_func=print):
+    return _get_top_symbols_generic(limit, market='spot', log_func=log_func)
 
 
-def _get_top_symbols_generic(limit=30, market='swap'):
+def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
     try:
+        log_func(f"🔍 Gate {market}: создаю ccxt.gateio()...")
         exchange = ccxt.gateio({
             'enableRateLimit': True,
             'timeout': 10000,
             'options': {'defaultType': market}
         })
+        log_func(f"🔍 Gate {market}: вызываю fetch_tickers()...")
         tickers = exchange.fetch_tickers()
-        print(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
+        log_func(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
+
+        # Показать первые 5 символов для диагностики
+        sample = list(tickers.keys())[:5]
+        log_func(f"🔍 Gate {market}: примеры символов: {sample}")
 
         candidates = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
         MIN_VOLUME_24H = 100_000
 
         suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
-        replace_from = suffix
+
+        passed_suffix = 0
+        passed_stable = 0
+        passed_valid = 0
+        passed_volume = 0
 
         for symbol, data in tickers.items():
             if not symbol.endswith(suffix):
+                passed_suffix += 1
                 continue
-            clean_symbol = symbol.replace(replace_from, '')
+            clean_symbol = symbol.replace(suffix, '')
             if clean_symbol in stablecoins:
+                passed_stable += 1
                 continue
             if not is_valid_symbol(clean_symbol):
+                passed_valid += 1
                 continue
             volume = data.get('quoteVolume') or 0
             if volume < MIN_VOLUME_24H:
+                passed_volume += 1
                 continue
             candidates.append((clean_symbol, volume))
 
-        print(f"📊 Gate {market}: кандидатов {len(candidates)}")
+        log_func(f"📊 Gate {market} статистика:")
+        log_func(f"  - Не {suffix}: {passed_suffix}")
+        log_func(f"  - Stablecoins: {passed_stable}")
+        log_func(f"  - Невалидные: {passed_valid}")
+        log_func(f"  - Низкий объём: {passed_volume}")
+        log_func(f"  - Кандидатов: {len(candidates)}")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in candidates[:limit]]
 
     except Exception as e:
-        print(f"❌ Ошибка в _get_top_symbols_generic(gate {market}): {e}")
+        log_func(f"❌ Ошибка в _get_top_symbols_generic(gate {market}): {e}")
         import traceback
-        print(traceback.format_exc())
+        log_func(traceback.format_exc())
         return []
 
 
@@ -653,7 +670,7 @@ def start_gate_spot_monitor(log_func=print):
         daemon=True
     ).start()
 
-    candidates = get_top_spot_symbols(60)
+    candidates = get_top_spot_symbols(60, log_func)
     active_symbols = []
     TARGET = 30
 
