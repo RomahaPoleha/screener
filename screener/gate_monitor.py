@@ -199,62 +199,90 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
 # ОБЩИЕ ФУНКЦИИ СИНХРОНИЗАЦИИ В КЭШ
 # ==========================================
 
-def _sync_to_cache_generic(symbol, market, log_func=print):
-    """market: 'futures' или 'spot'"""
-    if market == 'futures':
-        books = gate_futures_order_books
-        ts_store = gate_futures_density_timestamps
-        lock = gate_futures_order_books_lock
-        key = f"scalp:futures:gate:{symbol}"
-    else:
-        books = gate_spot_order_books
-        ts_store = gate_spot_density_timestamps
-        lock = gate_spot_order_books_lock
-        key = f"scalp:spot:gate:{symbol}"
-
+def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
+    """Получение топ монет Gate через ccxt с правильным расчётом объёма"""
     try:
-        with lock:
-            book = books.get(symbol, {})
-            ts = ts_store.get(symbol, {})
-            if not book:
-                return 0
+        log_func(f"🔍 Gate {market}: создаю ccxt.gateio()...")
 
-        now = time.time()
-        densities = []
-        is_first_load = len(ts) == 0
+        exchange = ccxt.gateio({
+            'enableRateLimit': True,
+            'timeout': 15000,
+            'options': {'defaultType': market}
+        })
 
-        for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
-            for price, qty in book.get(side, {}).items():
-                volume = price * qty
-                if volume < 10000:
-                    continue
-                if price in ts:
-                    if now - ts[price] < MIN_AGE_SECONDS:
-                        continue
-                else:
-                    if is_first_load:
-                        ts[price] = now - 20
-                    else:
-                        ts[price] = now
-                        continue
-                densities.append({
-                    'price': price,
-                    'volume': volume,
-                    'side': side_name,
-                    'timestamp': ts[price],
-                    'exchange': 'gate'
-                })
+        log_func(f"🔍 Gate {market}: вызываю fetch_tickers()...")
+        tickers = exchange.fetch_tickers()
+        log_func(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
 
-        cache.set(key, densities, CACHE_TTL)
+        if len(tickers) == 0:
+            log_func(f"⚠️ Gate {market}: пустой ответ")
+            return []
 
-        with lock:
-            ts_store[symbol] = ts
+        # Показать примеры для диагностики
+        sample = list(tickers.keys())[:5]
+        log_func(f"🔍 Gate {market}: примеры: {sample}")
 
-        return len(densities)
+        candidates = []
+        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
+        MIN_VOLUME_24H = 100_000
+
+        suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
+
+        passed_suffix = 0
+        passed_stable = 0
+        passed_valid = 0
+        passed_volume = 0
+
+        for symbol, data in tickers.items():
+            if not symbol.endswith(suffix):
+                passed_suffix += 1
+                continue
+
+            clean_symbol = symbol.replace(suffix, '')
+
+            if clean_symbol in stablecoins:
+                passed_stable += 1
+                continue
+
+            if not is_valid_symbol(clean_symbol):
+                passed_valid += 1
+                continue
+
+            # Gate futures: volume_24h в контрактах, нужно умножить на цену
+            info = data.get('info', {})
+            last_price = float(data.get('last') or 0)
+
+            if market == 'swap':
+                # Для swap берём volume_24h из info и умножаем на цену
+                vol_contracts = float(info.get('volume_24h') or 0)
+                volume = vol_contracts * last_price  # контракты × цена = USDT
+            else:
+                # Для spot quoteVolume уже в USDT
+                volume = float(data.get('quoteVolume') or 0)
+
+            if volume < MIN_VOLUME_24H:
+                passed_volume += 1
+                continue
+
+            candidates.append((clean_symbol, volume))
+
+        log_func(f"📊 Gate {market} статистика:")
+        log_func(f"  - Не {suffix}: {passed_suffix}")
+        log_func(f"  - Stablecoins: {passed_stable}")
+        log_func(f"  - Невалидные: {passed_valid}")
+        log_func(f"  - Низкий объём (<{MIN_VOLUME_24H}): {passed_volume}")
+        log_func(f"  - Кандидатов: {len(candidates)}")
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        result = [s[0] for s in candidates[:limit]]
+        log_func(f"🔍 Gate {market}: топ-5: {result[:5]}")
+        return result
 
     except Exception as e:
-        log_func(f"❌ sync_to_cache(gate {market} {symbol}): {e}")
-        return 0
+        log_func(f"❌ Ошибка в _get_top_symbols_generic(gate {market}): {e}")
+        import traceback
+        log_func(traceback.format_exc())
+        return []
 
 
 def _update_order_book_generic(symbol, bids_delta, asks_delta, market, log_func=print):
