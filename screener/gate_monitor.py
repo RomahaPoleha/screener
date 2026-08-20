@@ -53,7 +53,7 @@ last_sync_time = {}
 gate_spot_last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 1800
+MIN_AGE_SECONDS = 0
 CACHE_TTL = 900
 
 
@@ -80,7 +80,7 @@ def get_top_spot_symbols(limit=30, log_func=print):
 
 
 def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
-    """Отбор: объём 24ч > $100K, по убыванию объёма"""
+    """Отбор: объём 24ч > $100K, NATR(5m) >= 0.3, сортировка по NATR по убыванию"""
     try:
         exchange = GateExchange({
             'enableRateLimit': True,
@@ -88,7 +88,6 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
             'options': {'defaultType': market}
         })
 
-        # Для Gate ОБЯЗАТЕЛЬНО передаём type в params
         tickers = exchange.fetch_tickers(params={'type': market})
 
         log_func(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
@@ -96,9 +95,9 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
         candidates = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
         MIN_VOLUME_24H = 100_000
+        MIN_NATR = 0.3
 
         for symbol, data in tickers.items():
-            # Определяем суффикс
             suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
             if not symbol.endswith(suffix):
                 continue
@@ -110,20 +109,25 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
             if not is_valid_symbol(clean_symbol):
                 continue
 
-            # Для Gate futures объём в контрактах, нужно умножить на цену
             if market == 'swap':
                 info = data.get('info', {})
                 vol_contracts = float(info.get('volume_24h') or 0)
                 last_price = float(data.get('last') or 0)
                 volume = vol_contracts * last_price
             else:
-                # Для spot quoteVolume уже в USDT
                 volume = float(data.get('quoteVolume') or 0)
 
             if volume < MIN_VOLUME_24H:
                 continue
 
-            candidates.append((clean_symbol, volume))
+            # NATR из кэша (как в Bybit)
+            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
+            natr = natr_data.get('natr_5m14') or 0
+
+            if natr < MIN_NATR:
+                continue
+
+            candidates.append((clean_symbol, natr))
 
         log_func(f"📊 Gate {market}: кандидатов {len(candidates)}")
 
