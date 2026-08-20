@@ -9,6 +9,10 @@ import websocket
 from queue import Queue, Empty
 from django.core.cache import cache
 import ccxt
+# Поддержка старых и новых версий ccxt
+GateExchange = getattr(ccxt, 'gateio', None) or getattr(ccxt, 'gate', None)
+if GateExchange is None:
+    raise ImportError("ccxt не поддерживает Gate.io (нет ни 'gateio' ни 'gate')")
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
@@ -74,17 +78,10 @@ def get_top_spot_symbols(limit=30, log_func=print):
     return _get_top_symbols_generic(limit, market='spot', log_func=log_func)
 
 
-
-
-
-# ==========================================
-# ОБЩИЕ ФУНКЦИИ СИНХРОНИЗАЦИИ В КЭШ
-# ==========================================
-
 def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
     """Отбор: объём 24ч > $100K, по убыванию объёма"""
     try:
-        exchange = ccxt.gateio({
+        exchange = GateExchange({
             'enableRateLimit': True,
             'timeout': 15000,
             'options': {'defaultType': market}
@@ -137,6 +134,69 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
         import traceback
         log_func(traceback.format_exc())
         return []
+
+
+# ==========================================
+# ОБЩИЕ ФУНКЦИИ СИНХРОНИЗАЦИИ В КЭШ
+# ==========================================
+
+def _sync_to_cache_generic(symbol, market, log_func=print):
+    """Синхронизация стакана в Redis"""
+    if market == 'futures':
+        books = gate_futures_order_books
+        ts_store = gate_futures_density_timestamps
+        lock = gate_futures_order_books_lock
+        key = f"scalp:futures:gate:{symbol}"
+    else:
+        books = gate_spot_order_books
+        ts_store = gate_spot_density_timestamps
+        lock = gate_spot_order_books_lock
+        key = f"scalp:spot:gate:{symbol}"
+
+    try:
+        with lock:
+            book = books.get(symbol, {})
+            ts = ts_store.get(symbol, {})
+            if not book:
+                return 0
+
+        now = time.time()
+        densities = []
+        is_first_load = len(ts) == 0
+
+        for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
+            for price, qty in book.get(side, {}).items():
+                volume = price * qty
+                if volume < 10000:
+                    continue
+                if price in ts:
+                    if now - ts[price] < MIN_AGE_SECONDS:
+                        continue
+                else:
+                    if is_first_load:
+                        ts[price] = now - 20
+                    else:
+                        ts[price] = now
+                        continue
+                densities.append({
+                    'price': price,
+                    'volume': volume,
+                    'side': side_name,
+                    'timestamp': ts[price],
+                    'exchange': 'gate'
+                })
+
+        cache.set(key, densities, CACHE_TTL)
+
+        with lock:
+            ts_store[symbol] = ts
+
+        return len(densities)
+
+    except Exception as e:
+        log_func(f"❌ sync_to_cache(gate {market} {symbol}): {e}")
+        return 0
+
 
 def _update_order_book_generic(symbol, bids_delta, asks_delta, market, log_func=print):
     """bids_delta/asks_delta — список [{p: '...', s: '...'}] от Gate WS"""
@@ -569,7 +629,7 @@ def start_gate_monitor(log_func=print):
         daemon=True
     ).start()
 
-    candidates = get_top_symbols(60)
+    candidates = get_top_symbols(60, log_func)
     active_symbols = []
     TARGET = 30
 
@@ -674,7 +734,7 @@ def _refresh_symbols_generic(market, log_func=print):
     log_func(f"🔄 Обновление списка Gate {market}...")
 
     old_symbols = set(symbols_list)
-    candidates = get_top(60)
+    candidates = get_top(60, log_func)
 
     new_active = []
     TARGET = 30
