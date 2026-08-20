@@ -40,7 +40,8 @@ def start_scalp_monitor():
         from .binance_monitor import start_binance_monitor
         # from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
         # from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
-        from .gate_monitor import start_gate_monitor,start_gate_spot_monitor
+        from .gate_monitor import start_gate_monitor, start_gate_spot_monitor
+
         # Запуск Binance Monitor
         binance_thread = threading.Thread(
             target=lambda: start_binance_monitor(log),
@@ -50,19 +51,16 @@ def start_scalp_monitor():
         binance_thread.start()
         log("✅ Binance Monitor поток запущен")
 
-
-        # Gate Futures
-        threading.Thread(
+        # Запуск Gate Futures Monitor
+        gate_futures_thread = threading.Thread(
             target=lambda: start_gate_monitor(log),
             name='Gate-Futures-Monitor',
             daemon=True
-        ).start()
+        )
+        gate_futures_thread.start()
         log("✅ Gate Futures Monitor поток запущен")
 
-    except Exception as e:
-        log(f"❌ Ошибка запуска мониторов: {e}")
         # Запуск Gate Spot Monitor
-
         gate_spot_thread = threading.Thread(
             target=lambda: start_gate_spot_monitor(log),
             name='Gate-Spot-Monitor',
