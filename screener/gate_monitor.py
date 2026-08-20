@@ -77,16 +77,44 @@ def get_top_spot_symbols(limit=30, log_func=print):
 def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
     try:
         log_func(f"🔍 Gate {market}: создаю ccxt.gateio()...")
+
         exchange = ccxt.gateio({
             'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': market}
+            'timeout': 15000,
         })
-        log_func(f"🔍 Gate {market}: вызываю fetch_tickers()...")
-        tickers = exchange.fetch_tickers()
+
+        # Явно загружаем рынки нужного типа
+        log_func(f"🔍 Gate {market}: загружаю markets...")
+        exchange.load_markets()
+
+        # Для swap/futures используем fetch_tickers с явным params
+        log_func(f"🔍 Gate {market}: вызываю fetch_tickers...")
+
+        if market == 'swap':
+            # Gate futures: явно запрашиваем swap тикеры
+            tickers = exchange.fetch_tickers(params={'type': 'swap'})
+        else:
+            tickers = exchange.fetch_tickers(params={'type': 'spot'})
+
         log_func(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
 
-        # Показать первые 5 символов для диагностики
+        if len(tickers) == 0:
+            log_func(f"⚠️ Gate {market}: fetch_tickers вернул 0! Пробую альтернативный способ...")
+            # Альтернатива: фильтруем все тикеры по типу
+            all_tickers = exchange.fetch_tickers()
+            log_func(f"🔍 Gate {market}: всего тикеров {len(all_tickers)}")
+            sample = list(all_tickers.keys())[:10]
+            log_func(f"🔍 Gate {market}: примеры: {sample}")
+
+            # Показываем типы первых 5
+            for i, (sym, data) in enumerate(all_tickers.items()):
+                if i >= 5: break
+                log_func(
+                    f"   {sym}: quoteVolume={data.get('quoteVolume')}, info_keys={list(data.get('info', {}).keys())[:5]}")
+
+            tickers = all_tickers
+
+        # Показать первые 5 символов
         sample = list(tickers.keys())[:5]
         log_func(f"🔍 Gate {market}: примеры символов: {sample}")
 
@@ -94,7 +122,21 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
         MIN_VOLUME_24H = 100_000
 
+        # Определяем суффикс на основе реальных данных
         suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
+
+        # Проверяем есть ли вообще символы с нужным суффиксом
+        has_suffix = sum(1 for s in tickers.keys() if s.endswith(suffix))
+        log_func(f"🔍 Gate {market}: символов с суффиксом '{suffix}': {has_suffix}")
+
+        if has_suffix == 0:
+            # Пробуем другой суффикс
+            alt_suffix = '/USDT' if market == 'swap' else '/USDT:USDT'
+            has_alt = sum(1 for s in tickers.keys() if s.endswith(alt_suffix))
+            log_func(f"🔍 Gate {market}: с суффиксом '{alt_suffix}': {has_alt}")
+            if has_alt > 0:
+                suffix = alt_suffix
+                log_func(f"🔍 Gate {market}: переключаюсь на суффикс '{suffix}'")
 
         passed_suffix = 0
         passed_stable = 0
@@ -112,7 +154,23 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
             if not is_valid_symbol(clean_symbol):
                 passed_valid += 1
                 continue
+
+            # Для gateio swap quoteVolume может быть в контрактах
+            # Берём из info если есть
             volume = data.get('quoteVolume') or 0
+
+            # Если volume подозрительно маленький, пробуем взять из info
+            if volume < MIN_VOLUME_24H:
+                info = data.get('info', {})
+                # Gate API v4 для futures: volume_24h_base, volume_24h_quote, volume_24h_usd
+                vol_usd = info.get('volume_24h_usd') or info.get('volume_24h_quote') or 0
+                try:
+                    vol_usd = float(vol_usd)
+                    if vol_usd > volume:
+                        volume = vol_usd
+                except (ValueError, TypeError):
+                    pass
+
             if volume < MIN_VOLUME_24H:
                 passed_volume += 1
                 continue
@@ -122,11 +180,13 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
         log_func(f"  - Не {suffix}: {passed_suffix}")
         log_func(f"  - Stablecoins: {passed_stable}")
         log_func(f"  - Невалидные: {passed_valid}")
-        log_func(f"  - Низкий объём: {passed_volume}")
+        log_func(f"  - Низкий объём (<{MIN_VOLUME_24H}): {passed_volume}")
         log_func(f"  - Кандидатов: {len(candidates)}")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in candidates[:limit]]
+        result = [s[0] for s in candidates[:limit]]
+        log_func(f"🔍 Gate {market}: топ-5 кандидатов: {result[:5]}")
+        return result
 
     except Exception as e:
         log_func(f"❌ Ошибка в _get_top_symbols_generic(gate {market}): {e}")
