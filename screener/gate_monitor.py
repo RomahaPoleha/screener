@@ -36,10 +36,10 @@ gate_spot_message_queue = Queue(maxsize=50000)
 # URLs Gate.io
 # ==========================================
 GATE_FUTURES_WS_URL = "wss://fx-ws.gateio.ws/v4/ws/usdt"
-GATE_FUTURES_REST_URL = "https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={}_USDT&limit=100"
+GATE_FUTURES_REST_URL = "https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={}_USDT&limit=50"
 
 GATE_SPOT_WS_URL = "wss://api.gateio.ws/ws/v4/"
-GATE_SPOT_REST_URL = "https://api.gateio.ws/api/v4/spot/order_book?currency_pair={}_USDT&limit=100"
+GATE_SPOT_REST_URL = "https://api.gateio.ws/api/v4/spot/order_book?currency_pair={}_USDT&limit=50"
 
 # Управление WebSocket
 gate_futures_ws_stop_event = threading.Event()
@@ -340,8 +340,22 @@ def _init_order_book_generic(symbol, market, log_func=print):
             log_func(f"⚠️ gate {market} {symbol}: не JSON: {res.text[:200]}")
             return 0
 
-        if not isinstance(data, dict) or ('asks' not in data and 'bids' not in data):
-            log_func(f"⚠️ gate {market} {symbol}: неожиданный формат")
+        # Логируем что пришло для диагностики
+        if isinstance(data, list):
+            log_func(f"⚠️ gate {market} {symbol}: API вернул список вместо объекта: {str(data)[:200]}")
+            return 0
+
+        if not isinstance(data, dict):
+            log_func(f"⚠️ gate {market} {symbol}: неожиданный тип ответа: {type(data)}")
+            return 0
+
+        # Gate может вернуть ошибку в формате {label, message}
+        if 'label' in data or 'message' in data:
+            log_func(f"⚠️ gate {market} {symbol}: ошибка API: {data.get('label')} - {data.get('message')}")
+            return 0
+
+        if 'asks' not in data and 'bids' not in data:
+            log_func(f"⚠️ gate {market} {symbol}: нет asks/bids в ответе: {str(data)[:200]}")
             return 0
 
         raw_bids = data.get('bids') or []
