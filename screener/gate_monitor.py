@@ -74,125 +74,7 @@ def get_top_spot_symbols(limit=30, log_func=print):
     return _get_top_symbols_generic(limit, market='spot', log_func=log_func)
 
 
-def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
-    try:
-        log_func(f"🔍 Gate {market}: создаю ccxt.gateio()...")
 
-        exchange = ccxt.gateio({
-            'enableRateLimit': True,
-            'timeout': 15000,
-        })
-
-        # Явно загружаем рынки нужного типа
-        log_func(f"🔍 Gate {market}: загружаю markets...")
-        exchange.load_markets()
-
-        # Для swap/futures используем fetch_tickers с явным params
-        log_func(f"🔍 Gate {market}: вызываю fetch_tickers...")
-
-        if market == 'swap':
-            # Gate futures: явно запрашиваем swap тикеры
-            tickers = exchange.fetch_tickers(params={'type': 'swap'})
-        else:
-            tickers = exchange.fetch_tickers(params={'type': 'spot'})
-
-        log_func(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
-
-        if len(tickers) == 0:
-            log_func(f"⚠️ Gate {market}: fetch_tickers вернул 0! Пробую альтернативный способ...")
-            # Альтернатива: фильтруем все тикеры по типу
-            all_tickers = exchange.fetch_tickers()
-            log_func(f"🔍 Gate {market}: всего тикеров {len(all_tickers)}")
-            sample = list(all_tickers.keys())[:10]
-            log_func(f"🔍 Gate {market}: примеры: {sample}")
-
-            # Показываем типы первых 5
-            for i, (sym, data) in enumerate(all_tickers.items()):
-                if i >= 5: break
-                log_func(
-                    f"   {sym}: quoteVolume={data.get('quoteVolume')}, info_keys={list(data.get('info', {}).keys())[:5]}")
-
-            tickers = all_tickers
-
-        # Показать первые 5 символов
-        sample = list(tickers.keys())[:5]
-        log_func(f"🔍 Gate {market}: примеры символов: {sample}")
-
-        candidates = []
-        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
-        MIN_VOLUME_24H = 100_000
-
-        # Определяем суффикс на основе реальных данных
-        suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
-
-        # Проверяем есть ли вообще символы с нужным суффиксом
-        has_suffix = sum(1 for s in tickers.keys() if s.endswith(suffix))
-        log_func(f"🔍 Gate {market}: символов с суффиксом '{suffix}': {has_suffix}")
-
-        if has_suffix == 0:
-            # Пробуем другой суффикс
-            alt_suffix = '/USDT' if market == 'swap' else '/USDT:USDT'
-            has_alt = sum(1 for s in tickers.keys() if s.endswith(alt_suffix))
-            log_func(f"🔍 Gate {market}: с суффиксом '{alt_suffix}': {has_alt}")
-            if has_alt > 0:
-                suffix = alt_suffix
-                log_func(f"🔍 Gate {market}: переключаюсь на суффикс '{suffix}'")
-
-        passed_suffix = 0
-        passed_stable = 0
-        passed_valid = 0
-        passed_volume = 0
-
-        for symbol, data in tickers.items():
-            if not symbol.endswith(suffix):
-                passed_suffix += 1
-                continue
-            clean_symbol = symbol.replace(suffix, '')
-            if clean_symbol in stablecoins:
-                passed_stable += 1
-                continue
-            if not is_valid_symbol(clean_symbol):
-                passed_valid += 1
-                continue
-
-            # Для gateio swap quoteVolume может быть в контрактах
-            # Берём из info если есть
-            volume = data.get('quoteVolume') or 0
-
-            # Если volume подозрительно маленький, пробуем взять из info
-            if volume < MIN_VOLUME_24H:
-                info = data.get('info', {})
-                # Gate API v4 для futures: volume_24h_base, volume_24h_quote, volume_24h_usd
-                vol_usd = info.get('volume_24h_usd') or info.get('volume_24h_quote') or 0
-                try:
-                    vol_usd = float(vol_usd)
-                    if vol_usd > volume:
-                        volume = vol_usd
-                except (ValueError, TypeError):
-                    pass
-
-            if volume < MIN_VOLUME_24H:
-                passed_volume += 1
-                continue
-            candidates.append((clean_symbol, volume))
-
-        log_func(f"📊 Gate {market} статистика:")
-        log_func(f"  - Не {suffix}: {passed_suffix}")
-        log_func(f"  - Stablecoins: {passed_stable}")
-        log_func(f"  - Невалидные: {passed_valid}")
-        log_func(f"  - Низкий объём (<{MIN_VOLUME_24H}): {passed_volume}")
-        log_func(f"  - Кандидатов: {len(candidates)}")
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        result = [s[0] for s in candidates[:limit]]
-        log_func(f"🔍 Gate {market}: топ-5 кандидатов: {result[:5]}")
-        return result
-
-    except Exception as e:
-        log_func(f"❌ Ошибка в _get_top_symbols_generic(gate {market}): {e}")
-        import traceback
-        log_func(traceback.format_exc())
-        return []
 
 
 # ==========================================
@@ -200,90 +82,61 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
 # ==========================================
 
 def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
-    """Получение топ монет Gate через ccxt с правильным расчётом объёма"""
+    """Отбор: объём 24ч > $100K, по убыванию объёма"""
     try:
-        log_func(f"🔍 Gate {market}: создаю ccxt.gateio()...")
-
         exchange = ccxt.gateio({
             'enableRateLimit': True,
             'timeout': 15000,
             'options': {'defaultType': market}
         })
 
-        log_func(f"🔍 Gate {market}: вызываю fetch_tickers()...")
-        tickers = exchange.fetch_tickers()
+        # Для Gate ОБЯЗАТЕЛЬНО передаём type в params
+        tickers = exchange.fetch_tickers(params={'type': market})
+
         log_func(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
-
-        if len(tickers) == 0:
-            log_func(f"⚠️ Gate {market}: пустой ответ")
-            return []
-
-        # Показать примеры для диагностики
-        sample = list(tickers.keys())[:5]
-        log_func(f"🔍 Gate {market}: примеры: {sample}")
 
         candidates = []
         stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
         MIN_VOLUME_24H = 100_000
 
-        suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
-
-        passed_suffix = 0
-        passed_stable = 0
-        passed_valid = 0
-        passed_volume = 0
-
         for symbol, data in tickers.items():
+            # Определяем суффикс
+            suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
             if not symbol.endswith(suffix):
-                passed_suffix += 1
                 continue
 
             clean_symbol = symbol.replace(suffix, '')
 
             if clean_symbol in stablecoins:
-                passed_stable += 1
                 continue
-
             if not is_valid_symbol(clean_symbol):
-                passed_valid += 1
                 continue
 
-            # Gate futures: volume_24h в контрактах, нужно умножить на цену
-            info = data.get('info', {})
-            last_price = float(data.get('last') or 0)
-
+            # Для Gate futures объём в контрактах, нужно умножить на цену
             if market == 'swap':
-                # Для swap берём volume_24h из info и умножаем на цену
+                info = data.get('info', {})
                 vol_contracts = float(info.get('volume_24h') or 0)
-                volume = vol_contracts * last_price  # контракты × цена = USDT
+                last_price = float(data.get('last') or 0)
+                volume = vol_contracts * last_price
             else:
                 # Для spot quoteVolume уже в USDT
                 volume = float(data.get('quoteVolume') or 0)
 
             if volume < MIN_VOLUME_24H:
-                passed_volume += 1
                 continue
 
             candidates.append((clean_symbol, volume))
 
-        log_func(f"📊 Gate {market} статистика:")
-        log_func(f"  - Не {suffix}: {passed_suffix}")
-        log_func(f"  - Stablecoins: {passed_stable}")
-        log_func(f"  - Невалидные: {passed_valid}")
-        log_func(f"  - Низкий объём (<{MIN_VOLUME_24H}): {passed_volume}")
-        log_func(f"  - Кандидатов: {len(candidates)}")
+        log_func(f"📊 Gate {market}: кандидатов {len(candidates)}")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
-        result = [s[0] for s in candidates[:limit]]
-        log_func(f"🔍 Gate {market}: топ-5: {result[:5]}")
-        return result
+        return [s[0] for s in candidates[:limit]]
 
     except Exception as e:
         log_func(f"❌ Ошибка в _get_top_symbols_generic(gate {market}): {e}")
         import traceback
         log_func(traceback.format_exc())
         return []
-
 
 def _update_order_book_generic(symbol, bids_delta, asks_delta, market, log_func=print):
     """bids_delta/asks_delta — список [{p: '...', s: '...'}] от Gate WS"""
