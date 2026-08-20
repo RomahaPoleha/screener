@@ -56,8 +56,10 @@ const EXCHANGES_CONFIG = [
 let scalpExchanges = {
     binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    okx: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    gate:    { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 100000, minVolumeSpot: 50000 },
 };
+
 
 // Миграция любого старого формата + подхват сохранённых значений
 try {
