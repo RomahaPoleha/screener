@@ -9,6 +9,7 @@ import websocket
 from queue import Queue, Empty
 from django.core.cache import cache
 import ccxt
+
 # Поддержка старых и новых версий ccxt
 GateExchange = getattr(ccxt, 'gateio', None) or getattr(ccxt, 'gate', None)
 if GateExchange is None:
@@ -360,27 +361,34 @@ def _init_order_book_generic(symbol, market, log_func=print):
 
         raw_bids = data.get('bids') or []
         raw_asks = data.get('asks') or []
-        bids = {}
-        asks = {}
 
-        # REST Gate: [["price", "size"], ...]
-        for row in raw_bids:
-            try:
-                p, q = float(row[0]), abs(float(row[1]))
-                if p > 0 and q > 0:
-                    bids[p] = q
-            except Exception:
-                continue
-        for row in raw_asks:
-            try:
-                p, q = float(row[0]), abs(float(row[1]))
-                if p > 0 and q > 0:
-                    asks[p] = q
-            except Exception:
-                continue
+        def parse_levels(levels):
+            """Парсит уровни: и массивы [p, s], и объекты {p, s}"""
+            result = {}
+            for row in levels:
+                try:
+                    if isinstance(row, dict):
+                        # Gate futures: {"p": "...", "s": ...}
+                        p = float(row.get('p', 0))
+                        q = abs(float(row.get('s', 0)))
+                    elif isinstance(row, (list, tuple)):
+                        # Gate spot: ["price", "size"]
+                        p = float(row[0])
+                        q = abs(float(row[1]))
+                    else:
+                        continue
+                    if p > 0 and q > 0:
+                        result[p] = q
+                except (ValueError, TypeError, KeyError, IndexError):
+                    continue
+            return result
 
+        bids = parse_levels(raw_bids)
+        asks = parse_levels(raw_asks)
+
+        # ↓↓↓ ВОТ ЭТОГО БЛОКА НЕ ХВАТАЛО ↓↓↓
         if not bids and not asks:
-            log_func(f"⚠️ gate {market} {symbol}: пустой стакан")
+            log_func(f"⚠️ gate {market} {symbol}: пустой стакан после парсинга")
             return 0
 
         with lock:
