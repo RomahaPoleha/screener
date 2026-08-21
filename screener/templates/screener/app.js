@@ -885,16 +885,13 @@ function toggleReconSettings() {
 }
 
 function openSettingsModal() {
-    document.getElementById('densityMarketFuture').checked = densityMarkets.future;
-    document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
-    document.getElementById('densityMinVolumeFuture').value = densityMinVolumeFuture;
-    document.getElementById('densityMinVolumeSpot').value = densityMinVolumeSpot;
     document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
     document.getElementById('showDrawingTools').checked = showDrawingTools;
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
         reconToggle.checked = reconEnabled;
         toggleReconSettings();
+        renderReconSettings();
     }
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
@@ -906,16 +903,6 @@ function openSettingsModal() {
 }
 
 function applySettings() {
-    densityMarkets = {
-        future: document.getElementById('densityMarketFuture').checked,
-        spot: document.getElementById('densityMarketSpot').checked
-    };
-    densityMinVolumeFuture = Math.max(50000, parseInt(document.getElementById('densityMinVolumeFuture').value) || 50000);
-    densityMinVolumeSpot = Math.max(10000, parseInt(document.getElementById('densityMinVolumeSpot').value) || 10000);
-    densityEnabled = densityMarkets.future || densityMarkets.spot;
-    localStorage.setItem('densityMinVolumeFuture', densityMinVolumeFuture);
-    localStorage.setItem('densityMinVolumeSpot', densityMinVolumeSpot);
-
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
     if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
@@ -928,39 +915,30 @@ function applySettings() {
     if (reconToggle) {
         reconEnabled = reconToggle.checked;
         localStorage.setItem('reconEnabled', reconEnabled);
+        for (const ex of RECON_EXCHANGES) {
+            const f = document.getElementById(`reconMinF_${ex.id}`);
+            const s = document.getElementById(`reconMinS_${ex.id}`);
+            if (f) reconMinVolumes[ex.id].futures = Math.max(1000, parseInt(f.value) || 50000);
+            if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
+        }
+        localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
 
     const btn = document.getElementById('settingsBtn');
-    if (densityEnabled || scalpEnabled) {
-        btn.style.background = '#f0b90b'; btn.style.color = '#000';
-    } else {
-        btn.style.background = '#2d3748'; btn.style.color = '#9ca3af';
+    if (btn) {
+        if (densityEnabled || scalpEnabled || reconEnabled) {
+            btn.style.background = '#f0b90b'; btn.style.color = '#000';
+        } else {
+            btn.style.background = '#2d3748'; btn.style.color = '#9ca3af';
+        }
     }
 
     if (currentSymbol) {
-        if (densityEnabled) {
-            previousDensities = { future: [], spot: [] };
-            startDensityUpdates(currentSymbol);
-        } else {
-            if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
-            clearDensityLines();
-        }
-        if (scalpEnabled) {
-            previousScalpData = {};
-            startScalpUpdates(currentSymbol);
-        } else {
-            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
-            clearScalpLines();
-        }
-        if (reconEnabled) {
-            startReconUpdates(currentSymbol);
-        } else {
-            stopReconUpdates();
-        }
+        if (reconEnabled) startReconUpdates(currentSymbol);
+        else stopReconUpdates();
     }
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
-
 // ==========================================
 // RECON — сырой стакан (Binance legacy)
 // ==========================================
@@ -1033,7 +1011,7 @@ function startDensityUpdates(symbol) {
 }
 
 // ==========================================
-// RECON PANEL — горизонтальная панель с тумблерами
+// RECON PANEL — тумблеры сырых стаканов всех бирж
 // ==========================================
 const RECON_EXCHANGES = [
     { id: 'binance', label: 'BI', color: '#f0b90b' },
@@ -1044,21 +1022,32 @@ const RECON_EXCHANGES = [
 let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
 let reconPanelEl = null;
-let lastReconData = {};
+let reconLines = [];
 let reconMarkets = {
-    binance: { spot: true, futures: true },
-    bybit:   { spot: true, futures: true },
-    okx:     { spot: true, futures: true },
-    gate:    { spot: true, futures: true },
+    binance: { spot: false, futures: true },
+    bybit:   { spot: false, futures: false },
+    okx:     { spot: false, futures: false },
+    gate:    { spot: false, futures: false },
+};
+let reconMinVolumes = {
+    binance: { spot: 10000, futures: 50000 },
+    bybit:   { spot: 10000, futures: 50000 },
+    okx:     { spot: 10000, futures: 50000 },
+    gate:    { spot: 10000, futures: 50000 },
 };
 try {
     const savedRecon = JSON.parse(localStorage.getItem('reconMarkets') || 'null');
-    if (savedRecon) {
-        for (const id of Object.keys(reconMarkets)) {
-            if (savedRecon[id]) {
-                reconMarkets[id].spot = !!savedRecon[id].spot;
-                reconMarkets[id].futures = !!savedRecon[id].futures;
-            }
+    if (savedRecon) for (const id of Object.keys(reconMarkets)) {
+        if (savedRecon[id]) {
+            reconMarkets[id].spot = !!savedRecon[id].spot;
+            reconMarkets[id].futures = !!savedRecon[id].futures;
+        }
+    }
+    const savedVol = JSON.parse(localStorage.getItem('reconMinVolumes') || 'null');
+    if (savedVol) for (const id of Object.keys(reconMinVolumes)) {
+        if (savedVol[id]) {
+            if (Number(savedVol[id].spot) > 0) reconMinVolumes[id].spot = Number(savedVol[id].spot);
+            if (Number(savedVol[id].futures) > 0) reconMinVolumes[id].futures = Number(savedVol[id].futures);
         }
     }
 } catch (e) {}
@@ -1100,7 +1089,7 @@ async function fetchReconMarket(exId, symbol, market) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
-    const minVolume = market === 'futures' ? densityMinVolumeFuture : densityMinVolumeSpot;
+    const minVolume = reconMinVolumes[exId][market];
     const out = [];
     const push = (arr) => {
         for (const row of arr) {
@@ -1116,27 +1105,39 @@ async function fetchReconMarket(exId, symbol, market) {
 }
 
 async function loadReconDensities(symbol) {
-    if (!reconEnabled || !candleSeries || !reconPanelEl) return;
+    if (!reconEnabled || !candleSeries) return;
     const tasks = [];
     for (const ex of RECON_EXCHANGES) {
         for (const market of ['spot', 'futures']) {
-            if (!reconMarkets[ex.id][market]) {
-                tasks.push(Promise.resolve({ ex: ex.id, market, data: null }));
-                continue;
-            }
+            if (!reconMarkets[ex.id][market]) continue;
             tasks.push(fetchReconMarket(ex.id, symbol, market)
                 .then(d => ({ ex: ex.id, market, data: d }))
                 .catch(() => ({ ex: ex.id, market, data: null })));
         }
     }
     const results = await Promise.all(tasks);
-    const result = {};
+    clearReconLines();
     for (const r of results) {
-        if (!result[r.ex]) result[r.ex] = { spot: null, futures: null };
-        result[r.ex][r.market] = r.data;
+        if (!r.data) continue;
+        const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
+        const suffix = r.market === 'futures' ? 'F' : 'S';
+        const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+        top.forEach(d => {
+            const line = candleSeries.createPriceLine({
+                price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+                axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                title: `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+            });
+            reconLines.push(line);
+        });
     }
-    lastReconData = result;
-    renderReconPanel(result);
+}
+
+function clearReconLines() {
+    if (!candleSeries) return;
+    reconLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
+    reconLines = [];
 }
 
 function ensureReconPanel() {
@@ -1161,18 +1162,14 @@ function removeReconPanel() {
     reconPanelEl = null;
 }
 
-function renderReconPanel(result) {
+function renderReconPanel() {
     if (!reconPanelEl) return;
     reconPanelEl.innerHTML = RECON_EXCHANGES.map(ex => {
-        const d = result[ex.id] || {};
         const mkToggle = (market, letter) => {
             const on = reconMarkets[ex.id][market];
-            const count = (on && d[market]) ? d[market].length : null;
-            const bg = on ? `${ex.color}26` : 'transparent';
-            const border = on ? `1px solid ${ex.color}77` : '1px solid #374151';
-            const color = on ? ex.color : '#4b5563';
-            const txt = on ? (count !== null ? count : '…') : '–';
-            return `<span style="font-size:10px;color:#9ca3af;">${letter}</span><div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}" style="min-width:26px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:5px;background:${bg};border:${border};color:${color};font-weight:700;font-size:10px;cursor:pointer;user-select:none;">${txt}</div>`;
+            const bg = on ? `${ex.color}33` : 'transparent';
+            const border = on ? `1px solid ${ex.color}` : '1px solid #374151';
+            return `<span style="font-size:10px;color:#9ca3af;">${letter}</span><div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}" style="width:20px;height:20px;border-radius:5px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}"></div>`;
         };
         return `<div style="display:flex;align-items:center;gap:5px;">
             <span style="font-weight:700;font-size:11px;color:${ex.color};min-width:20px;">${ex.label}</span>
@@ -1185,24 +1182,48 @@ function renderReconPanel(result) {
 function toggleReconMarket(exId, market) {
     reconMarkets[exId][market] = !reconMarkets[exId][market];
     localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
+    renderReconPanel();
     if (currentSymbol) loadReconDensities(currentSymbol);
-    else renderReconPanel(lastReconData);
 }
 
 function startReconUpdates(symbol) {
     if (reconUpdateTimer) clearInterval(reconUpdateTimer);
     if (!reconEnabled) return;
     ensureReconPanel();
-    renderReconPanel(lastReconData);
+    renderReconPanel();
     loadReconDensities(symbol);
     reconUpdateTimer = setInterval(() => {
         if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
-    }, 5000);
+    }, 3000);
 }
 
 function stopReconUpdates() {
     if (reconUpdateTimer) { clearInterval(reconUpdateTimer); reconUpdateTimer = null; }
     removeReconPanel();
+    clearReconLines();
+}
+
+function toggleReconSettings() {
+    const toggle = document.getElementById('reconPanelToggle');
+    const section = document.getElementById('reconSettingsSection');
+    if (toggle && section) {
+        section.style.display = toggle.checked ? 'block' : 'none';
+    }
+}
+
+function renderReconSettings() {
+    const container = document.getElementById('reconSettingsContainer');
+    if (!container) return;
+    container.innerHTML = RECON_EXCHANGES.map(ex => `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-weight:700;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span>
+            <label style="font-size:11px;color:#9ca3af;">F:</label>
+            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000"
+                style="width:90px;background:#0b0f19;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;">
+            <label style="font-size:11px;color:#9ca3af;">S:</label>
+            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000"
+                style="width:90px;background:#0b0f19;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;">
+        </div>`).join('');
 }
 
 // ==========================================
