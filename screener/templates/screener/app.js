@@ -16,7 +16,7 @@ function playHourSound(minutesLeft) {
     sound.currentTime = 0;
     sound.play().catch(err => {
         console.warn('Не удалось воспроизвести звук:', err);
-        speak(minutesLeft === 5 ? 'До перехода на новый час осталось 5 минут' : 'Внимание, до перехода на новый час осталась 1 минута');
+        speak(minutesLeft === 5 ? 'До перехода на новый час осталось 5 минут' : 'Внимание, до нового часа осталась 1 минута');
     });
 }
 
@@ -135,7 +135,7 @@ function showSearchDropdown(query) {
     dropdown.innerHTML = filtered.map(coin => `<div class="search-dropdown-item" onclick="selectCoinFromSearch('${coin.symbol}')"><span class="symbol">${coin.symbol}</span><span class="name">Vol: $${fmt(coin.volume)}</span></div>`).join('');
     dropdown.classList.add('active');
 }
-function hideSearchDropdown() { document.getElementById('searchDropdown').classList.remove('active'); }
+function hideSearchDropdown() { document.getElementById('searchDropdown').remove('active'); }
 function selectCoinFromSearch(symbol) {
     document.getElementById('searchInput').value = symbol;
     hideSearchDropdown();
@@ -883,6 +883,8 @@ function openSettingsModal() {
     document.getElementById('densityMinVolumeSpot').value = densityMinVolumeSpot;
     document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
     document.getElementById('showDrawingTools').checked = showDrawingTools;
+    const reconToggle = document.getElementById('reconPanelToggle');
+    if (reconToggle) reconToggle.checked = reconEnabled;
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
         soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
@@ -911,6 +913,12 @@ function applySettings() {
     localStorage.setItem('showDrawingTools', showDrawingTools);
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
 
+    const reconToggle = document.getElementById('reconPanelToggle');
+    if (reconToggle) {
+        reconEnabled = reconToggle.checked;
+        localStorage.setItem('reconEnabled', reconEnabled);
+    }
+
     const btn = document.getElementById('settingsBtn');
     if (densityEnabled || scalpEnabled) {
         btn.style.background = '#f0b90b'; btn.style.color = '#000';
@@ -933,12 +941,17 @@ function applySettings() {
             if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
             clearScalpLines();
         }
+        if (reconEnabled) {
+            startReconUpdates(currentSymbol);
+        } else {
+            stopReconUpdates();
+        }
     }
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
 
 // ==========================================
-// RECON — сырой стакан
+// RECON — сырой стакан (Binance legacy)
 // ==========================================
 async function loadDensities(symbol) {
     if (!densityEnabled || !candleSeries) return;
@@ -1006,6 +1019,179 @@ function startDensityUpdates(symbol) {
     densityUpdateTimer = setInterval(() => {
         if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
     }, 3000);
+}
+
+// ==========================================
+// RECON PANEL — горизонтальная панель с тумблерами
+// ==========================================
+const RECON_EXCHANGES = [
+    { id: 'binance', label: 'BI', color: '#f0b90b' },
+    { id: 'bybit',   label: 'BY', color: '#f7931a' },
+    { id: 'okx',     label: 'OK', color: '#ffffff' },
+    { id: 'gate',    label: 'G',  color: '#2354e6' },
+];
+let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
+let reconUpdateTimer = null;
+let reconPanelEl = null;
+let lastReconData = {};
+let reconMarkets = {
+    binance: { spot: true, futures: true },
+    bybit:   { spot: true, futures: true },
+    okx:     { spot: true, futures: true },
+    gate:    { spot: true, futures: true },
+};
+try {
+    const savedRecon = JSON.parse(localStorage.getItem('reconMarkets') || 'null');
+    if (savedRecon) {
+        for (const id of Object.keys(reconMarkets)) {
+            if (savedRecon[id]) {
+                reconMarkets[id].spot = !!savedRecon[id].spot;
+                reconMarkets[id].futures = !!savedRecon[id].futures;
+            }
+        }
+    }
+} catch (e) {}
+
+function getReconUrl(exId, symbol, market) {
+    if (exId === 'binance') return market === 'futures'
+        ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=1000`
+        : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=1000`;
+    if (exId === 'bybit') return market === 'futures'
+        ? `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbol}USDT&limit=200`
+        : `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbol}USDT&limit=200`;
+    if (exId === 'okx') return market === 'futures'
+        ? `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT-SWAP&sz=200`
+        : `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT&sz=200`;
+    if (exId === 'gate') return market === 'futures'
+        ? `https://api.gateio.ws/api/v4/futures/usdt/order_book?contract=${symbol}_USDT&limit=100`
+        : `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${symbol}_USDT&limit=100`;
+    return null;
+}
+
+function parseReconLevels(exId, data) {
+    let rawBids = [], rawAsks = [];
+    if (exId === 'binance') { rawBids = data.bids || []; rawAsks = data.asks || []; }
+    else if (exId === 'bybit') { rawBids = (data.result && data.result.b) || []; rawAsks = (data.result && data.result.a) || []; }
+    else if (exId === 'okx') { const d = (data.data || [])[0] || {}; rawBids = d.bids || []; rawAsks = d.asks || []; }
+    else if (exId === 'gate') { rawBids = data.bids || []; rawAsks = data.asks || []; }
+    const toLevel = (row) => {
+        if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
+        if (row && typeof row === 'object') return [parseFloat(row.p), Math.abs(parseFloat(row.s))];
+        return [NaN, NaN];
+    };
+    return { rawBids, rawAsks, toLevel };
+}
+
+async function fetchReconMarket(exId, symbol, market) {
+    const url = getReconUrl(exId, symbol, market);
+    if (!url) return [];
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
+    const minVolume = market === 'futures' ? densityMinVolumeFuture : densityMinVolumeSpot;
+    const out = [];
+    const push = (arr) => {
+        for (const row of arr) {
+            const [p, q] = toLevel(row);
+            if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
+            const vol = p * q;
+            if (vol >= minVolume) out.push({ price: p, volume: vol });
+        }
+    };
+    push(rawBids);
+    push(rawAsks);
+    return out;
+}
+
+async function loadReconDensities(symbol) {
+    if (!reconEnabled || !candleSeries || !reconPanelEl) return;
+    const tasks = [];
+    for (const ex of RECON_EXCHANGES) {
+        for (const market of ['spot', 'futures']) {
+            if (!reconMarkets[ex.id][market]) {
+                tasks.push(Promise.resolve({ ex: ex.id, market, data: null }));
+                continue;
+            }
+            tasks.push(fetchReconMarket(ex.id, symbol, market)
+                .then(d => ({ ex: ex.id, market, data: d }))
+                .catch(() => ({ ex: ex.id, market, data: null })));
+        }
+    }
+    const results = await Promise.all(tasks);
+    const result = {};
+    for (const r of results) {
+        if (!result[r.ex]) result[r.ex] = { spot: null, futures: null };
+        result[r.ex][r.market] = r.data;
+    }
+    lastReconData = result;
+    renderReconPanel(result);
+}
+
+function ensureReconPanel() {
+    removeReconPanel();
+    if (!reconEnabled) return;
+    const tfBtn = document.querySelector('.tf-btn');
+    if (!tfBtn || !tfBtn.parentElement) return;
+    const panel = document.createElement('div');
+    panel.id = 'reconPanel';
+    panel.style.cssText = 'display:flex;flex-direction:row;gap:16px;align-items:center;margin-left:24px;padding:6px 12px;background:rgba(11,15,25,0.9);border:1px solid #2d3748;border-radius:8px;';
+    panel.addEventListener('click', (e) => {
+        const t = e.target.closest('.recon-toggle');
+        if (!t) return;
+        toggleReconMarket(t.dataset.ex, t.dataset.market);
+    });
+    tfBtn.parentElement.appendChild(panel);
+    reconPanelEl = panel;
+}
+
+function removeReconPanel() {
+    if (reconPanelEl && reconPanelEl.parentNode) reconPanelEl.parentNode.removeChild(reconPanelEl);
+    reconPanelEl = null;
+}
+
+function renderReconPanel(result) {
+    if (!reconPanelEl) return;
+    reconPanelEl.innerHTML = RECON_EXCHANGES.map(ex => {
+        const d = result[ex.id] || {};
+        const mkToggle = (market, letter) => {
+            const on = reconMarkets[ex.id][market];
+            const count = (on && d[market]) ? d[market].length : null;
+            const bg = on ? `${ex.color}26` : 'transparent';
+            const border = on ? `1px solid ${ex.color}77` : '1px solid #374151';
+            const color = on ? ex.color : '#4b5563';
+            const txt = on ? (count !== null ? count : '…') : '–';
+            return `<span style="font-size:10px;color:#9ca3af;">${letter}</span><div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}" style="min-width:26px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:5px;background:${bg};border:${border};color:${color};font-weight:700;font-size:10px;cursor:pointer;user-select:none;">${txt}</div>`;
+        };
+        return `<div style="display:flex;align-items:center;gap:5px;">
+            <span style="font-weight:700;font-size:11px;color:${ex.color};min-width:20px;">${ex.label}</span>
+            ${mkToggle('spot', 'S')}
+            ${mkToggle('futures', 'F')}
+        </div>`;
+    }).join('');
+}
+
+function toggleReconMarket(exId, market) {
+    reconMarkets[exId][market] = !reconMarkets[exId][market];
+    localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
+    if (currentSymbol) loadReconDensities(currentSymbol);
+    else renderReconPanel(lastReconData);
+}
+
+function startReconUpdates(symbol) {
+    if (reconUpdateTimer) clearInterval(reconUpdateTimer);
+    if (!reconEnabled) return;
+    ensureReconPanel();
+    renderReconPanel(lastReconData);
+    loadReconDensities(symbol);
+    reconUpdateTimer = setInterval(() => {
+        if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
+    }, 5000);
+}
+
+function stopReconUpdates() {
+    if (reconUpdateTimer) { clearInterval(reconUpdateTimer); reconUpdateTimer = null; }
+    removeReconPanel();
 }
 
 // ==========================================
@@ -1201,6 +1387,7 @@ function closeChart() {
     clearScalpLines();
     previousScalpData = {};
     if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+    stopReconUpdates();
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
@@ -1215,6 +1402,7 @@ async function openChart(symbol) {
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
     clearScalpLines(); previousScalpData = {}; if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+    stopReconUpdates();
     await new Promise(resolve => setTimeout(resolve, 150));
 
     currentSymbol = symbol;
@@ -1388,6 +1576,7 @@ async function openChart(symbol) {
     if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);
     if (densityEnabled) startDensityUpdates(symbol);
     if (scalpEnabled) startScalpUpdates(symbol);
+    if (reconEnabled) startReconUpdates(symbol);
 }
 
 async function loadChartData(symbol, tf) {
