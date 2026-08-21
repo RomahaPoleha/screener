@@ -16,7 +16,7 @@ function playHourSound(minutesLeft) {
     sound.currentTime = 0;
     sound.play().catch(err => {
         console.warn('Не удалось воспроизвести звук:', err);
-        speak(minutesLeft === 5 ? 'До перехода на новый час осталось 5 минут' : 'Внимание, до нового часа осталась 1 минута');
+        speak(minutesLeft === 5 ? 'До перехода на новый час осталось 5 минут' : 'Внимание, до перехода на новый час осталась 1 минута');
     });
 }
 
@@ -135,7 +135,7 @@ function showSearchDropdown(query) {
     dropdown.innerHTML = filtered.map(coin => `<div class="search-dropdown-item" onclick="selectCoinFromSearch('${coin.symbol}')"><span class="symbol">${coin.symbol}</span><span class="name">Vol: $${fmt(coin.volume)}</span></div>`).join('');
     dropdown.classList.add('active');
 }
-function hideSearchDropdown() { document.getElementById('searchDropdown').remove('active'); }
+function hideSearchDropdown() { document.getElementById('searchDropdown').classList.remove('active'); }
 function selectCoinFromSearch(symbol) {
     document.getElementById('searchInput').value = symbol;
     hideSearchDropdown();
@@ -876,6 +876,14 @@ function updateMagnetIndicator(param) {
 // ==========================================
 // НАСТРОЙКИ (основное окно)
 // ==========================================
+function toggleReconSettings() {
+    const toggle = document.getElementById('reconPanelToggle');
+    const section = document.getElementById('reconSettingsSection');
+    if (toggle && section) {
+        section.style.display = toggle.checked ? 'block' : 'none';
+    }
+}
+
 function openSettingsModal() {
     document.getElementById('densityMarketFuture').checked = densityMarkets.future;
     document.getElementById('densityMarketSpot').checked = densityMarkets.spot;
@@ -884,7 +892,10 @@ function openSettingsModal() {
     document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
     document.getElementById('showDrawingTools').checked = showDrawingTools;
     const reconToggle = document.getElementById('reconPanelToggle');
-    if (reconToggle) reconToggle.checked = reconEnabled;
+    if (reconToggle) {
+        reconToggle.checked = reconEnabled;
+        toggleReconSettings();
+    }
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
         soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
