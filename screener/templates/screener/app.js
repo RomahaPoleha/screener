@@ -1018,6 +1018,7 @@ const RECON_EXCHANGES = [
     { id: 'bybit',   label: 'BY', color: '#f7931a' },
     { id: 'okx',     label: 'OK', color: '#ffffff' },
     { id: 'gate',    label: 'G',  color: '#2354e6' },
+    { id: 'mexc', label: 'MX', color: '#1972ff' },
 ];
 let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
@@ -1028,12 +1029,15 @@ let reconMarkets = {
     bybit:   { spot: false, futures: false },
     okx:     { spot: false, futures: false },
     gate:    { spot: false, futures: false },
+    mexc:    { spot: false, futures: false },
+
 };
 let reconMinVolumes = {
     binance: { spot: 10000, futures: 50000 },
     bybit:   { spot: 10000, futures: 50000 },
     okx:     { spot: 10000, futures: 50000 },
     gate:    { spot: 10000, futures: 50000 },
+    mexc:    { spot: 10000, futures: 50000 }
 };
 try {
     const savedRecon = JSON.parse(localStorage.getItem('reconMarkets') || 'null');
@@ -1066,6 +1070,9 @@ function getReconUrl(exId, symbol, market) {
         ? `https://api.gateio.ws/api/v4/futures/usdt/order_book?contract=${symbol}_USDT&limit=100`
         : `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${symbol}_USDT&limit=100`;
     return null;
+    if (exId === 'mexc') return market === 'futures'
+    ? `https://contract.mexc.com/api/v1/contract/depth/${symbol}_USDT?limit=100`
+    : `https://api.mexc.com/api/v3/depth?symbol=${symbol}USDT&limit=100`;
 }
 
 function parseReconLevels(exId, data) {
@@ -1074,6 +1081,8 @@ function parseReconLevels(exId, data) {
     else if (exId === 'bybit') { rawBids = (data.result && data.result.b) || []; rawAsks = (data.result && data.result.a) || []; }
     else if (exId === 'okx') { const d = (data.data || [])[0] || {}; rawBids = d.bids || []; rawAsks = d.asks || []; }
     else if (exId === 'gate') { rawBids = data.bids || []; rawAsks = data.asks || []; }
+    else if (exId === 'mexc') {const inner = data.data || {}; rawBids = inner.bids || []; rawAsks = inner.asks || [];
+}
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
         if (row && typeof row === 'object') return [parseFloat(row.p), Math.abs(parseFloat(row.s))];
@@ -1271,7 +1280,7 @@ async function loadScalpDensities(symbol) {
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
             const densities = allNewData[key];
-            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G' };
+            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX'};
             const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
             const marketSuffix = market === 'futures' ? 'F' : 'S';
             const prefix = `${exchangePrefix}-${marketSuffix}`;

@@ -50,6 +50,7 @@ const EXCHANGES_CONFIG = [
     { id: 'bybit',   name: 'Bybit',   domain: 'bybit.com',   color: '#f7931a' },
     { id: 'okx',     name: 'OKX',     domain: 'okx.com',     color: '#ffffff' },
     { id: 'gate',    name: 'Gate.io',  domain: 'gate.io',     color: '#2354e6' },
+    { id: 'mexc', name: 'MEXC', domain: 'mexc.com', color: '#1972ff' },
 ];
 
 // Текущие настройки каждой биржи
@@ -57,7 +58,8 @@ let scalpExchanges = {
     binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    gate:    { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 100000, minVolumeSpot: 50000 },
+    gate:    { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    mexc: { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
 };
 
 
