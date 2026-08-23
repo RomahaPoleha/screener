@@ -179,8 +179,17 @@ def init_order_book(symbol, log_func=print):
             log_func(f"⚠️ mexc futures {symbol}: не JSON: {res.text[:200]}")
             return 0
 
-        if not data.get('success'):
-            log_func(f"⚠️ mexc futures {symbol}: code={data.get('code')} msg={data.get('msg')}")
+        # Логируем что пришло для диагностики
+        if isinstance(data, list):
+            log_func(f"⚠️ mexc futures {symbol}: API вернул список")
+            return 0
+        if not isinstance(data, dict):
+            log_func(f"⚠️ mexc futures {symbol}: неожиданный тип {type(data)}")
+            return 0
+
+        # Проверка success
+        if data.get('success') is False:
+            log_func(f"⚠️ mexc futures {symbol}: success=false code={data.get('code')} msg={data.get('msg')}")
             return 0
 
         inner = data.get('data') or {}
@@ -192,9 +201,14 @@ def init_order_book(symbol, log_func=print):
 
         for row in raw_bids:
             try:
-                # MEXC futures: {"price": "...", "vol": "..."}
-                price = float(row.get('price') or row.get('p') or row[0])
-                qty = abs(float(row.get('vol') or row.get('v') or row[1]))
+                if isinstance(row, dict):
+                    price = float(row.get('p') or row.get('price') or 0)
+                    qty = abs(float(row.get('v') or row.get('vol') or 0))
+                elif isinstance(row, (list, tuple)):
+                    price = float(row[0])
+                    qty = abs(float(row[1]))
+                else:
+                    continue
                 if price > 0 and qty > 0:
                     bids[price] = qty
             except Exception:
@@ -202,15 +216,21 @@ def init_order_book(symbol, log_func=print):
 
         for row in raw_asks:
             try:
-                price = float(row.get('price') or row.get('p') or row[0])
-                qty = abs(float(row.get('vol') or row.get('v') or row[1]))
+                if isinstance(row, dict):
+                    price = float(row.get('p') or row.get('price') or 0)
+                    qty = abs(float(row.get('v') or row.get('vol') or 0))
+                elif isinstance(row, (list, tuple)):
+                    price = float(row[0])
+                    qty = abs(float(row[1]))
+                else:
+                    continue
                 if price > 0 and qty > 0:
                     asks[price] = qty
             except Exception:
                 continue
 
         if not bids and not asks:
-            log_func(f"⚠️ mexc futures {symbol}: пустой стакан")
+            log_func(f"⚠️ mexc futures {symbol}: пустой стакан после парсинга (bids={len(raw_bids)} asks={len(raw_asks)})")
             return 0
 
         with mexc_futures_order_books_lock:
@@ -234,7 +254,7 @@ def init_order_book(symbol, log_func=print):
 
 
 def init_spot_order_book(symbol, log_func=print):
-    """Инициализация стакана MEXC Spot."""
+    """Инициализация стакана MEXC Spot. ВАЖНО: формат без code/data — прямо bids/asks"""
     try:
         url = MEXC_SPOT_REST_URL.format(symbol)
         res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
@@ -249,22 +269,33 @@ def init_spot_order_book(symbol, log_func=print):
             log_func(f"⚠️ mexc spot {symbol}: не JSON: {res.text[:200]}")
             return 0
 
-        if data.get('code') != 0:
+        # MEXC Spot v3 возвращает данные ПРЯМО в корне, без code/data!
+        if isinstance(data, list):
+            log_func(f"⚠️ mexc spot {symbol}: API вернул список")
+            return 0
+        if not isinstance(data, dict):
+            log_func(f"⚠️ mexc spot {symbol}: неожиданный тип {type(data)}")
+            return 0
+
+        # Проверяем ошибку (если code есть)
+        if 'code' in data and data.get('code') != 0:
             log_func(f"⚠️ mexc spot {symbol}: code={data.get('code')} msg={data.get('msg')}")
             return 0
 
-        inner = data.get('data') or {}
-        raw_bids = inner.get('bids') or []
-        raw_asks = inner.get('asks') or []
+        # Берём bids/asks напрямую (они в корне ответа)
+        raw_bids = data.get('bids') or []
+        raw_asks = data.get('asks') or []
 
         bids = {}
         asks = {}
 
         for row in raw_bids:
             try:
-                # MEXC spot: [["price", "qty"], ...]
-                price = float(row[0])
-                qty = abs(float(row[1]))
+                if isinstance(row, (list, tuple)):
+                    price = float(row[0])
+                    qty = abs(float(row[1]))
+                else:
+                    continue
                 if price > 0 and qty > 0:
                     bids[price] = qty
             except Exception:
@@ -272,15 +303,18 @@ def init_spot_order_book(symbol, log_func=print):
 
         for row in raw_asks:
             try:
-                price = float(row[0])
-                qty = abs(float(row[1]))
+                if isinstance(row, (list, tuple)):
+                    price = float(row[0])
+                    qty = abs(float(row[1]))
+                else:
+                    continue
                 if price > 0 and qty > 0:
                     asks[price] = qty
             except Exception:
                 continue
 
         if not bids and not asks:
-            log_func(f"⚠️ mexc spot {symbol}: пустой стакан")
+            log_func(f"⚠️ mexc spot {symbol}: пустой стакан после парсинга (bids={len(raw_bids)} asks={len(raw_asks)})")
             return 0
 
         with mexc_spot_order_books_lock:
@@ -301,7 +335,6 @@ def init_spot_order_book(symbol, log_func=print):
     except Exception as e:
         log_func(f"❌ init_spot_order_book(mexc spot {symbol}): {e}")
         return 0
-
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS
