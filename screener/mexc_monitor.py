@@ -51,7 +51,7 @@ mexc_spot_ws_instance = None
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 0
+MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 
 
@@ -67,9 +67,6 @@ def is_valid_symbol(symbol):
 
 # ==========================================
 # ТОП МОНЕТ
-# ==========================================
-# ==========================================
-# ТОП МОНЕТ (гибридная формула)
 # ==========================================
 def get_top_symbols(limit=30):
     """Отбор MEXC Futures по гибридной формуле (RVOL+NATR+%)"""
@@ -157,7 +154,6 @@ def init_order_book(symbol, log_func=print):
             log_func(f"⚠️ mexc futures {symbol}: не JSON: {res.text[:200]}")
             return 0
 
-        # Логируем что пришло для диагностики
         if isinstance(data, list):
             log_func(f"⚠️ mexc futures {symbol}: API вернул список")
             return 0
@@ -165,7 +161,6 @@ def init_order_book(symbol, log_func=print):
             log_func(f"⚠️ mexc futures {symbol}: неожиданный тип {type(data)}")
             return 0
 
-        # Проверка success
         if data.get('success') is False:
             log_func(f"⚠️ mexc futures {symbol}: success=false code={data.get('code')} msg={data.get('msg')}")
             return 0
@@ -232,7 +227,7 @@ def init_order_book(symbol, log_func=print):
 
 
 def init_spot_order_book(symbol, log_func=print):
-    """Инициализация стакана MEXC Spot. ВАЖНО: формат без code/data — прямо bids/asks"""
+    """Инициализация стакана MEXC Spot."""
     try:
         url = MEXC_SPOT_REST_URL.format(symbol)
         res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
@@ -247,7 +242,6 @@ def init_spot_order_book(symbol, log_func=print):
             log_func(f"⚠️ mexc spot {symbol}: не JSON: {res.text[:200]}")
             return 0
 
-        # MEXC Spot v3 возвращает данные ПРЯМО в корне, без code/data!
         if isinstance(data, list):
             log_func(f"⚠️ mexc spot {symbol}: API вернул список")
             return 0
@@ -255,12 +249,10 @@ def init_spot_order_book(symbol, log_func=print):
             log_func(f"⚠️ mexc spot {symbol}: неожиданный тип {type(data)}")
             return 0
 
-        # Проверяем ошибку (если code есть)
         if 'code' in data and data.get('code') != 0:
             log_func(f"⚠️ mexc spot {symbol}: code={data.get('code')} msg={data.get('msg')}")
             return 0
 
-        # Берём bids/asks напрямую (они в корне ответа)
         raw_bids = data.get('bids') or []
         raw_asks = data.get('asks') or []
 
@@ -559,25 +551,13 @@ def process_message_queue(log_func=print):
             data = json.loads(message)
 
             channel = data.get('channel', '')
-
-            # ДИАГНОСТИКА: логируем все каналы
-            if channel:
-                print(f"📥 process_message_queue: channel={channel}, symbol={data.get('symbol')}")
-
             if channel not in ('push.depth', 'rs.depth'):
-                # Логируем что отфильтровано (первые 10 для отладки)
-                if not hasattr(process_message_queue, 'filtered_count'):
-                    process_message_queue.filtered_count = 0
-                process_message_queue.filtered_count += 1
-                if process_message_queue.filtered_count <= 10:
-                    print(f"🚫 mexc futures отфильтрован: channel={channel}")
                 continue
 
-            # {"channel":"push.depth","symbol":"BTC_USDT","data":{"symbol":"BTC_USDT","bids":[...],"asks":[...],"t":..}}
             sym = data.get('symbol', '')
             symbol = sym[:-5] if sym.endswith('_USDT') else sym
 
-            # ВАЖНО: как в Recon — fallback на data если data пустой
+            # Fallback как в Recon — bids/asks могут быть и на корне, и внутри data
             inner = data.get('data') or data or {}
             bids = inner.get('bids') or data.get('bids') or []
             asks = inner.get('asks') or data.get('asks') or []
@@ -610,12 +590,20 @@ def process_message_queue(log_func=print):
             with mexc_futures_order_books_lock:
                 old_ts = mexc_futures_density_timestamps.get(symbol, {})
                 new_ts = {}
+
+                # Bids: сохраняем старые timestamp-ы, новым ставим текущее время
                 for p in new_bids:
                     if p in old_ts:
                         new_ts[p] = old_ts[p]
+                    else:
+                        new_ts[p] = time.time()
+
+                # Asks: то же самое (ВАЖНО — было пропущено!)
                 for p in new_asks:
                     if p in old_ts:
                         new_ts[p] = old_ts[p]
+                    else:
+                        new_ts[p] = time.time()
 
                 mexc_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
                 mexc_futures_density_timestamps[symbol] = new_ts
@@ -639,7 +627,6 @@ def process_spot_message_queue(log_func=print):
             if not channel.startswith('spot@public.depth'):
                 continue
 
-            # {"c":"spot@public.depth.v3.api@BTCUSDT","d":{"asks":[{"p":"50000.0","v":"0.1"}],"bids":[]},"t":123,"s":"BTCUSDT"}
             sym = data.get('s', '')
             symbol = sym[:-4] if sym.endswith('USDT') else sym
 
@@ -675,12 +662,20 @@ def process_spot_message_queue(log_func=print):
             with mexc_spot_order_books_lock:
                 old_ts = mexc_spot_density_timestamps.get(symbol, {})
                 new_ts = {}
+
+                # Bids: сохраняем старые timestamp-ы, новым ставим текущее время
                 for p in new_bids:
                     if p in old_ts:
                         new_ts[p] = old_ts[p]
+                    else:
+                        new_ts[p] = time.time()
+
+                # Asks: то же самое
                 for p in new_asks:
                     if p in old_ts:
                         new_ts[p] = old_ts[p]
+                    else:
+                        new_ts[p] = time.time()
 
                 mexc_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
                 mexc_spot_density_timestamps[symbol] = new_ts
@@ -699,14 +694,6 @@ def process_spot_message_queue(log_func=print):
 def on_message(ws, message):
     try:
         mexc_futures_message_queue.put_nowait(message)
-        # ВРЕМЕННАЯ ДИАГНОСТИКА
-        try:
-            data = json.loads(message)
-            channel = data.get('channel', 'NO_CHANNEL')
-            sym = data.get('symbol', 'NO_SYMBOL')
-            print(f"📩 mexc futures WS msg: channel={channel}, symbol={sym}")
-        except:
-            print(f"📩 mexc futures WS msg (raw): {str(message)[:150]}")
     except Exception as e:
         print(f"❌ mexc futures on_message: {e}")
 
@@ -720,18 +707,7 @@ def on_message_spot(ws, message):
 
 def on_open(ws):
     print(f"✅ mexc futures WebSocket открыт: {len(ws.symbols)} символов")
-
-    # Первые 3 символа с логами
-    for symbol in ws.symbols[:3]:
-        sub = {
-            "method": "sub.depth",
-            "param": {"symbol": f"{symbol}_USDT"}
-        }
-        print(f"📤 Отправка подписки MEXC futures: {sub}")
-        ws.send(json.dumps(sub))
-
-    # Остальные без лога
-    for symbol in ws.symbols[3:]:
+    for symbol in ws.symbols:
         sub = {
             "method": "sub.depth",
             "param": {"symbol": f"{symbol}_USDT"}
@@ -748,7 +724,7 @@ def on_open_spot(ws):
 
 def start_websocket(symbols_list, log_func=print):
     global mexc_futures_ws_stop_event, mexc_futures_ws_instance
-    log_func(f"🚀 mexc futures start_websocket запущен, stop_event.is_set() = {mexc_futures_ws_stop_event.is_set()}")
+
     while not mexc_futures_ws_stop_event.is_set():
         ws = None
         stop_event = threading.Event()
@@ -976,7 +952,6 @@ def refresh_mexc_futures_symbols(log_func=print):
                 pass
         time.sleep(2)
         mexc_futures_ws_stop_event.clear()
-        log_func(f"🔓 mexc futures: stop_event сброшен, is_set={mexc_futures_ws_stop_event.is_set()}")
 
         if mexc_futures_symbols:
             threading.Thread(
