@@ -717,7 +717,7 @@ def on_open_spot(ws):
 
 def start_websocket(symbols_list, log_func=print):
     global mexc_futures_ws_stop_event, mexc_futures_ws_instance
-
+    log_func(f"🚀 mexc futures start_websocket запущен, stop_event.is_set() = {mexc_futures_ws_stop_
     while not mexc_futures_ws_stop_event.is_set():
         ws = None
         stop_event = threading.Event()
@@ -945,6 +945,8 @@ def refresh_mexc_futures_symbols(log_func=print):
                 pass
         time.sleep(2)
         mexc_futures_ws_stop_event.clear()
+        log_func(f"🔓 mexc futures: stop_event сброшен, is_set={mexc_futures_ws_stop_event.is_set()}")
+
         if mexc_futures_symbols:
             threading.Thread(
                 target=lambda: start_websocket(mexc_futures_symbols, log_func),
