@@ -544,7 +544,7 @@ def update_spot_order_book(symbol, bids_delta, asks_delta, log_func=print):
 # ОБРАБОТКА ОЧЕРЕДЕЙ WS СООБЩЕНИЙ
 # ==========================================
 def process_message_queue(log_func=print):
-    """MEXC Futures: канал push.depth, snapshot периодически"""
+    """MEXC Futures: канал push.depth согласно официальной документации"""
     while True:
         try:
             message = mexc_futures_message_queue.get(timeout=1)
@@ -557,33 +557,37 @@ def process_message_queue(log_func=print):
             sym = data.get('symbol', '')
             symbol = sym[:-5] if sym.endswith('_USDT') else sym
 
-            # Fallback как в Recon — bids/asks могут быть и на корне, и внутри data
-            inner = data.get('data') or data or {}
-            bids = inner.get('bids') or data.get('bids') or []
-            asks = inner.get('asks') or data.get('asks') or []
+            # Согласно официальной документации: данные внутри data
+            inner = data.get('data') or {}
+            bids = inner.get('bids') or []
+            asks = inner.get('asks') or []
 
             if not (bids or asks):
                 continue
 
-            # MEXC фьючерсы шлют snapshot целиком — полная замена
+            # Парсинг согласно официальной документации:
+            # Каждый элемент: [price, order_count, quantity]
             new_bids = {}
             new_asks = {}
 
             for row in bids:
                 try:
-                    price = float(row.get('p') or row.get('price') or 0)
-                    qty = abs(float(row.get('v') or row.get('vol') or 0))
-                    if price > 0 and qty > 0:
-                        new_bids[price] = qty
+                    # Формат: [price, order_count, quantity]
+                    if isinstance(row, (list, tuple)) and len(row) >= 3:
+                        price = float(row[0])
+                        qty = abs(float(row[2]))  # row[2] = quantity (объём)
+                        if price > 0 and qty > 0:
+                            new_bids[price] = qty
                 except Exception:
                     continue
 
             for row in asks:
                 try:
-                    price = float(row.get('p') or row.get('price') or 0)
-                    qty = abs(float(row.get('v') or row.get('vol') or 0))
-                    if price > 0 and qty > 0:
-                        new_asks[price] = qty
+                    if isinstance(row, (list, tuple)) and len(row) >= 3:
+                        price = float(row[0])
+                        qty = abs(float(row[2]))
+                        if price > 0 and qty > 0:
+                            new_asks[price] = qty
                 except Exception:
                     continue
 
@@ -598,7 +602,7 @@ def process_message_queue(log_func=print):
                     else:
                         new_ts[p] = time.time()
 
-                # Asks: то же самое (ВАЖНО — было пропущено!)
+                # Asks: то же самое
                 for p in new_asks:
                     if p in old_ts:
                         new_ts[p] = old_ts[p]
