@@ -1069,10 +1069,10 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'gate') return market === 'futures'
         ? `https://api.gateio.ws/api/v4/futures/usdt/order_book?contract=${symbol}_USDT&limit=100`
         : `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${symbol}_USDT&limit=100`;
-    return null;
     if (exId === 'mexc') return market === 'futures'
-    ? `https://contract.mexc.com/api/v1/contract/depth/${symbol}_USDT?limit=100`
-    : `https://api.mexc.com/api/v3/depth?symbol=${symbol}USDT&limit=100`;
+        ? `https://contract.mexc.com/api/v1/contract/depth/${symbol}_USDT?limit=100`
+        : `https://api.mexc.com/api/v3/depth?symbol=${symbol}USDT&limit=100`;
+    return null;   // ← перенесено в конец
 }
 
 function parseReconLevels(exId, data) {
@@ -1081,11 +1081,16 @@ function parseReconLevels(exId, data) {
     else if (exId === 'bybit') { rawBids = (data.result && data.result.b) || []; rawAsks = (data.result && data.result.a) || []; }
     else if (exId === 'okx') { const d = (data.data || [])[0] || {}; rawBids = d.bids || []; rawAsks = d.asks || []; }
     else if (exId === 'gate') { rawBids = data.bids || []; rawAsks = data.asks || []; }
-    else if (exId === 'mexc') {const inner = data.data || {}; rawBids = inner.bids || []; rawAsks = inner.asks || [];
-}
+    else if (exId === 'mexc') {
+        // Futures: {success: true, data: {bids: [{p,v}], asks: [{p,v}]}}
+        // Spot:    {bids: [[p,q]], asks: [[p,q]]} — без data обёртки
+        const inner = data.data || data || {};
+        rawBids = inner.bids || [];
+        rawAsks = inner.asks || [];
+    }
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
-        if (row && typeof row === 'object') return [parseFloat(row.p), Math.abs(parseFloat(row.s))];
+        if (row && typeof row === 'object') return [parseFloat(row.p || row.price), Math.abs(parseFloat(row.v || row.vol))];
         return [NaN, NaN];
     };
     return { rawBids, rawAsks, toLevel };
