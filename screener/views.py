@@ -298,3 +298,61 @@ def api_scalp_active(request):
             active[symbol] = total_count
 
     return JsonResponse({'active': active})
+
+
+@require_http_methods(["GET"])
+def api_mexc_depth(request):
+    """Прокси для MEXC стаканов (обход CORS)"""
+    import requests as req
+
+    market = request.GET.get('market', 'futures')
+    symbol = request.GET.get('symbol', '').upper()
+
+    if not symbol or market not in ['futures', 'spot']:
+        return JsonResponse({'error': 'bad params'}, status=400)
+
+    cache_key = f"mexc:depth:{market}:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse(cached)
+
+    if market == 'futures':
+        url = f"https://contract.mexc.com/api/v1/contract/depth/{symbol}_USDT?limit=100"
+    else:
+        url = f"https://api.mexc.com/api/v3/depth?symbol={symbol}USDT&limit=100"
+
+    try:
+        res = req.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+        if not res.ok:
+            return JsonResponse({'bids': [], 'asks': []})
+        data = res.json()
+    except Exception as e:
+        print(f"⚠️ api_mexc_depth({market} {symbol}): {e}")
+        return JsonResponse({'bids': [], 'asks': []})
+
+    # MEXC futures: {success:true, data:{bids:[{p,v}], asks:[{p,v}]}}
+    # MEXC spot: {bids:[[p,q]], asks:[[p,q]]}
+    inner = data.get('data') or data or {}
+    raw_bids = inner.get('bids') or []
+    raw_asks = inner.get('asks') or []
+
+    # Нормализация в формат [[price, qty], ...]
+    def norm(levels):
+        out = []
+        for row in levels:
+            try:
+                if isinstance(row, dict):
+                    p = float(row.get('p') or row.get('price') or 0)
+                    q = abs(float(row.get('v') or row.get('vol') or 0))
+                else:
+                    p = float(row[0])
+                    q = abs(float(row[1]))
+                if p > 0 and q > 0:
+                    out.append([p, q])
+            except:
+                continue
+        return out
+
+    result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
+    cache.set(cache_key, result, 2)
+    return JsonResponse(result)

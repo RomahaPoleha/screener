@@ -1077,31 +1077,49 @@ function getReconUrl(exId, symbol, market) {
 
 function parseReconLevels(exId, data) {
     let rawBids = [], rawAsks = [];
-    if (exId === 'binance') { rawBids = data.bids || []; rawAsks = data.asks || []; }
-    else if (exId === 'bybit') { rawBids = (data.result && data.result.b) || []; rawAsks = (data.result && data.result.a) || []; }
-    else if (exId === 'okx') { const d = (data.data || [])[0] || {}; rawBids = d.bids || []; rawAsks = d.asks || []; }
-    else if (exId === 'gate') { rawBids = data.bids || []; rawAsks = data.asks || []; }
-    else if (exId === 'mexc') {
-        // Futures: {success: true, data: {bids: [{p,v}], asks: [{p,v}]}}
-        // Spot:    {bids: [[p,q]], asks: [[p,q]]} — без data обёртки
-        const inner = data.data || data || {};
-        rawBids = inner.bids || [];
-        rawAsks = inner.asks || [];
+
+    if (exId === 'binance') {
+        rawBids = data.bids || []; rawAsks = data.asks || [];
+    } else if (exId === 'bybit') {
+        rawBids = (data.result && data.result.b) || [];
+        rawAsks = (data.result && data.result.a) || [];
+    } else if (exId === 'okx') {
+        const d = (data.data || [])[0] || {};
+        rawBids = d.bids || []; rawAsks = d.asks || [];
+    } else if (exId === 'gate') {
+        rawBids = data.bids || []; rawAsks = data.asks || [];
+    } else if (exId === 'mexc') {
+        // MEXC прокси возвращает {bids: [[p,q]], asks: [[p,q]]}
+        rawBids = data.bids || [];
+        rawAsks = data.asks || [];
     }
+
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
         if (row && typeof row === 'object') return [parseFloat(row.p || row.price), Math.abs(parseFloat(row.v || row.vol))];
         return [NaN, NaN];
     };
+
     return { rawBids, rawAsks, toLevel };
 }
 
 async function fetchReconMarket(exId, symbol, market) {
-    const url = getReconUrl(exId, symbol, market);
-    if (!url) return [];
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    let data;
+
+    if (exId === 'mexc') {
+        // MEXC — через прокси (CORS блок)
+        const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+    } else {
+        // Binance/Bybit/OKX/Gate — напрямую из браузера (CORS работает)
+        const url = getReconUrl(exId, symbol, market);
+        if (!url) return [];
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+    }
+
     const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
     const minVolume = reconMinVolumes[exId][market];
     const out = [];

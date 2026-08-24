@@ -27,4 +27,5 @@ urlpatterns = [
     path('api/scalp/<str:symbol>/', views.api_scalp, name='api_scalp'),
     path('api/sound/<str:filename>/', views.api_sound, name='api_sound'),
     path('api/scalp-active/', views.api_scalp_active),
+    path('api/mexc-depth/', views.api_mexc_depth, name='api_mexc_depth'),
 ]
