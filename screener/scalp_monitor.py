@@ -41,7 +41,7 @@ def start_scalp_monitor():
         from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
         # from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
         from .gate_monitor import start_gate_monitor, start_gate_spot_monitor
-        # from .mexc_monitor import start_mexc_monitor, start_mexc_spot_monitor
+        from .mexc_monitor import start_mexc_monitor, start_mexc_spot_monitor
 
         # Запуск Binance Monitor
         binance_thread = threading.Thread(
@@ -52,22 +52,22 @@ def start_scalp_monitor():
         binance_thread.start()
         log("✅ Binance Monitor поток запущен")
 
-        # # Запуск MEXC Futures Monitor
-        # threading.Thread(
-        #     target=lambda: start_mexc_monitor(log),
-        #     name='MEXC-Futures-Monitor',
-        #     daemon=True
-        # ).start()
-        # log("✅ MEXC Futures Monitor поток запущен")
-        #
-        # # Запуск MEXC Spot Monitor
-        # threading.Thread(
-        #     target=lambda: start_mexc_spot_monitor(log),
-        #     name='MEXC-Spot-Monitor',
-        #     daemon=True
-        # ).start()
-        # log("✅ MEXC Spot Monitor поток запущен")
-        #
+        # Запуск MEXC Futures Monitor
+        threading.Thread(
+            target=lambda: start_mexc_monitor(log),
+            name='MEXC-Futures-Monitor',
+            daemon=True
+        ).start()
+        log("✅ MEXC Futures Monitor поток запущен")
+
+        # Запуск MEXC Spot Monitor
+        threading.Thread(
+            target=lambda: start_mexc_spot_monitor(log),
+            name='MEXC-Spot-Monitor',
+            daemon=True
+        ).start()
+        log("✅ MEXC Spot Monitor поток запущен")
+
         # Запуск Gate Futures Monitor
         gate_futures_thread = threading.Thread(
             target=lambda: start_gate_monitor(log),
