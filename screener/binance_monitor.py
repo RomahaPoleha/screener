@@ -8,6 +8,7 @@ import websocket
 from queue import Queue, Empty
 from django.core.cache import cache
 import ccxt
+from . import coin_selection
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ (единые имена!)
@@ -56,7 +57,7 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=30, market='futures'):
-    """Отбор: объём 24ч > $100K, NATR(5m) >= 0.3, сортировка по NATR по убыванию"""
+    """Отбор по схеме Finviz/CoinGlass: RVOL + NATR + ликвидная база"""
     try:
         ccxt_market = 'future' if market == 'futures' else 'spot'
         exchange = ccxt.binance({
@@ -66,37 +67,17 @@ def get_top_symbols(limit=30, market='futures'):
         })
         tickers = exchange.fetch_tickers()
 
-        candidates = []
-        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
+        # Ярус 1: накапливаем историю объёма (нужно для RVOL)
+        clean_fn = coin_selection.clean_swap if market == 'futures' else coin_selection.clean_spot
+        coin_selection.update_volume_history(tickers, clean_fn)
 
-        MIN_VOLUME_24H = 100_000
-        MIN_NATR = 0.3
+        # Ярус 2: отбор по Score = 0.6*RVOL + 0.4*NATR
+        candidates = coin_selection.select_candidates(
+            tickers, clean_fn, limit=limit * 2,
+            log_func=lambda msg: print(msg)
+        )
 
-        for symbol, data in tickers.items():
-            if ':USDT' not in symbol and not symbol.endswith('/USDT'):
-                continue
-
-            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-
-            if clean_symbol in stablecoins:
-                continue
-            if not is_valid_symbol(clean_symbol):
-                continue
-
-            volume = data.get('quoteVolume') or 0
-            if volume < MIN_VOLUME_24H:
-                continue
-
-            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
-            natr = natr_data.get('natr_5m14') or 0
-
-            if natr < MIN_NATR:
-                continue
-
-            candidates.append((clean_symbol, natr))
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in candidates[:limit]]
+        return candidates[:limit]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_symbols({market}): {e}")
@@ -407,6 +388,9 @@ def start_binance_monitor(log_func=print):
     global futures_symbols, spot_symbols
 
     log_func("🚀 Запуск Binance Monitor...")
+    # Лёгкий скан каждые 60 сек — копим историю объёма для RVOL
+    coin_selection.start_volume_poller('binance-futures', _fetch_swap_tickers, coin_selection.clean_swap, log_func)
+    coin_selection.start_volume_poller('binance-spot', _fetch_spot_tickers, coin_selection.clean_spot, log_func)
 
     # Запуск ДВУХ потоков обработки очереди
     threading.Thread(
@@ -614,7 +598,7 @@ def refresh_binance_spot_symbols(log_func=print):
 
 def periodic_binance_refresh(log_func=print):
     """Периодическое обновление списка монет Binance"""
-    REFRESH_INTERVAL = 1800  # 5 минут
+    REFRESH_INTERVAL = 300
 
     while True:
         time.sleep(REFRESH_INTERVAL)
@@ -623,3 +607,23 @@ def periodic_binance_refresh(log_func=print):
             refresh_binance_spot_symbols(log_func)
         except Exception as e:
             log_func(f"❌ Ошибка при обновлении списка Binance: {e}")
+
+
+
+
+def _fetch_swap_tickers():
+    exchange = ccxt.binance({
+        'enableRateLimit': True,
+        'timeout': 10000,
+        'options': {'defaultType': 'future'}
+    })
+    return exchange.fetch_tickers()
+
+
+def _fetch_spot_tickers():
+    exchange = ccxt.binance({
+        'enableRateLimit': True,
+        'timeout': 10000,
+        'options': {'defaultType': 'spot'}
+    })
+    return exchange.fetch_tickers()
