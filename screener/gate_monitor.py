@@ -9,6 +9,7 @@ import websocket
 from queue import Queue, Empty
 from django.core.cache import cache
 import ccxt
+from . import coin_selection
 
 # Поддержка старых и новых версий ccxt
 GateExchange = getattr(ccxt, 'gateio', None) or getattr(ccxt, 'gate', None)
@@ -71,16 +72,22 @@ def is_valid_symbol(symbol):
 # ОБОБЩЁННАЯ ЛОГИКА СКАЧАНИЯ ТОПА МОНЕТ
 # ==========================================
 
+# ==========================================
+# ОБОБЩЁННАЯ ЛОГИКА СКАЧАНИЯ ТОПА МОНЕТ
+# ==========================================
+
 def get_top_symbols(limit=30, log_func=print):
+    """Отбор Gate Futures по гибридной формуле"""
     return _get_top_symbols_generic(limit, market='swap', log_func=log_func)
 
 
 def get_top_spot_symbols(limit=30, log_func=print):
+    """Отбор Gate Spot по гибридной формуле"""
     return _get_top_symbols_generic(limit, market='spot', log_func=log_func)
 
 
 def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
-    """Отбор: объём 24ч > $100K, NATR(5m) >= 0.3, сортировка по NATR по убыванию"""
+    """Гибридный отбор: Score = 0.5*RVOL + 0.3*NATR + 0.2*|%|"""
     try:
         exchange = GateExchange({
             'enableRateLimit': True,
@@ -89,50 +96,31 @@ def _get_top_symbols_generic(limit=30, market='swap', log_func=print):
         })
 
         tickers = exchange.fetch_tickers(params={'type': market})
-
         log_func(f"🔍 Gate {market}: получено {len(tickers)} тикеров")
 
-        candidates = []
-        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
-        MIN_VOLUME_24H = 100_000
-        MIN_NATR = 0.3
+        # Для swap Gate отдаёт volume в контрактах — пересчитываем в quoteVolume
+        if market == 'swap':
+            for symbol, data in tickers.items():
+                try:
+                    info = data.get('info', {})
+                    vol_contracts = float(info.get('volume_24h') or 0)
+                    last_price = float(data.get('last') or 0)
+                    data['quoteVolume'] = vol_contracts * last_price
+                except Exception:
+                    pass
 
-        for symbol, data in tickers.items():
-            suffix = '/USDT:USDT' if market == 'swap' else '/USDT'
-            if not symbol.endswith(suffix):
-                continue
+        # Ярус 1: накапливаем историю объёма для RVOL
+        clean_fn = coin_selection.clean_swap if market == 'swap' else coin_selection.clean_spot
+        coin_selection.update_volume_history(tickers, clean_fn)
 
-            clean_symbol = symbol.replace(suffix, '')
+        # Ярус 2: отбор по гибридной формуле
+        candidates = coin_selection.select_candidates(
+            tickers, clean_fn, limit=limit * 2,
+            log_func=log_func
+        )
 
-            if clean_symbol in stablecoins:
-                continue
-            if not is_valid_symbol(clean_symbol):
-                continue
-
-            if market == 'swap':
-                info = data.get('info', {})
-                vol_contracts = float(info.get('volume_24h') or 0)
-                last_price = float(data.get('last') or 0)
-                volume = vol_contracts * last_price
-            else:
-                volume = float(data.get('quoteVolume') or 0)
-
-            if volume < MIN_VOLUME_24H:
-                continue
-
-            # NATR из кэша (как в Bybit)
-            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
-            natr = natr_data.get('natr_5m14') or 0
-
-            if natr < MIN_NATR:
-                continue
-
-            candidates.append((clean_symbol, natr))
-
-        log_func(f"📊 Gate {market}: кандидатов {len(candidates)}")
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in candidates[:limit]]
+        log_func(f"📊 Gate {market}: отобрано {len(candidates)}")
+        return candidates[:limit]
 
     except Exception as e:
         log_func(f"❌ Ошибка в _get_top_symbols_generic(gate {market}): {e}")
@@ -828,7 +816,7 @@ def refresh_gate_spot_symbols(log_func=print):
 
 
 def periodic_gate_futures_refresh(log_func=print):
-    REFRESH_INTERVAL = 1800
+    REFRESH_INTERVAL = 300
     while True:
         time.sleep(REFRESH_INTERVAL)
         try:
@@ -838,7 +826,7 @@ def periodic_gate_futures_refresh(log_func=print):
 
 
 def periodic_gate_spot_refresh(log_func=print):
-    REFRESH_INTERVAL = 1800
+    REFRESH_INTERVAL = 300
     while True:
         time.sleep(REFRESH_INTERVAL)
         try:
