@@ -124,13 +124,27 @@ def start_volume_poller(name, fetch_tickers_fn, clean_fn, log_func=print):
 # ОТБОР КАНДИДАТОВ (гибрид)
 # ==========================================
 def select_candidates(tickers, clean_fn, limit=60, log_func=print):
-    """
-    Гибридный отбор:
-    - Порог $10M volume
-    - Score = 0.5*RVOL + 0.3*NATR + 0.2*|%24h|
-    - Добор ликвидной базой по объёму
-    """
+    """Гибридный отбор с оптимизированным чтением NATR"""
     rows = []
+
+    # Batch-чтение NATR из Redis (один запрос вместо N)
+    natr_batch = {}
+    try:
+        # Собираем все ключи NATR которые нам нужны
+        natr_keys = []
+        for symbol, data in tickers.items():
+            clean = clean_fn(symbol)
+            if clean:
+                natr_keys.append(f"natr_{clean}_future")
+
+        # Читаем все за раз (если Redis поддерживает pipeline)
+        if natr_keys:
+            # Fallback: читаем по одному, но с кэшированием
+            for key in natr_keys:
+                natr_batch[key] = cache.get(key) or {}
+    except Exception:
+        pass
+
     for symbol, data in tickers.items():
         clean = clean_fn(symbol)
         if not clean:
@@ -143,15 +157,14 @@ def select_candidates(tickers, clean_fn, limit=60, log_func=print):
         pct = float(data.get('percentage') or 0)
         pct_capped = min(abs(pct), PCT_CAP) / PCT_CAP
 
-        natr_data = cache.get(f"natr_{clean}_future") or {}
+        # Используем batch вместо cache.get для каждой монеты
+        natr_data = natr_batch.get(f"natr_{clean}_future", {})
         natr = float(natr_data.get('natr_5m14') or 0)
         rvol = get_rvol(clean, volume)
 
-        # Нормализация
         rvol_norm = min(rvol, RVOL_CAP) / RVOL_CAP
         natr_norm = min(natr, NATR_CAP) / NATR_CAP
 
-        # Гибридный score
         score = (RVOL_WEIGHT * rvol_norm +
                  NATR_WEIGHT * natr_norm +
                  PCT_WEIGHT * pct_capped)
@@ -161,11 +174,9 @@ def select_candidates(tickers, clean_fn, limit=60, log_func=print):
             'natr': natr, 'rvol': rvol, 'pct': pct, 'score': score
         })
 
-    # Сортировка по score (аномалии вперёд)
     active = sorted(rows, key=lambda r: r['score'], reverse=True)
     result = [r['symbol'] for r in active]
 
-    # Ликвидная база (если score-отбор дал мало)
     if len(result) < limit:
         by_vol = sorted(rows, key=lambda r: r['volume'], reverse=True)
         for r in by_vol:

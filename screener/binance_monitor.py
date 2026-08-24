@@ -388,9 +388,8 @@ def start_binance_monitor(log_func=print):
     global futures_symbols, spot_symbols
 
     log_func("🚀 Запуск Binance Monitor...")
-    # Лёгкий скан каждые 60 сек — копим историю объёма для RVOL
-    coin_selection.start_volume_poller('binance-futures', _fetch_swap_tickers, coin_selection.clean_swap, log_func)
-    coin_selection.start_volume_poller('binance-spot', _fetch_spot_tickers, coin_selection.clean_spot, log_func)
+
+
 
     # Запуск ДВУХ потоков обработки очереди
     threading.Thread(
