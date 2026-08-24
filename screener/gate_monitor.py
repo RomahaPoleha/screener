@@ -54,7 +54,7 @@ last_sync_time = {}
 gate_spot_last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 1800
+MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 
 
