@@ -1,11 +1,13 @@
 """
-Отбор монет по схеме популярных скринеров (Finviz / CoinGlass / Velo Data)
+Отбор монет по гибридной схеме (Finviz + RVOL + NATR)
 
-Ярус 1: лёгкий скан всего юниверса каждые 60 сек → копим историю объёма для RVOL
-Ярус 2: отбор кандидатов по Score = 0.6*RVOL + 0.4*NATR (аномалии) + добор ликвидной базы
+Score = 0.5*RVOL + 0.3*NATR + 0.2*|%24h|
 
-RVOL = объём за последние 5 мин / средний объём за 5 мин из 24ч
-RVOL >= 2  → «начинается движение» (то, что ищут скринеры)
+RVOL = объём за 5 мин / средний объём за 5 мин (24ч)
+NATR = Normalized ATR (волатильность в %)
+%24h = процент изменения за 24ч (capped на 5%)
+
+Порог входа: $10M volume (как в текущем binance_monitor)
 """
 import time
 import threading
@@ -13,19 +15,23 @@ from collections import deque
 from django.core.cache import cache
 
 # ==========================================
-# КОНСТАНТЫ КАК У ПОПУЛЯРНЫХ СКРИНЕРОВ
+# КОНСТАНТЫ
 # ==========================================
-UNIVERSE_MIN_VOLUME = 5_000_000   # порог входа в юниверс (у профи $5-10M, не $100K)
-MIN_NATR = 0.2                    # NATR — фильтр, а не единственный ранжир
-RVOL_TRIGGER = 2.0                # RVOL >= 2 = аномальная активность
-RVOL_WEIGHT = 0.6
-NATR_WEIGHT = 0.4
-POLL_INTERVAL = 60                # лёгкий скан раз в 60 сек
+MIN_LIQUIDITY_VOLUME = 10_000_000   # порог входа (из текущего binance_monitor)
+RVOL_CAP = 10.0                      # RVOL >= 10 = максимум
+NATR_CAP = 2.0                       # NATR >= 2% = максимум
+PCT_CAP = 5.0                        # |%| >= 5 = максимум
+
+RVOL_WEIGHT = 0.5
+NATR_WEIGHT = 0.3
+PCT_WEIGHT = 0.2
+
+POLL_INTERVAL = 60                   # лёгкий скан каждые 60 сек
 
 STABLECOINS = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
 # ==========================================
-# ИСТОРИЯ ОБЪЁМА (кольцевой буфер)
+# ИСТОРИЯ ОБЪЁМА (для RVOL)
 # ==========================================
 volume_history = {}   # clean_symbol -> deque([(ts, quoteVolume)])
 _history_lock = threading.Lock()
@@ -63,7 +69,7 @@ def clean_spot(symbol):
 
 
 def update_volume_history(tickers, clean_fn):
-    """Ярус 1: снимаем снапшот quoteVolume (вызывается каждые 60 сек)"""
+    """Ярус 1: снимаем снапшот quoteVolume (каждые 60 сек)"""
     now = time.time()
     with _history_lock:
         for symbol, data in tickers.items():
@@ -82,7 +88,6 @@ def get_rvol(clean, quote_vol_24h):
         if not dq or len(dq) < 6:
             return 0.0
         now_ts, now_v = dq[-1]
-        # самый свежий снапшот возрастом >= 5 минут
         old_v = None
         for ts, v in dq:
             if now_ts - ts >= 300:
@@ -92,7 +97,7 @@ def get_rvol(clean, quote_vol_24h):
     if old_v is None:
         return 0.0
     vol_5m = max(0.0, now_v - old_v)
-    expected = quote_vol_24h / 288.0   # средний объём за 5 мин из 24ч
+    expected = quote_vol_24h / 288.0
     return vol_5m / expected if expected > 0 else 0.0
 
 
@@ -116,40 +121,51 @@ def start_volume_poller(name, fetch_tickers_fn, clean_fn, log_func=print):
 
 
 # ==========================================
-# ЯРУС 2: ОТБОР КАНДИДАТОВ
+# ОТБОР КАНДИДАТОВ (гибрид)
 # ==========================================
 def select_candidates(tickers, clean_fn, limit=60, log_func=print):
     """
-    1. Юниверс: объём 24ч > $5M
-    2. Аномалии: RVOL >= 2 ИЛИ NATR >= 0.3 → ранжируем по Score
-    3. Если аномалий мало — добираем ликвидной базой (топ по объёму)
+    Гибридный отбор:
+    - Порог $10M volume
+    - Score = 0.5*RVOL + 0.3*NATR + 0.2*|%24h|
+    - Добор ликвидной базой по объёму
     """
     rows = []
     for symbol, data in tickers.items():
         clean = clean_fn(symbol)
         if not clean:
             continue
+
         volume = float(data.get('quoteVolume') or 0)
-        if volume < UNIVERSE_MIN_VOLUME:
+        if volume < MIN_LIQUIDITY_VOLUME:
             continue
+
+        pct = float(data.get('percentage') or 0)
+        pct_capped = min(abs(pct), PCT_CAP) / PCT_CAP
 
         natr_data = cache.get(f"natr_{clean}_future") or {}
         natr = float(natr_data.get('natr_5m14') or 0)
         rvol = get_rvol(clean, volume)
 
-        rows.append({'symbol': clean, 'volume': volume, 'natr': natr, 'rvol': rvol})
+        # Нормализация
+        rvol_norm = min(rvol, RVOL_CAP) / RVOL_CAP
+        natr_norm = min(natr, NATR_CAP) / NATR_CAP
 
-    # Активная часть — «что происходит СЕЙЧАС»
-    active = [r for r in rows if r['rvol'] >= RVOL_TRIGGER or r['natr'] >= 0.3]
-    for r in active:
-        rvol_norm = min(r['rvol'], 10) / 10     # RVOL 10x = максимум
-        natr_norm = min(r['natr'], 2) / 2       # NATR 2% = максимум
-        r['score'] = RVOL_WEIGHT * rvol_norm + NATR_WEIGHT * natr_norm
-    active.sort(key=lambda r: r['score'], reverse=True)
+        # Гибридный score
+        score = (RVOL_WEIGHT * rvol_norm +
+                 NATR_WEIGHT * natr_norm +
+                 PCT_WEIGHT * pct_capped)
 
+        rows.append({
+            'symbol': clean, 'volume': volume,
+            'natr': natr, 'rvol': rvol, 'pct': pct, 'score': score
+        })
+
+    # Сортировка по score (аномалии вперёд)
+    active = sorted(rows, key=lambda r: r['score'], reverse=True)
     result = [r['symbol'] for r in active]
 
-    # Ликвидная база — чтобы стаканы не пустовали
+    # Ликвидная база (если score-отбор дал мало)
     if len(result) < limit:
         by_vol = sorted(rows, key=lambda r: r['volume'], reverse=True)
         for r in by_vol:
@@ -161,8 +177,11 @@ def select_candidates(tickers, clean_fn, limit=60, log_func=print):
     if rows:
         top = active[:5]
         log_func(
-            f"📊 отбор: юниверс {len(rows)}, аномалий {len(active)} | "
-            + ", ".join(f"{r['symbol']}(RVOL {r['rvol']:.1f} NATR {r['natr']:.2f})" for r in top)
+            f"📊 отбор: юниверс {len(rows)} | "
+            + ", ".join(
+                f"{r['symbol']}(RVOL {r['rvol']:.1f} NATR {r['natr']:.2f} %{r['pct']:+.1f} score {r['score']:.2f})"
+                for r in top
+            )
         )
 
     return result[:limit]
