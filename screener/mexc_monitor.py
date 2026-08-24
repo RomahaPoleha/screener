@@ -51,7 +51,7 @@ mexc_spot_ws_instance = None
 last_sync_time = {}
 
 # Минимальный возраст плотности
-MIN_AGE_SECONDS = 180
+MIN_AGE_SECONDS = 0
 CACHE_TTL = 900
 
 
