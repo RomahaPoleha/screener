@@ -39,7 +39,7 @@ def start_scalp_monitor():
     try:
         from .binance_monitor import start_binance_monitor
         from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
-        # from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
+        from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
         from .gate_monitor import start_gate_monitor, start_gate_spot_monitor
         from .mexc_monitor import start_mexc_monitor, start_mexc_spot_monitor
 
@@ -86,23 +86,23 @@ def start_scalp_monitor():
         gate_spot_thread.start()
         log("✅ Gate Spot Monitor поток запущен")
 
-        # # Запуск OKX Futures Monitor (временно вместо Bybit)
-        # okx_thread = threading.Thread(
-        #     target=lambda: start_okx_monitor(log),
-        #     name='OKX-Futures-Monitor',
-        #     daemon=True
-        # )
-        # okx_thread.start()
-        # log("✅ OKX Futures Monitor поток запущен")
-        #
-        # # Запуск OKX Spot Monitor
-        # okx_spot_thread = threading.Thread(
-        #     target=lambda: start_okx_spot_monitor(log),
-        #     name='OKX-Spot-Monitor',
-        #     daemon=True
-        # )
-        # okx_spot_thread.start()
-        # log("✅ OKX Spot Monitor поток запущен")
+        # Запуск OKX Futures Monitor (временно вместо Bybit)
+        okx_thread = threading.Thread(
+            target=lambda: start_okx_monitor(log),
+            name='OKX-Futures-Monitor',
+            daemon=True
+        )
+        okx_thread.start()
+        log("✅ OKX Futures Monitor поток запущен")
+
+        # Запуск OKX Spot Monitor
+        okx_spot_thread = threading.Thread(
+            target=lambda: start_okx_spot_monitor(log),
+            name='OKX-Spot-Monitor',
+            daemon=True
+        )
+        okx_spot_thread.start()
+        log("✅ OKX Spot Monitor поток запущен")
 
         # Запуск Bybit Futures Monitor
         bybit_thread = threading.Thread(
