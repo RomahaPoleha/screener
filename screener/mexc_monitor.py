@@ -9,6 +9,7 @@ import websocket
 from queue import Queue, Empty
 from django.core.cache import cache
 import ccxt
+from . import coin_selection
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
@@ -67,8 +68,11 @@ def is_valid_symbol(symbol):
 # ==========================================
 # ТОП МОНЕТ
 # ==========================================
+# ==========================================
+# ТОП МОНЕТ (гибридная формула)
+# ==========================================
 def get_top_symbols(limit=30):
-    """Отбор: объём 24ч > $100K, NATR(5m) >= 0.3, по убыванию NATR"""
+    """Отбор MEXC Futures по гибридной формуле (RVOL+NATR+%)"""
     try:
         exchange = ccxt.mexc({
             'enableRateLimit': True,
@@ -77,37 +81,31 @@ def get_top_symbols(limit=30):
         })
         tickers = exchange.fetch_tickers()
 
-        candidates = []
-        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
-        MIN_VOLUME_24H = 100_000
-        MIN_NATR = 0.3
-
+        # Страховка: если ccxt не посчитал quoteVolume — считаем сами
         for symbol, data in tickers.items():
-            # MEXC swap: BTC/USDT:USDT
-            if not symbol.endswith(':USDT'):
-                continue
+            if not (data.get('quoteVolume') or 0):
+                try:
+                    info = data.get('info', {})
+                    amount24 = float(info.get('amount24') or 0)
+                    if amount24 > 0:
+                        data['quoteVolume'] = amount24
+                    else:
+                        vol_contracts = float(info.get('volume24') or info.get('volume_24h') or 0)
+                        last_price = float(data.get('last') or info.get('lastPrice') or 0)
+                        data['quoteVolume'] = vol_contracts * last_price
+                except Exception:
+                    pass
 
-            clean_symbol = symbol.replace('/USDT:USDT', '')
+        # Ярус 1: накапливаем историю объёма для RVOL
+        coin_selection.update_volume_history(tickers, coin_selection.clean_swap)
 
-            if clean_symbol in stablecoins:
-                continue
-            if not is_valid_symbol(clean_symbol):
-                continue
+        # Ярус 2: отбор по гибридной формуле
+        candidates = coin_selection.select_candidates(
+            tickers, coin_selection.clean_swap, limit=limit * 2,
+            log_func=lambda msg: print(msg)
+        )
 
-            volume = data.get('quoteVolume') or 0
-            if volume < MIN_VOLUME_24H:
-                continue
-
-            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
-            natr = natr_data.get('natr_5m14') or 0
-
-            if natr < MIN_NATR:
-                continue
-
-            candidates.append((clean_symbol, natr))
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in candidates[:limit]]
+        return candidates[:limit]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_symbols(mexc futures): {e}")
@@ -115,7 +113,7 @@ def get_top_symbols(limit=30):
 
 
 def get_top_spot_symbols(limit=30):
-    """Отбор для Spot: объём 24ч > $100K, NATR(5m) >= 0.3, по убыванию NATR"""
+    """Отбор MEXC Spot по гибридной формуле (RVOL+NATR+%)"""
     try:
         exchange = ccxt.mexc({
             'enableRateLimit': True,
@@ -124,36 +122,16 @@ def get_top_spot_symbols(limit=30):
         })
         tickers = exchange.fetch_tickers()
 
-        candidates = []
-        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
-        MIN_VOLUME_24H = 100_000
-        MIN_NATR = 0.3
+        # Ярус 1: накапливаем историю объёма для RVOL
+        coin_selection.update_volume_history(tickers, coin_selection.clean_spot)
 
-        for symbol, data in tickers.items():
-            if not symbol.endswith('/USDT'):
-                continue
+        # Ярус 2: отбор по гибридной формуле
+        candidates = coin_selection.select_candidates(
+            tickers, coin_selection.clean_spot, limit=limit * 2,
+            log_func=lambda msg: print(msg)
+        )
 
-            clean_symbol = symbol.replace('/USDT', '')
-
-            if clean_symbol in stablecoins:
-                continue
-            if not is_valid_symbol(clean_symbol):
-                continue
-
-            volume = data.get('quoteVolume') or 0
-            if volume < MIN_VOLUME_24H:
-                continue
-
-            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
-            natr = natr_data.get('natr_5m14') or 0
-
-            if natr < MIN_NATR:
-                continue
-
-            candidates.append((clean_symbol, natr))
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in candidates[:limit]]
+        return candidates[:limit]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_spot_symbols(mexc spot): {e}")
@@ -1034,7 +1012,7 @@ def refresh_mexc_spot_symbols(log_func=print):
 
 
 def periodic_mexc_futures_refresh(log_func=print):
-    REFRESH_INTERVAL = 1800
+    REFRESH_INTERVAL = 300
     while True:
         time.sleep(REFRESH_INTERVAL)
         try:
@@ -1044,7 +1022,7 @@ def periodic_mexc_futures_refresh(log_func=print):
 
 
 def periodic_mexc_spot_refresh(log_func=print):
-    REFRESH_INTERVAL = 1800
+    REFRESH_INTERVAL = 300
     while True:
         time.sleep(REFRESH_INTERVAL)
         try:
