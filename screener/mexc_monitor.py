@@ -577,11 +577,18 @@ def process_message_queue(log_func=print):
             sym = data.get('symbol', '')
             symbol = sym[:-5] if sym.endswith('_USDT') else sym
 
+            # MEXC futures WS шлёт bids/asks И на корне, И внутри data — проверяем оба
             inner = data.get('data') or {}
-            bids = inner.get('bids') or []
-            asks = inner.get('asks') or []
+            bids = inner.get('bids') or data.get('bids') or []
+            asks = inner.get('asks') or data.get('asks') or []
 
             if not (bids or asks):
+                # ДИАГНОСТИКА: если всё ещё пусто — логируем что пришло
+                if not hasattr(process_message_queue, 'empty_count'):
+                    process_message_queue.empty_count = 0
+                process_message_queue.empty_count += 1
+                if process_message_queue.empty_count <= 5:
+                    print(f"⚠️ mexc futures {symbol}: пустые bids/asks, msg: {str(data)[:300]}")
                 continue
 
             # MEXC фьючерсы шлют snapshot целиком — полная замена
