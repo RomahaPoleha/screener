@@ -17,7 +17,7 @@ from django.core.cache import cache
 # ==========================================
 # КОНСТАНТЫ
 # ==========================================
-MIN_LIQUIDITY_VOLUME = 10_000_000   # порог входа (из текущего binance_monitor)
+MIN_LIQUIDITY_VOLUME = 1000_000   # порог входа (из текущего binance_monitor)
 RVOL_CAP = 10.0                      # RVOL >= 10 = максимум
 NATR_CAP = 2.0                       # NATR >= 2% = максимум
 PCT_CAP = 5.0                        # |%| >= 5 = максимум
