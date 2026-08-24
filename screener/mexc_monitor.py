@@ -559,7 +559,18 @@ def process_message_queue(log_func=print):
             data = json.loads(message)
 
             channel = data.get('channel', '')
+
+            # ДИАГНОСТИКА: логируем все каналы
+            if channel:
+                print(f"📥 process_message_queue: channel={channel}, symbol={data.get('symbol')}")
+
             if channel not in ('push.depth', 'rs.depth'):
+                # Логируем что отфильтровано (первые 10 для отладки)
+                if not hasattr(process_message_queue, 'filtered_count'):
+                    process_message_queue.filtered_count = 0
+                process_message_queue.filtered_count += 1
+                if process_message_queue.filtered_count <= 10:
+                    print(f"🚫 mexc futures отфильтрован: channel={channel}")
                 continue
 
             # {"channel":"push.depth","symbol":"BTC_USDT","data":{"symbol":"BTC_USDT","bids":[...],"asks":[...],"t":..}}
@@ -687,6 +698,14 @@ def process_spot_message_queue(log_func=print):
 def on_message(ws, message):
     try:
         mexc_futures_message_queue.put_nowait(message)
+        # ВРЕМЕННАЯ ДИАГНОСТИКА
+        try:
+            data = json.loads(message)
+            channel = data.get('channel', 'NO_CHANNEL')
+            sym = data.get('symbol', 'NO_SYMBOL')
+            print(f"📩 mexc futures WS msg: channel={channel}, symbol={sym}")
+        except:
+            print(f"📩 mexc futures WS msg (raw): {str(message)[:150]}")
     except Exception as e:
         print(f"❌ mexc futures on_message: {e}")
 
@@ -700,7 +719,18 @@ def on_message_spot(ws, message):
 
 def on_open(ws):
     print(f"✅ mexc futures WebSocket открыт: {len(ws.symbols)} символов")
-    for symbol in ws.symbols:
+
+    # Первые 3 символа с логами
+    for symbol in ws.symbols[:3]:
+        sub = {
+            "method": "sub.depth",
+            "param": {"symbol": f"{symbol}_USDT"}
+        }
+        print(f"📤 Отправка подписки MEXC futures: {sub}")
+        ws.send(json.dumps(sub))
+
+    # Остальные без лога
+    for symbol in ws.symbols[3:]:
         sub = {
             "method": "sub.depth",
             "param": {"symbol": f"{symbol}_USDT"}
