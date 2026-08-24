@@ -9,6 +9,7 @@ import websocket
 from queue import Queue, Empty
 from django.core.cache import cache
 import ccxt
+from . import coin_selection
 
 # Глобальное состояние
 bybit_futures_order_books = {}
@@ -58,7 +59,7 @@ def is_valid_symbol(symbol):
 
 
 def get_top_symbols(limit=30):
-    """Отбор: объём 24ч > $100K, NATR(5m) >= 0.3, сортировка по NATR по убыванию"""
+    """Отбор Bybit Futures по гибридной формуле (RVOL+NATR+%)"""
     try:
         exchange = ccxt.bybit({
             'enableRateLimit': True,
@@ -67,44 +68,24 @@ def get_top_symbols(limit=30):
         })
         tickers = exchange.fetch_tickers()
 
-        candidates = []
-        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
+        # Накапливаем историю объёма для RVOL
+        coin_selection.update_volume_history(tickers, coin_selection.clean_swap)
 
-        MIN_VOLUME_24H = 100_000
-        MIN_NATR = 0.3
+        # Отбор по гибридной формуле
+        candidates = coin_selection.select_candidates(
+            tickers, coin_selection.clean_swap, limit=limit * 2,
+            log_func=lambda msg: print(msg)
+        )
 
-        for symbol, data in tickers.items():
-            if ':USDT' not in symbol and not symbol.endswith('/USDT'):
-                continue
-
-            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-
-            if clean_symbol in stablecoins:
-                continue
-            if not is_valid_symbol(clean_symbol):
-                continue
-
-            volume = data.get('quoteVolume') or 0
-            if volume < MIN_VOLUME_24H:
-                continue
-
-            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
-            natr = natr_data.get('natr_5m14') or 0
-
-            if natr < MIN_NATR:
-                continue
-
-            candidates.append((clean_symbol, natr))
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in candidates[:limit]]
+        return candidates[:limit]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_symbols(bybit): {e}")
         return []
 
+
 def get_top_spot_symbols(limit=30):
-    """Отбор для Spot: объём 24ч > $100K, NATR(5m) >= 0.3, по убыванию NATR"""
+    """Отбор Bybit Spot по гибридной формуле (RVOL+NATR+%)"""
     try:
         exchange = ccxt.bybit({
             'enableRateLimit': True,
@@ -113,38 +94,16 @@ def get_top_spot_symbols(limit=30):
         })
         tickers = exchange.fetch_tickers()
 
-        candidates = []
-        stablecoins = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
+        # Накапливаем историю объёма для RVOL
+        coin_selection.update_volume_history(tickers, coin_selection.clean_spot)
 
-        MIN_VOLUME_24H = 100_000
-        MIN_NATR = 0.3
+        # Отбор по гибридной формуле
+        candidates = coin_selection.select_candidates(
+            tickers, coin_selection.clean_spot, limit=limit * 2,
+            log_func=lambda msg: print(msg)
+        )
 
-        for symbol, data in tickers.items():
-            if not symbol.endswith('/USDT'):
-                continue
-
-            clean_symbol = symbol.replace('/USDT', '')
-
-            if clean_symbol in stablecoins:
-                continue
-            if not is_valid_symbol(clean_symbol):
-                continue
-
-            volume = data.get('quoteVolume') or 0
-            if volume < MIN_VOLUME_24H:
-                continue
-
-            # Для spot используем NATR фьючерса как прокси волатильности
-            natr_data = cache.get(f"natr_{clean_symbol}_future") or {}
-            natr = natr_data.get('natr_5m14') or 0
-
-            if natr < MIN_NATR:
-                continue
-
-            candidates.append((clean_symbol, natr))
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in candidates[:limit]]
+        return candidates[:limit]
 
     except Exception as e:
         print(f"❌ Ошибка в get_top_spot_symbols(bybit spot): {e}")
@@ -1081,7 +1040,7 @@ def refresh_bybit_spot_symbols(log_func=print):
 
 def periodic_bybit_spot_refresh(log_func=print):
     """Периодическое обновление списка монет Bybit Spot"""
-    REFRESH_INTERVAL = 1800  # 5 минут
+    REFRESH_INTERVAL = 300  # 5 минут
 
     while True:
         time.sleep(REFRESH_INTERVAL)
@@ -1093,7 +1052,7 @@ def periodic_bybit_spot_refresh(log_func=print):
 
 def periodic_bybit_futures_refresh(log_func=print):
     """Периодическое обновление списка монет каждые 30 минут"""
-    REFRESH_INTERVAL = 1800  # 30 минут в секундах
+    REFRESH_INTERVAL = 300  # 30 минут в секундах
 
     while True:
         time.sleep(REFRESH_INTERVAL)
