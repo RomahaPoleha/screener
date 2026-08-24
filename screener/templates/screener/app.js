@@ -1066,13 +1066,15 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'okx') return market === 'futures'
         ? `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT-SWAP&sz=200`
         : `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT&sz=200`;
-    if (exId === 'gate') return market === 'futures'
-        ? `https://api.gateio.ws/api/v4/futures/usdt/order_book?contract=${symbol}_USDT&limit=100`
-        : `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${symbol}_USDT&limit=100`;
-    if (exId === 'mexc') return market === 'futures'
-        ? `https://contract.mexc.com/api/v1/contract/depth/${symbol}_USDT?limit=100`
-        : `https://api.mexc.com/api/v3/depth?symbol=${symbol}USDT&limit=100`;
-    return null;   // ← перенесено в конец
+    if (exId === 'gate') {
+        // Gate — через прокси (CORS блок)
+        return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
+    }
+    if (exId === 'mexc') {
+        // MEXC — через прокси (CORS блок)
+        return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
+    }
+    return null;
 }
 
 function parseReconLevels(exId, data) {

@@ -356,3 +356,64 @@ def api_mexc_depth(request):
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
     cache.set(cache_key, result, 2)
     return JsonResponse(result)
+
+
+@require_http_methods(["GET"])
+def api_gate_depth(request):
+    """Прокси для Gate.io стаканов (обход CORS)"""
+    import requests as req
+
+    market = request.GET.get('market', 'futures')
+    symbol = request.GET.get('symbol', '').upper()
+
+    if not symbol or market not in ['futures', 'spot']:
+        return JsonResponse({'error': 'bad params'}, status=400)
+
+    cache_key = f"gate:depth:{market}:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse(cached)
+
+    if market == 'futures':
+        url = f"https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={symbol}_USDT&limit=100"
+    else:
+        url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}_USDT&limit=100"
+
+    try:
+        res = req.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+        if not res.ok:
+            print(f"⚠️ api_gate_depth({market} {symbol}): HTTP {res.status_code}")
+            return JsonResponse({'bids': [], 'asks': []})
+        data = res.json()
+    except Exception as e:
+        print(f"⚠️ api_gate_depth({market} {symbol}): {e}")
+        return JsonResponse({'bids': [], 'asks': []})
+
+    # Gate отдаёт {current: timestamp, asks: [...], bids: [...]}
+    raw_bids = data.get('bids') or []
+    raw_asks = data.get('asks') or []
+
+    # Нормализация в формат [[price, qty], ...]
+    def norm(levels):
+        out = []
+        for row in levels:
+            try:
+                if isinstance(row, dict):
+                    # Gate futures: {"p": "...", "s": "..."}
+                    p = float(row.get('p') or row.get('price') or 0)
+                    q = abs(float(row.get('s') or row.get('size') or 0))
+                elif isinstance(row, (list, tuple)):
+                    # Gate spot: ["price", "size"]
+                    p = float(row[0])
+                    q = abs(float(row[1]))
+                else:
+                    continue
+                if p > 0 and q > 0:
+                    out.append([p, q])
+            except Exception:
+                continue
+        return out
+
+    result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
+    cache.set(cache_key, result, 2)
+    return JsonResponse(result)
