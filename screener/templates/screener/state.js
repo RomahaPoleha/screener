@@ -51,6 +51,7 @@ const EXCHANGES_CONFIG = [
     { id: 'okx',     name: 'OKX',     domain: 'okx.com',     color: '#ffffff' },
     { id: 'gate',    name: 'Gate.io',  domain: 'gate.io',     color: '#2354e6' },
     { id: 'mexc', name: 'MEXC', domain: 'mexc.com', color: '#1972ff' },
+    { id: 'bitget', name: 'Bitget', domain: 'bitget.com', color: '#00d4ff' },
 ];
 
 // Текущие настройки каждой биржи
