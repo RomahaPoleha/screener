@@ -1,5 +1,6 @@
 """
 MEXC Monitor — мониторинг плотностей MEXC Futures и Spot
+Формат push.depth: [price, qty, orderCount] — дельта-обновления
 """
 import json
 import time
@@ -29,28 +30,19 @@ mexc_spot_order_books_lock = threading.Lock()
 mexc_spot_symbols = []
 mexc_spot_message_queue = Queue(maxsize=50000)
 
-# ==========================================
-# URLs MEXC
-# ==========================================
-# Spot
+# URLs
 MEXC_SPOT_REST_URL = "https://api.mexc.com/api/v3/depth?symbol={}USDT&limit=100"
 MEXC_SPOT_WS_URL = "wss://wbs.mexc.com/ws"
-
-# Futures (контракты)
 MEXC_FUTURES_REST_URL = "https://contract.mexc.com/api/v1/contract/depth/{}_USDT?limit=100"
 MEXC_FUTURES_WS_URL = "wss://contract.mexc.com/edge"
 
-# Управление WebSocket
 mexc_futures_ws_stop_event = threading.Event()
 mexc_futures_ws_instance = None
-
 mexc_spot_ws_stop_event = threading.Event()
 mexc_spot_ws_instance = None
 
-# Rate limiting
 last_sync_time = {}
 
-# Минимальный возраст плотности
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 
@@ -65,9 +57,6 @@ def is_valid_symbol(symbol):
     return True
 
 
-# ==========================================
-# ТОП МОНЕТ
-# ==========================================
 def get_top_symbols(limit=30):
     """Отбор MEXC Futures по гибридной формуле (RVOL+NATR+%)"""
     try:
@@ -78,7 +67,7 @@ def get_top_symbols(limit=30):
         })
         tickers = exchange.fetch_tickers()
 
-        # Страховка: если ccxt не посчитал quoteVolume — считаем сами
+        # Страховка: если ccxt не посчитал quoteVolume
         for symbol, data in tickers.items():
             if not (data.get('quoteVolume') or 0):
                 try:
@@ -93,24 +82,19 @@ def get_top_symbols(limit=30):
                 except Exception:
                     pass
 
-        # Ярус 1: накапливаем историю объёма для RVOL
         coin_selection.update_volume_history(tickers, coin_selection.clean_swap)
-
-        # Ярус 2: отбор по гибридной формуле
         candidates = coin_selection.select_candidates(
             tickers, coin_selection.clean_swap, limit=limit * 2,
             log_func=lambda msg: print(msg)
         )
-
         return candidates[:limit]
-
     except Exception as e:
         print(f"❌ Ошибка в get_top_symbols(mexc futures): {e}")
         return []
 
 
 def get_top_spot_symbols(limit=30):
-    """Отбор MEXC Spot по гибридной формуле (RVOL+NATR+%)"""
+    """Отбор MEXC Spot по гибридной формуле"""
     try:
         exchange = ccxt.mexc({
             'enableRateLimit': True,
@@ -118,28 +102,21 @@ def get_top_spot_symbols(limit=30):
             'options': {'defaultType': 'spot'}
         })
         tickers = exchange.fetch_tickers()
-
-        # Ярус 1: накапливаем историю объёма для RVOL
         coin_selection.update_volume_history(tickers, coin_selection.clean_spot)
-
-        # Ярус 2: отбор по гибридной формуле
         candidates = coin_selection.select_candidates(
             tickers, coin_selection.clean_spot, limit=limit * 2,
             log_func=lambda msg: print(msg)
         )
-
         return candidates[:limit]
-
     except Exception as e:
         print(f"❌ Ошибка в get_top_spot_symbols(mexc spot): {e}")
         return []
 
 
-# ==========================================
-# ИНИЦИАЛИЗАЦИЯ СТАКАНОВ ЧЕРЕЗ REST
-# ==========================================
 def init_order_book(symbol, log_func=print):
-    """Инициализация стакана MEXC Futures."""
+    """Инициализация стакана MEXC Futures через REST.
+    REST формат: {"success":true,"data":{"bids":[[p,q,c],...],"asks":[[p,q,c],...]}}
+    """
     try:
         url = MEXC_FUTURES_REST_URL.format(symbol)
         res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
@@ -151,18 +128,11 @@ def init_order_book(symbol, log_func=print):
         try:
             data = res.json()
         except Exception:
-            log_func(f"⚠️ mexc futures {symbol}: не JSON: {res.text[:200]}")
+            log_func(f"⚠️ mexc futures {symbol}: не JSON")
             return 0
 
-        if isinstance(data, list):
-            log_func(f"⚠️ mexc futures {symbol}: API вернул список")
-            return 0
-        if not isinstance(data, dict):
-            log_func(f"⚠️ mexc futures {symbol}: неожиданный тип {type(data)}")
-            return 0
-
-        if data.get('success') is False:
-            log_func(f"⚠️ mexc futures {symbol}: success=false code={data.get('code')} msg={data.get('msg')}")
+        if not isinstance(data, dict) or data.get('success') is False:
+            log_func(f"⚠️ mexc futures {symbol}: API ошибка")
             return 0
 
         inner = data.get('data') or {}
@@ -172,38 +142,29 @@ def init_order_book(symbol, log_func=print):
         bids = {}
         asks = {}
 
+        # Формат: [price, qty, orderCount]
         for row in raw_bids:
             try:
-                if isinstance(row, dict):
-                    price = float(row.get('p') or row.get('price') or 0)
-                    qty = abs(float(row.get('v') or row.get('vol') or 0))
-                elif isinstance(row, (list, tuple)):
+                if isinstance(row, (list, tuple)) and len(row) >= 2:
                     price = float(row[0])
-                    qty = abs(float(row[1]))
-                else:
-                    continue
-                if price > 0 and qty > 0:
-                    bids[price] = qty
+                    qty = abs(float(row[1]))  # row[1] = qty
+                    if price > 0 and qty > 0:
+                        bids[price] = qty
             except Exception:
                 continue
 
         for row in raw_asks:
             try:
-                if isinstance(row, dict):
-                    price = float(row.get('p') or row.get('price') or 0)
-                    qty = abs(float(row.get('v') or row.get('vol') or 0))
-                elif isinstance(row, (list, tuple)):
+                if isinstance(row, (list, tuple)) and len(row) >= 2:
                     price = float(row[0])
-                    qty = abs(float(row[1]))
-                else:
-                    continue
-                if price > 0 and qty > 0:
-                    asks[price] = qty
+                    qty = abs(float(row[1]))  # row[1] = qty
+                    if price > 0 and qty > 0:
+                        asks[price] = qty
             except Exception:
                 continue
 
         if not bids and not asks:
-            log_func(f"⚠️ mexc futures {symbol}: пустой стакан после парсинга (bids={len(raw_bids)} asks={len(raw_asks)})")
+            log_func(f"⚠️ mexc futures {symbol}: пустой стакан")
             return 0
 
         with mexc_futures_order_books_lock:
@@ -211,11 +172,7 @@ def init_order_book(symbol, log_func=print):
             mexc_futures_density_timestamps[symbol] = {}
 
         saved_count = sync_to_cache(symbol, log_func)
-
-        log_func(
-            f"✅ mexc futures Стакан {symbol}: "
-            f"{len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}"
-        )
+        log_func(f"✅ mexc futures Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
         return saved_count
 
     except requests.exceptions.Timeout:
@@ -227,7 +184,7 @@ def init_order_book(symbol, log_func=print):
 
 
 def init_spot_order_book(symbol, log_func=print):
-    """Инициализация стакана MEXC Spot."""
+    """Инициализация стакана MEXC Spot через REST"""
     try:
         url = MEXC_SPOT_REST_URL.format(symbol)
         res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
@@ -239,18 +196,14 @@ def init_spot_order_book(symbol, log_func=print):
         try:
             data = res.json()
         except Exception:
-            log_func(f"⚠️ mexc spot {symbol}: не JSON: {res.text[:200]}")
+            log_func(f"⚠️ mexc spot {symbol}: не JSON")
             return 0
 
         if isinstance(data, list):
-            log_func(f"⚠️ mexc spot {symbol}: API вернул список")
             return 0
         if not isinstance(data, dict):
-            log_func(f"⚠️ mexc spot {symbol}: неожиданный тип {type(data)}")
             return 0
-
         if 'code' in data and data.get('code') != 0:
-            log_func(f"⚠️ mexc spot {symbol}: code={data.get('code')} msg={data.get('msg')}")
             return 0
 
         raw_bids = data.get('bids') or []
@@ -264,10 +217,8 @@ def init_spot_order_book(symbol, log_func=print):
                 if isinstance(row, (list, tuple)):
                     price = float(row[0])
                     qty = abs(float(row[1]))
-                else:
-                    continue
-                if price > 0 and qty > 0:
-                    bids[price] = qty
+                    if price > 0 and qty > 0:
+                        bids[price] = qty
             except Exception:
                 continue
 
@@ -276,15 +227,13 @@ def init_spot_order_book(symbol, log_func=print):
                 if isinstance(row, (list, tuple)):
                     price = float(row[0])
                     qty = abs(float(row[1]))
-                else:
-                    continue
-                if price > 0 and qty > 0:
-                    asks[price] = qty
+                    if price > 0 and qty > 0:
+                        asks[price] = qty
             except Exception:
                 continue
 
         if not bids and not asks:
-            log_func(f"⚠️ mexc spot {symbol}: пустой стакан после парсинга (bids={len(raw_bids)} asks={len(raw_asks)})")
+            log_func(f"⚠️ mexc spot {symbol}: пустой стакан")
             return 0
 
         with mexc_spot_order_books_lock:
@@ -292,11 +241,7 @@ def init_spot_order_book(symbol, log_func=print):
             mexc_spot_density_timestamps[symbol] = {}
 
         saved_count = sync_spot_to_cache(symbol, log_func)
-
-        log_func(
-            f"✅ mexc spot Стакан {symbol}: "
-            f"{len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}"
-        )
+        log_func(f"✅ mexc spot Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
         return saved_count
 
     except requests.exceptions.Timeout:
@@ -306,9 +251,7 @@ def init_spot_order_book(symbol, log_func=print):
         log_func(f"❌ init_spot_order_book(mexc spot {symbol}): {e}")
         return 0
 
-# ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS
-# ==========================================
+
 def sync_to_cache(symbol, log_func=print):
     try:
         with mexc_futures_order_books_lock:
@@ -411,153 +354,23 @@ def sync_spot_to_cache(symbol, log_func=print):
         return 0
 
 
-# ==========================================
-# ОБНОВЛЕНИЕ ПО WS ДЕЛЬТАМ
-# ==========================================
-def update_order_book(symbol, bids_delta, asks_delta, log_func=print):
-    global last_sync_time
-
-    try:
-        with mexc_futures_order_books_lock:
-            if symbol not in mexc_futures_order_books:
-                return
-
-            book = mexc_futures_order_books[symbol]
-            ts = mexc_futures_density_timestamps.get(symbol, {})
-            changed = False
-
-            for row in bids_delta:
-                try:
-                    if isinstance(row, dict):
-                        price = float(row.get('price') or row.get('p') or 0)
-                        qty = abs(float(row.get('vol') or row.get('v') or 0))
-                    else:
-                        price = float(row[0])
-                        qty = abs(float(row[1]))
-                except Exception:
-                    continue
-
-                if qty == 0:
-                    if price in book['bids']:
-                        del book['bids'][price]
-                        ts.pop(price, None)
-                        changed = True
-                else:
-                    book['bids'][price] = qty
-                    if price not in ts:
-                        ts[price] = time.time()
-                    changed = True
-
-            for row in asks_delta:
-                try:
-                    if isinstance(row, dict):
-                        price = float(row.get('price') or row.get('p') or 0)
-                        qty = abs(float(row.get('vol') or row.get('v') or 0))
-                    else:
-                        price = float(row[0])
-                        qty = abs(float(row[1]))
-                except Exception:
-                    continue
-
-                if qty == 0:
-                    if price in book['asks']:
-                        del book['asks'][price]
-                        ts.pop(price, None)
-                        changed = True
-                else:
-                    book['asks'][price] = qty
-                    if price not in ts:
-                        ts[price] = time.time()
-                    changed = True
-
-        if changed:
-            now = time.time()
-            key = f"mexc:futures:{symbol}"
-            if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
-                sync_to_cache(symbol, log_func)
-                last_sync_time[key] = now
-
-    except Exception as e:
-        log_func(f"❌ update_order_book(mexc futures {symbol}): {e}")
-
-
-def update_spot_order_book(symbol, bids_delta, asks_delta, log_func=print):
-    global last_sync_time
-
-    try:
-        with mexc_spot_order_books_lock:
-            if symbol not in mexc_spot_order_books:
-                return
-
-            book = mexc_spot_order_books[symbol]
-            ts = mexc_spot_density_timestamps.get(symbol, {})
-            changed = False
-
-            for row in bids_delta:
-                try:
-                    price = float(row.get('p') or row.get('price') or row[0])
-                    qty = abs(float(row.get('v') or row.get('vol') or row[1]))
-                except Exception:
-                    continue
-
-                if qty == 0:
-                    if price in book['bids']:
-                        del book['bids'][price]
-                        ts.pop(price, None)
-                        changed = True
-                else:
-                    book['bids'][price] = qty
-                    if price not in ts:
-                        ts[price] = time.time()
-                    changed = True
-
-            for row in asks_delta:
-                try:
-                    price = float(row.get('p') or row.get('price') or row[0])
-                    qty = abs(float(row.get('v') or row.get('vol') or row[1]))
-                except Exception:
-                    continue
-
-                if qty == 0:
-                    if price in book['asks']:
-                        del book['asks'][price]
-                        ts.pop(price, None)
-                        changed = True
-                else:
-                    book['asks'][price] = qty
-                    if price not in ts:
-                        ts[price] = time.time()
-                    changed = True
-
-        if changed:
-            now = time.time()
-            key = f"mexc:spot:{symbol}"
-            if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
-                sync_spot_to_cache(symbol, log_func)
-                last_sync_time[key] = now
-
-    except Exception as e:
-        log_func(f"❌ update_spot_order_book(mexc spot {symbol}): {e}")
-
-
-# ==========================================
-# ОБРАБОТКА ОЧЕРЕДЕЙ WS СООБЩЕНИЙ
-# ==========================================
 def process_message_queue(log_func=print):
-    """MEXC Futures: канал push.depth согласно официальной документации"""
+    """MEXC Futures: push.depth — дельта-обновления.
+    Формат: {"channel":"push.depth","symbol":"BTC_USDT","data":{"bids":[[p,q,c],...],"asks":[[p,q,c],...]}}
+    Где [price, qty, orderCount]. qty=0 означает удаление уровня.
+    """
     while True:
         try:
             message = mexc_futures_message_queue.get(timeout=1)
             data = json.loads(message)
 
             channel = data.get('channel', '')
-            if channel not in ('push.depth', 'rs.depth'):
+            if channel != 'push.depth':
                 continue
 
             sym = data.get('symbol', '')
             symbol = sym[:-5] if sym.endswith('_USDT') else sym
 
-            # Согласно официальной документации: данные внутри data
             inner = data.get('data') or {}
             bids = inner.get('bids') or []
             asks = inner.get('asks') or []
@@ -565,54 +378,66 @@ def process_message_queue(log_func=print):
             if not (bids or asks):
                 continue
 
-            # Парсинг согласно официальной документации:
-            # Каждый элемент: [price, order_count, quantity]
-            new_bids = {}
-            new_asks = {}
-
-            for row in bids:
-                try:
-                    # Формат: [price, order_count, quantity]
-                    if isinstance(row, (list, tuple)) and len(row) >= 3:
-                        price = float(row[0])
-                        qty = abs(float(row[2]))  # row[2] = quantity (объём)
-                        if price > 0 and qty > 0:
-                            new_bids[price] = qty
-                except Exception:
-                    continue
-
-            for row in asks:
-                try:
-                    if isinstance(row, (list, tuple)) and len(row) >= 3:
-                        price = float(row[0])
-                        qty = abs(float(row[2]))
-                        if price > 0 and qty > 0:
-                            new_asks[price] = qty
-                except Exception:
-                    continue
-
             with mexc_futures_order_books_lock:
-                old_ts = mexc_futures_density_timestamps.get(symbol, {})
-                new_ts = {}
+                if symbol not in mexc_futures_order_books:
+                    continue
 
-                # Bids: сохраняем старые timestamp-ы, новым ставим текущее время
-                for p in new_bids:
-                    if p in old_ts:
-                        new_ts[p] = old_ts[p]
-                    else:
-                        new_ts[p] = time.time()
+                book = mexc_futures_order_books[symbol]
+                ts = mexc_futures_density_timestamps.get(symbol, {})
+                changed = False
 
-                # Asks: то же самое
-                for p in new_asks:
-                    if p in old_ts:
-                        new_ts[p] = old_ts[p]
-                    else:
-                        new_ts[p] = time.time()
+                # Обработка bids
+                for row in bids:
+                    try:
+                        if not isinstance(row, (list, tuple)) or len(row) < 2:
+                            continue
+                        price = float(row[0])
+                        qty = abs(float(row[1]))  # row[1] = qty!
 
-                mexc_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
-                mexc_futures_density_timestamps[symbol] = new_ts
+                        if qty == 0:
+                            # Удаление уровня
+                            if price in book['bids']:
+                                del book['bids'][price]
+                                ts.pop(price, None)
+                                changed = True
+                        else:
+                            # Добавление/обновление уровня
+                            book['bids'][price] = qty
+                            if price not in ts:
+                                ts[price] = time.time()
+                            changed = True
+                    except Exception:
+                        continue
 
-            sync_to_cache(symbol, log_func)
+                # Обработка asks
+                for row in asks:
+                    try:
+                        if not isinstance(row, (list, tuple)) or len(row) < 2:
+                            continue
+                        price = float(row[0])
+                        qty = abs(float(row[1]))  # row[1] = qty!
+
+                        if qty == 0:
+                            # Удаление уровня
+                            if price in book['asks']:
+                                del book['asks'][price]
+                                ts.pop(price, None)
+                                changed = True
+                        else:
+                            # Добавление/обновление уровня
+                            book['asks'][price] = qty
+                            if price not in ts:
+                                ts[price] = time.time()
+                            changed = True
+                    except Exception:
+                        continue
+
+            if changed:
+                now = time.time()
+                key = f"mexc:futures:{symbol}"
+                if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
+                    sync_to_cache(symbol, log_func)
+                    last_sync_time[key] = now
 
         except Empty:
             continue
@@ -641,40 +466,38 @@ def process_spot_message_queue(log_func=print):
             if not (bids or asks):
                 continue
 
-            # MEXC spot v3 depth API шлёт полные снимки — полная замена
+            # Spot: полная замена стакана
             new_bids = {}
             new_asks = {}
 
             for row in bids:
                 try:
-                    price = float(row.get('p') or row.get('price') or 0)
-                    qty = abs(float(row.get('v') or row.get('vol') or 0))
-                    if price > 0 and qty > 0:
-                        new_bids[price] = qty
+                    if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        price = float(row[0])
+                        qty = abs(float(row[1]))
+                        if price > 0 and qty > 0:
+                            new_bids[price] = qty
                 except Exception:
                     continue
 
             for row in asks:
                 try:
-                    price = float(row.get('p') or row.get('price') or 0)
-                    qty = abs(float(row.get('v') or row.get('vol') or 0))
-                    if price > 0 and qty > 0:
-                        new_asks[price] = qty
+                    if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        price = float(row[0])
+                        qty = abs(float(row[1]))
+                        if price > 0 and qty > 0:
+                            new_asks[price] = qty
                 except Exception:
                     continue
 
             with mexc_spot_order_books_lock:
                 old_ts = mexc_spot_density_timestamps.get(symbol, {})
                 new_ts = {}
-
-                # Bids: сохраняем старые timestamp-ы, новым ставим текущее время
                 for p in new_bids:
                     if p in old_ts:
                         new_ts[p] = old_ts[p]
                     else:
                         new_ts[p] = time.time()
-
-                # Asks: то же самое
                 for p in new_asks:
                     if p in old_ts:
                         new_ts[p] = old_ts[p]
@@ -712,10 +535,7 @@ def on_message_spot(ws, message):
 def on_open(ws):
     print(f"✅ mexc futures WebSocket открыт: {len(ws.symbols)} символов")
     for symbol in ws.symbols:
-        sub = {
-            "method": "sub.depth",
-            "param": {"symbol": f"{symbol}_USDT"}
-        }
+        sub = {"method": "sub.depth", "param": {"symbol": f"{symbol}_USDT"}}
         ws.send(json.dumps(sub))
 
 
