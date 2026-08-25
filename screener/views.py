@@ -159,7 +159,7 @@ def api_scalp(request, symbol):
     now = time.time()
     symbol_upper = symbol.upper()
 
-    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc']
+    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget']
     result_by_exchange = {ex: [] for ex in EXCHANGES}
 
     for exchange in EXCHANGES:

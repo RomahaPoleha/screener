@@ -1019,6 +1019,7 @@ const RECON_EXCHANGES = [
     { id: 'okx',     label: 'OK', color: '#ffffff' },
     { id: 'gate',    label: 'G',  color: '#2354e6' },
     { id: 'mexc', label: 'MX', color: '#1972ff' },
+    { id: 'bitget',  label: 'BG', color: '#00d4ff' },
 ];
 let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
@@ -1030,6 +1031,7 @@ let reconMarkets = {
     okx:     { spot: false, futures: false },
     gate:    { spot: false, futures: false },
     mexc:    { spot: false, futures: false },
+    bitget:  { spot: false, futures: false },
 
 };
 let reconMinVolumes = {
@@ -1037,7 +1039,8 @@ let reconMinVolumes = {
     bybit:   { spot: 10000, futures: 50000 },
     okx:     { spot: 10000, futures: 50000 },
     gate:    { spot: 10000, futures: 50000 },
-    mexc:    { spot: 10000, futures: 50000 }
+    mexc:    { spot: 10000, futures: 50000 },
+    bitget:  { spot: 10000, futures: 50000 }
 };
 try {
     const savedRecon = JSON.parse(localStorage.getItem('reconMarkets') || 'null');
@@ -1066,12 +1069,13 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'okx') return market === 'futures'
         ? `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT-SWAP&sz=200`
         : `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT&sz=200`;
+    if (exId === 'bitget') return market === 'futures'
+        ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=100`
+        : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
     if (exId === 'gate') {
-        // Gate — через прокси (CORS блок)
         return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
     }
     if (exId === 'mexc') {
-        // MEXC — через прокси (CORS блок)
         return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     }
     return null;
@@ -1091,9 +1095,13 @@ function parseReconLevels(exId, data) {
     } else if (exId === 'gate') {
         rawBids = data.bids || []; rawAsks = data.asks || [];
     } else if (exId === 'mexc') {
-        // MEXC прокси возвращает {bids: [[p,q]], asks: [[p,q]]}
         rawBids = data.bids || [];
         rawAsks = data.asks || [];
+    } else if (exId === 'bitget') {
+        // Bitget REST: {"code":"00000","data":{"bids":[[p,q],...],"asks":[[p,q],...]}}
+        const inner = data.data || {};
+        rawBids = inner.bids || [];
+        rawAsks = inner.asks || [];
     }
 
     const toLevel = (row) => {
@@ -1305,7 +1313,7 @@ async function loadScalpDensities(symbol) {
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
             const densities = allNewData[key];
-            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX'};
+            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG'};};
             const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
             const marketSuffix = market === 'futures' ? 'F' : 'S';
             const prefix = `${exchangePrefix}-${marketSuffix}`;

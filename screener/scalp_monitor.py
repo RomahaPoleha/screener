@@ -42,6 +42,7 @@ def start_scalp_monitor():
         from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
         from .gate_monitor import start_gate_monitor, start_gate_spot_monitor
         from .mexc_monitor import start_mexc_monitor, start_mexc_spot_monitor
+        from .bitget_monitor import start_bitget_monitor, start_bitget_spot_monitor
 
         # Запуск Binance Monitor
         binance_thread = threading.Thread(
@@ -86,7 +87,7 @@ def start_scalp_monitor():
         gate_spot_thread.start()
         log("✅ Gate Spot Monitor поток запущен")
 
-        # Запуск OKX Futures Monitor (временно вместо Bybit)
+        # Запуск OKX Futures Monitor
         okx_thread = threading.Thread(
             target=lambda: start_okx_monitor(log),
             name='OKX-Futures-Monitor',
@@ -121,6 +122,24 @@ def start_scalp_monitor():
         )
         bybit_spot_thread.start()
         log("✅ Bybit Spot Monitor поток запущен")
+
+        # Запуск Bitget Futures Monitor
+        bitget_thread = threading.Thread(
+            target=lambda: start_bitget_monitor(log),
+            name='Bitget-Futures-Monitor',
+            daemon=True
+        )
+        bitget_thread.start()
+        log("✅ Bitget Futures Monitor поток запущен")
+
+        # Запуск Bitget Spot Monitor
+        bitget_spot_thread = threading.Thread(
+            target=lambda: start_bitget_spot_monitor(log),
+            name='Bitget-Spot-Monitor',
+            daemon=True
+        )
+        bitget_spot_thread.start()
+        log("✅ Bitget Spot Monitor поток запущен")
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
