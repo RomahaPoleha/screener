@@ -61,6 +61,7 @@ let scalpExchanges = {
     okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     gate:    { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     mexc: { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    bitget: { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
 };
 
 
