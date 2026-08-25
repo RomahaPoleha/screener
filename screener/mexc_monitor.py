@@ -795,7 +795,7 @@ def refresh_mexc_spot_symbols(log_func=print):
     candidates = get_top_spot_symbols(60)
 
     new_active = []
-    TARGET = 30
+    TARGET = 20
 
     for symbol in candidates:
         if len(new_active) >= TARGET:

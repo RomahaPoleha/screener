@@ -645,7 +645,7 @@ def start_gate_monitor(log_func=print):
 
     candidates = get_top_symbols(60, log_func)
     active_symbols = []
-    TARGET = 30
+    TARGET = 20
 
     for symbol in candidates:
         if len(active_symbols) >= TARGET:

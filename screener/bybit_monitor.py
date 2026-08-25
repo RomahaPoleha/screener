@@ -810,7 +810,7 @@ def start_bybit_monitor(log_func=print):
     # Берём кандидатов с запасом
     candidates = get_top_symbols(60)
     active_symbols = []
-    TARGET = 30
+    TARGET = 20
 
     for symbol in candidates:
         if len(active_symbols) >= TARGET:

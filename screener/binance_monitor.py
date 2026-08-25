@@ -402,7 +402,7 @@ def start_binance_monitor(log_func=print):
         daemon=True
     ).start()
 
-    TARGET = 30
+    TARGET = 20
 
     # --- Futures ---
     futures_candidates = get_top_symbols(60, 'futures')
