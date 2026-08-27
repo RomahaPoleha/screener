@@ -259,12 +259,15 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 # HEARTBEAT — JSON {"method":"ping"} для MEXC
 # ==========================================
 async def ws_heartbeat(ws, market='futures', log_func=print):
-    """MEXC требует JSON {"method":"ping"} каждые 15 секунд"""
     try:
         while True:
             await asyncio.sleep(15)
             try:
-                await ws.send(json.dumps({"method": "ping"}))
+                if market == 'futures':
+                    await ws.send(json.dumps({"method": "ping"}))
+                else:
+                    # Spot ожидает просто строку "ping", не JSON!
+                    await ws.send("ping")
             except (websockets.exceptions.ConnectionClosed, Exception) as e:
                 log_func(f"⚠️ mexc {market} heartbeat завершён: {e}")
                 return
@@ -291,7 +294,7 @@ async def ws_listener(market='futures', log_func=print):
 
             log_func(f"🔌 mexc {market} WS подключение: {len(symbols)} символов")
 
-            async with websockets.connect(ws_url, ping_interval=20, ping_timeout=10) as ws:
+            async with websockets.connect(ws_url, ping_interval=None, ping_timeout=None) as ws:
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
