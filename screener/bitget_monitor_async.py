@@ -228,29 +228,22 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 # ==========================================
 # HEARTBEAT (async) — текстовый "ping" для Bitget
 # ==========================================
-async def ws_heartbeat(ws_ref, market='futures', log_func=print):
+async def ws_heartbeat(ws, market='futures', log_func=print):
     """Отправка текстовой строки 'ping' каждые 25 секунд для Bitget"""
     try:
         while True:
             await asyncio.sleep(25)
             try:
-                ws = ws_ref()  # weakref, вернёт None если WS закрыт
-                if ws and ws.open:
-                    await ws.send("ping")
-            except (websockets.exceptions.ConnectionClosed, AttributeError):
-                # WS закрыт — выходим, новый heartbeat запустится при переподключении
-                return
-            except Exception as e:
-                log_func(f"⚠️ bitget {market} heartbeat ошибка: {e}")
+                await ws.send("ping")
+            except (websockets.exceptions.ConnectionClosed, Exception) as e:
+                # WS закрыт или ошибка — выходим, новый запустится при переподключении
+                log_func(f"⚠️ bitget {market} heartbeat завершён: {e}")
                 return
     except asyncio.CancelledError:
-        # Задача отменена при shutdown — выходим тихо
+        # Задача отменена при отключении
         return
 
 
-# ==========================================
-# WEBSOCKET LISTENER (async)
-# ==========================================
 async def ws_listener(market='futures', log_func=print):
     """Бесконечный цикл подключения к WebSocket"""
     global bitget_futures_symbols, bitget_spot_symbols
@@ -266,11 +259,8 @@ async def ws_listener(market='futures', log_func=print):
             log_func(f"🔌 bitget {market} WS подключение: {len(symbols)} символов")
 
             async with websockets.connect(BITGET_WS_URL, ping_interval=None, ping_timeout=None) as ws:
-                # Слабая ссылка на ws для heartbeat (не держит WS открытым после закрытия)
-                ws_ref = weakref.ref(ws)
-
-                # Запускаем heartbeat как отдельную задачу
-                heartbeat_task = asyncio.create_task(ws_heartbeat(ws_ref, market, log_func))
+                # Запускаем heartbeat как отдельную задачу (передаём ws напрямую)
+                heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
                     # Подписка
@@ -295,9 +285,9 @@ async def ws_listener(market='futures', log_func=print):
                         try:
                             queue.put_nowait(message)
                         except asyncio.QueueFull:
-                            pass  # Очередь переполнена — пропускаем
+                            pass
                 finally:
-                    # Отменяем heartbeat при выходе из async with
+                    # Отменяем heartbeat при выходе
                     heartbeat_task.cancel()
                     try:
                         await heartbeat_task
@@ -545,20 +535,25 @@ async def periodic_refresh(market='futures', log_func=print):
             new_active = []
             TARGET = 30
 
+            # ШАГ 1: Сохраняем ВСЕ старые монеты (стабильность)
+            for symbol in old_symbols:
+                if len(new_active) >= TARGET:
+                    break
+                new_active.append(symbol)
+
+            # ШАГ 2: Добавляем новых кандидатов если есть место
             for symbol in candidates:
                 if len(new_active) >= TARGET:
                     break
-
-                if symbol in old_symbols:
-                    new_active.append(symbol)
-                    continue
+                if symbol in new_active:
+                    continue  # уже есть
 
                 saved_count = await init_order_book_async(symbol, market, log_func)
                 if saved_count > 0:
                     new_active.append(symbol)
                     log_func(f"✅ bitget {market} {symbol}: добавлен (плотностей: {saved_count})")
                 else:
-                    log_func(f"⚠️ bitget {market} {symbol}: пропущен")
+                    log_func(f"⚠️ bitget {market} {symbol}: пропущен (нет плотностей)")
 
             if market == 'futures':
                 removed = old_symbols - set(new_active)
@@ -583,7 +578,6 @@ async def periodic_refresh(market='futures', log_func=print):
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(bitget {market}): {e}")
-
 
 # ==========================================
 # ГЛАВНАЯ ФУНКЦИЯ
