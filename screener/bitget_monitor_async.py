@@ -5,6 +5,7 @@ Bitget Monitor ASYNC — пилотная версия на asyncio
 import asyncio
 import json
 import time
+import weakref
 import aiohttp
 import websockets
 from django.core.cache import cache
@@ -80,7 +81,7 @@ def _fetch_top_symbols_sync(market_type='swap'):
 
 async def get_top_symbols_async(market_type='swap'):
     """Асинхронная обёртка — запускает ccxt в отдельном потоке"""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market_type)
 
 
@@ -202,9 +203,13 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'exchange': 'bitget'
                 })
 
-        # Django cache синхронный — запускаем в потоке
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
+        # Django cache синхронный — запускаем через ThreadPoolExecutor
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
+        except RuntimeError:
+            # Event loop закрыт — пропускаем
+            pass
 
         if market == 'futures':
             async with bitget_futures_lock:
@@ -218,6 +223,29 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
     except Exception as e:
         log_func(f"❌ sync_to_cache_async(bitget {market} {symbol}): {e}")
         return 0
+
+
+# ==========================================
+# HEARTBEAT (async) — текстовый "ping" для Bitget
+# ==========================================
+async def ws_heartbeat(ws_ref, market='futures', log_func=print):
+    """Отправка текстовой строки 'ping' каждые 25 секунд для Bitget"""
+    try:
+        while True:
+            await asyncio.sleep(25)
+            try:
+                ws = ws_ref()  # weakref, вернёт None если WS закрыт
+                if ws and ws.open:
+                    await ws.send("ping")
+            except (websockets.exceptions.ConnectionClosed, AttributeError):
+                # WS закрыт — выходим, новый heartbeat запустится при переподключении
+                return
+            except Exception as e:
+                log_func(f"⚠️ bitget {market} heartbeat ошибка: {e}")
+                return
+    except asyncio.CancelledError:
+        # Задача отменена при shutdown — выходим тихо
+        return
 
 
 # ==========================================
@@ -237,30 +265,44 @@ async def ws_listener(market='futures', log_func=print):
 
             log_func(f"🔌 bitget {market} WS подключение: {len(symbols)} символов")
 
-            async with websockets.connect(BITGET_WS_URL, ping_interval=None) as ws:
-                # Подписка
-                inst_type = "USDT-FUTURES" if market == 'futures' else "SPOT"
-                args = [
-                    {
-                        "instId": f"{s}USDT",
-                        "channel": "books15",
-                        "instType": inst_type
-                    }
-                    for s in symbols
-                ]
-                await ws.send(json.dumps({"op": "subscribe", "args": args}))
-                log_func(f"✅ bitget {market} WS подписан на {len(symbols)} символов")
+            async with websockets.connect(BITGET_WS_URL, ping_interval=None, ping_timeout=None) as ws:
+                # Слабая ссылка на ws для heartbeat (не держит WS открытым после закрытия)
+                ws_ref = weakref.ref(ws)
 
-                # Цикл приёма сообщений
-                async for message in ws:
-                    if message == 'pong':
-                        continue
+                # Запускаем heartbeat как отдельную задачу
+                heartbeat_task = asyncio.create_task(ws_heartbeat(ws_ref, market, log_func))
 
-                    queue = bitget_futures_message_queue if market == 'futures' else bitget_spot_message_queue
+                try:
+                    # Подписка
+                    inst_type = "USDT-FUTURES" if market == 'futures' else "SPOT"
+                    args = [
+                        {
+                            "instId": f"{s}USDT",
+                            "channel": "books15",
+                            "instType": inst_type
+                        }
+                        for s in symbols
+                    ]
+                    await ws.send(json.dumps({"op": "subscribe", "args": args}))
+                    log_func(f"✅ bitget {market} WS подписан на {len(symbols)} символов")
+
+                    # Цикл приёма сообщений
+                    async for message in ws:
+                        if message == 'pong':
+                            continue
+
+                        queue = bitget_futures_message_queue if market == 'futures' else bitget_spot_message_queue
+                        try:
+                            queue.put_nowait(message)
+                        except asyncio.QueueFull:
+                            pass  # Очередь переполнена — пропускаем
+                finally:
+                    # Отменяем heartbeat при выходе из async with
+                    heartbeat_task.cancel()
                     try:
-                        queue.put_nowait(message)
-                    except asyncio.QueueFull:
-                        pass  # Очередь переполнена — пропускаем
+                        await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
 
         except websockets.exceptions.ConnectionClosed:
             log_func(f"⚠️ bitget {market} WS закрыт, переподключение через 3 сек")
@@ -268,16 +310,6 @@ async def ws_listener(market='futures', log_func=print):
         except Exception as e:
             log_func(f"❌ bitget {market} WS ошибка: {e}, переподключение через 5 сек")
             await asyncio.sleep(5)
-
-
-# ==========================================
-# HEARTBEAT (async)
-# ==========================================
-async def ws_heartbeat(market='futures', log_func=print):
-    """Отправка ping каждые 25 секунд"""
-    # В websockets ping отправляется автоматически, эта функция не нужна
-    # Оставляем для совместимости
-    pass
 
 
 # ==========================================
@@ -600,5 +632,17 @@ async def main_async(log_func=print):
 
 
 def start_bitget_async_monitor(log_func=print):
-    """Синхронная обёртка для запуска из Django"""
-    asyncio.run(main_async(log_func))
+    """Синхронная обёртка для запуска из Django с постоянным event loop"""
+    # Создаём постоянный loop для этого потока
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        loop.run_until_complete(main_async(log_func))
+    except Exception as e:
+        log_func(f"❌ Bitget Async Monitor упал: {e}")
+        import traceback
+        log_func(traceback.format_exc())
+    finally:
+        # НЕ закрываем loop чтобы не было shutdown ошибок
+        pass
