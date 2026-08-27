@@ -180,6 +180,14 @@ def start_scalp_monitor():
         # gate_async_thread.start()
         # log("✅ Gate Async Monitor поток запущен")
 
+        mexc_async_thread = threading.Thread(
+            target=lambda: start_mexc_async_monitor(log),
+            name='MEXC-Async-Monitor',
+            daemon=True
+        )
+        mexc_async_thread.start()
+        log("✅ MEXC Async Monitor поток запущен")
+
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
         import traceback
