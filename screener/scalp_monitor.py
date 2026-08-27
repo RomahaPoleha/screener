@@ -38,9 +38,10 @@ def start_scalp_monitor():
 
     try:
         from .binance_monitor import start_binance_monitor
+        from .gate_monitor_async import start_gate_async_monitor
         # from .bitget_monitor_async import start_bitget_async_monitor
-        from .bybit_monitor_async import start_bybit_async_monitor
-        from .okx_monitor_async import start_okx_async_monitor
+        # from .bybit_monitor_async import start_bybit_async_monitor
+        # from .okx_monitor_async import start_okx_async_monitor
         # from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
         # from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
         # from .gate_monitor import start_gate_monitor, start_gate_spot_monitor
@@ -161,13 +162,21 @@ def start_scalp_monitor():
         # log("✅ Bitget Async Monitor поток запущен")
 
 
-        okx_async_thread = threading.Thread(
-            target=lambda: start_okx_async_monitor(log),
-            name='OKX-Async-Monitor',
+        # okx_async_thread = threading.Thread(
+        #     target=lambda: start_okx_async_monitor(log),
+        #     name='OKX-Async-Monitor',
+        #     daemon=True
+        # )
+        # okx_async_thread.start()
+        # log("✅ OKX Async Monitor поток запущен")
+
+        gate_async_thread = threading.Thread(
+            target=lambda: start_gate_async_monitor(log),
+            name='Gate-Async-Monitor',
             daemon=True
         )
-        okx_async_thread.start()
-        log("✅ OKX Async Monitor поток запущен")
+        gate_async_thread.start()
+        log("✅ Gate Async Monitor поток запущен")
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
