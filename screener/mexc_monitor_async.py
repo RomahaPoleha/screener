@@ -291,7 +291,7 @@ async def ws_listener(market='futures', log_func=print):
 
             log_func(f"🔌 mexc {market} WS подключение: {len(symbols)} символов")
 
-            async with websockets.connect(ws_url, ping_interval=None, ping_timeout=None) as ws:
+            async with websockets.connect(ws_url, ping_interval=20, ping_timeout=10) as ws:
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
