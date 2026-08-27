@@ -38,6 +38,8 @@ def start_scalp_monitor():
 
     try:
         from .binance_monitor import start_binance_monitor
+        # from .bitget_monitor_async import start_bitget_async_monitor
+        from .bybit_monitor_async import start_bybit_async_monitor
         # from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
         # from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
         # from .gate_monitor import start_gate_monitor, start_gate_spot_monitor
@@ -141,14 +143,21 @@ def start_scalp_monitor():
         # bitget_spot_thread.start()
         # log("✅ Bitget Spot Monitor поток запущен")
 
-        from .bitget_monitor_async import start_bitget_async_monitor
-        bitget_async_thread = threading.Thread(
-            target=lambda: start_bitget_async_monitor(log),
-            name='Bitget-Async-Monitor',
+        bybit_async_thread = threading.Thread(
+            target=lambda: start_bybit_async_monitor(log),
+            name='Bybit-Async-Monitor',
             daemon=True
         )
-        bitget_async_thread.start()
-        log("✅ Bitget Async Monitor поток запущен")
+        bybit_async_thread.start()
+        log("✅ Bybit Async Monitor поток запущен")
+
+        # bitget_async_thread = threading.Thread(
+        #     target=lambda: start_bitget_async_monitor(log),
+        #     name='Bitget-Async-Monitor',
+        #     daemon=True
+        # )
+        # bitget_async_thread.start()
+        # log("✅ Bitget Async Monitor поток запущен")
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
