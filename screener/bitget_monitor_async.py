@@ -20,12 +20,14 @@ bitget_futures_density_timestamps = {}
 bitget_futures_symbols = []
 bitget_futures_message_queue = asyncio.Queue(maxsize=10000)
 bitget_futures_lock = asyncio.Lock()
+bitget_futures_reconnect_event = asyncio.Event()
 
 bitget_spot_order_books = {}
 bitget_spot_density_timestamps = {}
 bitget_spot_symbols = []
 bitget_spot_message_queue = asyncio.Queue(maxsize=10000)
 bitget_spot_lock = asyncio.Lock()
+bitget_spot_reconnect_event = asyncio.Event()
 
 # URLs
 BITGET_WS_URL = "wss://ws.bitget.com/v2/ws/public"
@@ -245,8 +247,10 @@ async def ws_heartbeat(ws, market='futures', log_func=print):
 
 
 async def ws_listener(market='futures', log_func=print):
-    """Бесконечный цикл подключения к WebSocket"""
+    """Бесконечный цикл подключения к WebSocket с поддержкой переподключения"""
     global bitget_futures_symbols, bitget_spot_symbols
+
+    reconnect_event = bitget_futures_reconnect_event if market == 'futures' else bitget_spot_reconnect_event
 
     while True:
         try:
@@ -259,7 +263,7 @@ async def ws_listener(market='futures', log_func=print):
             log_func(f"🔌 bitget {market} WS подключение: {len(symbols)} символов")
 
             async with websockets.connect(BITGET_WS_URL, ping_interval=None, ping_timeout=None) as ws:
-                # Запускаем heartbeat как отдельную задачу (передаём ws напрямую)
+                # Запускаем heartbeat как отдельную задачу
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
@@ -276,8 +280,20 @@ async def ws_listener(market='futures', log_func=print):
                     await ws.send(json.dumps({"op": "subscribe", "args": args}))
                     log_func(f"✅ bitget {market} WS подписан на {len(symbols)} символов")
 
-                    # Цикл приёма сообщений
-                    async for message in ws:
+                    # Цикл приёма сообщений с проверкой сигнала переподключения
+                    while True:
+                        # Проверяем сигнал переподключения (неблокирующая проверка)
+                        if reconnect_event.is_set():
+                            reconnect_event.clear()
+                            log_func(f"🔄 bitget {market}: сигнал переподключения получен")
+                            break
+
+                        try:
+                            # Ждём сообщение с таймаутом 1 сек чтобы проверять событие
+                            message = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                        except asyncio.TimeoutError:
+                            continue  # Нет сообщения за 1 сек — проверяем событие снова
+
                         if message == 'pong':
                             continue
 
@@ -286,6 +302,7 @@ async def ws_listener(market='futures', log_func=print):
                             queue.put_nowait(message)
                         except asyncio.QueueFull:
                             pass
+
                 finally:
                     # Отменяем heartbeat при выходе
                     heartbeat_task.cancel()
@@ -564,6 +581,9 @@ async def periodic_refresh(market='futures', log_func=print):
                             bitget_futures_order_books.pop(sym, None)
                             bitget_futures_density_timestamps.pop(sym, None)
                     log_func(f"🗑️ bitget futures удалены: {', '.join(sorted(removed))}")
+
+                # ← ДОБАВЬ: сигнал переподключения
+                bitget_futures_reconnect_event.set()
             else:
                 removed = old_symbols - set(new_active)
                 bitget_spot_symbols = new_active
@@ -573,6 +593,9 @@ async def periodic_refresh(market='futures', log_func=print):
                             bitget_spot_order_books.pop(sym, None)
                             bitget_spot_density_timestamps.pop(sym, None)
                     log_func(f"🗑️ bitget spot удалены: {', '.join(sorted(removed))}")
+
+                # ← ДОБАВЬ: сигнал переподключения
+                bitget_spot_reconnect_event.set()
 
             log_func(f"🔄 bitget {market}: ротация завершена, активных {len(new_active)}")
 
