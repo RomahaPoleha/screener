@@ -1,80 +1,76 @@
 <!-- Модальное окно настроек -->
 <div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 560px;">
-        <div class="modal-content" style="background:#334155; border:1px solid #475569; color:#e2e8f0;">
-            <div class="modal-header" style="border-bottom:1px solid #475569;">
-                <h5 class="modal-title" style="color:#f1f5f9; font-weight:600; letter-spacing:0.3px;">Настройки</h5>
+        <div class="modal-content" style="background:#1a1a1a; border:1px solid #333333; color:#e5e5e5;">
+            <div class="modal-header" style="border-bottom:1px solid #333333;">
+                <h5 class="modal-title" style="color:#ffffff; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;">Настройки</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" style="padding-top: 0;">
-                <!-- Табы -->
                 <div class="settings-tabs">
                     <button type="button" class="settings-tab active" data-tab="display">Отображение</button>
                     <button type="button" class="settings-tab" data-tab="data">Данные</button>
                     <button type="button" class="settings-tab" data-tab="alerts">Оповещения</button>
                 </div>
 
-                <!-- Вкладка: Отображение -->
                 <div class="settings-tab-content active" id="tab-display">
                     <div class="modal-section">
                         <div class="modal-section-title">График</div>
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e2e8f0; margin-bottom:10px;">
-                            <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#3b82f6; width:16px; height:16px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
+                            <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f59e0b; width:16px; height:16px;">
                             <span>Показывать гистограмму объёма</span>
                         </label>
                     </div>
                     <div class="modal-section">
                         <div class="modal-section-title">Инструменты рисования</div>
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e2e8f0;">
-                            <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#3b82f6; width:16px; height:16px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5;">
+                            <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f59e0b; width:16px; height:16px;">
                             <span>Показывать панель инструментов</span>
                         </label>
                     </div>
                 </div>
 
-                <!-- Вкладка: Данные -->
                 <div class="settings-tab-content" id="tab-data">
                     <div class="modal-section">
                         <div class="modal-section-title">Панель рекона (сырые стаканы)</div>
                         <div class="form-check form-switch" style="margin-bottom:8px;">
-                            <input class="form-check-input" type="checkbox" id="reconPanelToggle" onchange="toggleReconSettings()" style="accent-color:#3b82f6; width:16px; height:16px;">
-                            <label class="form-check-label" for="reconPanelToggle" style="font-size:13px; color:#e2e8f0;">Показывать панель рекона</label>
+                            <input class="form-check-input" type="checkbox" id="reconPanelToggle" onchange="toggleReconSettings()" style="accent-color:#f59e0b; width:16px; height:16px;">
+                            <label class="form-check-label" for="reconPanelToggle" style="font-size:13px; color:#e5e5e5;">Показывать панель рекона</label>
                         </div>
                     </div>
                     <div id="reconSettingsSection" style="display:none;">
                         <div class="modal-section">
-                            <div class="modal-section-title" style="font-size:12px; color:#94a3b8;">Мин. объём по биржам (USDT)</div>
+                            <div class="modal-section-title" style="font-size:12px; color:#999999;">Мин. объём по биржам (USDT)</div>
                             <div id="reconSettingsContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
                         </div>
                     </div>
                     <div class="modal-section">
                         <div class="modal-section-title">Scalp мониторинг</div>
-                        <p style="font-size:12px; color:#94a3b8; margin-bottom:10px; line-height:1.5;">
+                        <p style="font-size:12px; color:#999999; margin-bottom:10px; line-height:1.5;">
                             Фильтрованные плотности с нескольких бирж (Binance, Bybit, OKX, Gate, MEXC, Bitget)
                         </p>
                         <button type="button" id="openScalpSettingsBtn"
-                            style="width:100%; padding:10px; background:#475569; color:#e2e8f0; border:1px solid #64748b; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; transition:all 0.2s;">
+                            style="width:100%; padding:10px; background:#2a2a2a; color:#ffffff; border:1px solid #444444; border-radius:0; cursor:pointer; font-size:13px; font-weight:600; transition:all 0.2s; text-transform:uppercase; letter-spacing:0.5px;">
                             Настроить биржи и объёмы
                         </button>
                     </div>
                 </div>
 
-                <!-- Вкладка: Оповещения -->
                 <div class="settings-tab-content" id="tab-alerts">
                     <div class="modal-section">
                         <div class="modal-section-title">Голосовое оповещение</div>
-                        <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:10px; font-size:13px;">
+                        <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:10px; font-size:13px; border-radius:0;">
                             Голосовое оповещение
                         </button>
-                        <p style="font-size:11px; color:#94a3b8; margin-top:10px; line-height:1.5;">
+                        <p style="font-size:11px; color:#999999; margin-top:10px; line-height:1.5;">
                             Озвучивает предупреждения за 5 минут и 1 минуту до перехода на новый час
                         </p>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer" style="border-top:1px solid #475569;">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#475569; border:none; color:#e2e8f0;">Закрыть</button>
-                <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#3b82f6; border:none; color:#fff; font-weight:600;">Применить</button>
+            <div class="modal-footer" style="border-top:1px solid #333333;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2a2a2a; border:none; color:#ffffff; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Закрыть</button>
+                <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#f59e0b; border:none; color:#000000; font-weight:700; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Применить</button>
             </div>
         </div>
     </div>
@@ -83,20 +79,20 @@
 <!-- Отдельное окно Scalp настроек -->
 <div class="modal fade" id="scalpSettingsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content" style="background:#334155; border:1px solid #475569; color:#e2e8f0;">
-            <div class="modal-header" style="border-bottom:1px solid #475569;">
-                <h5 class="modal-title" style="color:#f1f5f9; font-weight:600;">Scalp настройки</h5>
+        <div class="modal-content" style="background:#1a1a1a; border:1px solid #333333; color:#e5e5e5;">
+            <div class="modal-header" style="border-bottom:1px solid #333333;">
+                <h5 class="modal-title" style="color:#ffffff; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Scalp настройки</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="scalpExchangesContainer"
                  style="display:flex; flex-direction:column; gap:14px;"></div>
-            <div class="modal-footer" style="border-top:1px solid #475569;">
-                <div style="font-size:11px; color:#94a3b8; line-height:1.6; margin-right:auto;">
-                    <span style="color:#fbbf24;">&#9632;</span> Жёлтый — плотность до 500K<br>
-                    <span style="color:#ba55d3;">&#9632;</span> Фиолетовый — плотность от 500K
+            <div class="modal-footer" style="border-top:1px solid #333333;">
+                <div style="font-size:11px; color:#999999; line-height:1.6; margin-right:auto;">
+                    <span style="color:#ffffff;">&#9632;</span> Светлый — плотность до 500K<br>
+                    <span style="color:#666666;">&#9632;</span> Тёмный — плотность от 500K
                 </div>
                 <button type="button" class="btn btn-primary" id="applyScalpSettingsBtn"
-                    style="background:#3b82f6; border:none; color:#fff; font-weight:600;">Сохранить</button>
+                    style="background:#f59e0b; border:none; color:#000000; font-weight:700; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Сохранить</button>
             </div>
         </div>
     </div>

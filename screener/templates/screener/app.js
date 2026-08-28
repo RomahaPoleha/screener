@@ -60,10 +60,11 @@ function playAlertSound() {
 function showPriceAlertToast(currentPrice, alertPrice, direction) {
     const toast = document.createElement('div');
     toast.className = 'hour-toast show';
-    toast.innerHTML = `<div class="toast-icon" style="color:#3b82f6;">&#9679;</div><div class="toast-content"><div class="toast-title">Алерт сработал</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
+    toast.innerHTML = `<div class="toast-icon" style="color:#f59e0b;">&#9679;</div><div class="toast-content"><div class="toast-title">Алерт сработал</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 5000);
 }
+
 
 function checkAlerts(currentPrice, prevPrice) {
     activeAlerts.forEach((alert) => {
@@ -75,8 +76,8 @@ function checkAlerts(currentPrice, prevPrice) {
             playAlertSound();
             showPriceAlertToast(currentPrice, alert.price, direction);
             try { candleSeries.removePriceLine(alert.line); } catch(e) {}
-            const fadedLine = candleSeries.createPriceLine({
-                price: alert.price, color: 'rgba(59, 130, 246, 0.3)', lineWidth: 1,
+                        const fadedLine = candleSeries.createPriceLine({
+                price: alert.price, color: 'rgba(245, 158, 11, 0.3)', lineWidth: 1,
                 lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true,
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
@@ -459,7 +460,7 @@ function getXByTime(time) {
 
 function redrawPencilStrokes() {
     if (!pencilCtx || !chart || !candleSeries) return;
-    pencilCtx.strokeStyle = '#3b82f6';
+        pencilCtx.strokeStyle = '#f59e0b';
     pencilCtx.lineWidth = 2;
     pencilCtx.lineCap = 'round';
     pencilCtx.lineJoin = 'round';
@@ -626,9 +627,10 @@ function handleChartClick(param) {
     else if (isHorizontalLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
-        const line = candleSeries.createPriceLine({
-            price: price, color: '#38bdf8', lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: false, title: ''
+                const line = candleSeries.createPriceLine({
+            price: price, color: '#f59e0b', lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
+            title: ` ${price.toFixed(currentPrecision)}`
         });
         activeHorizontalLines.push({ price: price, line: line });
     }
@@ -662,8 +664,8 @@ function handlePencilDraw(param) {
     if (!price || !time) { lastPencilPoint = param.point; return; }
     if (!currentStroke) currentStroke = [{ time, price, logicalIndex }];
     else currentStroke.push({ time, price, logicalIndex });
-    if (lastPencilPoint) {
-        pencilCtx.strokeStyle = '#3b82f6'; pencilCtx.lineWidth = 2;
+        if (lastPencilPoint) {
+        pencilCtx.strokeStyle = '#f59e0b'; pencilCtx.lineWidth = 2;
         pencilCtx.lineCap = 'round'; pencilCtx.lineJoin = 'round';
         pencilCtx.beginPath(); pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
         pencilCtx.lineTo(param.point.x, param.point.y); pencilCtx.stroke();
@@ -910,12 +912,12 @@ function applySettings() {
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
 
-    const btn = document.getElementById('settingsBtn');
+        const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
-            btn.style.background = '#3b82f6'; btn.style.color = '#fff';
+            btn.style.background = '#f59e0b'; btn.style.color = '#000000';
         } else {
-            btn.style.background = '#475569'; btn.style.color = '#cbd5e1';
+            btn.style.background = '#2a2a2a'; btn.style.color = '#ffffff';
         }
     }
 
@@ -995,12 +997,12 @@ function startDensityUpdates(symbol) {
 }
 
 const RECON_EXCHANGES = [
-    { id: 'binance', label: 'BI', color: '#3b82f6' },
-    { id: 'bybit',   label: 'BY', color: '#3b82f6' },
-    { id: 'okx',     label: 'OK', color: '#3b82f6' },
-    { id: 'gate',    label: 'G',  color: '#3b82f6' },
-    { id: 'mexc',    label: 'MX', color: '#3b82f6' },
-    { id: 'bitget',  label: 'BG', color: '#3b82f6' },
+    { id: 'binance', label: 'BI', color: '#f59e0b' },
+    { id: 'bybit',   label: 'BY', color: '#f59e0b' },
+    { id: 'okx',     label: 'OK', color: '#f59e0b' },
+    { id: 'gate',    label: 'G',  color: '#f59e0b' },
+    { id: 'mexc',    label: 'MX', color: '#f59e0b' },
+    { id: 'bitget',  label: 'BG', color: '#f59e0b' },
 ];
 let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
@@ -1384,12 +1386,12 @@ function applyScalpSettings() {
         const cfg = scalpExchanges[ex.id];
         return cfg && cfg.enabled && (cfg.markets.futures || cfg.markets.spot);
     });
-    const btn = document.getElementById('settingsBtn');
+        const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled) {
-            btn.style.background = '#3b82f6'; btn.style.color = '#fff';
+            btn.style.background = '#f59e0b'; btn.style.color = '#000000';
         } else {
-            btn.style.background = '#475569'; btn.style.color = '#cbd5e1';
+            btn.style.background = '#2a2a2a'; btn.style.color = '#ffffff';
         }
     }
     if (currentSymbol) {

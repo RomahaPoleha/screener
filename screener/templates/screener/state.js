@@ -46,12 +46,12 @@ let previousScalpData = {};
 
 // Конфигурация бирж (легко расширяется — добавь строку)
 const EXCHANGES_CONFIG = [
-    { id: 'binance', name: 'Binance', domain: 'binance.com', color: '#d4a574' },
-    { id: 'bybit',   name: 'Bybit',   domain: 'bybit.com',   color: '#d4824a' },
-    { id: 'okx',     name: 'OKX',     domain: 'okx.com',     color: '#e2e8f0' },
-    { id: 'gate',    name: 'Gate.io',  domain: 'gate.io',     color: '#5b7fd4' },
-    { id: 'mexc',    name: 'MEXC',    domain: 'mexc.com',    color: '#4a8ad4' },
-    { id: 'bitget',  name: 'Bitget',  domain: 'bitget.com',  color: '#6bb8d4' },
+    { id: 'binance', name: 'Binance', domain: 'binance.com', color: '#f59e0b' },
+    { id: 'bybit',   name: 'Bybit',   domain: 'bybit.com',   color: '#f59e0b' },
+    { id: 'okx',     name: 'OKX',     domain: 'okx.com',     color: '#ffffff' },
+    { id: 'gate',    name: 'Gate.io',  domain: 'gate.io',     color: '#f59e0b' },
+    { id: 'mexc',    name: 'MEXC',    domain: 'mexc.com',    color: '#f59e0b' },
+    { id: 'bitget',  name: 'Bitget',  domain: 'bitget.com',  color: '#f59e0b' },
 ];
 
 // Текущие настройки каждой биржи
