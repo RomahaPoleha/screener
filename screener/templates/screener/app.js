@@ -70,7 +70,7 @@ function playAlertSound() {
 function showPriceAlertToast(currentPrice, alertPrice, direction) {
     const toast = document.createElement('div');
     toast.className = 'hour-toast show';
-    toast.style.background = 'linear-gradient(135deg, #f0b90b 0%, #f59e0b 100%)';
+    toast.style.background = '#1a1d23';
     toast.innerHTML = `<div class="toast-icon"></div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 5000);
@@ -87,7 +87,7 @@ function checkAlerts(currentPrice, prevPrice) {
             showPriceAlertToast(currentPrice, alert.price, direction);
             try { candleSeries.removePriceLine(alert.line); } catch(e) {}
             const fadedLine = candleSeries.createPriceLine({
-                price: alert.price, color: 'rgba(240, 185, 11, 0.3)', lineWidth: 1,
+                   price: alert.price, color: 'rgba(148, 163, 184, 0.3)', lineWidth: 1,
                 lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true,
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
@@ -643,7 +643,7 @@ function handleChartClick(param) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
         const line = candleSeries.createPriceLine({
-            price: price, color: '#f0b90b', lineWidth: 2,
+            price: price, color: '#94a3b8', lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             title: ` ${price.toFixed(currentPrecision)}`
         });
@@ -689,7 +689,7 @@ function handlePencilDraw(param) {
     if (!currentStroke) currentStroke = [{ time, price, logicalIndex }];
     else currentStroke.push({ time, price, logicalIndex });
     if (lastPencilPoint) {
-        pencilCtx.strokeStyle = '#f0b90b'; pencilCtx.lineWidth = 2;
+        pencilCtx.strokeStyle = '#94a3b8'; pencilCtx.lineWidth = 2;
         pencilCtx.lineCap = 'round'; pencilCtx.lineJoin = 'round';
         pencilCtx.beginPath(); pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
         pencilCtx.lineTo(param.point.x, param.point.y); pencilCtx.stroke();
@@ -945,12 +945,12 @@ function applySettings() {
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
 
-    const btn = document.getElementById('settingsBtn');
+        const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
-            btn.style.background = '#f0b90b'; btn.style.color = '#000';
+            btn.style.background = '#94a3b8'; btn.style.color = '#0f1114';  // БЫЛО: #f0b90b
         } else {
-            btn.style.background = '#2d3748'; btn.style.color = '#9ca3af';
+            btn.style.background = '#2a2e35'; btn.style.color = '#94a3b8';  // БЫЛО: #2d3748
         }
     }
 
@@ -1035,12 +1035,12 @@ function startDensityUpdates(symbol) {
 // RECON PANEL — тумблеры сырых стаканов всех бирж
 // ==========================================
 const RECON_EXCHANGES = [
-    { id: 'binance', label: 'BI', color: '#f0b90b' },
-    { id: 'bybit',   label: 'BY', color: '#f7931a' },
-    { id: 'okx',     label: 'OK', color: '#ffffff' },
-    { id: 'gate',    label: 'G',  color: '#2354e6' },
-    { id: 'mexc', label: 'MX', color: '#1972ff' },
-    { id: 'bitget',  label: 'BG', color: '#00d4ff' },
+    { id: 'binance', label: 'BI', color: '#94a3b8' },
+    { id: 'bybit',   label: 'BY', color: '#94a3b8' },
+    { id: 'okx',     label: 'OK', color: '#94a3b8' },
+    { id: 'gate',    label: 'G',  color: '#94a3b8' },
+    { id: 'mexc',    label: 'MX', color: '#94a3b8' },
+    { id: 'bitget',  label: 'BG', color: '#94a3b8' },
 ];
 let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
@@ -1442,12 +1442,12 @@ function applyScalpSettings() {
         const cfg = scalpExchanges[ex.id];
         return cfg && cfg.enabled && (cfg.markets.futures || cfg.markets.spot);
     });
-    const btn = document.getElementById('settingsBtn');
+        const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled) {
-            btn.style.background = '#f0b90b'; btn.style.color = '#000';
+            btn.style.background = '#94a3b8'; btn.style.color = '#0f1114';  // БЫЛО: #f0b90b
         } else {
-            btn.style.background = '#2d3748'; btn.style.color = '#9ca3af';
+            btn.style.background = '#2a2e35'; btn.style.color = '#94a3b8';  // БЫЛО: #2d3748
         }
     }
     if (currentSymbol) {
