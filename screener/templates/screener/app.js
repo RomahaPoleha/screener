@@ -2,17 +2,13 @@
 // app.js
 // ==========================================
 
-// ==========================================
-// ПРЕДЗАГРУЗКА АУДИО ФАЙЛОВ
-// ==========================================
 const sound5min = new Audio('/api/sound/alert_5min.mp3');
 const sound1min = new Audio('/api/sound/alert_1min.mp3');
 sound5min.preload = 'auto';
 sound1min.preload = 'auto';
 
-// Кэш свечей (symbol -> candles)
 const candlesCache = new Map();
-const CACHE_TTL = 60000; // 60 секунд
+const CACHE_TTL = 60000;
 
 function playHourSound(minutesLeft) {
     if (!soundEnabled) return;
@@ -24,9 +20,6 @@ function playHourSound(minutesLeft) {
     });
 }
 
-// ==========================================
-// УТИЛИТЫ И ФОРМАТИРОВАНИЕ
-// ==========================================
 const fmtThreshold = (v) => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
 const fmt = (num) => {
     if (!num) return '0';
@@ -51,9 +44,6 @@ function formatVolumeText(volume) {
     return `${volume.toFixed(0)}`;
 }
 
-// ==========================================
-// ЗВУК И ОПОВЕЩЕНИЯ
-// ==========================================
 function playAlertSound() {
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -70,8 +60,7 @@ function playAlertSound() {
 function showPriceAlertToast(currentPrice, alertPrice, direction) {
     const toast = document.createElement('div');
     toast.className = 'hour-toast show';
-    toast.style.background = '#1a1d23';
-    toast.innerHTML = `<div class="toast-icon"></div><div class="toast-content"><div class="toast-title">Алерт сработал!</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
+    toast.innerHTML = `<div class="toast-icon" style="color:#3b82f6;">&#9679;</div><div class="toast-content"><div class="toast-title">Алерт сработал</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 5000);
 }
@@ -87,7 +76,7 @@ function checkAlerts(currentPrice, prevPrice) {
             showPriceAlertToast(currentPrice, alert.price, direction);
             try { candleSeries.removePriceLine(alert.line); } catch(e) {}
             const fadedLine = candleSeries.createPriceLine({
-                   price: alert.price, color: 'rgba(148, 163, 184, 0.3)', lineWidth: 1,
+                price: alert.price, color: 'rgba(59, 130, 246, 0.3)', lineWidth: 1,
                 lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true,
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
@@ -97,9 +86,6 @@ function checkAlerts(currentPrice, prevPrice) {
     });
 }
 
-// ==========================================
-// ЗАГРУЗКА ДАННЫХ И API
-// ==========================================
 async function loadAllData() {
     try {
         const res = await fetch(`/api/data/`);
@@ -107,7 +93,7 @@ async function loadAllData() {
         allCoins = await res.json();
         applyLocalFilters();
     } catch (err) {
-        console.error('❌ Ошибка загрузки:', err);
+        console.error('Ошибка загрузки:', err);
         els.table.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">${err.message}</div>`;
     }
 }
@@ -128,9 +114,6 @@ function startNatrAutoUpdate() {
     natrAutoUpdateTimer = setInterval(loadNatrData, 15000);
 }
 
-// ==========================================
-// ТАБЛИЦА И ФИЛЬТРЫ
-// ==========================================
 function showSearchDropdown(query) {
     if (!query || query.length === 0) { hideSearchDropdown(); return; }
     const filtered = allCoins.filter(coin => coin.symbol.toUpperCase().includes(query.toUpperCase())).slice(0, 10);
@@ -213,15 +196,12 @@ function applyLocalFilters() {
     renderTable(filtered);
 }
 
-// ==========================================
-// WEBSOCKET СВЕЧЕЙ И СДЕЛОК
-// ==========================================
 function startCandleWebSocket(symbol, tf) {
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
     const wsUrl = `wss://fstream.binance.com/market/ws/${streamName}`;
     wsCandles = new WebSocket(wsUrl);
-    wsCandles.onopen = () => console.log(`✅ WS свечей подключен: ${symbol} ${tf}`);
+    wsCandles.onopen = () => console.log(`WS свечей подключен: ${symbol} ${tf}`);
     wsCandles.onmessage = (e) => {
         try {
             const data = JSON.parse(e.data);
@@ -252,9 +232,9 @@ function startCandleWebSocket(symbol, tf) {
                     });
                 }
             }
-        } catch (err) { console.error('❌ Ошибка парсинга WS свечи:', err); }
+        } catch (err) { console.error('Ошибка парсинга WS свечи:', err); }
     };
-    wsCandles.onerror = (e) => console.error('❌ WS свечей ошибка:', e);
+    wsCandles.onerror = (e) => console.error('WS свечей ошибка:', e);
     wsCandles.onclose = () => {
         if (currentSymbol === symbol) setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
     };
@@ -279,16 +259,13 @@ function startTradesStream(symbol) {
         } catch (err) { console.warn('Trade parse error:', err); }
     };
     wsTrades.onerror = () => {
-        if (els.tradesOverlayBody) els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">⚠️ Разрыв связи</div>';
+        if (els.tradesOverlayBody) els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">Разрыв связи</div>';
     };
     wsTrades.onclose = () => {
         setTimeout(() => { if (currentSymbol === symbol && els.tradesOverlay.classList.contains('active')) startTradesStream(symbol); }, 3000);
     };
 }
 
-// ==========================================
-// ИНСТРУМЕНТЫ РИСОВАНИЯ
-// ==========================================
 function clearSpecificDrawings(type) {
     if (type === 'alerts') {
         activeAlerts.forEach(a => { try { candleSeries.removePriceLine(a.line); } catch(e){} });
@@ -424,9 +401,6 @@ function clearAllDrawings() {
     clearSpecificDrawings('ruler');
 }
 
-// ==========================================
-// ЛОГИКА РИСОВАНИЯ
-// ==========================================
 function initPencilCanvas() {
     if (!chart || !els.pencilCanvas) return;
     const rect = els.chartWrapper.getBoundingClientRect();
@@ -485,7 +459,7 @@ function getXByTime(time) {
 
 function redrawPencilStrokes() {
     if (!pencilCtx || !chart || !candleSeries) return;
-    pencilCtx.strokeStyle = '#f0b90b';
+    pencilCtx.strokeStyle = '#3b82f6';
     pencilCtx.lineWidth = 2;
     pencilCtx.lineCap = 'round';
     pencilCtx.lineJoin = 'round';
@@ -531,7 +505,7 @@ function drawRulerRectangle(start, end) {
 function redrawAllPersistentDrawings() {
     if (!pencilCtx || !chart) return;
     pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
-    pencilCtx.strokeStyle = '#38bdf8';
+    pencilCtx.strokeStyle = '#3b82f6';
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
     activeTrendlines.forEach(tl => {
@@ -552,7 +526,7 @@ function redrawAllPersistentDrawings() {
         const y1 = candleSeries.priceToCoordinate(trendLinePreview.price1);
         const y2 = candleSeries.priceToCoordinate(trendLinePreview.price2);
         if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-            pencilCtx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+            pencilCtx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
             pencilCtx.lineWidth = 1.5;
             pencilCtx.setLineDash([3, 3]);
             pencilCtx.beginPath();
@@ -643,7 +617,7 @@ function handleChartClick(param) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
         const line = candleSeries.createPriceLine({
-            price: price, color: '#94a3b8', lineWidth: 2,
+            price: price, color: '#3b82f6', lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             title: ` ${price.toFixed(currentPrecision)}`
         });
@@ -689,7 +663,7 @@ function handlePencilDraw(param) {
     if (!currentStroke) currentStroke = [{ time, price, logicalIndex }];
     else currentStroke.push({ time, price, logicalIndex });
     if (lastPencilPoint) {
-        pencilCtx.strokeStyle = '#94a3b8'; pencilCtx.lineWidth = 2;
+        pencilCtx.strokeStyle = '#3b82f6'; pencilCtx.lineWidth = 2;
         pencilCtx.lineCap = 'round'; pencilCtx.lineJoin = 'round';
         pencilCtx.beginPath(); pencilCtx.moveTo(lastPencilPoint.x, lastPencilPoint.y);
         pencilCtx.lineTo(param.point.x, param.point.y); pencilCtx.stroke();
@@ -766,19 +740,19 @@ function showRulerMeasurement(start, end) {
             </div>
             <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Бары:</span><span style="font-weight:600;">${barsCount}</span>
+                    <span style="color:#94a3b8;">Бары:</span><span style="font-weight:600;">${barsCount}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
+                    <span style="color:#94a3b8;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
+                    <span style="color:#94a3b8;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Объем:</span><span style="font-weight:600;">${volumeFormatted}</span>
+                    <span style="color:#94a3b8;">Объем:</span><span style="font-weight:600;">${volumeFormatted}</span>
                 </div>
-                <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px;">
-                    <div style="display:flex; justify-content:space-between; font-size:10px; color:#9ca3af;">
+                <div style="border-top:1px solid #475569; margin-top:6px; padding-top:6px;">
+                    <div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8;">
                         <span>Max: <span style="color:#22c55e;">${maxPrice}</span></span>
                         <span>Min: <span style="color:#ef4444;">${minPrice}</span></span>
                     </div>
@@ -786,7 +760,7 @@ function showRulerMeasurement(start, end) {
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
                     ${formatTime(startTime)} → ${formatTime(endTime)}
                 </div>
-                ${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">️ Часть в пустой зоне</div>' : ''}
+                ${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">Часть в пустой зоне</div>' : ''}
             </div>`;
     } else {
         els.rulerMeasurement.innerHTML = `
@@ -795,13 +769,13 @@ function showRulerMeasurement(start, end) {
             </div>
             <div style="font-size:11px; color:#d1d5db; line-height:1.6;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
+                    <span style="color:#94a3b8;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                    <span style="color:#9ca3af;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
+                    <span style="color:#94a3b8;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span>
                 </div>
-                <div style="border-top:1px solid #2d3748; margin-top:6px; padding-top:6px; text-align:center;">
-                    <div style="font-size:9px; color:#f59e0b; font-style:italic;">️ Зона будущих свечей</div>
+                <div style="border-top:1px solid #475569; margin-top:6px; padding-top:6px; text-align:center;">
+                    <div style="font-size:9px; color:#f59e0b; font-style:italic;">Зона будущих свечей</div>
                 </div>
                 <div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">
                     ${formatTime(startTime)} → ${formatTime(endTime)}
@@ -822,9 +796,6 @@ function showRulerMeasurement(start, end) {
     els.rulerMeasurement.style.display = 'block';
 }
 
-// ==========================================
-// МАГНИТ
-// ==========================================
 function createMagnetIndicator() {
     if (!chart || !els.chartWrapper) return;
     removeMagnetIndicator();
@@ -877,9 +848,6 @@ function updateMagnetIndicator(param) {
     }
 }
 
-// ==========================================
-// НАСТРОЙКИ (основное окно)
-// ==========================================
 function toggleReconSettings() {
     const toggle = document.getElementById('reconPanelToggle');
     const section = document.getElementById('reconSettingsSection');
@@ -889,7 +857,6 @@ function toggleReconSettings() {
 }
 
 function openSettingsModal() {
-    // Сбрасываем на первый таб при каждом открытии
     document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
     const firstTab = document.querySelector('.settings-tab[data-tab="display"]');
@@ -897,7 +864,6 @@ function openSettingsModal() {
     if (firstTab) firstTab.classList.add('active');
     if (firstContent) firstContent.classList.add('active');
 
-    // Восстанавливаем состояние чекбоксов
     const volHist = document.getElementById('showVolumeHistogram');
     if (volHist) volHist.checked = volumeHistogramEnabled;
     const drawTools = document.getElementById('showDrawingTools');
@@ -916,7 +882,6 @@ function openSettingsModal() {
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
 
-    // Инициализируем табы
     initSettingsTabs();
 
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
@@ -945,12 +910,12 @@ function applySettings() {
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
 
-        const btn = document.getElementById('settingsBtn');
+    const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
-            btn.style.background = '#94a3b8'; btn.style.color = '#0f1114';  // БЫЛО: #f0b90b
+            btn.style.background = '#3b82f6'; btn.style.color = '#fff';
         } else {
-            btn.style.background = '#2a2e35'; btn.style.color = '#94a3b8';  // БЫЛО: #2d3748
+            btn.style.background = '#475569'; btn.style.color = '#cbd5e1';
         }
     }
 
@@ -960,9 +925,7 @@ function applySettings() {
     }
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
-// ==========================================
-// RECON — сырой стакан (Binance legacy)
-// ==========================================
+
 async function loadDensities(symbol) {
     if (!densityEnabled || !candleSeries) return;
     let hasChanges = false;
@@ -1031,16 +994,13 @@ function startDensityUpdates(symbol) {
     }, 3000);
 }
 
-// ==========================================
-// RECON PANEL — тумблеры сырых стаканов всех бирж
-// ==========================================
 const RECON_EXCHANGES = [
-    { id: 'binance', label: 'BI', color: '#94a3b8' },
-    { id: 'bybit',   label: 'BY', color: '#94a3b8' },
-    { id: 'okx',     label: 'OK', color: '#94a3b8' },
-    { id: 'gate',    label: 'G',  color: '#94a3b8' },
-    { id: 'mexc',    label: 'MX', color: '#94a3b8' },
-    { id: 'bitget',  label: 'BG', color: '#94a3b8' },
+    { id: 'binance', label: 'BI', color: '#3b82f6' },
+    { id: 'bybit',   label: 'BY', color: '#3b82f6' },
+    { id: 'okx',     label: 'OK', color: '#3b82f6' },
+    { id: 'gate',    label: 'G',  color: '#3b82f6' },
+    { id: 'mexc',    label: 'MX', color: '#3b82f6' },
+    { id: 'bitget',  label: 'BG', color: '#3b82f6' },
 ];
 let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
@@ -1119,7 +1079,6 @@ function parseReconLevels(exId, data) {
         rawBids = data.bids || [];
         rawAsks = data.asks || [];
     } else if (exId === 'bitget') {
-        // Bitget REST: {"code":"00000","data":{"bids":[[p,q],...],"asks":[[p,q],...]}}
         const inner = data.data || {};
         rawBids = inner.bids || [];
         rawAsks = inner.asks || [];
@@ -1138,12 +1097,10 @@ async function fetchReconMarket(exId, symbol, market) {
     let data;
 
     if (exId === 'mexc') {
-        // MEXC — через прокси (CORS блок)
         const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         data = await res.json();
     } else {
-        // Binance/Bybit/OKX/Gate — напрямую из браузера (CORS работает)
         const url = getReconUrl(exId, symbol, market);
         if (!url) return [];
         const res = await fetch(url);
@@ -1210,7 +1167,7 @@ function ensureReconPanel() {
     if (!tfBtn || !tfBtn.parentElement) return;
     const panel = document.createElement('div');
     panel.id = 'reconPanel';
-    panel.style.cssText = 'display:flex;flex-direction:row;gap:16px;align-items:center;margin-left:24px;padding:6px 12px;background:rgba(11,15,25,0.9);border:1px solid #2d3748;border-radius:8px;';
+    panel.style.cssText = 'display:flex;flex-direction:row;gap:16px;align-items:center;margin-left:24px;padding:6px 12px;background:rgba(30,41,59,0.9);border:1px solid #475569;border-radius:4px;';
     panel.addEventListener('click', (e) => {
         const t = e.target.closest('.recon-toggle');
         if (!t) return;
@@ -1230,18 +1187,17 @@ function renderReconPanel() {
     reconPanelEl.innerHTML = RECON_EXCHANGES.map(ex => {
         const mkToggle = (market, letter) => {
             const on = reconMarkets[ex.id][market];
-            const bg = on ? `${ex.color}33` : 'transparent';
-            const border = on ? `1px solid ${ex.color}` : '1px solid #374151';
-            // Галочка появляется только при включённом состоянии
+            const bg = on ? 'rgba(59, 130, 246, 0.2)' : 'transparent';
+            const border = on ? `1px solid ${ex.color}` : '1px solid #475569';
             const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:11px;font-weight:bold;">✓</span>` : '';
-            return `<span style="font-size:10px;color:#9ca3af;">${letter}</span>
+            return `<span style="font-size:10px;color:#94a3b8;">${letter}</span>
                 <div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}"
-                    style="position:relative;width:20px;height:20px;border-radius:5px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
+                    style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
                     ${checkmark}
                 </div>`;
         };
         return `<div style="display:flex;align-items:center;gap:5px;">
-            <span style="font-weight:700;font-size:11px;color:${ex.color};min-width:20px;">${ex.label}</span>
+            <span style="font-weight:600;font-size:11px;color:${ex.color};min-width:20px;">${ex.label}</span>
             ${mkToggle('spot', 'S')}
             ${mkToggle('futures', 'F')}
         </div>`;
@@ -1272,32 +1228,21 @@ function stopReconUpdates() {
     clearReconLines();
 }
 
-function toggleReconSettings() {
-    const toggle = document.getElementById('reconPanelToggle');
-    const section = document.getElementById('reconSettingsSection');
-    if (toggle && section) {
-        section.style.display = toggle.checked ? 'block' : 'none';
-    }
-}
-
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
     container.innerHTML = RECON_EXCHANGES.map(ex => `
         <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-weight:700;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span>
-            <label style="font-size:11px;color:#9ca3af;">F:</label>
+            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span>
+            <label style="font-size:11px;color:#94a3b8;">F:</label>
             <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000"
-                style="width:90px;background:#0b0f19;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;">
-            <label style="font-size:11px;color:#9ca3af;">S:</label>
+                style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
+            <label style="font-size:11px;color:#94a3b8;">S:</label>
             <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000"
-                style="width:90px;background:#0b0f19;border:1px solid #2d3748;color:#fff;padding:4px 8px;border-radius:4px;font-size:12px;">
+                style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
         </div>`).join('');
 }
 
-// ==========================================
-// SCALP — плотности с бирж (по настройкам каждой биржи)
-// ==========================================
 async function loadScalpDensities(symbol) {
     if (!scalpEnabled || !candleSeries || isScalpLoading) return;
     isScalpLoading = true;
@@ -1373,15 +1318,12 @@ function startScalpUpdates(symbol) {
     }, 3000);
 }
 
-// ==========================================
-// ОТДЕЛЬНОЕ ОКНО SCALP НАСТРОЕК
-// ==========================================
 function openScalpSettingsModal() {
     const container = document.getElementById('scalpExchangesContainer');
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
         const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
         return `
-            <div class="exchange-card" style="background:#1a2238; border:1px solid #2d3748; border-radius:10px; padding:14px;">
+            <div class="exchange-card" style="background:#3b4252; border:1px solid #475569; border-radius:6px; padding:14px;">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span style="position:relative; width:26px; height:26px; display:inline-block;">
@@ -1390,31 +1332,31 @@ function openScalpSettingsModal() {
                                      onerror="this.style.display='none'"
                                      style="position:relative; width:26px; height:26px; border-radius:6px;">
                             </span>
-                        <span style="font-weight:700; color:${ex.color}; font-size:15px;">${ex.name}</span>
+                        <span style="font-weight:600; color:${ex.color}; font-size:15px;">${ex.name}</span>
                     </div>
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#d1d5db;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0;">
                         <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} style="accent-color:${ex.color}; width:16px; height:16px;">
                         <span>Включить</span>
                     </label>
                 </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                    <div style="background:#0b0f19; border:1px solid #2d3748; border-radius:6px; padding:10px;">
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#d1d5db; margin-bottom:8px;">
+                    <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
                             <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
                             <span>Futures</span>
                         </label>
-                        <label style="font-size:10px; color:#9ca3af; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
                         <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
-                            style="width:100%; background:#151b2b; border:1px solid #2d3748; color:#fff; padding:5px 8px; border-radius:4px; font-size:12px;">
+                            style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                     </div>
-                    <div style="background:#0b0f19; border:1px solid #2d3748; border-radius:6px; padding:10px;">
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#d1d5db; margin-bottom:8px;">
+                    <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
                             <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
                             <span>Spot</span>
                         </label>
-                        <label style="font-size:10px; color:#9ca3af; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
                         <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
-                            style="width:100%; background:#151b2b; border:1px solid #2d3748; color:#fff; padding:5px 8px; border-radius:4px; font-size:12px;">
+                            style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                     </div>
                 </div>
             </div>`;
@@ -1442,12 +1384,12 @@ function applyScalpSettings() {
         const cfg = scalpExchanges[ex.id];
         return cfg && cfg.enabled && (cfg.markets.futures || cfg.markets.spot);
     });
-        const btn = document.getElementById('settingsBtn');
+    const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled) {
-            btn.style.background = '#94a3b8'; btn.style.color = '#0f1114';  // БЫЛО: #f0b90b
+            btn.style.background = '#3b82f6'; btn.style.color = '#fff';
         } else {
-            btn.style.background = '#2a2e35'; btn.style.color = '#94a3b8';  // БЫЛО: #2d3748
+            btn.style.background = '#475569'; btn.style.color = '#cbd5e1';
         }
     }
     if (currentSymbol) {
@@ -1462,9 +1404,6 @@ function applyScalpSettings() {
     bootstrap.Modal.getInstance(document.getElementById('scalpSettingsModal')).hide();
 }
 
-// ==========================================
-// ГРАФИК И УПРАВЛЕНИЕ
-// ==========================================
 function updateWatermark() {
     if (currentSymbol && els.chartWatermark) {
         els.watermarkSymbol.textContent = currentSymbol;
@@ -1475,7 +1414,7 @@ function updateWatermark() {
 function copySymbolToClipboard() {
     if (!currentSymbol) return;
     navigator.clipboard.writeText(`${currentSymbol}USDT`).then(() => {
-        els.chartTitle.classList.add('copied'); els.chartTitle.textContent = `✅ ${currentSymbol}USDT скопирован!`;
+        els.chartTitle.classList.add('copied'); els.chartTitle.textContent = `${currentSymbol}USDT скопирован`;
         setTimeout(() => { els.chartTitle.classList.remove('copied'); els.chartTitle.textContent = `${currentSymbol}/USDT`; }, 1200);
     }).catch(err => console.error('Ошибка копирования:', err));
 }
@@ -1515,10 +1454,10 @@ async function openChart(symbol) {
         chart = LightweightCharts.createChart(els.chartWrapper, {
             width: els.chartWrapper.clientWidth,
             height: els.chartWrapper.clientHeight,
-            layout: { background: { color: '#0b0f19' }, textColor: '#d1d5db' },
-            grid: { vertLines: { color: '#1e2538' }, horzLines: { color: '#1e2538' } },
-            timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#2d3748', rightOffset: 50, barSpacing: 10 },
-            rightPriceScale: { borderColor: '#2d3748', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
+            layout: { background: { color: '#1e293b' }, textColor: '#e2e8f0' },
+            grid: { vertLines: { color: '#334155' }, horzLines: { color: '#334155' } },
+            timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#475569', rightOffset: 50, barSpacing: 10 },
+            rightPriceScale: { borderColor: '#475569', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
         candleSeries = chart.addCandlestickSeries({ upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444' });
@@ -1687,9 +1626,7 @@ async function loadChartData(symbol, tf) {
     const cacheKey = `${symbol}_${tf}`;
     const cached = candlesCache.get(cacheKey);
 
-    // Проверяем кэш
     if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-        // Используем кэш
         applyCandlesToChart(cached.data);
         return;
     }
@@ -1702,7 +1639,6 @@ async function loadChartData(symbol, tf) {
 
         const limitedHistory = history.slice(-500);
 
-        // Сохраняем в кэш
         candlesCache.set(cacheKey, {
             data: limitedHistory,
             timestamp: Date.now()
@@ -1740,9 +1676,6 @@ function applyCandlesToChart(history) {
     chart.timeScale().scrollToPosition(12, false);
 }
 
-// ==========================================
-// КРУПНЫЕ СДЕЛКИ
-// ==========================================
 function toggleTradesOverlay() {
     els.tradesOverlay.classList.contains('active') ? closeTradesOverlay() : openTradesOverlay();
 }
@@ -1763,9 +1696,6 @@ function updateTradesOverlay() {
     els.tradesOverlayBody.scrollTop = els.tradesOverlayBody.scrollHeight;
 }
 
-// ==========================================
-// ГОЛОС И ВРЕМЯ
-// ==========================================
 function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('soundEnabled', soundEnabled);
@@ -1803,23 +1733,20 @@ function checkHourTransition() {
     const currentMinuteKey = now.getHours() * 60 + now.getMinutes();
     if (now.getMinutes() === 55 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast('⏰ До нового часа 5 минут');
+        showHourToast('До нового часа 5 минут');
         playHourSound(5);
     }
     if (now.getMinutes() === 59 && now.getSeconds() < 3 && lastNotifiedMinute !== currentMinuteKey) {
         lastNotifiedMinute = currentMinuteKey;
-        showHourToast(' До нового часа 1 минута');
+        showHourToast('До нового часа 1 минута');
         playHourSound(1);
     }
 }
 setInterval(checkHourTransition, 1000);
 
-// ==========================================
-// ИНИЦИАЛИЗАЦИЯ И ОБРАБОТЧИКИ СОБЫТИЙ
-// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     if (!els.tradesThresholdSlider || !els.search) {
-        console.error('❌ Критическая ошибка: DOM-элементы не найдены. Проверьте HTML.');
+        console.error('Критическая ошибка: DOM-элементы не найдены. Проверьте HTML.');
         return;
     }
 
@@ -1889,7 +1816,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
 
-    // Кнопки Scalp окна
     const openScalpBtn = document.getElementById('openScalpSettingsBtn');
     if (openScalpBtn) openScalpBtn.addEventListener('click', openScalpSettingsModal);
     const applyScalpBtn = document.getElementById('applyScalpSettingsBtn');
@@ -1899,12 +1825,8 @@ document.addEventListener('DOMContentLoaded', () => {
     startNatrAutoUpdate();
 });
 
-// ==========================================
-// ТАБЫ НАСТРОЕК
-// ==========================================
 function initSettingsTabs() {
     document.querySelectorAll('.settings-tab').forEach(tab => {
-        // Удаляем старые слушатели чтобы не дублировались
         tab.replaceWith(tab.cloneNode(true));
     });
     document.querySelectorAll('.settings-tab').forEach(tab => {
