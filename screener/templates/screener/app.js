@@ -1215,7 +1215,13 @@ function renderReconPanel() {
             const on = reconMarkets[ex.id][market];
             const bg = on ? `${ex.color}33` : 'transparent';
             const border = on ? `1px solid ${ex.color}` : '1px solid #374151';
-            return `<span style="font-size:10px;color:#9ca3af;">${letter}</span><div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}" style="width:20px;height:20px;border-radius:5px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}"></div>`;
+            // Галочка появляется только при включённом состоянии
+            const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:11px;font-weight:bold;">✓</span>` : '';
+            return `<span style="font-size:10px;color:#9ca3af;">${letter}</span>
+                <div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}"
+                    style="position:relative;width:20px;height:20px;border-radius:5px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
+                    ${checkmark}
+                </div>`;
         };
         return `<div style="display:flex;align-items:center;gap:5px;">
             <span style="font-weight:700;font-size:11px;color:${ex.color};min-width:20px;">${ex.label}</span>
