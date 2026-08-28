@@ -889,19 +889,36 @@ function toggleReconSettings() {
 }
 
 function openSettingsModal() {
-    document.getElementById('showVolumeHistogram').checked = volumeHistogramEnabled;
-    document.getElementById('showDrawingTools').checked = showDrawingTools;
+    // Сбрасываем на первый таб при каждом открытии
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+    const firstTab = document.querySelector('.settings-tab[data-tab="display"]');
+    const firstContent = document.getElementById('tab-display');
+    if (firstTab) firstTab.classList.add('active');
+    if (firstContent) firstContent.classList.add('active');
+
+    // Восстанавливаем состояние чекбоксов
+    const volHist = document.getElementById('showVolumeHistogram');
+    if (volHist) volHist.checked = volumeHistogramEnabled;
+    const drawTools = document.getElementById('showDrawingTools');
+    if (drawTools) drawTools.checked = showDrawingTools;
+
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
         reconToggle.checked = reconEnabled;
         toggleReconSettings();
         renderReconSettings();
     }
+
     const soundBtnModal = document.getElementById('soundToggleModal');
     if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? '🔊 Голосовое оповещение' : '🔇 Голосовое оповещение';
+        soundBtnModal.textContent = soundEnabled ? 'Голосовое оповещение: Включено' : 'Голосовое оповещение: Выключено';
         soundBtnModal.classList.toggle('muted', !soundEnabled);
     }
+
+    // Инициализируем табы
+    initSettingsTabs();
+
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
     modal.show();
 }
@@ -1753,8 +1770,10 @@ function toggleSound() {
     soundEnabled = !soundEnabled;
     localStorage.setItem('soundEnabled', soundEnabled);
     const btn = document.getElementById('soundToggleModal');
-    btn.textContent = soundEnabled ? ' Голосовое оповещение' : '🔇 Голосовое оповещение';
-    btn.classList.toggle('muted', !soundEnabled);
+    if (btn) {
+        btn.textContent = soundEnabled ? 'Голосовое оповещение: Включено' : 'Голосовое оповещение: Выключено';
+        btn.classList.toggle('muted', !soundEnabled);
+    }
     if (soundEnabled) speak('Оповещения включены');
 }
 function initVoices() {
@@ -1879,3 +1898,23 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAllData();
     startNatrAutoUpdate();
 });
+
+// ==========================================
+// ТАБЫ НАСТРОЕК
+// ==========================================
+function initSettingsTabs() {
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        // Удаляем старые слушатели чтобы не дублировались
+        tab.replaceWith(tab.cloneNode(true));
+    });
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            const targetId = 'tab-' + tab.dataset.tab;
+            const target = document.getElementById(targetId);
+            if (target) target.classList.add('active');
+        });
+    });
+}

@@ -1,52 +1,75 @@
 <!-- Модальное окно настроек -->
 <div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 560px;">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title">⚙️ Настройки</h5>
+                <h5 class="modal-title">Настройки</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <div class="modal-section">
-                    <div class="modal-section-title">🔊 Голосовое оповещение</div>
-                    <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:8px; font-size:13px;">
-                         Голосовое оповещение
-                    </button>
+            <div class="modal-body" style="padding-top: 0;">
+                <!-- Табы -->
+                <div class="settings-tabs">
+                    <button type="button" class="settings-tab active" data-tab="display">Отображение</button>
+                    <button type="button" class="settings-tab" data-tab="data">Данные</button>
+                    <button type="button" class="settings-tab" data-tab="alerts">Оповещения</button>
                 </div>
-                <div class="modal-section">
-                    <div class="modal-section-title">🎨 Инструменты рисования</div>
-                    <div style="margin-bottom:12px;">
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db; margin-bottom:8px;">
+
+                <!-- Вкладка: Отображение -->
+                <div class="settings-tab-content active" id="tab-display">
+                    <div class="modal-section">
+                        <div class="modal-section-title">График</div>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#d1d5db; margin-bottom:10px;">
+                            <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <span>Показывать гистограмму объёма</span>
+                        </label>
+                    </div>
+                    <div class="modal-section">
+                        <div class="modal-section-title">Инструменты рисования</div>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#d1d5db;">
                             <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f0b90b; width:16px; height:16px;">
                             <span>Показывать панель инструментов</span>
                         </label>
                     </div>
                 </div>
-                <div class="modal-section">
-                    <div class="modal-section-title">📊 Панель рекона</div>
-                    <div class="form-check form-switch mb-2" style="margin-bottom:0;">
-                        <input class="form-check-input" type="checkbox" id="reconPanelToggle" onchange="toggleReconSettings()" style="accent-color:#f0b90b; width:16px; height:16px;">
-                        <label class="form-check-label" for="reconPanelToggle" style="font-size:13px; color:#d1d5db;">Панель рекона (сырые стаканы)</label>
-                    </div>
-                </div>
-                <div id="reconSettingsSection" style="display:none;">
+
+                <!-- Вкладка: Данные -->
+                <div class="settings-tab-content" id="tab-data">
                     <div class="modal-section">
-                        <div class="modal-section-title">🔍 RECON — мин. объём по биржам (USDT)</div>
-                        <div id="reconSettingsContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
+                        <div class="modal-section-title">Панель рекона (сырые стаканы)</div>
+                        <div class="form-check form-switch" style="margin-bottom:8px;">
+                            <input class="form-check-input" type="checkbox" id="reconPanelToggle" onchange="toggleReconSettings()" style="accent-color:#f0b90b; width:16px; height:16px;">
+                            <label class="form-check-label" for="reconPanelToggle" style="font-size:13px; color:#d1d5db;">Показывать панель рекона</label>
+                        </div>
+                    </div>
+                    <div id="reconSettingsSection" style="display:none;">
+                        <div class="modal-section">
+                            <div class="modal-section-title" style="font-size:12px; color:#9ca3af;">Мин. объём по биржам (USDT)</div>
+                            <div id="reconSettingsContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
+                        </div>
+                    </div>
+                    <div class="modal-section">
+                        <div class="modal-section-title">Scalp мониторинг</div>
+                        <p style="font-size:12px; color:#9ca3af; margin-bottom:10px; line-height:1.5;">
+                            Фильтрованные плотности с нескольких бирж (Binance, Bybit, OKX, Gate, MEXC, Bitget)
+                        </p>
+                        <button type="button" id="openScalpSettingsBtn"
+                            style="width:100%; padding:10px; background:#2d3748; color:#f0b90b; border:1px solid #3d4558; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; transition:all 0.2s;">
+                            Настроить биржи и объёмы
+                        </button>
                     </div>
                 </div>
-                <div class="modal-section">
-                    <div class="modal-section-title">🎯 Scalp — Мониторинг плотностей</div>
-                    <button type="button" id="openScalpSettingsBtn"
-                        style="width:100%; padding:10px; background:#2d3748; color:#f0b90b; border:1px solid #f0b90b; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600;">
-                        ⚙️ Scalp настройки (биржи и объёмы)
-                    </button>
-                </div>
-                <div class="modal-section">
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:#d1d5db;">
-                        <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f0b90b; width:16px; height:16px;">
-                        <span>Показывать гистограмму объёма</span>
-                    </label>
+
+                <!-- Вкладка: Оповещения -->
+                <div class="settings-tab-content" id="tab-alerts">
+                    <div class="modal-section">
+                        <div class="modal-section-title">Голосовое оповещение</div>
+                        <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:10px; font-size:13px;">
+                            Голосовое оповещение
+                        </button>
+                        <p style="font-size:11px; color:#6b7280; margin-top:10px; line-height:1.5;">
+                            Озвучивает предупреждения за 5 минут и 1 минуту до перехода на новый час
+                        </p>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer" style="border-top:1px solid #2d3748;">
@@ -62,15 +85,15 @@
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content" style="background:#151b2b; border:1px solid #2d3748; color:#d1d5db;">
             <div class="modal-header" style="border-bottom:1px solid #2d3748;">
-                <h5 class="modal-title" style="color:#f0b90b;">⚡ Scalp настройки</h5>
+                <h5 class="modal-title">Scalp настройки</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="scalpExchangesContainer"
                  style="display:flex; flex-direction:column; gap:14px;"></div>
             <div class="modal-footer" style="border-top:1px solid #2d3748;">
                 <div style="font-size:11px; color:#9ca3af; line-height:1.6; margin-right:auto;">
-                    <span style="color:#fbbf24;">🟡 Жёлтый</span> — плотность до 500K<br>
-                    <span style="color:#ba55d3;">🟣 Фиолетовый</span> — плотность от 500K
+                    <span style="color:#fbbf24;">&#9632;</span> Жёлтый — плотность до 500K<br>
+                    <span style="color:#ba55d3;">&#9632;</span> Фиолетовый — плотность от 500K
                 </div>
                 <button type="button" class="btn btn-primary" id="applyScalpSettingsBtn"
                     style="background:#f0b90b; border:none; color:#000; font-weight:600;">Сохранить</button>
