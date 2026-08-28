@@ -259,15 +259,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 # HEARTBEAT — JSON {"method":"ping"} для MEXC
 # ==========================================
 async def ws_heartbeat(ws, market='futures', log_func=print):
+    """MEXC: JSON {"method": "ping"} для ОБЕИХ рынков (как в оригинале)"""
     try:
         while True:
             await asyncio.sleep(15)
             try:
-                if market == 'futures':
-                    await ws.send(json.dumps({"method": "ping"}))
-                else:
-                    # Spot ожидает просто строку "ping", не JSON!
-                    await ws.send("ping")
+                await ws.send(json.dumps({"method": "ping"}))  # ← ОДИН ФОРМАТ для обоих!
             except (websockets.exceptions.ConnectionClosed, Exception) as e:
                 log_func(f"⚠️ mexc {market} heartbeat завершён: {e}")
                 return
@@ -454,9 +451,6 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
                         new_ts[p] = old_ts[p]
                 else:
                     new_ts[p] = time.time()  # ← ДОБАВЛЕНО
-
-            mexc_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
-            mexc_spot_density_timestamps[symbol] = new_ts
 
             mexc_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             mexc_spot_density_timestamps[symbol] = new_ts
