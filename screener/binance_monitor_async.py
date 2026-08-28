@@ -75,7 +75,68 @@ def _fetch_top_symbols_sync(market='futures'):
 async def get_top_symbols_async(market='futures'):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market)
+# ==========================================
+# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
+# ==========================================
+STABLE_COINS_LIMIT = 10  # Размер белого списка
 
+# Глобальные переменные для хранения белого списка
+stable_futures_symbols = []
+stable_spot_symbols = []
+
+
+def _fetch_stable_coins_sync(market='futures', limit=10):
+    """Синхронная функция — топ монет по абсолютному объёму"""
+    try:
+        ccxt_market = 'future' if market == 'futures' else 'spot'
+        exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'timeout': 10000,
+            'options': {'defaultType': ccxt_market}
+        })
+        tickers = exchange.fetch_tickers()
+
+        # Собираем монеты с объёмами
+        coins_with_volume = []
+        for symbol, data in tickers.items():
+            # Фильтр по суффиксу
+            if market == 'futures':
+                if ':USDT' not in symbol:
+                    continue
+            else:
+                if '/USDT' not in symbol:
+                    continue
+
+            volume = data.get('quoteVolume') or 0
+            if volume < 100000:  # Минимальный порог
+                continue
+
+            # Чистим символ
+            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
+
+            # Валидация
+            if '-' in clean_symbol:
+                continue
+            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+                continue
+            if not clean_symbol.replace('_', '').isalnum():
+                continue
+
+            coins_with_volume.append((clean_symbol, volume))
+
+        # Сортируем по убыванию объёма и берём топ-N
+        coins_with_volume.sort(key=lambda x: x[1], reverse=True)
+        return [s for s, v in coins_with_volume[:limit]]
+
+    except Exception as e:
+        print(f"❌ Ошибка _fetch_stable_coins({market}): {e}")
+        return []
+
+
+async def get_stable_coins_async(market='futures', limit=10):
+    """Асинхронная обёртка — топ монет по абсолютному объёму"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНА через ccxt.fetch_order_book
@@ -427,35 +488,49 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 # ПЕРИОДИЧЕСКАЯ РОТАЦИЯ
 # ==========================================
 async def periodic_refresh(log_func=print):
-    global futures_symbols, spot_symbols
+    global futures_symbols, spot_symbols, stable_futures_symbols, stable_spot_symbols
 
     while True:
         await asyncio.sleep(300)  # 5 минут
 
         try:
+            # Обновляем белый список каждые 5 минут
+            new_stable_f = await get_stable_coins_async('futures', STABLE_COINS_LIMIT)
+            new_stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
+            stable_futures_symbols = new_stable_f
+            stable_spot_symbols = new_stable_s
+
             # --- Futures ротация ---
             candidates_f = await get_top_symbols_async('futures')
             old_symbols = set(futures_symbols)
-
             new_active = []
-            TARGET = 30
 
-            for symbol in old_symbols:
-                if len(new_active) >= TARGET:
-                    break
-                new_active.append(symbol)
+            # Шаг 1: Сохраняем монеты из белого списка
+            for symbol in new_stable_f:
+                if symbol in old_symbols:
+                    new_active.append(symbol)
+                else:
+                    # Новая монета в белом списке — инициализируем
+                    saved_count = await init_order_book_async(symbol, 'futures', log_func)
+                    if saved_count > 0:
+                        new_active.append(symbol)
+                        log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
+            # Шаг 2: Добавляем топ по формуле
             for symbol in candidates_f:
-                if len(new_active) >= TARGET:
+                if len(new_active) >= 30:
                     break
                 if symbol in new_active:
+                    continue
+                if symbol in old_symbols:
+                    new_active.append(symbol)
                     continue
                 saved_count = await init_order_book_async(symbol, 'futures', log_func)
                 if saved_count > 0:
                     new_active.append(symbol)
                     log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count})")
                 else:
-                    log_func(f"⚠️ binance futures {symbol}: пропущен (нет плотностей)")
+                    log_func(f"⚠️ binance futures {symbol}: пропущен")
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -476,26 +551,31 @@ async def periodic_refresh(log_func=print):
             # --- Spot ротация ---
             candidates_s = await get_top_symbols_async('spot')
             old_symbols = set(spot_symbols)
-
             new_active = []
-            TARGET = 30
 
-            for symbol in old_symbols:
-                if len(new_active) >= TARGET:
-                    break
-                new_active.append(symbol)
+            for symbol in new_stable_s:
+                if symbol in old_symbols:
+                    new_active.append(symbol)
+                else:
+                    saved_count = await init_order_book_async(symbol, 'spot', log_func)
+                    if saved_count > 0:
+                        new_active.append(symbol)
+                        log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
             for symbol in candidates_s:
-                if len(new_active) >= TARGET:
+                if len(new_active) >= 30:
                     break
                 if symbol in new_active:
+                    continue
+                if symbol in old_symbols:
+                    new_active.append(symbol)
                     continue
                 saved_count = await init_order_book_async(symbol, 'spot', log_func)
                 if saved_count > 0:
                     new_active.append(symbol)
                     log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count})")
                 else:
-                    log_func(f"⚠️ binance spot {symbol}: пропущен (нет плотностей)")
+                    log_func(f"⚠️ binance spot {symbol}: пропущен")
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -521,25 +601,49 @@ async def periodic_refresh(log_func=print):
 # ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
 async def main_async(log_func=print):
-    global futures_symbols, spot_symbols
+    global futures_symbols, spot_symbols, stable_futures_symbols, stable_spot_symbols
 
     log_func("🚀 Запуск Binance Async Monitor...")
 
+    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
+    stable_f = await get_stable_coins_async('futures', STABLE_COINS_LIMIT)
+    stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
+    stable_futures_symbols = stable_f
+    stable_spot_symbols = stable_s
+    log_func(f"🔒 Белый список futures: {stable_f}")
+    log_func(f"🔒 Белый список spot: {stable_s}")
+
+    # --- Шаг 2: Получаем кандидатов по формуле ---
     futures_candidates = await get_top_symbols_async('futures')
     spot_candidates = await get_top_symbols_async('spot')
 
+    # --- Шаг 3: Инициализируем белый список ---
     active_futures = []
+    for symbol in stable_f:
+        saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        if saved_count > 0:
+            active_futures.append(symbol)
+            log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+
     active_spot = []
+    for symbol in stable_s:
+        saved_count = await init_order_book_async(symbol, 'spot', log_func)
+        if saved_count > 0:
+            active_spot.append(symbol)
+            log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
-    TARGET_START = 20  # При старте меньше — как в оригинале
-
-    for symbol in futures_candidates[:TARGET_START]:
+    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
+    for symbol in futures_candidates[:20]:
+        if symbol in active_futures:
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
             log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
 
-    for symbol in spot_candidates[:TARGET_START]:
+    for symbol in spot_candidates[:20]:
+        if symbol in active_spot:
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
