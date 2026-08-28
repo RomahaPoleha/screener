@@ -10,6 +10,10 @@ const sound1min = new Audio('/api/sound/alert_1min.mp3');
 sound5min.preload = 'auto';
 sound1min.preload = 'auto';
 
+// Кэш свечей (symbol -> candles)
+const candlesCache = new Map();
+const CACHE_TTL = 60000; // 60 секунд
+
 function playHourSound(minutesLeft) {
     if (!soundEnabled) return;
     const sound = minutesLeft === 5 ? sound5min : sound1min;
@@ -1477,7 +1481,7 @@ async function openChart(symbol) {
     clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
     clearScalpLines(); previousScalpData = {}; if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
     stopReconUpdates();
-    await new Promise(resolve => setTimeout(resolve, 150));
+
 
     currentSymbol = symbol;
     els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
@@ -1656,27 +1660,61 @@ async function openChart(symbol) {
 async function loadChartData(symbol, tf) {
     if (!chart || !candleSeries) return;
     els.chartTitle.textContent = `${symbol}/USDT`;
+
+    const cacheKey = `${symbol}_${tf}`;
+    const cached = candlesCache.get(cacheKey);
+
+    // Проверяем кэш
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+        // Используем кэш
+        applyCandlesToChart(cached.data);
+        return;
+    }
+
     try {
         const res = await fetch(`/api/candles/${symbol}/?tf=${tf}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const history = await res.json();
         if (!history || history.length === 0) throw new Error('Пустая история');
+
         const limitedHistory = history.slice(-500);
-        const firstPrice = limitedHistory[0].close;
-        currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
-        const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
-        candleSeries.applyOptions({ priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove } });
-        candleSeries.setData(limitedHistory.map(c => ({ ...c, time: safeTime(c.time) })));
-        window.candleData = limitedHistory.map(c => ({ ...c, time: safeTime(c.time) }));
-        if (limitedHistory[0].volume !== undefined) {
-            volumeSeries.setData(limitedHistory.map(c => ({
-                time: safeTime(c.time), value: c.volume,
-                color: c.close >= c.open ? 'rgba(200, 200, 200, 0.6)' : 'rgba(80, 80, 80, 0.7)'
-            })));
-        }
-        chart.timeScale().fitContent();
-        chart.timeScale().scrollToPosition(12, false);
-    } catch (err) { els.chartTitle.textContent = `Ошибка: ${err.message}`; console.error('loadChartData error:', err); }
+
+        // Сохраняем в кэш
+        candlesCache.set(cacheKey, {
+            data: limitedHistory,
+            timestamp: Date.now()
+        });
+
+        applyCandlesToChart(limitedHistory);
+
+    } catch (err) {
+        els.chartTitle.textContent = `Ошибка: ${err.message}`;
+        console.error('loadChartData error:', err);
+    }
+}
+
+function applyCandlesToChart(history) {
+    const firstPrice = history[0].close;
+    currentPrecision = firstPrice < 1 ? (firstPrice < 0.01 ? 8 : 5) : 2;
+    const minMove = firstPrice < 1 ? (firstPrice < 0.01 ? 0.00000001 : 0.00001) : 0.01;
+
+    candleSeries.applyOptions({
+        priceFormat: { type: 'price', precision: currentPrecision, minMove: minMove }
+    });
+
+    candleSeries.setData(history.map(c => ({ ...c, time: safeTime(c.time) })));
+    window.candleData = history.map(c => ({ ...c, time: safeTime(c.time) }));
+
+    if (history[0].volume !== undefined) {
+        volumeSeries.setData(history.map(c => ({
+            time: safeTime(c.time),
+            value: c.volume,
+            color: c.close >= c.open ? 'rgba(200, 200, 200, 0.6)' : 'rgba(80, 80, 80, 0.7)'
+        })));
+    }
+
+    chart.timeScale().fitContent();
+    chart.timeScale().scrollToPosition(12, false);
 }
 
 // ==========================================
