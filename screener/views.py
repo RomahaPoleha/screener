@@ -5,6 +5,35 @@ from django.core.cache import cache
 from django.shortcuts import render
 from django.http import FileResponse, Http404
 from pathlib import Path
+import time
+
+# Глобальный exchange объект — создаётся один раз
+_binance_exchange_future = None
+
+def get_binance_exchange():
+    """Ленивая инициализация exchange (экономит 50-100мс на запрос)"""
+    global _binance_exchange_future
+    if _binance_exchange_future is None:
+        _binance_exchange_future = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'},
+            'timeout': 10000
+        })
+    return _binance_exchange_future
+
+
+# Максимальный возраст кэша по таймфреймам (в секундах)
+MAX_CACHE_AGE = {
+    '1m':  120,     # 2 минуты
+    '5m':  360,     # 6 минут
+    '15m': 1080,    # 18 минут
+    '30m': 2160,    # 36 минут
+    '1h':  4320,    # 72 минуты
+    '4h':  17280,   # 4.8 часа
+    '1d':  86400,   # 24 часа
+}
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Минимальный объём для фильтрации
@@ -67,24 +96,36 @@ def api_data(request):
     return JsonResponse(coins, safe=False)
 
 
+
+# ==========================================
+# API ФУНКЦИЯ
+# ==========================================
 @require_http_methods(["GET"])
 def api_candles(request, symbol):
-    """API: история свечей (только Futures)"""
+    """API: история свечей с умным кэшированием по таймфрейму"""
     tf = request.GET.get('tf', '1m')
-
     cache_key = f"candles_{symbol}_{tf}_future"
     cached = cache.get(cache_key)
+
+    # УМНЫЙ КЭШ: проверяем не только наличие, но и свежесть последней свечи
     if cached:
-        return JsonResponse(cached, safe=False)
+        try:
+            now_ts = int(time.time())
+            last_candle_ts = cached[-1]['time']
+            age = now_ts - last_candle_ts
+            max_age = MAX_CACHE_AGE.get(tf, 120)
 
+            # age < 0 = свеча из будущего (рассинхронизация часов) — считаем свежей
+            if age < max_age:
+                return JsonResponse(cached, safe=False)
+            # Иначе кэш устарел — идём за новыми данными
+        except (KeyError, IndexError, TypeError):
+            pass  # Кэш повреждён — идём за новыми данными
+
+    # FETCH С БИРЖИ
     try:
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'options': {'defaultType': 'future'},
-            'timeout': 10000
-        })
+        exchange = get_binance_exchange()
         pair = f"{symbol}/USDT:USDT"
-
         ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
 
         candles = [
@@ -94,12 +135,12 @@ def api_candles(request, symbol):
                 'high': float(h),
                 'low': float(l),
                 'close': float(c),
-                'volume': float(v)  # ← Добавляем объём
+                'volume': float(v)
             }
             for ts, o, h, l, c, v in ohlcv
         ]
 
-        cache.set(cache_key, candles, 30)
+        cache.set(cache_key, candles, 300)
         return JsonResponse(candles, safe=False)
 
     except ccxt.BadSymbol as e:
@@ -107,6 +148,9 @@ def api_candles(request, symbol):
         return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
     except Exception as e:
         print(f"❌ Ошибка api_candles {symbol}: {e}")
+        # Если есть старый кэш — отдаём его даже устаревший (лучше чем 500)
+        if cached:
+            return JsonResponse(cached, safe=False)
         return JsonResponse({'error': str(e)}, status=500)
 
 
