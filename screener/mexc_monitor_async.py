@@ -430,9 +430,13 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                else:
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                else:
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
 
             mexc_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             mexc_futures_density_timestamps[symbol] = new_ts
@@ -443,9 +447,16 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                else:
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
             for p in new_asks:
                 if p in old_ts:
-                    new_ts[p] = old_ts[p]
+                        new_ts[p] = old_ts[p]
+                else:
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
+
+            mexc_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
+            mexc_spot_density_timestamps[symbol] = new_ts
 
             mexc_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             mexc_spot_density_timestamps[symbol] = new_ts

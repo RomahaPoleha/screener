@@ -37,27 +37,28 @@ def start_scalp_monitor():
     log("🔧 Вызов start_scalp_monitor()...")
 
     try:
-        from .binance_monitor import start_binance_monitor
+        from .binance_monitor_async import start_binance_async_monitor
         # from .gate_monitor_async import start_gate_async_monitor
         # from .bitget_monitor_async import start_bitget_async_monitor
         # from .bybit_monitor_async import start_bybit_async_monitor
         # from .okx_monitor_async import start_okx_async_monitor
-        from .mexc_monitor_async import start_mexc_async_monitor
+        # from .mexc_monitor_async import start_mexc_async_monitor
 
+        # from .binance_monitor import start_binance_monitor
         # from .bybit_monitor import start_bybit_monitor, start_bybit_spot_monitor
         # from .okx_monitor import start_okx_monitor, start_okx_spot_monitor
         # from .gate_monitor import start_gate_monitor, start_gate_spot_monitor
         # from .mexc_monitor import start_mexc_monitor, start_mexc_spot_monitor
         # from .bitget_monitor import start_bitget_monitor, start_bitget_spot_monitor
 
-        # Запуск Binance Monitor
-        binance_thread = threading.Thread(
-            target=lambda: start_binance_monitor(log),
-            name='Binance-Monitor',
-            daemon=True
-        )
-        binance_thread.start()
-        log("✅ Binance Monitor поток запущен")
+        # # Запуск Binance Monitor
+        # binance_thread = threading.Thread(
+        #     target=lambda: start_binance_monitor(log),
+        #     name='Binance-Monitor',
+        #     daemon=True
+        # )
+        # binance_thread.start()
+        # log("✅ Binance Monitor поток запущен")
 
         # # Запуск MEXC Futures Monitor
         # threading.Thread(
@@ -180,13 +181,21 @@ def start_scalp_monitor():
         # gate_async_thread.start()
         # log("✅ Gate Async Monitor поток запущен")
 
-        mexc_async_thread = threading.Thread(
-            target=lambda: start_mexc_async_monitor(log),
-            name='MEXC-Async-Monitor',
+        # mexc_async_thread = threading.Thread(
+        #     target=lambda: start_mexc_async_monitor(log),
+        #     name='MEXC-Async-Monitor',
+        #     daemon=True
+        # )
+        # mexc_async_thread.start()
+        # log("✅ MEXC Async Monitor поток запущен")
+
+        binance_async_thread = threading.Thread(
+            target=lambda: start_binance_async_monitor(log),
+            name='Binance-Async-Monitor',
             daemon=True
         )
-        mexc_async_thread.start()
-        log("✅ MEXC Async Monitor поток запущен")
+        binance_async_thread.start()
+        log("✅ Binance Async Monitor поток запущен")
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
