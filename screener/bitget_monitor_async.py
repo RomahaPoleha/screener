@@ -86,6 +86,69 @@ async def get_top_symbols_async(market_type='swap'):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market_type)
 
+# ==========================================
+# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
+# ==========================================
+STABLE_COINS_LIMIT = 10  # Размер белого списка
+
+# Глобальные переменные для хранения белого списка
+stable_futures_symbols = []
+stable_spot_symbols = []
+
+
+def _fetch_stable_coins_sync(market='futures', limit=10):
+    """Синхронная функция — топ монет по абсолютному объёму"""
+    try:
+        # Для Bitget используем 'swap' вместо 'future'
+        ccxt_market = 'swap' if market == 'futures' else 'spot'
+        exchange = ccxt.bitget({
+            'enableRateLimit': True,
+            'timeout': 10000,
+            'options': {'defaultType': ccxt_market}
+        })
+        tickers = exchange.fetch_tickers()
+
+        # Собираем монеты с объёмами
+        coins_with_volume = []
+        for symbol, data in tickers.items():
+            # Фильтр по суффиксу
+            if market == 'futures':
+                if ':USDT' not in symbol:
+                    continue
+            else:
+                if '/USDT' not in symbol:
+                    continue
+
+            volume = data.get('quoteVolume') or 0
+            if volume < 100000:  # Минимальный порог
+                continue
+
+            # Чистим символ
+            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
+
+            # Валидация
+            if '-' in clean_symbol:
+                continue
+            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+                continue
+            if not clean_symbol.replace('_', '').isalnum():
+                continue
+
+            coins_with_volume.append((clean_symbol, volume))
+
+        # Сортируем по убыванию объёма и берём топ-N
+        coins_with_volume.sort(key=lambda x: x[1], reverse=True)
+        return [s for s, v in coins_with_volume[:limit]]
+
+    except Exception as e:
+        print(f"❌ Ошибка _fetch_stable_coins(bitget {market}): {e}")
+        return []
+
+
+async def get_stable_coins_async(market='futures', limit=10):
+    """Асинхронная обёртка — топ монет по абсолютному объёму"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
@@ -536,113 +599,178 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 # ==========================================
 # ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
 # ==========================================
-async def periodic_refresh(market='futures', log_func=print):
-    """Периодическое обновление списка монет каждые 5 минут"""
-    global bitget_futures_symbols, bitget_spot_symbols
+async def periodic_refresh(log_func=print):
+    global futures_symbols, spot_symbols, stable_futures_symbols, stable_spot_symbols
 
     while True:
         await asyncio.sleep(300)  # 5 минут
 
         try:
-            market_type = 'swap' if market == 'futures' else 'spot'
-            candidates = await get_top_symbols_async(market_type)
+            # Обновляем белый список каждые 5 минут
+            new_stable_f = await get_stable_coins_async('futures', STABLE_COINS_LIMIT)
+            new_stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
+            stable_futures_symbols = new_stable_f
+            stable_spot_symbols = new_stable_s
 
-            old_symbols = set(bitget_futures_symbols if market == 'futures' else bitget_spot_symbols)
-
+            # --- Futures ротация ---
+            candidates_f = await get_top_symbols_async('futures')
+            old_symbols = set(futures_symbols)
             new_active = []
-            TARGET = 30
 
-            # ШАГ 1: Сохраняем ВСЕ старые монеты (стабильность)
-            for symbol in old_symbols:
-                if len(new_active) >= TARGET:
-                    break
-                new_active.append(symbol)
+            # Шаг 1: Сохраняем монеты из белого списка
+            for symbol in new_stable_f:
+                if symbol in old_symbols:
+                    new_active.append(symbol)
+                else:
+                    # Новая монета в белом списке — инициализируем
+                    saved_count = await init_order_book_async(symbol, 'futures', log_func)
+                    if saved_count > 0:
+                        new_active.append(symbol)
+                        log_func(f"✅ bitget futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
-            # ШАГ 2: Добавляем новых кандидатов если есть место
-            for symbol in candidates:
-                if len(new_active) >= TARGET:
+            # Шаг 2: Добавляем топ по формуле
+            for symbol in candidates_f:
+                if len(new_active) >= 30:
                     break
                 if symbol in new_active:
-                    continue  # уже есть
-
-                saved_count = await init_order_book_async(symbol, market, log_func)
+                    continue
+                if symbol in old_symbols:
+                    new_active.append(symbol)
+                    continue
+                saved_count = await init_order_book_async(symbol, 'futures', log_func)
                 if saved_count > 0:
                     new_active.append(symbol)
-                    log_func(f"✅ bitget {market} {symbol}: добавлен (плотностей: {saved_count})")
+                    log_func(f"✅ bitget futures {symbol}: добавлен (плотностей: {saved_count})")
                 else:
-                    log_func(f"⚠️ bitget {market} {symbol}: пропущен (нет плотностей)")
+                    log_func(f"⚠️ bitget futures {symbol}: пропущен")
 
-            if market == 'futures':
-                removed = old_symbols - set(new_active)
-                bitget_futures_symbols = new_active
-                if removed:
-                    async with bitget_futures_lock:
-                        for sym in removed:
-                            bitget_futures_order_books.pop(sym, None)
-                            bitget_futures_density_timestamps.pop(sym, None)
-                    log_func(f"🗑️ bitget futures удалены: {', '.join(sorted(removed))}")
+            removed = old_symbols - set(new_active)
+            added = set(new_active) - old_symbols
+            futures_symbols = new_active
+            if removed:
+                async with bitget_futures_lock:
+                    for sym in removed:
+                        bitget_futures_order_books.pop(sym, None)
+                        bitget_futures_density_timestamps.pop(sym, None)
+                log_func(f"🗑️ bitget futures удалены: {', '.join(sorted(removed))}")
 
-                # ← ДОБАВЬ: сигнал переподключения
+            if removed or added:
                 bitget_futures_reconnect_event.set()
+                log_func(f"🔄 bitget futures: список изменился (+{len(added)} -{len(removed)}), переподключение")
             else:
-                removed = old_symbols - set(new_active)
-                bitget_spot_symbols = new_active
-                if removed:
-                    async with bitget_spot_lock:
-                        for sym in removed:
-                            bitget_spot_order_books.pop(sym, None)
-                            bitget_spot_density_timestamps.pop(sym, None)
-                    log_func(f"🗑️ bitget spot удалены: {', '.join(sorted(removed))}")
+                log_func(f"✅ bitget futures: список не изменился ({len(new_active)} монет)")
 
-                # ← ДОБАВЬ: сигнал переподключения
+            # --- Spot ротация ---
+            candidates_s = await get_top_symbols_async('spot')
+            old_symbols = set(spot_symbols)
+            new_active = []
+
+            for symbol in new_stable_s:
+                if symbol in old_symbols:
+                    new_active.append(symbol)
+                else:
+                    saved_count = await init_order_book_async(symbol, 'spot', log_func)
+                    if saved_count > 0:
+                        new_active.append(symbol)
+                        log_func(f"✅ bitget spot {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+
+            for symbol in candidates_s:
+                if len(new_active) >= 30:
+                    break
+                if symbol in new_active:
+                    continue
+                if symbol in old_symbols:
+                    new_active.append(symbol)
+                    continue
+                saved_count = await init_order_book_async(symbol, 'spot', log_func)
+                if saved_count > 0:
+                    new_active.append(symbol)
+                    log_func(f"✅ bitget spot {symbol}: добавлен (плотностей: {saved_count})")
+                else:
+                    log_func(f"⚠️ bitget spot {symbol}: пропущен")
+
+            removed = old_symbols - set(new_active)
+            added = set(new_active) - old_symbols
+            spot_symbols = new_active
+            if removed:
+                async with bitget_spot_lock:
+                    for sym in removed:
+                        bitget_spot_order_books.pop(sym, None)
+                        bitget_spot_density_timestamps.pop(sym, None)
+                log_func(f"🗑️ bitget spot удалены: {', '.join(sorted(removed))}")
+
+            if removed or added:
                 bitget_spot_reconnect_event.set()
-
-            log_func(f"🔄 bitget {market}: ротация завершена, активных {len(new_active)}")
+                log_func(f"🔄 bitget spot: список изменился (+{len(added)} -{len(removed)}), переподключение")
+            else:
+                log_func(f"✅ bitget spot: список не изменился ({len(new_active)} монет)")
 
         except Exception as e:
-            log_func(f"❌ Ошибка в periodic_refresh(bitget {market}): {e}")
+            log_func(f"❌ Ошибка в periodic_refresh(bitget): {e}")
 
 # ==========================================
 # ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
 async def main_async(log_func=print):
-    """Главная асинхронная функция — запускает все задачи"""
-    global bitget_futures_symbols, bitget_spot_symbols
+    global futures_symbols, spot_symbols, stable_futures_symbols, stable_spot_symbols
 
     log_func("🚀 Запуск Bitget Async Monitor...")
 
-    # Инициализация начальных списков монет
-    futures_candidates = await get_top_symbols_async('swap')
+    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
+    stable_f = await get_stable_coins_async('futures', STABLE_COINS_LIMIT)
+    stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
+    stable_futures_symbols = stable_f
+    stable_spot_symbols = stable_s
+    log_func(f"🔒 Белый список futures: {stable_f}")
+    log_func(f"🔒 Белый список spot: {stable_s}")
+
+    # --- Шаг 2: Получаем кандидатов по формуле ---
+    futures_candidates = await get_top_symbols_async('futures')
     spot_candidates = await get_top_symbols_async('spot')
 
+    # --- Шаг 3: Инициализируем белый список ---
     active_futures = []
-    active_spot = []
+    for symbol in stable_f:
+        saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        if saved_count > 0:
+            active_futures.append(symbol)
+            log_func(f"✅ bitget futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
-    for symbol in futures_candidates[:30]:
+    active_spot = []
+    for symbol in stable_s:
+        saved_count = await init_order_book_async(symbol, 'spot', log_func)
+        if saved_count > 0:
+            active_spot.append(symbol)
+            log_func(f"✅ bitget spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+
+    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
+    for symbol in futures_candidates[:20]:
+        if symbol in active_futures:
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
             log_func(f"✅ bitget futures {symbol}: принят (плотностей: {saved_count})")
 
-    for symbol in spot_candidates[:30]:
+    for symbol in spot_candidates[:20]:
+        if symbol in active_spot:
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
             log_func(f"✅ bitget spot {symbol}: принят (плотностей: {saved_count})")
 
-    bitget_futures_symbols = active_futures
-    bitget_spot_symbols = active_spot
+    futures_symbols = active_futures
+    spot_symbols = active_spot
 
     log_func(f"✅ Bitget Async Monitor инициализирован: {len(active_futures)} futures, {len(active_spot)} spot")
 
-    # Запуск всех задач параллельно
     tasks = [
         ws_listener('futures', log_func),
         ws_listener('spot', log_func),
         process_queue('futures', log_func),
         process_queue('spot', log_func),
-        periodic_refresh('futures', log_func),
-        periodic_refresh('spot', log_func),
+        periodic_refresh(log_func),
     ]
 
     await asyncio.gather(*tasks)
