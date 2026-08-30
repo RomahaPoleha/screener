@@ -1456,10 +1456,10 @@ async function openChart(symbol) {
         chart = LightweightCharts.createChart(els.chartWrapper, {
             width: els.chartWrapper.clientWidth,
             height: els.chartWrapper.clientHeight,
-            layout: { background: { color: '#1e293b' }, textColor: '#e2e8f0' },
-            grid: { vertLines: { color: '#334155' }, horzLines: { color: '#334155' } },
-            timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#475569', rightOffset: 50, barSpacing: 10 },
-            rightPriceScale: { borderColor: '#475569', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
+            layout: { background: {  color: '#0f0f0f' }, textColor: '#999999' },
+            grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
+            timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#333333', rightOffset: 50, barSpacing: 10 },
+            rightPriceScale: { borderColor: '#333333', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
         });
         candleSeries = chart.addCandlestickSeries({ upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444' });
