@@ -1386,7 +1386,8 @@ function applyScalpSettings() {
         const cfg = scalpExchanges[ex.id];
         return cfg && cfg.enabled && (cfg.markets.futures || cfg.markets.spot);
     });
-        const btn = document.getElementById('settingsBtn');
+
+    const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled) {
             btn.style.background = '#f59e0b'; btn.style.color = '#000000';
@@ -1394,13 +1395,25 @@ function applyScalpSettings() {
             btn.style.background = '#2a2a2a'; btn.style.color = '#ffffff';
         }
     }
+
     if (currentSymbol) {
+        // ВСЕГДА очищаем линии и кэш перед применением новых настроек
+        clearScalpLines();
         previousScalpData = {};
+
         if (scalpEnabled) {
-            startScalpUpdates(currentSymbol);
+            // Сразу загружаем актуальные данные (только для включённых бирж)
+            loadScalpDensities(currentSymbol);
+            // Перезапускаем таймер если его нет
+            if (!scalpUpdateTimer) {
+                startScalpUpdates(currentSymbol);
+            }
         } else {
-            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
-            clearScalpLines();
+            // Всё выключено — останавливаем таймер
+            if (scalpUpdateTimer) {
+                clearInterval(scalpUpdateTimer);
+                scalpUpdateTimer = null;
+            }
         }
     }
     bootstrap.Modal.getInstance(document.getElementById('scalpSettingsModal')).hide();
