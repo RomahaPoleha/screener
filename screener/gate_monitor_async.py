@@ -103,6 +103,87 @@ async def get_top_symbols_async(market='swap', log_func=print):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market, log_func)
 
+# ==========================================
+# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
+# ==========================================
+STABLE_COINS_LIMIT = 10  # Размер белого списка
+
+# Глобальные переменные для хранения белого списка
+stable_futures_symbols = []
+stable_spot_symbols = []
+
+
+def _fetch_stable_coins_sync(market='swap', limit=10):
+    """Синхронная функция — топ монет по абсолютному объёму"""
+    try:
+        exchange = GateExchange({
+            'enableRateLimit': True,
+            'timeout': 15000,
+            'options': {'defaultType': market}
+        })
+        tickers = exchange.fetch_tickers(params={'type': market})
+
+        # Gate swap отдаёт volume в контрактах — пересчитываем в quoteVolume
+        if market == 'swap':
+            for symbol, data in tickers.items():
+                try:
+                    info = data.get('info', {})
+                    vol_contracts = float(info.get('volume_24h') or 0)
+                    last_price = float(data.get('last') or 0)
+                    data['quoteVolume'] = vol_contracts * last_price
+                except Exception:
+                    pass
+
+        # Собираем монеты с объёмами
+        coins_with_volume = []
+        for symbol, data in tickers.items():
+            # Gate ccxt форматы:
+            # - spot: BTC/USDT
+            # - swap: может быть BTC_USDT или BTC/USDT:USDT
+            if market == 'swap':
+                if '_USDT' in symbol:
+                    # Формат: BTC_USDT
+                    clean_symbol = symbol.replace('_USDT', '')
+                elif ':USDT' in symbol:
+                    # Формат: BTC/USDT:USDT
+                    clean_symbol = symbol.split(':')[0].split('/')[0]
+                elif '/USDT' in symbol:
+                    # Формат: BTC/USDT
+                    clean_symbol = symbol.replace('/USDT', '')
+                else:
+                    continue
+            else:
+                if '/USDT' not in symbol:
+                    continue
+                clean_symbol = symbol.replace('/USDT', '')
+
+            volume = data.get('quoteVolume') or 0
+            if volume < 100000:  # Минимальный порог
+                continue
+
+            # Валидация
+            if not clean_symbol:
+                continue
+            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+                continue
+            if not clean_symbol.replace('_', '').isalnum():
+                continue
+
+            coins_with_volume.append((clean_symbol, volume))
+
+        # Сортируем по убыванию объёма и берём топ-N
+        coins_with_volume.sort(key=lambda x: x[1], reverse=True)
+        return [s for s, v in coins_with_volume[:limit]]
+
+    except Exception as e:
+        print(f"❌ Ошибка _fetch_stable_coins(gate {market}): {e}")
+        return []
+
+
+async def get_stable_coins_async(market='swap', limit=10):
+    """Асинхронная обёртка — топ монет по абсолютному объёму"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
 
 # ==========================================
 # ПАРСИНГ УРОВНЕЙ (два формата: dict и list)
@@ -561,15 +642,24 @@ async def periodic_refresh(market='futures', log_func=print):
             candidates = await get_top_symbols_async(market_type, log_func)
 
             old_symbols = set(gate_futures_symbols if market == 'futures' else gate_spot_symbols)
+            stable_symbols = stable_futures_symbols if market == 'futures' else stable_spot_symbols
 
             new_active = []
             TARGET = 30
 
-            for symbol in old_symbols:
+            # ШАГ 1: Сохраняем монеты из белого списка (без обновления)
+            for symbol in stable_symbols:
                 if len(new_active) >= TARGET:
                     break
-                new_active.append(symbol)
+                if symbol in old_symbols:
+                    new_active.append(symbol)
+                else:
+                    saved_count = await init_order_book_async(symbol, market, log_func)
+                    if saved_count > 0:
+                        new_active.append(symbol)
+                        log_func(f"✅ gate {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
+            # ШАГ 2: Добавляем топ по формуле
             for symbol in candidates:
                 if len(new_active) >= TARGET:
                     break
@@ -623,23 +713,49 @@ async def periodic_refresh(market='futures', log_func=print):
 # ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
 async def main_async(log_func=print):
-    global gate_futures_symbols, gate_spot_symbols
+    global gate_futures_symbols, gate_spot_symbols, stable_futures_symbols, stable_spot_symbols
 
     log_func("🚀 Запуск Gate Async Monitor...")
 
+    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
+    stable_f = await get_stable_coins_async('swap', STABLE_COINS_LIMIT)
+    stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
+    stable_futures_symbols = stable_f
+    stable_spot_symbols = stable_s
+    log_func(f"🔒 Белый список futures: {stable_f}")
+    log_func(f"🔒 Белый список spot: {stable_s}")
+
+    # --- Шаг 2: Получаем кандидатов по формуле ---
     futures_candidates = await get_top_symbols_async('swap', log_func)
     spot_candidates = await get_top_symbols_async('spot', log_func)
 
+    # --- Шаг 3: Инициализируем белый список ---
     active_futures = []
-    active_spot = []
+    for symbol in stable_f:
+        saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        if saved_count > 0:
+            active_futures.append(symbol)
+            log_func(f"✅ gate futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
+    active_spot = []
+    for symbol in stable_s:
+        saved_count = await init_order_book_async(symbol, 'spot', log_func)
+        if saved_count > 0:
+            active_spot.append(symbol)
+            log_func(f"✅ gate spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+
+    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
     for symbol in futures_candidates[:30]:
+        if symbol in active_futures:
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
             log_func(f"✅ gate futures {symbol}: принят (плотностей: {saved_count})")
 
     for symbol in spot_candidates[:30]:
+        if symbol in active_spot:
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
