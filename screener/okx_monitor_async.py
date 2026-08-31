@@ -118,27 +118,46 @@ def _fetch_stable_coins_sync(market_type='swap', limit=10):
         })
         tickers = exchange.fetch_tickers()
 
+        # ОТЛАДКА: показать первые 10 символов чтобы понять формат
+        sample_symbols = list(tickers.keys())[:10]
+        print(f"🔍 OKX {market_type} — первые 10 символов: {sample_symbols}")
+
+        # ВАЖНО: для swap пересчитываем объём в USDT
+        if market_type == 'swap':
+            for symbol, data in tickers.items():
+                if not (data.get('quoteVolume') or 0):
+                    try:
+                        info = data.get('info', {}) or {}
+                        last = float(data.get('last') or 0)
+                        vol_ccy = float(info.get('volCcy24h') or 0)
+                        data['quoteVolume'] = vol_ccy * last
+                    except Exception:
+                        pass
+
         # Собираем монеты с объёмами
         coins_with_volume = []
         for symbol, data in tickers.items():
-            # Фильтр по суффиксу
+            # Проверяем оба возможных формата
             if market_type == 'swap':
-                # OKX futures формат: BTC-USDT-SWAP
-                if '-USDT-SWAP' not in symbol:
+                if ':USDT' in symbol:
+                    # Формат: BTC/USDT:USDT
+                    clean_symbol = symbol.split(':')[0].split('/')[0]
+                elif '-SWAP' in symbol:
+                    # Формат: BTC-USDT-SWAP
+                    clean_symbol = symbol.replace('-USDT-SWAP', '')
+                else:
                     continue
-                clean_symbol = symbol.replace('-USDT-SWAP', '')
             else:
-                # OKX spot формат: BTC/USDT
                 if '/USDT' not in symbol:
                     continue
                 clean_symbol = symbol.replace('/USDT', '')
 
             volume = data.get('quoteVolume') or 0
-            if volume < 100000:  # Минимальный порог
+            if volume < 100000:
                 continue
 
             # Валидация
-            if '-' in clean_symbol:
+            if not clean_symbol:
                 continue
             if len(clean_symbol) < 2 or len(clean_symbol) > 15:
                 continue
@@ -149,10 +168,15 @@ def _fetch_stable_coins_sync(market_type='swap', limit=10):
 
         # Сортируем по убыванию объёма и берём топ-N
         coins_with_volume.sort(key=lambda x: x[1], reverse=True)
-        return [s for s, v in coins_with_volume[:limit]]
+        result = [s for s, v in coins_with_volume[:limit]]
+
+        print(f"✅ OKX {market_type} — найдено {len(coins_with_volume)} монет, топ-{limit}: {result}")
+        return result
 
     except Exception as e:
         print(f"❌ Ошибка _fetch_stable_coins(okx {market_type}): {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
