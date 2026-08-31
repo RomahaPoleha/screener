@@ -600,29 +600,25 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 # ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
 # ==========================================
 async def periodic_refresh(log_func=print):
-    global futures_symbols, spot_symbols, stable_futures_symbols, stable_spot_symbols
+    global futures_symbols, spot_symbols
 
     while True:
         await asyncio.sleep(300)  # 5 минут
 
         try:
-            # Обновляем белый список каждые 5 минут
-            new_stable_f = await get_stable_coins_async('futures', STABLE_COINS_LIMIT)
-            new_stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
-            stable_futures_symbols = new_stable_f
-            stable_spot_symbols = new_stable_s
+            # Белый список НЕ обновляем — используем тот что при старте
+            # (он сохраняется в stable_futures_symbols и stable_spot_symbols)
 
             # --- Futures ротация ---
             candidates_f = await get_top_symbols_async('futures')
             old_symbols = set(futures_symbols)
             new_active = []
 
-            # Шаг 1: Сохраняем монеты из белого списка
-            for symbol in new_stable_f:
+            # Шаг 1: Сохраняем монеты из белого списка (без обновления)
+            for symbol in stable_futures_symbols:
                 if symbol in old_symbols:
                     new_active.append(symbol)
                 else:
-                    # Новая монета в белом списке — инициализируем
                     saved_count = await init_order_book_async(symbol, 'futures', log_func)
                     if saved_count > 0:
                         new_active.append(symbol)
@@ -665,7 +661,7 @@ async def periodic_refresh(log_func=print):
             old_symbols = set(spot_symbols)
             new_active = []
 
-            for symbol in new_stable_s:
+            for symbol in stable_spot_symbols:
                 if symbol in old_symbols:
                     new_active.append(symbol)
                 else:
