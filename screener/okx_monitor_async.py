@@ -39,7 +39,7 @@ OKX_SPOT_REST_URL = "https://www.okx.com/api/v5/market/books?instId={}-USDT&sz=2
 # Rate limiting
 last_sync_time = {}
 
-MIN_AGE_SECONDS = 180
+MIN_AGE_SECONDS = 30
 CACHE_TTL = 900
 
 _http_client = None
