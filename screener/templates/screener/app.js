@@ -1429,8 +1429,10 @@ function updateWatermark() {
 function copySymbolToClipboard() {
     if (!currentSymbol) return;
     navigator.clipboard.writeText(`${currentSymbol}USDT`).then(() => {
-        els.chartTitle.classList.add('copied'); els.chartTitle.textContent = `${currentSymbol}USDT скопирован`;
-        setTimeout(() => { els.chartTitle.classList.remove('copied'); els.chartTitle.textContent = `${currentSymbol}/USDT`; }, 1200);
+        els.chartTitle.classList.add('copied');
+        setTimeout(() => {
+            els.chartTitle.classList.remove('copied');
+        }, 600);
     }).catch(err => console.error('Ошибка копирования:', err));
 }
 
