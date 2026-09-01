@@ -1716,7 +1716,6 @@ function toggleSound() {
     const checkbox = document.getElementById('soundToggleModal');
     soundEnabled = checkbox.checked;
     localStorage.setItem('soundEnabled', soundEnabled);
-    if (soundEnabled) speak('Оповещения включены');
 }
 function initVoices() {
     const voices = speechSynthesis.getVoices();
