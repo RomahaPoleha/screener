@@ -1,38 +1,101 @@
 <div class="left-panel">
     <div class="chart-area">
         <div class="drawing-tools-panel" id="drawingToolsPanel">
-            <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (Shift+S)">
-                <span class="tool-icon">📈</span>
-            </div>
-            <div class="tool-btn" id="horizontalLineBtn" onclick="toggleHorizontalLine()" title="Горизонтальная линия (Shift+D)">
-                <span class="tool-icon">➖</span>
-            </div>
-            <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (Shift+P)">
-                <span class="tool-icon">✏️</span>
-            </div>
-            <div class="tool-btn" id="rulerBtn" onclick="toggleRuler()" title="Линейка (колёсико)">
-                <span class="tool-icon">📏</span>
-            </div>
-            <div class="tool-divider"></div>
+    <!-- Трендовая линия -->
+    <div class="tool-btn" id="trendLineBtn" onclick="toggleTrendLine()" title="Трендовая линия (Shift+S)">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <line x1="4" y1="20" x2="20" y2="4"/>
+                <polyline points="14,4 20,4 20,10"/>
+            </svg>
+        </span>
+    </div>
 
-            <div class="tool-btn" id="eraserBtn" onclick="toggleEraser()" title="Ластик (Shift+E)">
-                <span class="tool-icon">🧹</span>
-            </div>
-            <div class="tool-divider"></div>
+    <!-- Горизонтальная линия -->
+    <div class="tool-btn" id="horizontalLineBtn" onclick="toggleHorizontalLine()" title="Горизонтальная линия (Shift+D)">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="9" x2="4" y2="15"/>
+                <line x1="20" y1="9" x2="20" y2="15"/>
+            </svg>
+        </span>
+    </div>
 
-            <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">
-                <span class="tool-icon">🧲</span>
-            </div>
-            <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (B)">
-                <span class="tool-icon">🔔</span>
-            </div>
+    <!-- Карандаш -->
+    <div class="tool-btn" id="pencilBtn" onclick="togglePencil()" title="Карандаш (Shift+P)">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+        </span>
+    </div>
 
-            <div class="tool-divider"></div>
+    <!-- Линейка -->
+    <div class="tool-btn" id="rulerBtn" onclick="toggleRuler()" title="Линейка (колёсико)">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="8" width="18" height="8" rx="1"/>
+                <line x1="7" y1="8" x2="7" y2="12"/>
+                <line x1="11" y1="8" x2="11" y2="12"/>
+                <line x1="15" y1="8" x2="15" y2="12"/>
+                <line x1="19" y1="8" x2="19" y2="12"/>
+            </svg>
+        </span>
+    </div>
 
-            <div class="tool-btn tool-btn-danger" onclick="clearAllDrawings()" title="Очистить всё">
-                <span class="tool-icon">🗑️</span>
-            </div>
-        </div>
+    <div class="tool-divider"></div>
+
+    <!-- Ластик -->
+    <div class="tool-btn" id="eraserBtn" onclick="toggleEraser()" title="Ластик (Shift+E)">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 20H7L3 16a1 1 0 0 1 0-1.41l9.59-9.59a2 2 0 0 1 2.82 0L21 10.59a2 2 0 0 1 0 2.82L13 20"/>
+                <line x1="18" y1="13" x2="11" y2="6"/>
+            </svg>
+        </span>
+    </div>
+
+    <div class="tool-divider"></div>
+
+    <!-- Магнит -->
+    <div class="tool-btn" id="magnetBtn" onclick="toggleMagnet()" title="Магнит">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 2v6a6 6 0 0 0 12 0V2"/>
+                <line x1="2" y1="2" x2="6" y2="2"/>
+                <line x1="18" y1="2" x2="22" y2="2"/>
+                <line x1="2" y1="6" x2="6" y2="6"/>
+                <line x1="18" y1="6" x2="22" y2="6"/>
+            </svg>
+        </span>
+    </div>
+
+    <!-- Алерт -->
+    <div class="tool-btn" id="alertBtn" onclick="toggleAlertMode()" title="Алерт (B)">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+        </span>
+    </div>
+
+    <div class="tool-divider"></div>
+
+    <!-- Очистить всё -->
+    <div class="tool-btn tool-btn-danger" onclick="clearAllDrawings()" title="Очистить всё">
+        <span class="tool-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <polyline points="3,6 5,6 21,6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+            </svg>
+        </span>
+    </div>
+</div>
 
         <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена"></div>
         <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
