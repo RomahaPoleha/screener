@@ -60,14 +60,12 @@
 
                 <div class="settings-tab-content" id="tab-alerts">
                     <div class="modal-section">
-                        <div class="modal-section-title">Голосовое оповещение</div>
-                        <button class="sound-toggle" id="soundToggleModal" onclick="toggleSound()" style="width:100%; padding:10px; font-size:13px; border-radius:0;">
-                            Голосовое оповещение
-                        </button>
-                        <p style="font-size:11px; color:#999999; margin-top:10px; line-height:1.5;">
-                            Озвучивает предупреждения за 5 минут и 1 минуту до перехода на новый час
-                        </p>
-                    </div>
+                    <div class="modal-section-title">Голосовое оповещение</div>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5;">
+                        <input type="checkbox" id="soundToggleModal" onchange="toggleSound()" style="accent-color:#f59e0b; width:16px; height:16px;">
+                        <span>Озвучивать предупреждения за 5 и 1 минуту до нового часа</span>
+                    </label>
+                </div>
                 </div>
             </div>
             <div class="modal-footer" style="border-top:1px solid #333333;">

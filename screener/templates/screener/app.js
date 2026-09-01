@@ -878,10 +878,9 @@ function openSettingsModal() {
         renderReconSettings();
     }
 
-    const soundBtnModal = document.getElementById('soundToggleModal');
-    if (soundBtnModal) {
-        soundBtnModal.textContent = soundEnabled ? 'Голосовое оповещение: Включено' : 'Голосовое оповещение: Выключено';
-        soundBtnModal.classList.toggle('muted', !soundEnabled);
+    const soundCheckbox = document.getElementById('soundToggleModal');
+    if (soundCheckbox) {
+        soundCheckbox.checked = soundEnabled;
     }
 
     initSettingsTabs();
@@ -1714,13 +1713,9 @@ function updateTradesOverlay() {
 }
 
 function toggleSound() {
-    soundEnabled = !soundEnabled;
+    const checkbox = document.getElementById('soundToggleModal');
+    soundEnabled = checkbox.checked;
     localStorage.setItem('soundEnabled', soundEnabled);
-    const btn = document.getElementById('soundToggleModal');
-    if (btn) {
-        btn.textContent = soundEnabled ? 'Голосовое оповещение: Включено' : 'Голосовое оповещение: Выключено';
-        btn.classList.toggle('muted', !soundEnabled);
-    }
     if (soundEnabled) speak('Оповещения включены');
 }
 function initVoices() {
