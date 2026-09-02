@@ -90,9 +90,24 @@ def get_symbols_from_tickers():
         return []
 
 
+_volume_poller_started = False
+
+
 @require_http_methods(["GET"])
 def api_data(request):
-    """API: список монет (только Futures)"""
+    """API: список монет (только Futures) + ленивый старт RVOL поллера"""
+    global _volume_poller_started
+
+    # Ленивый старт поллера при первом запросе
+    if not _volume_poller_started:
+        _volume_poller_started = True
+
+        def fetch_fn():
+            exchange = get_binance_exchange()
+            return exchange.fetch_tickers()
+
+        coin_selection.start_volume_poller('binance_future', fetch_fn, coin_selection.clean_swap)
+
     cache_key = "coins_future"
     cached = cache.get(cache_key)
     if cached:
@@ -102,7 +117,6 @@ def api_data(request):
     cache.set(cache_key, coins, 60)
 
     return JsonResponse(coins, safe=False)
-
 
 
 # ==========================================
