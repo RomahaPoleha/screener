@@ -198,7 +198,11 @@ async function loadNatrData() {
 function startNatrAutoUpdate() {
     if (natrAutoUpdateTimer) return;
     loadNatrData();
-    natrAutoUpdateTimer = setInterval(loadNatrData, 15000);
+    loadAllData();   // ← ДОБАВЛЕНО: первая загрузка allCoins
+    natrAutoUpdateTimer = setInterval(() => {
+        loadNatrData();
+        loadAllData();   // ← ДОБАВЛЕНО: обновляем allCoins вместе с NATR
+    }, 15000);
 }
 
 function showSearchDropdown(query) {
