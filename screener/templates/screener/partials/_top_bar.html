@@ -4,4 +4,13 @@
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
         <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">💰 Крупные сделки</button>
     </div>
+    <div style="position:relative; display:inline-block; margin-left:auto;">
+    <button class="sound-toggle" id="alertHistoryBtn" onclick="toggleAlertHistory()">
+        АЛЕРТЫ <span id="alertBadge" class="alert-badge">0</span>
+    </button>
+    <div id="alertHistoryPanel" class="alert-history-panel">
+        <div class="alert-history-header">История алертов</div>
+        <div id="alertHistoryBody" class="alert-history-body"></div>
+    </div>
+</div>
 </div>

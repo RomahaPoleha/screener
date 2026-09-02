@@ -408,3 +408,52 @@ body {
     border-color: #f59e0b;
     color: #f59e0b;
 }
+
+.alert-badge {
+    background: #f59e0b;
+    color: #000000;
+    border-radius: 8px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 4px;
+    display: none;
+}
+.alert-history-panel {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    width: 300px;
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    z-index: 10001;
+    display: none;
+}
+.alert-history-panel.active { display: block; }
+.alert-history-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #f59e0b;
+    border-bottom: 1px solid #333333;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.alert-history-body { max-height: 300px; overflow-y: auto; }
+.alert-history-item {
+    display: grid;
+    grid-template-columns: 45px 1fr 50px 70px;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #1f1f1f;
+    cursor: pointer;
+    font-size: 12px;
+    align-items: center;
+}
+.alert-history-item:hover { background: #1f1f1f; }
+.alert-time { color: #999999; font-size: 11px; }
+.alert-symbol { color: #ffffff; font-weight: 700; }
+.alert-rvol { color: #f59e0b; font-weight: 700; }
+.alert-vol { color: #999999; text-align: right; }

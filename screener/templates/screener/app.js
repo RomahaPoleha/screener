@@ -91,22 +91,30 @@ function checkAlerts(currentPrice, prevPrice) {
 // АЛЕРТЫ ПО ОБЪЁМУ (RVOL)
 // ==========================================
 function showVolumeAlertToast(symbol, rvol, volume) {
-    // Удаляем старые тосты если их больше 3
+    // === Сохраняем в историю ===
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    volumeAlertHistory.unshift({ symbol, rvol, volume, time: timeStr });
+    if (volumeAlertHistory.length > 20) volumeAlertHistory.pop();
+    localStorage.setItem('volumeAlertHistory', JSON.stringify(volumeAlertHistory));
+    unreadAlerts++;
+    updateAlertBadge();
+
+    // === Тост в левом нижнем углу, стек вверх ===
     const existing = document.querySelectorAll('.volume-alert-toast');
-    if (existing.length >= 3) {
-        existing[0].remove();
-    }
+    if (existing.length >= 3) existing[0].remove();
+    const offset = document.querySelectorAll('.volume-alert-toast').length * 90;
 
     const toast = document.createElement('div');
     toast.className = 'volume-alert-toast';
     toast.style.cssText = `
         position: fixed;
-        top: ${80 + document.querySelectorAll('.volume-alert-toast').length * 80}px;
-        right: 20px;
+        left: 20px;
+        bottom: ${20 + offset}px;
         background: #1a1a1a;
         border: 2px solid #f59e0b;
         color: #ffffff;
-        padding: 16px 20px;
+        padding: 14px 18px;
         border-radius: 0;
         box-shadow: 0 4px 16px rgba(0,0,0,0.5);
         display: flex;
@@ -116,43 +124,75 @@ function showVolumeAlertToast(symbol, rvol, volume) {
         cursor: pointer;
         transition: all 0.3s ease;
         opacity: 0;
-        transform: translateX(400px);
+        transform: translateX(-400px);
     `;
     toast.innerHTML = `
-        <div style="font-size:24px; color:#f59e0b;">&#9650;</div>
-        <div style="display:flex; flex-direction:column; gap:4px;">
-            <div style="font-size:14px; font-weight:700; color:#ffffff; letter-spacing:0.5px; text-transform:uppercase;">
+        <div style="font-size:22px; color:#f59e0b;">&#9650;</div>
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <div style="font-size:13px; font-weight:700; color:#ffffff; letter-spacing:0.5px; text-transform:uppercase;">
                 ${symbol} — аномальный объём
             </div>
-            <div style="font-size:12px; margin-top:2px;">
-                RVOL x${rvol} | Объём: $${fmt(volume)}
-            </div>
-            <div style="font-size:10px; color:#999999; margin-top:2px;">
-                Клик — открыть график
-            </div>
+            <div style="font-size:12px;">RVOL x${rvol} | Объём: $${fmt(volume)}</div>
+            <div style="font-size:10px; color:#999999;">Клик — открыть график</div>
         </div>
     `;
     toast.onclick = () => {
         openChart(symbol);
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(400px)';
+        toast.style.transform = 'translateX(-400px)';
         setTimeout(() => toast.remove(), 500);
     };
     document.body.appendChild(toast);
     playAlertSound();
 
-    // Анимация появления
-    setTimeout(() => {
-        toast.style.opacity = '1';
-        toast.style.transform = 'translateX(0)';
-    }, 50);
-
-    // Автоудаление через 8 секунд
+    setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(0)'; }, 50);
     setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(400px)';
+        toast.style.transform = 'translateX(-400px)';
         setTimeout(() => toast.remove(), 500);
     }, 8000);
+}
+
+function updateAlertBadge() {
+    const badge = document.getElementById('alertBadge');
+    if (badge) {
+        badge.textContent = unreadAlerts;
+        badge.style.display = unreadAlerts > 0 ? 'inline-block' : 'none';
+    }
+}
+
+function toggleAlertHistory() {
+    const panel = document.getElementById('alertHistoryPanel');
+    if (!panel) return;
+    const isOpen = panel.classList.toggle('active');
+    if (isOpen) {
+        unreadAlerts = 0;
+        updateAlertBadge();
+        renderAlertHistory();
+    }
+}
+
+function renderAlertHistory() {
+    const body = document.getElementById('alertHistoryBody');
+    if (!body) return;
+    if (volumeAlertHistory.length === 0) {
+        body.innerHTML = '<div style="color:#6b7280; text-align:center; padding:20px;">Нет алертов</div>';
+        return;
+    }
+    body.innerHTML = volumeAlertHistory.map(a => `
+        <div class="alert-history-item" onclick="openChartFromHistory('${a.symbol}')">
+            <span class="alert-time">${a.time}</span>
+            <span class="alert-symbol">${a.symbol}</span>
+            <span class="alert-rvol">x${a.rvol}</span>
+            <span class="alert-vol">$${fmt(a.volume)}</span>
+        </div>
+    `).join('');
+}
+
+function openChartFromHistory(symbol) {
+    const panel = document.getElementById('alertHistoryPanel');
+    if (panel) panel.classList.remove('active');
+    openChart(symbol);
 }
 
 function checkVolumeAlerts() {

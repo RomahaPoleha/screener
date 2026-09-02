@@ -36,6 +36,13 @@ let volumeAlertEnabled = localStorage.getItem('volumeAlertEnabled') === 'true';
 let volumeAlertThreshold = parseFloat(localStorage.getItem('volumeAlertThreshold') || '3');
 let volumeAlertCooldown = {};  // symbol -> timestamp последнего алерта
 
+// История алертов по объёму
+let volumeAlertHistory = [];
+try {
+    volumeAlertHistory = JSON.parse(localStorage.getItem('volumeAlertHistory') || '[]');
+} catch(e) { volumeAlertHistory = []; }
+let unreadAlerts = 0;
+
 // RECON
 let densityLines = [], densityEnabled = false;
 let densityMarkets = { future: false, spot: false };
