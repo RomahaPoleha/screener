@@ -1195,7 +1195,50 @@ function parseReconLevels(exId, data) {
     return { rawBids, rawAsks, toLevel };
 }
 
-fetchReconMarket
+async function fetchReconMarket(exId, symbol, market) {
+    let data;
+
+    try {
+        if (exId === 'mexc') {
+            const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
+            if (!res.ok) return [];
+            data = await res.json();
+        } else if (exId === 'gate') {
+            const res = await fetch(`/api/gate-depth/?market=${market}&symbol=${symbol}`);
+            if (!res.ok) return [];
+            data = await res.json();
+        } else {
+            const url = getReconUrl(exId, symbol, market);
+            if (!url) return [];
+            const res = await fetch(url);
+            if (!res.ok) return [];
+            data = await res.json();
+        }
+    } catch (e) {
+        return [];
+    }
+
+    if (data && ((data.code !== undefined && data.code !== 0) ||
+                 (data.msg && data.msg.includes('not found')) ||
+                 (data.retCode !== undefined && data.retCode !== 0))) {
+        return [];
+    }
+
+    const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
+    const minVolume = reconMinVolumes[exId][market];
+    const out = [];
+    const push = (arr) => {
+        for (const row of arr) {
+            const [p, q] = toLevel(row);
+            if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
+            const vol = p * q;
+            if (vol >= minVolume) out.push({ price: p, volume: vol });
+        }
+    };
+    push(rawBids);
+    push(rawAsks);
+    return out;
+}
 async function loadReconDensities(symbol) {
     if (!reconEnabled || !candleSeries) return;
     const tasks = [];
