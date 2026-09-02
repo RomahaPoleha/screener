@@ -6,6 +6,7 @@ from django.shortcuts import render
 from django.http import FileResponse, Http404
 from pathlib import Path
 import time
+from . import coin_selection
 
 # Глобальный exchange объект — создаётся один раз
 _binance_exchange_future = None
@@ -41,7 +42,7 @@ MIN_VOLUME = 100_000
 
 
 def get_symbols_from_tickers():
-    """Получает список монет с Binance Futures"""
+    """Получает список монет с Binance Futures + RVOL для алертов"""
     try:
         exchange = ccxt.binance({
             'enableRateLimit': True,
@@ -68,10 +69,17 @@ def get_symbols_from_tickers():
             if not clean_symbol.replace('_', '').isalnum():
                 continue
 
+            # Считаем RVOL — использует историю, которую собирает coin_selection
+            try:
+                rvol = coin_selection.get_rvol(clean_symbol, volume)
+            except Exception:
+                rvol = 0.0
+
             symbols_with_volume.append({
                 'symbol': clean_symbol,
                 'volume': volume,
-                'change': round(data.get('percentage') or 0, 2)
+                'change': round(data.get('percentage') or 0, 2),
+                'rvol': round(rvol, 2)
             })
 
         symbols_with_volume.sort(key=lambda x: x['volume'], reverse=True)

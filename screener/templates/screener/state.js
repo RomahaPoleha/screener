@@ -31,6 +31,11 @@ let wsTrades = null, wsCandles = null;
 let currentPrecision = 2, tradeBuffer = [], currentThreshold = 10000;
 let currentTF = '1m', currentSymbol = '', lastCandlePrice = null;
 
+// Volume alerts
+let volumeAlertEnabled = localStorage.getItem('volumeAlertEnabled') === 'true';
+let volumeAlertThreshold = parseFloat(localStorage.getItem('volumeAlertThreshold') || '3');
+let volumeAlertCooldown = {};  // symbol -> timestamp последнего алерта
+
 // RECON
 let densityLines = [], densityEnabled = false;
 let densityMarkets = { future: false, spot: false };

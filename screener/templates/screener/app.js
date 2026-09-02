@@ -87,6 +87,46 @@ function checkAlerts(currentPrice, prevPrice) {
     });
 }
 
+// ==========================================
+// АЛЕРТЫ ПО ОБЪЁМУ (RVOL)
+// ==========================================
+function showVolumeAlertToast(symbol, rvol, volume) {
+    const toast = document.createElement('div');
+    toast.className = 'hour-toast show';
+    toast.style.cursor = 'pointer';
+    toast.innerHTML = `<div class="toast-icon" style="color:#f59e0b;">&#9650;</div>
+        <div class="toast-content">
+            <div class="toast-title">${symbol} — аномальный объём</div>
+            <div style="font-size:12px; margin-top:4px;">RVOL x${rvol} | Объём: $${fmt(volume)}</div>
+            <div style="font-size:10px; color:#999999; margin-top:4px;">Клик — открыть график</div>
+        </div>`;
+    toast.onclick = () => {
+        openChart(symbol);
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 500);
+    };
+    document.body.appendChild(toast);
+    playAlertSound();
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 8000);
+}
+
+function checkVolumeAlerts() {
+    if (!volumeAlertEnabled) return;
+    const now = Date.now();
+    const COOLDOWN = 5 * 60 * 1000;  // 5 минут на монету
+
+    for (const coin of allCoins) {
+        if (coin.rvol === undefined || coin.rvol === null || coin.rvol === 0) continue;
+
+        if (coin.rvol >= volumeAlertThreshold) {
+            const last = volumeAlertCooldown[coin.symbol] || 0;
+            if (now - last >= COOLDOWN) {
+                volumeAlertCooldown[coin.symbol] = now;
+                showVolumeAlertToast(coin.symbol, coin.rvol, coin.volume);
+            }
+        }
+    }
+}
 async function loadAllData() {
     try {
         const res = await fetch(`/api/data/`);
@@ -106,6 +146,7 @@ async function loadNatrData() {
         const response = await res.json();
         natrData = response.natr || {};
         applyLocalFilters();
+        checkVolumeAlerts();   // ← ДОБАВЛЕНО
     } catch (err) { console.error(err); }
 }
 
@@ -882,6 +923,10 @@ function openSettingsModal() {
     if (soundCheckbox) {
         soundCheckbox.checked = soundEnabled;
     }
+    const volAlertToggle = document.getElementById('volumeAlertToggle');
+        if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
+        const volAlertThr = document.getElementById('volumeAlertThreshold');
+        if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
 
     initSettingsTabs();
 
@@ -924,6 +969,13 @@ function applySettings() {
         if (reconEnabled) startReconUpdates(currentSymbol);
         else stopReconUpdates();
     }
+    volumeAlertEnabled = document.getElementById('volumeAlertToggle').checked;
+localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
+const thr = parseFloat(document.getElementById('volumeAlertThreshold').value);
+if (thr >= 1) {
+    volumeAlertThreshold = thr;
+    localStorage.setItem('volumeAlertThreshold', volumeAlertThreshold);
+}
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
 
