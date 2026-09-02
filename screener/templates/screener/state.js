@@ -46,8 +46,11 @@ let previousScalpData = {};
 
 // Дельта покупок/продаж
 let deltaSeries = null;
-let deltaByCandle = {};  // { candleTime: { buy: 0, sell: 0 } }
-let deltaEnabled = true;  // можно добавить настройку для вкл/выкл
+let deltaByCandle = {};
+let deltaEnabled = true;
+if (localStorage.getItem('deltaEnabled') !== null) {
+    deltaEnabled = localStorage.getItem('deltaEnabled') === 'true';
+}
 
 // Конфигурация бирж (легко расширяется — добавь строку)
 const EXCHANGES_CONFIG = [

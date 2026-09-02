@@ -1508,8 +1508,9 @@ function closeChart() {
     if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
     stopReconUpdates();
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
+    if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.close(); wsTrades = null; }
     clearDeltaData();
-    if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
+    if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; deltaSeries = null; }
     tradeBuffer = []; lastCandlePrice = null;
     els.chartTitle.textContent = ''; els.chartWrapper.classList.remove('active');
     els.chartHint.style.display = 'block'; els.chartWatermark.style.display = 'none';
