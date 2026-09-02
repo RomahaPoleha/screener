@@ -44,14 +44,6 @@ let scalpLines = [], scalpEnabled = false;
 let scalpUpdateTimer = null, isScalpLoading = false;
 let previousScalpData = {};
 
-// Дельта покупок/продаж
-let deltaSeries = null;
-let deltaByCandle = {};
-let deltaEnabled = true;
-if (localStorage.getItem('deltaEnabled') !== null) {
-    deltaEnabled = localStorage.getItem('deltaEnabled') === 'true';
-}
-
 // Конфигурация бирж (легко расширяется — добавь строку)
 const EXCHANGES_CONFIG = [
     { id: 'binance', name: 'Binance', domain: 'binance.com', color: '#f59e0b' },
@@ -71,7 +63,6 @@ let scalpExchanges = {
     mexc: { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     bitget: { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
 };
-
 
 // Миграция любого старого формата + подхват сохранённых значений
 try {
@@ -103,6 +94,10 @@ let volumeHistogramEnabled = true;
 if (localStorage.getItem('volumeHistogramEnabled') !== null) {
     volumeHistogramEnabled = localStorage.getItem('volumeHistogramEnabled') === 'true';
 }
+
+// Delta
+let deltaSeries = null;
+let deltaByCandle = {};
 let deltaEnabled = true;
 if (localStorage.getItem('deltaEnabled') !== null) {
     deltaEnabled = localStorage.getItem('deltaEnabled') === 'true';
