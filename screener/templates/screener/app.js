@@ -10,6 +10,58 @@ sound1min.preload = 'auto';
 const candlesCache = new Map();
 const CACHE_TTL = 60000;
 
+
+// ==========================================
+// ДЕЛЬТА ПОКУПОК/ПРОДАЖ
+// ==========================================
+function getCandleTime(tf) {
+    const now = Math.floor(Date.now() / 1000);
+    const tfSeconds = {'1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '4h': 14400}[tf] || 60;
+    return Math.floor(now / tfSeconds) * tfSeconds;
+}
+
+function updateDelta(value, isBuyerMaker) {
+    if (!deltaEnabled) return;
+
+    const candleTime = getCandleTime(currentTF);
+
+    if (!deltaByCandle[candleTime]) {
+        deltaByCandle[candleTime] = { buy: 0, sell: 0 };
+    }
+
+    // isBuyerMaker = false → покупка по рынку (бьёт по аскам)
+    // isBuyerMaker = true  → продажа по рынку (льёт в биды)
+    if (isBuyerMaker) {
+        deltaByCandle[candleTime].sell += value;
+    } else {
+        deltaByCandle[candleTime].buy += value;
+    }
+
+    updateDeltaHistogram(candleTime);
+}
+
+function updateDeltaHistogram(candleTime) {
+    if (!deltaSeries || !deltaByCandle[candleTime]) return;
+
+    const delta = deltaByCandle[candleTime];
+    const deltaValue = delta.buy - delta.sell;
+
+    deltaSeries.update({
+        time: candleTime,
+        value: Math.abs(deltaValue),
+        color: deltaValue >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)'
+    });
+}
+
+function clearDeltaData() {
+    deltaByCandle = {};
+    if (deltaSeries && candleSeries) {
+        try {
+            deltaSeries.setData([]);
+        } catch(e) {}
+    }
+}
+
 function playHourSound(minutesLeft) {
     if (!soundEnabled) return;
     const sound = minutesLeft === 5 ? sound5min : sound1min;
@@ -251,8 +303,14 @@ function startTradesStream(symbol) {
             const price = parseFloat(trade.p);
             const qty = parseFloat(trade.q);
             const value = price * qty;
-            if (value < currentThreshold) return;
             const isBuyerMaker = trade.m;
+
+            // Собираем дельту для ВСЕХ сделок (без фильтра)
+            updateDelta(value, isBuyerMaker);
+
+            // Крупные сделки — как раньше (с фильтром)
+            if (value < currentThreshold) return;
+
             const time = new Date(trade.T).toLocaleTimeString('ru-RU', { hour12: false });
             tradeBuffer.push({ time, price, qty, value, isBuyerMaker });
             if (tradeBuffer.length > 50) tradeBuffer.shift();
@@ -260,7 +318,7 @@ function startTradesStream(symbol) {
         } catch (err) { console.warn('Trade parse error:', err); }
     };
     wsTrades.onerror = () => {
-        if (els.tradesOverlayBody) els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">Разрыв связи</div>';
+        if (els.tradesOverlayBody) els.tradesOverlayBody.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">⚠️ Разрыв связи</div>';
     };
     wsTrades.onclose = () => {
         setTimeout(() => { if (currentSymbol === symbol && els.tradesOverlay.classList.contains('active')) startTradesStream(symbol); }, 3000);
@@ -868,6 +926,8 @@ function openSettingsModal() {
 
     const volHist = document.getElementById('showVolumeHistogram');
     if (volHist) volHist.checked = volumeHistogramEnabled;
+    const deltaHist = document.getElementById('showDeltaHistogram');
+    if (deltaHist) deltaHist.checked = deltaEnabled;
     const drawTools = document.getElementById('showDrawingTools');
     if (drawTools) drawTools.checked = showDrawingTools;
 
@@ -893,6 +953,9 @@ function applySettings() {
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
     if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
+    deltaEnabled = document.getElementById('showDeltaHistogram').checked;
+    localStorage.setItem('deltaEnabled', deltaEnabled);
+    if (deltaSeries) deltaSeries.applyOptions({ visible: deltaEnabled });
 
     showDrawingTools = document.getElementById('showDrawingTools').checked;
     localStorage.setItem('showDrawingTools', showDrawingTools);
@@ -1445,7 +1508,7 @@ function closeChart() {
     if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
     stopReconUpdates();
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
-    if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
+    clearDeltaData();
     if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
     tradeBuffer = []; lastCandlePrice = null;
     els.chartTitle.textContent = ''; els.chartWrapper.classList.remove('active');
@@ -1480,6 +1543,21 @@ async function openChart(symbol) {
         volumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'volume', scaleMargins: { top: 0.85, bottom: 0 } });
         chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
         if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
+
+                // Дельта — гистограмма над объёмом
+        deltaSeries = chart.addHistogramSeries({
+            priceFormat: { type: 'volume' },
+            priceScaleId: 'delta',
+            scaleMargins: { top: 0.70, bottom: 0.15 }
+        });
+        chart.priceScale('delta').applyOptions({
+            visible: false,
+            scaleMargins: { top: 0.70, bottom: 0.15 }
+        });
+        if (deltaSeries) deltaSeries.applyOptions({ visible: deltaEnabled });
+
+        // Очищаем старые данные дельты
+        clearDeltaData();
 
         chart.subscribeCrosshairMove((param) => {
             if (isMagnetEnabled) updateMagnetIndicator(param);
@@ -1629,7 +1707,7 @@ async function openChart(symbol) {
     await loadChartData(symbol, currentTF);
     startCandleWebSocket(symbol, currentTF);
     updateWatermark();
-    if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);
+    startTradesStream(symbol);
     if (densityEnabled) startDensityUpdates(symbol);
     if (scalpEnabled) startScalpUpdates(symbol);
     if (reconEnabled) startReconUpdates(symbol);

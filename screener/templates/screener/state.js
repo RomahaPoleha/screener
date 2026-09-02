@@ -44,6 +44,11 @@ let scalpLines = [], scalpEnabled = false;
 let scalpUpdateTimer = null, isScalpLoading = false;
 let previousScalpData = {};
 
+// Дельта покупок/продаж
+let deltaSeries = null;
+let deltaByCandle = {};  // { candleTime: { buy: 0, sell: 0 } }
+let deltaEnabled = true;  // можно добавить настройку для вкл/выкл
+
 // Конфигурация бирж (легко расширяется — добавь строку)
 const EXCHANGES_CONFIG = [
     { id: 'binance', name: 'Binance', domain: 'binance.com', color: '#f59e0b' },
@@ -95,6 +100,11 @@ let volumeHistogramEnabled = true;
 if (localStorage.getItem('volumeHistogramEnabled') !== null) {
     volumeHistogramEnabled = localStorage.getItem('volumeHistogramEnabled') === 'true';
 }
+let deltaEnabled = true;
+if (localStorage.getItem('deltaEnabled') !== null) {
+    deltaEnabled = localStorage.getItem('deltaEnabled') === 'true';
+}
+
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
 if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
 
