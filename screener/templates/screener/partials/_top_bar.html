@@ -1,16 +1,22 @@
 <div class="top-bar">
     <span class="logo"> Screener</span>
-    <div style="margin-left:auto; display:flex; gap:8px;">
-        <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
+
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <!-- История алертов (крайняя слева из трёх, видна только когда включена) -->
+        <div id="alertHistoryWrap" style="position:relative; display:none;">
+            <button class="sound-toggle" id="alertHistoryBtn" onclick="toggleAlertHistory()">
+                АЛЕРТЫ <span id="alertBadge" class="alert-badge">0</span>
+            </button>
+            <div id="alertHistoryPanel" class="alert-history-panel">
+                <div class="alert-history-header">История алертов</div>
+                <div id="alertHistoryBody" class="alert-history-body"></div>
+            </div>
+        </div>
+
+        <!-- Крупные сделки -->
         <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">💰 Крупные сделки</button>
+
+        <!-- Настройки (крайняя справа) -->
+        <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
     </div>
-    <div style="position:relative; display:inline-block; margin-left:auto;">
-    <button class="sound-toggle" id="alertHistoryBtn" onclick="toggleAlertHistory()">
-        АЛЕРТЫ <span id="alertBadge" class="alert-badge">0</span>
-    </button>
-    <div id="alertHistoryPanel" class="alert-history-panel">
-        <div class="alert-history-header">История алертов</div>
-        <div id="alertHistoryBody" class="alert-history-body"></div>
-    </div>
-</div>
 </div>

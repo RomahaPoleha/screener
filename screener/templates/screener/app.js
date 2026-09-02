@@ -160,6 +160,10 @@ function updateAlertBadge() {
         badge.style.display = unreadAlerts > 0 ? 'inline-block' : 'none';
     }
 }
+function updateAlertHistoryVisibility() {
+    const wrap = document.getElementById('alertHistoryWrap');
+    if (wrap) wrap.style.display = volumeAlertEnabled ? 'inline-block' : 'none';
+}
 
 function toggleAlertHistory() {
     const panel = document.getElementById('alertHistoryPanel');
@@ -188,6 +192,7 @@ function renderAlertHistory() {
         </div>
     `).join('');
 }
+
 
 function openChartFromHistory(symbol) {
     const panel = document.getElementById('alertHistoryPanel');
@@ -1043,6 +1048,7 @@ function applySettings() {
             if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
         }
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
+        updateAlertHistoryVisibility();
     }
 
         const btn = document.getElementById('settingsBtn');
@@ -1985,7 +1991,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (openScalpBtn) openScalpBtn.addEventListener('click', openScalpSettingsModal);
     const applyScalpBtn = document.getElementById('applyScalpSettingsBtn');
     if (applyScalpBtn) applyScalpBtn.addEventListener('click', applyScalpSettings);
-
+    updateAlertHistoryVisibility();
     loadAllData();
     startNatrAutoUpdate();
 });
