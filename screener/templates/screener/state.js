@@ -64,6 +64,7 @@ let scalpExchanges = {
     bitget: { enabled: true, markets: { futures: true, spot: true }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
 };
 
+
 // Миграция любого старого формата + подхват сохранённых значений
 try {
     const saved = JSON.parse(localStorage.getItem('scalpExchanges') || 'null');
@@ -94,15 +95,6 @@ let volumeHistogramEnabled = true;
 if (localStorage.getItem('volumeHistogramEnabled') !== null) {
     volumeHistogramEnabled = localStorage.getItem('volumeHistogramEnabled') === 'true';
 }
-
-// Delta
-let deltaSeries = null;
-let deltaByCandle = {};
-let deltaEnabled = true;
-if (localStorage.getItem('deltaEnabled') !== null) {
-    deltaEnabled = localStorage.getItem('deltaEnabled') === 'true';
-}
-
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
 if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
 
