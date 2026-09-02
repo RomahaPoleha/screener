@@ -91,23 +91,68 @@ function checkAlerts(currentPrice, prevPrice) {
 // АЛЕРТЫ ПО ОБЪЁМУ (RVOL)
 // ==========================================
 function showVolumeAlertToast(symbol, rvol, volume) {
+    // Удаляем старые тосты если их больше 3
+    const existing = document.querySelectorAll('.volume-alert-toast');
+    if (existing.length >= 3) {
+        existing[0].remove();
+    }
+
     const toast = document.createElement('div');
-    toast.className = 'hour-toast show';
-    toast.style.cursor = 'pointer';
-    toast.innerHTML = `<div class="toast-icon" style="color:#f59e0b;">&#9650;</div>
-        <div class="toast-content">
-            <div class="toast-title">${symbol} — аномальный объём</div>
-            <div style="font-size:12px; margin-top:4px;">RVOL x${rvol} | Объём: $${fmt(volume)}</div>
-            <div style="font-size:10px; color:#999999; margin-top:4px;">Клик — открыть график</div>
-        </div>`;
+    toast.className = 'volume-alert-toast';
+    toast.style.cssText = `
+        position: fixed;
+        top: ${80 + document.querySelectorAll('.volume-alert-toast').length * 80}px;
+        right: 20px;
+        background: #1a1a1a;
+        border: 2px solid #f59e0b;
+        color: #ffffff;
+        padding: 16px 20px;
+        border-radius: 0;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        z-index: 10000;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        opacity: 0;
+        transform: translateX(400px);
+    `;
+    toast.innerHTML = `
+        <div style="font-size:24px; color:#f59e0b;">&#9650;</div>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="font-size:14px; font-weight:700; color:#ffffff; letter-spacing:0.5px; text-transform:uppercase;">
+                ${symbol} — аномальный объём
+            </div>
+            <div style="font-size:12px; margin-top:2px;">
+                RVOL x${rvol} | Объём: $${fmt(volume)}
+            </div>
+            <div style="font-size:10px; color:#999999; margin-top:2px;">
+                Клик — открыть график
+            </div>
+        </div>
+    `;
     toast.onclick = () => {
         openChart(symbol);
-        toast.classList.remove('show');
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(400px)';
         setTimeout(() => toast.remove(), 500);
     };
     document.body.appendChild(toast);
     playAlertSound();
-    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 8000);
+
+    // Анимация появления
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(0)';
+    }, 50);
+
+    // Автоудаление через 8 секунд
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(400px)';
+        setTimeout(() => toast.remove(), 500);
+    }, 8000);
 }
 
 function checkVolumeAlerts() {
@@ -1146,37 +1191,7 @@ function parseReconLevels(exId, data) {
     return { rawBids, rawAsks, toLevel };
 }
 
-async function fetchReconMarket(exId, symbol, market) {
-    let data;
-
-    if (exId === 'mexc') {
-        const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        data = await res.json();
-    } else {
-        const url = getReconUrl(exId, symbol, market);
-        if (!url) return [];
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        data = await res.json();
-    }
-
-    const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
-    const minVolume = reconMinVolumes[exId][market];
-    const out = [];
-    const push = (arr) => {
-        for (const row of arr) {
-            const [p, q] = toLevel(row);
-            if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
-            const vol = p * q;
-            if (vol >= minVolume) out.push({ price: p, volume: vol });
-        }
-    };
-    push(rawBids);
-    push(rawAsks);
-    return out;
-}
-
+fetchReconMarket
 async function loadReconDensities(symbol) {
     if (!reconEnabled || !candleSeries) return;
     const tasks = [];
