@@ -162,7 +162,9 @@ function updateAlertBadge() {
 }
 function updateAlertHistoryVisibility() {
     const wrap = document.getElementById('alertHistoryWrap');
-    if (wrap) wrap.style.display = volumeAlertEnabled ? 'inline-block' : 'none';
+    if (wrap) {
+        wrap.style.display = volumeAlertEnabled ? 'inline-block' : 'none';
+    }
 }
 
 function toggleAlertHistory() {
@@ -1033,6 +1035,13 @@ function applySettings() {
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
     if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 
+    const deltaHist = document.getElementById('showDeltaHistogram');
+    if (deltaHist) {
+        deltaEnabled = deltaHist.checked;
+        localStorage.setItem('deltaEnabled', deltaEnabled);
+        if (deltaSeries) deltaSeries.applyOptions({ visible: deltaEnabled });
+    }
+
     showDrawingTools = document.getElementById('showDrawingTools').checked;
     localStorage.setItem('showDrawingTools', showDrawingTools);
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
@@ -1048,8 +1057,31 @@ function applySettings() {
             if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
         }
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
-        updateAlertHistoryVisibility();
     }
+
+    // Алерты по объёму — читаем чекбокс и ТОЛЬКО ПОТОМ обновляем видимость кнопки
+    const volAlertToggle = document.getElementById('volumeAlertToggle');
+    if (volAlertToggle) {
+        volumeAlertEnabled = volAlertToggle.checked;
+        localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
+    }
+    updateAlertHistoryVisibility();
+
+    const btn = document.getElementById('settingsBtn');
+    if (btn) {
+        if (densityEnabled || scalpEnabled || reconEnabled) {
+            btn.style.background = '#f59e0b'; btn.style.color = '#000000';
+        } else {
+            btn.style.background = '#2a2a2a'; btn.style.color = '#ffffff';
+        }
+    }
+
+    if (currentSymbol) {
+        if (reconEnabled) startReconUpdates(currentSymbol);
+        else stopReconUpdates();
+    }
+    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+}
 
         const btn = document.getElementById('settingsBtn');
     if (btn) {
