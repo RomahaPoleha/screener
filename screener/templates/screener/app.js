@@ -1059,20 +1059,29 @@ function applySettings() {
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
 
-    // Алерты по объёму — читаем чекбокс и ТОЛЬКО ПОТОМ обновляем видимость кнопки
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) {
         volumeAlertEnabled = volAlertToggle.checked;
         localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
+    }
+    const volAlertThr = document.getElementById('volumeAlertThreshold');
+    if (volAlertThr) {
+        const thr = parseFloat(volAlertThr.value);
+        if (thr >= 1) {
+            volumeAlertThreshold = thr;
+            localStorage.setItem('volumeAlertThreshold', volumeAlertThreshold);
+        }
     }
     updateAlertHistoryVisibility();
 
     const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
-            btn.style.background = '#f59e0b'; btn.style.color = '#000000';
+            btn.style.background = '#f59e0b';
+            btn.style.color = '#000000';
         } else {
-            btn.style.background = '#2a2a2a'; btn.style.color = '#ffffff';
+            btn.style.background = '#2a2a2a';
+            btn.style.color = '#ffffff';
         }
     }
 
@@ -1080,29 +1089,6 @@ function applySettings() {
         if (reconEnabled) startReconUpdates(currentSymbol);
         else stopReconUpdates();
     }
-    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
-}
-
-        const btn = document.getElementById('settingsBtn');
-    if (btn) {
-        if (densityEnabled || scalpEnabled || reconEnabled) {
-            btn.style.background = '#f59e0b'; btn.style.color = '#000000';
-        } else {
-            btn.style.background = '#2a2a2a'; btn.style.color = '#ffffff';
-        }
-    }
-
-    if (currentSymbol) {
-        if (reconEnabled) startReconUpdates(currentSymbol);
-        else stopReconUpdates();
-    }
-    volumeAlertEnabled = document.getElementById('volumeAlertToggle').checked;
-localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
-const thr = parseFloat(document.getElementById('volumeAlertThreshold').value);
-if (thr >= 1) {
-    volumeAlertThreshold = thr;
-    localStorage.setItem('volumeAlertThreshold', volumeAlertThreshold);
-}
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
 
