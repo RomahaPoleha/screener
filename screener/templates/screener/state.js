@@ -77,6 +77,20 @@ let scalpExchanges = {
 };
 
 
+// Группы монет по цветам
+let coinColors = {};
+try {
+    coinColors = JSON.parse(localStorage.getItem('coinColors') || '{}');
+} catch(e) { coinColors = {}; }
+
+const COIN_COLOR_OPTIONS = [
+    { id: 'red',    hex: '#ef4444', label: 'Красный' },
+    { id: 'green',  hex: '#22c55e', label: 'Зелёный' },
+    { id: 'blue',   hex: '#3b82f6', label: 'Синий' },
+    { id: 'yellow', hex: '#f59e0b', label: 'Жёлтый' },
+];
+
+
 // Миграция любого старого формата + подхват сохранённых значений
 try {
     const saved = JSON.parse(localStorage.getItem('scalpExchanges') || 'null');

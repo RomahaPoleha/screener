@@ -36,8 +36,15 @@
             <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
         </div>
     </div>
-    <div class="right-panel-header">Монеты (<span id="coinsCount">0</span>)</div>
+            <div class="right-panel-header" style="display:flex; align-items:center; justify-content:space-between;">
+            <span>Монеты (<span id="coinsCount">0</span>)</span>
+            <button class="sound-toggle" id="groupsBtn" onclick="openGroupsModal()"
+                style="padding:2px 10px; font-size:11px; letter-spacing:0.5px;">
+                Группы
+            </button>
+        </div>
     <div class="coins-header">
+        <div></div>
         <div>Пара</div>
         <div class="text-end" onclick="sortBy('change')">Изм. 24ч <span id="sort-change"></span></div>
         <div class="text-end" onclick="sortBy('volume')">Объём <span id="sort-volume"></span></div>
