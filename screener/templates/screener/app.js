@@ -143,7 +143,7 @@ function showVolumeAlertToast(symbol, rvol, volume) {
         setTimeout(() => toast.remove(), 500);
     };
     document.body.appendChild(toast);
-    playAlertSound();
+    if (rvolAlertSoundEnabled) playAlertSound();
 
     setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(0)'; }, 50);
     setTimeout(() => {
@@ -1028,7 +1028,8 @@ function openSettingsModal() {
         if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
         const volAlertThr = document.getElementById('volumeAlertThreshold');
         if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
-
+    const rvolSoundToggle = document.getElementById('rvolSoundToggle');
+    if (rvolSoundToggle) rvolSoundToggle.checked = rvolAlertSoundEnabled;
     initSettingsTabs();
 
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
@@ -1069,7 +1070,11 @@ function applySettings() {
         volumeAlertEnabled = volAlertToggle.checked;
         localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
     }
-    const volAlertThr = document.getElementById('volumeAlertThreshold');
+const rvolSoundToggle = document.getElementById('rvolSoundToggle');
+if (rvolSoundToggle) {
+    rvolAlertSoundEnabled = rvolSoundToggle.checked;
+    localStorage.setItem('rvolAlertSoundEnabled', rvolAlertSoundEnabled);
+}    const volAlertThr = document.getElementById('volumeAlertThreshold');
     if (volAlertThr) {
         const thr = parseFloat(volAlertThr.value);
         if (thr >= 1) {
