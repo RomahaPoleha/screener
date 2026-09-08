@@ -14,6 +14,7 @@ function playHourSound(minutesLeft) {
     if (!soundEnabled) return;
     const sound = minutesLeft === 5 ? sound5min : sound1min;
     sound.currentTime = 0;
+    sound.volume = hourSoundVolume;
     sound.play().catch(err => {
         console.warn('Не удалось воспроизвести звук:', err);
         speak(minutesLeft === 5 ? 'До перехода на новый час осталось 5 минут' : 'Внимание, до перехода на новый час осталась 1 минута');
@@ -51,7 +52,7 @@ function playAlertSound() {
         const gain = audioCtx.createGain();
         osc.connect(gain); gain.connect(audioCtx.destination);
         osc.frequency.value = 880; osc.type = 'sine';
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.setValueAtTime(alertBeepVolume, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
         osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
     } catch(e) { console.warn('Ошибка звука:', e); }
@@ -1028,6 +1029,12 @@ function openSettingsModal() {
         if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
         const volAlertThr = document.getElementById('volumeAlertThreshold');
         if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
+
+    const beepSlider = document.getElementById('alertBeepVolume');
+    if (beepSlider) beepSlider.value = alertBeepVolume;
+    const hourSlider = document.getElementById('hourSoundVolume');
+    if (hourSlider) hourSlider.value = hourSoundVolume;
+
     const rvolSoundToggle = document.getElementById('rvolSoundToggle');
     if (rvolSoundToggle) rvolSoundToggle.checked = rvolAlertSoundEnabled;
     initSettingsTabs();
@@ -1070,6 +1077,11 @@ function applySettings() {
         volumeAlertEnabled = volAlertToggle.checked;
         localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
     }
+    alertBeepVolume = parseFloat(document.getElementById('alertBeepVolume').value);
+    localStorage.setItem('alertBeepVolume', alertBeepVolume);
+    hourSoundVolume = parseFloat(document.getElementById('hourSoundVolume').value);
+    localStorage.setItem('hourSoundVolume', hourSoundVolume);
+
 const rvolSoundToggle = document.getElementById('rvolSoundToggle');
 if (rvolSoundToggle) {
     rvolAlertSoundEnabled = rvolSoundToggle.checked;

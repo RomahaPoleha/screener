@@ -36,6 +36,10 @@ let volumeAlertEnabled = localStorage.getItem('volumeAlertEnabled') === 'true';
 let volumeAlertThreshold = parseFloat(localStorage.getItem('volumeAlertThreshold') || '3');
 let volumeAlertCooldown = {};  // symbol -> timestamp последнего алерта
 
+// Громкость звуков (микшер)
+let alertBeepVolume = parseFloat(localStorage.getItem('alertBeepVolume') || '0.3');
+let hourSoundVolume = parseFloat(localStorage.getItem('hourSoundVolume') || '1');
+
 
 // История алертов по объёму
 let volumeAlertHistory = [];
