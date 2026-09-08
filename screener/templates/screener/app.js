@@ -1183,12 +1183,12 @@ function startDensityUpdates(symbol) {
 }
 
 const RECON_EXCHANGES = [
-    { id: 'binance', label: 'BI', color: '#f59e0b' },
-    { id: 'bybit',   label: 'BY', color: '#f59e0b' },
-    { id: 'okx',     label: 'OK', color: '#f59e0b' },
-    { id: 'gate',    label: 'G',  color: '#f59e0b' },
-    { id: 'mexc',    label: 'MX', color: '#f59e0b' },
-    { id: 'bitget',  label: 'BG', color: '#f59e0b' },
+    { id: 'binance', label: 'BI', color: '#f59e0b', domain: 'binance.com' },
+    { id: 'bybit',   label: 'BY', color: '#f59e0b', domain: 'bybit.com' },
+    { id: 'okx',     label: 'OKX', color: '#f59e0b', domain: 'okx.com' },
+    { id: 'gate',    label: 'GT',  color: '#f59e0b', domain: 'gate.io' },
+    { id: 'mexc',    label: 'MEX', color: '#f59e0b', domain: 'mexc.com' },
+    { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
 ];
 let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
@@ -1398,7 +1398,12 @@ function renderReconPanel() {
                 </div>`;
         };
         return `<div style="display:flex;align-items:center;gap:5px;">
-            <span style="font-weight:600;font-size:11px;color:${ex.color};min-width:20px;">${ex.label}</span>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:22px;">
+                <span style="font-weight:600;font-size:11px;color:${ex.color};line-height:1;">${ex.label}</span>
+                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                     onerror="this.style.display='none'"
+                     style="width:12px;height:12px;border-radius:2px;display:block;">
+            </div>
             ${mkToggle('spot', 'S')}
             ${mkToggle('futures', 'F')}
         </div>`;
