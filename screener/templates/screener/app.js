@@ -1066,8 +1066,7 @@ function openSettingsModal() {
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) hourSlider.value = hourSoundVolume;
 
-    const rvolSoundToggle = document.getElementById('rvolSoundToggle');
-    if (rvolSoundToggle) rvolSoundToggle.checked = rvolAlertSoundEnabled;
+
     initSettingsTabs();
 
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
@@ -1113,11 +1112,7 @@ function applySettings() {
     hourSoundVolume = parseFloat(document.getElementById('hourSoundVolume').value);
     localStorage.setItem('hourSoundVolume', hourSoundVolume);
 
-const rvolSoundToggle = document.getElementById('rvolSoundToggle');
-if (rvolSoundToggle) {
-    rvolAlertSoundEnabled = rvolSoundToggle.checked;
-    localStorage.setItem('rvolAlertSoundEnabled', rvolAlertSoundEnabled);
-}    const volAlertThr = document.getElementById('volumeAlertThreshold');
+    const volAlertThr = document.getElementById('volumeAlertThreshold');
     if (volAlertThr) {
         const thr = parseFloat(volAlertThr.value);
         if (thr >= 1) {
@@ -1125,6 +1120,24 @@ if (rvolSoundToggle) {
             localStorage.setItem('volumeAlertThreshold', volumeAlertThreshold);
         }
     }
+
+    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+    if (priceImpulseThr) {
+        const thr = parseFloat(priceImpulseThr.value);
+        if (thr > 0) {
+            priceImpulseThreshold = thr;
+            localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
+        }
+    }
+    const priceImpulseWin = document.getElementById('priceImpulseWindow');
+    if (priceImpulseWin) {
+        const win = parseInt(priceImpulseWin.value);
+        if (win >= 10 && win <= 300) {
+            priceImpulseWindow = win;
+            localStorage.setItem('priceImpulseWindow', priceImpulseWindow);
+        }
+    }
+
     updateAlertHistoryVisibility();
 
     const btn = document.getElementById('settingsBtn');
@@ -1143,22 +1156,6 @@ if (rvolSoundToggle) {
         else stopReconUpdates();
     }
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
-}
-    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-if (priceImpulseThr) {
-    const thr = parseFloat(priceImpulseThr.value);
-    if (thr > 0) {
-        priceImpulseThreshold = thr;
-        localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
-    }
-}
-const priceImpulseWin = document.getElementById('priceImpulseWindow');
-if (priceImpulseWin) {
-    const win = parseInt(priceImpulseWin.value);
-    if (win >= 10 && win <= 300) {
-        priceImpulseWindow = win;
-        localStorage.setItem('priceImpulseWindow', priceImpulseWindow);
-    }
 }
 
 async function loadDensities(symbol) {
