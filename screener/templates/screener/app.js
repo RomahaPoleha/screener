@@ -1803,6 +1803,8 @@ function closeChart() {
     els.chartHint.style.display = 'block'; els.chartWatermark.style.display = 'none';
     closeTradesOverlay(); currentSymbol = '';
     priceHistory = {};
+    const tooltip = document.getElementById('volumeTooltip');
+    if (tooltip) tooltip.classList.remove('visible');
 }
 
 async function openChart(symbol) {
@@ -1833,7 +1835,7 @@ async function openChart(symbol) {
         chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
         if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 
-        chart.subscribeCrosshairMove((param) => {
+                chart.subscribeCrosshairMove((param) => {
             if (isMagnetEnabled) updateMagnetIndicator(param);
             if (isPencilEnabled && isDrawing) handlePencilDraw(param);
             if (isTrendLineEnabled && isDrawingTrendLine && trendLinePreview && param.point) {
@@ -1846,6 +1848,40 @@ async function openChart(symbol) {
                     trendLinePreview.logicalIndex2 = logicalIndex;
                     redrawAllPersistentDrawings();
                 }
+            }
+
+            // ТУЛТИП ОБЪЁМА
+            if (param.time && volumeSeries) {
+                const volumeData = param.seriesData.get(volumeSeries);
+                const candleData = param.seriesData.get(candleSeries);
+
+                if (volumeData && candleData) {
+                    const tooltip = document.getElementById('volumeTooltip');
+                    const isUp = candleData.close >= candleData.open;
+                    const colorClass = isUp ? 'vol-up' : 'vol-down';
+
+                    tooltip.innerHTML = `
+                        <div class="vol-label">Объём</div>
+                        <div class="vol-value ${colorClass}">${fmt(volumeData.value)}</div>
+                        <div style="font-size:10px; color:#666666; margin-top:2px;">
+                            ${candleData.open.toFixed(currentPrecision)} → ${candleData.close.toFixed(currentPrecision)}
+                        </div>
+                    `;
+                    tooltip.classList.add('visible');
+
+                    const rect = els.chartWrapper.getBoundingClientRect();
+                    const x = param.point.x + rect.left + 15;
+                    const y = param.point.y + rect.top - 40;
+
+                    tooltip.style.left = x + 'px';
+                    tooltip.style.top = y + 'px';
+                } else {
+                    const tooltip = document.getElementById('volumeTooltip');
+                    if (tooltip) tooltip.classList.remove('visible');
+                }
+            } else {
+                const tooltip = document.getElementById('volumeTooltip');
+                if (tooltip) tooltip.classList.remove('visible');
             }
         });
         chart.subscribeClick(handleChartClick);

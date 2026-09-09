@@ -469,3 +469,23 @@ body {
 .alert-symbol { color: #ffffff; font-weight: 700; }
 .alert-rvol { color: #f59e0b; font-weight: 700; }
 .alert-vol { color: #999999; text-align: right; }
+
+.volume-tooltip {
+    position: absolute;
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    color: #e5e5e5;
+    padding: 6px 10px;
+    font-size: 11px;
+    pointer-events: none;
+    z-index: 1000;
+    white-space: nowrap;
+    display: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    line-height: 1.4;
+}
+.volume-tooltip.visible { display: block; }
+.volume-tooltip .vol-label { color: #999999; font-size: 10px; }
+.volume-tooltip .vol-value { font-weight: 700; }
+.volume-tooltip .vol-up { color: #22c55e; }
+.volume-tooltip .vol-down { color: #ef4444; }
