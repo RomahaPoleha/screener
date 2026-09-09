@@ -302,6 +302,14 @@ def api_sound(request, filename):
         as_attachment=False
     )
 
+def api_logo(request):
+    """Отдаёт картинку логотипа"""
+    filepath = BASE_DIR / 'logo.png'
+    if not filepath.exists():
+        raise Http404('Логотип не найден')
+    return FileResponse(open(filepath, 'rb'), content_type='image/png')
+
+
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
