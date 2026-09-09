@@ -1850,31 +1850,40 @@ async function openChart(symbol) {
                 }
             }
 
-            // ТУЛТИП ОБЪЁМА
-            if (param.time && volumeSeries) {
-                const volumeData = param.seriesData.get(volumeSeries);
-                const candleData = param.seriesData.get(candleSeries);
+                        // ТУЛТИП ОБЪЁМА (только в области гистограммы)
+            if (param.time && volumeSeries && param.point) {
+                const chartHeight = els.chartWrapper.clientHeight;
+                const volumeAreaTop = chartHeight * 0.85; // Гистограмма в нижних 15%
 
-                if (volumeData && candleData) {
-                    const tooltip = document.getElementById('volumeTooltip');
-                    const isUp = candleData.close >= candleData.open;
-                    const colorClass = isUp ? 'vol-up' : 'vol-down';
+                // Показываем тултип только если курсор в области гистограммы
+                if (param.point.y >= volumeAreaTop) {
+                    const volumeData = param.seriesData.get(volumeSeries);
+                    const candleData = param.seriesData.get(candleSeries);
 
-                    tooltip.innerHTML = `
-                        <div class="vol-label">Объём</div>
-                        <div class="vol-value ${colorClass}">${fmt(volumeData.value)}</div>
-                        <div style="font-size:10px; color:#666666; margin-top:2px;">
-                            ${candleData.open.toFixed(currentPrecision)} → ${candleData.close.toFixed(currentPrecision)}
-                        </div>
-                    `;
-                    tooltip.classList.add('visible');
+                    if (volumeData && candleData) {
+                        const tooltip = document.getElementById('volumeTooltip');
+                        const isUp = candleData.close >= candleData.open;
+                        const colorClass = isUp ? 'vol-up' : 'vol-down';
 
-                    const rect = els.chartWrapper.getBoundingClientRect();
-                    const x = param.point.x + rect.left + 15;
-                    const y = param.point.y + rect.top - 40;
+                        tooltip.innerHTML = `
+                            <div class="vol-label">Объём</div>
+                            <div class="vol-value ${colorClass}">${fmt(volumeData.value)}</div>
+                            <div style="font-size:10px; color:#666666; margin-top:2px;">
+                                ${candleData.open.toFixed(currentPrecision)} → ${candleData.close.toFixed(currentPrecision)}
+                            </div>
+                        `;
+                        tooltip.classList.add('visible');
 
-                    tooltip.style.left = x + 'px';
-                    tooltip.style.top = y + 'px';
+                        const rect = els.chartWrapper.getBoundingClientRect();
+                        const x = param.point.x + rect.left + 15;
+                        const y = param.point.y + rect.top - 40;
+
+                        tooltip.style.left = x + 'px';
+                        tooltip.style.top = y + 'px';
+                    } else {
+                        const tooltip = document.getElementById('volumeTooltip');
+                        if (tooltip) tooltip.classList.remove('visible');
+                    }
                 } else {
                     const tooltip = document.getElementById('volumeTooltip');
                     if (tooltip) tooltip.classList.remove('visible');
