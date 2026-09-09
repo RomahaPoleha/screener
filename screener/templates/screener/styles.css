@@ -489,3 +489,12 @@ body {
 .volume-tooltip .vol-value { font-weight: 700; }
 .volume-tooltip .vol-up { color: #22c55e; }
 .volume-tooltip .vol-down { color: #ef4444; }
+
+.logo-img {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    margin-right: 8px;
+    vertical-align: middle;
+    mix-blend-mode: screen;
+}
