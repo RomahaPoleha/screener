@@ -1029,9 +1029,12 @@ function toggleReconSettings() {
 }
 
 function openSettingsModal() {
-    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
-    const firstTab = document.querySelector('.settings-tab[data-tab="display"]');
+    const firstTab = document.querySelector('.settings-nav-item[data-tab="display"]');
+    const firstContent = document.getElementById('tab-display');
+    if (firstTab) firstTab.classList.add('active');
+    if (firstContent) firstContent.classList.add('active');
     const firstContent = document.getElementById('tab-display');
     if (firstTab) firstTab.classList.add('active');
     if (firstContent) firstContent.classList.add('active');
@@ -1046,6 +1049,7 @@ function openSettingsModal() {
         reconToggle.checked = reconEnabled;
         toggleReconSettings();
         renderReconSettings();
+        renderScalpCards();
     }
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
@@ -1664,7 +1668,12 @@ function applyScalpSettings() {
             }
         }
     }
-    bootstrap.Modal.getInstance(document.getElementById('scalpSettingsModal')).hide();
+    const scalpModalEl = document.getElementById('scalpSettingsModal');
+    if (scalpModalEl) {
+        const inst = bootstrap.Modal.getInstance(scalpModalEl);
+        if (inst) inst.hide();
+    }
+    renderScalpCards();
 }
 
 // ==========================================
@@ -2235,16 +2244,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initSettingsTabs() {
-    document.querySelectorAll('.settings-tab').forEach(tab => {
+    document.querySelectorAll('.settings-nav-item').forEach(tab => {
         tab.replaceWith(tab.cloneNode(true));
     });
-    document.querySelectorAll('.settings-tab').forEach(tab => {
+    document.querySelectorAll('.settings-nav-item').forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
             tab.classList.add('active');
-            const targetId = 'tab-' + tab.dataset.tab;
-            const target = document.getElementById(targetId);
+            const target = document.getElementById('tab-' + tab.dataset.tab);
             if (target) target.classList.add('active');
         });
     });
@@ -2271,4 +2279,44 @@ function updateChartStats() {
     el.innerHTML = `Vol: <span style="color:#e5e5e5; font-weight:600;">${vol}</span>` +
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 1m: ${n1Html}` +
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 5m: ${n5Html}`;
+}
+
+function renderScalpCards() {
+    const container = document.getElementById('scalpExchangesContainer');
+    if (!container) return;
+    container.innerHTML = EXCHANGES_CONFIG.map(ex => {
+        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+        return `
+            <div class="exchange-card" style="background:#242424; border:1px solid #475569; border-radius:6px; padding:14px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:600; color:${ex.color}; font-size:14px;">${ex.name}</span>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0;">
+                        <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} style="accent-color:${ex.color}; width:16px; height:16px;">
+                        <span>Включить</span>
+                    </label>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
+                            <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                            <span>Futures</span>
+                        </label>
+                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
+                            style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    </div>
+                    <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
+                            <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                            <span>Spot</span>
+                        </label>
+                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
+                            style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
 }
