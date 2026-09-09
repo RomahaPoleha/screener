@@ -97,12 +97,13 @@
     </div>
 </div>
 
-       <div style="display:flex; align-items:center; gap:12px; padding:0 12px; flex-wrap:nowrap; overflow:hidden;">
+       <div style="position:absolute; top:8px; left:12px; z-index:10; display:flex; align-items:center; gap:6px; max-width:calc(100% - 130px);">
     <div class="chart-title-bar" id="chart-title" title="Копировать монету в буфер обмена"
-         style="display:inline-block !important; width:auto !important; flex-shrink:0; cursor:pointer; white-space:nowrap;"></div>
-    <span id="chartStats" style="font-size:11px; color:#999999; letter-spacing:0.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;"></span>
-    <button class="chart-reset-btn" onclick="closeChart()" style="display:inline-block !important; flex-shrink:0;">✕ Сброс</button>
+         style="position:static !important;"></div>
+    <span id="chartStats"
+          style="background:#0f0f0f; border:1px solid #333333; padding:4px 8px; font-size:11px; color:#999999; letter-spacing:0.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></span>
 </div>
+<button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
         <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
         <div id="chart-container"></div>
         <canvas id="pencilCanvas" class="pencil-canvas"></canvas>
