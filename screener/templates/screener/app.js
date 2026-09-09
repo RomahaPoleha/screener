@@ -1029,12 +1029,9 @@ function toggleReconSettings() {
 }
 
 function openSettingsModal() {
-        document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
     const firstTab = document.querySelector('.settings-nav-item[data-tab="display"]');
-    const firstContent = document.getElementById('tab-display');
-    if (firstTab) firstTab.classList.add('active');
-    if (firstContent) firstContent.classList.add('active');
     const firstContent = document.getElementById('tab-display');
     if (firstTab) firstTab.classList.add('active');
     if (firstContent) firstContent.classList.add('active');
@@ -1049,27 +1046,26 @@ function openSettingsModal() {
         reconToggle.checked = reconEnabled;
         toggleReconSettings();
         renderReconSettings();
-        renderScalpCards();
     }
+    renderScalpCards();
+
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
     if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
 
     const soundCheckbox = document.getElementById('soundToggleModal');
-    if (soundCheckbox) {
-        soundCheckbox.checked = soundEnabled;
-    }
+    if (soundCheckbox) soundCheckbox.checked = soundEnabled;
+
     const volAlertToggle = document.getElementById('volumeAlertToggle');
-        if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
-        const volAlertThr = document.getElementById('volumeAlertThreshold');
-        if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
+    if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
+    const volAlertThr = document.getElementById('volumeAlertThreshold');
+    if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
 
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) beepSlider.value = alertBeepVolume;
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) hourSlider.value = hourSoundVolume;
-
 
     initSettingsTabs();
 
