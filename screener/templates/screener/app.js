@@ -226,6 +226,7 @@ async function loadAllData() {
         if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
         allCoins = await res.json();
         applyLocalFilters();
+        updateChartStats();
     } catch (err) {
         console.error('Ошибка загрузки:', err);
         els.table.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">${err.message}</div>`;
@@ -240,6 +241,7 @@ async function loadNatrData() {
         natrData = response.natr || {};
         applyLocalFilters();
         checkVolumeAlerts();   // ← ДОБАВЛЕНО
+        updateChartStats();
     } catch (err) { console.error(err); }
 }
 
@@ -1752,7 +1754,10 @@ function closeChart() {
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
     tradeBuffer = []; lastCandlePrice = null;
-    els.chartTitle.textContent = ''; els.chartWrapper.classList.remove('active');
+    els.chartTitle.textContent = '';
+    const statsEl = document.getElementById('chartStats');
+    if (statsEl) statsEl.textContent = '';
+    els.chartWrapper.classList.remove('active');
     els.chartHint.style.display = 'block'; els.chartWatermark.style.display = 'none';
     closeTradesOverlay(); currentSymbol = '';
 }
@@ -1933,6 +1938,7 @@ async function openChart(symbol) {
     await loadChartData(symbol, currentTF);
     startCandleWebSocket(symbol, currentTF);
     updateWatermark();
+    updateChartStats();
     if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);
     if (densityEnabled) startDensityUpdates(symbol);
     if (scalpEnabled) startScalpUpdates(symbol);
@@ -2154,4 +2160,27 @@ function initSettingsTabs() {
             if (target) target.classList.add('active');
         });
     });
+}
+
+// ==========================================
+// СТАТИСТИКА НАД ГРАФИКОМ (объём + NATR)
+// ==========================================
+function updateChartStats() {
+    const el = document.getElementById('chartStats');
+    if (!el || !currentSymbol) return;
+
+    const coin = allCoins.find(c => c.symbol === currentSymbol);
+    const natr = natrData[currentSymbol] || {};
+
+    const vol = coin ? `$${fmt(coin.volume)}` : '—';
+    const n1 = (natr.natr_1m30 !== undefined && natr.natr_1m30 !== null) ? natr.natr_1m30 : null;
+    const n5 = (natr.natr_5m14 !== undefined && natr.natr_5m14 !== null) ? natr.natr_5m14 : null;
+
+    const natrColor = (v) => v > 1.0 ? '#ef4444' : v > 0.3 ? '#f59e0b' : '#22c55e';
+    const n1Html = n1 !== null ? `<span style="color:${natrColor(n1)}; font-weight:600;">${n1.toFixed(1)}</span>` : '<span style="color:#6b7280;">-</span>';
+    const n5Html = n5 !== null ? `<span style="color:${natrColor(n5)}; font-weight:600;">${n5.toFixed(1)}</span>` : '<span style="color:#6b7280;">-</span>';
+
+    el.innerHTML = `Vol: <span style="color:#e5e5e5; font-weight:600;">${vol}</span>` +
+                   `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 1m: ${n1Html}` +
+                   `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 5m: ${n5Html}`;
 }
