@@ -59,40 +59,51 @@
                 </div>
 
                 <div class="settings-tab-content" id="tab-alerts">
-    <!-- РАЗДЕЛ 1: АЛЕРТЫ (бип) -->
-    <div class="modal-section">
-        <div class="modal-section-title">Алерты</div>
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-            <input type="checkbox" id="rvolSoundToggle" style="accent-color:#f59e0b; width:16px; height:16px;">
-            <span>Звук RVOL алертов</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-            <input type="checkbox" id="volumeAlertToggle" style="accent-color:#f59e0b; width:16px; height:16px;">
-            <span>Оповещать об аномальном объёме (RVOL)</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-            <span style="color:#999999;">Порог (во сколько раз объём выше нормы):</span>
-            <input type="number" id="volumeAlertThreshold" value="3" min="1" step="0.5"
-                style="width:70px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 8px; border-radius:0; font-size:12px;">
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5;">
-            <span style="color:#999999; min-width:110px;">Громкость бипа:</span>
-            <input type="range" id="alertBeepVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
-        </label>
-    </div>
+                    <!-- РАЗДЕЛ 1: ИМПУЛЬС -->
+                    <div class="modal-section">
+                        <div class="modal-section-title">Импульс</div>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:12px;">
+                            <input type="checkbox" id="volumeAlertToggle" style="accent-color:#f59e0b; width:16px; height:16px;">
+                            <span>Включить технологию «Импульс» (объём + цена)</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
+                            <span style="color:#999999; min-width:170px;">Порог объёма (RVOL):</span>
+                            <input type="number" id="volumeAlertThreshold" value="3" min="1" step="0.5"
+                                style="width:70px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 8px; border-radius:0; font-size:12px;">
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
+                            <span style="color:#999999; min-width:170px;">Движение цены (%):</span>
+                            <input type="number" id="priceImpulseThreshold" value="1" min="0.1" step="0.1"
+                                style="width:70px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 8px; border-radius:0; font-size:12px;">
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
+                            <span style="color:#999999; min-width:170px;">Окно времени (сек):</span>
+                            <input type="number" id="priceImpulseWindow" value="60" min="10" max="300" step="10"
+                                style="width:70px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 8px; border-radius:0; font-size:12px;">
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
+                            <span style="color:#999999; min-width:170px;">Громкость оповещения:</span>
+                            <input type="range" id="alertBeepVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
+                        </label>
+                        <p style="font-size:10px; color:#666666; margin:0; line-height:1.5;">
+                            Алерт сработает когда объём выше порога И цена изменилась на указанный % за окно времени.
+                            Звук выключается слайдером громкости в ноль.
+                        </p>
+                    </div>
 
-    <!-- РАЗДЕЛ 2: ЧАСОВЫЕ ЗВУКИ (MP3) -->
-    <div class="modal-section">
-        <div class="modal-section-title">Часовые звуки</div>
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-            <input type="checkbox" id="soundToggleModal" onchange="toggleSound()" style="accent-color:#f59e0b; width:16px; height:16px;">
-            <span>Оповещения за 5 и 1 минуту до нового часа</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5;">
-            <span style="color:#999999; min-width:110px;">Громкость звука:</span>
-            <input type="range" id="hourSoundVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
-        </label>
-    </div>
+                    <!-- РАЗДЕЛ 2: ЧАСОВЫЕ ЗВУКИ (MP3) -->
+                    <div class="modal-section">
+                        <div class="modal-section-title">Часовые звуки</div>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
+                            <input type="checkbox" id="soundToggleModal" onchange="toggleSound()" style="accent-color:#f59e0b; width:16px; height:16px;">
+                            <span>Оповещения за 5 и 1 минуту до нового часа</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5;">
+                            <span style="color:#999999; min-width:170px;">Громкость звука:</span>
+                            <input type="range" id="hourSoundVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer" style="border-top:1px solid #333333;">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2a2a2a; border:none; color:#ffffff; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Закрыть</button>
@@ -123,7 +134,8 @@
         </div>
     </div>
 </div>
-<!-- Модалка групп монет  -->
+
+<!-- Модалка групп монет -->
 <div class="modal fade" id="coinGroupsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background:#1a1a1a; border:1px solid #333333; color:#e5e5e5;">

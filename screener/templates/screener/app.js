@@ -91,49 +91,41 @@ function checkAlerts(currentPrice, prevPrice) {
 // ==========================================
 // АЛЕРТЫ ПО ОБЪЁМУ (RVOL)
 // ==========================================
-function showVolumeAlertToast(symbol, rvol, volume) {
-    // === Сохраняем в историю ===
+function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
+    // === История ===
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    volumeAlertHistory.unshift({ symbol, rvol, volume, time: timeStr });
+    volumeAlertHistory.unshift({ symbol, rvol, volume, time: timeStr, direction, priceChange });
     if (volumeAlertHistory.length > 20) volumeAlertHistory.pop();
     localStorage.setItem('volumeAlertHistory', JSON.stringify(volumeAlertHistory));
     unreadAlerts++;
     updateAlertBadge();
 
-    // === Тост в левом нижнем углу, стек вверх ===
+    // === Тост ===
     const existing = document.querySelectorAll('.volume-alert-toast');
     if (existing.length >= 3) existing[0].remove();
     const offset = document.querySelectorAll('.volume-alert-toast').length * 90;
 
+    const color = direction === '↑' ? '#22c55e' : '#ef4444';
     const toast = document.createElement('div');
     toast.className = 'volume-alert-toast';
     toast.style.cssText = `
-        position: fixed;
-        left: 20px;
-        bottom: ${20 + offset}px;
-        background: #1a1a1a;
-        border: 2px solid #f59e0b;
-        color: #ffffff;
-        padding: 14px 18px;
-        border-radius: 0;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        z-index: 10000;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        opacity: 0;
-        transform: translateX(-400px);
+        position:fixed; left:20px; bottom:${20 + offset}px;
+        background:#1a1a1a; border:2px solid ${color};
+        color:#ffffff; padding:14px 18px; border-radius:0;
+        box-shadow:0 4px 16px rgba(0,0,0,0.5); z-index:10000;
+        cursor:pointer; transition:all 0.3s ease;
+        opacity:0; transform:translateX(-400px); display:flex; align-items:center; gap:12px;
     `;
     toast.innerHTML = `
-        <div style="font-size:22px; color:#f59e0b;">&#9650;</div>
+        <div style="font-size:22px; color:${color};">${direction === '↑' ? '▲' : '▼'}</div>
         <div style="display:flex; flex-direction:column; gap:3px;">
-            <div style="font-size:13px; font-weight:700; color:#ffffff; letter-spacing:0.5px; text-transform:uppercase;">
-                ${symbol} — аномальный объём
+            <div style="font-size:13px; font-weight:700; text-transform:uppercase;">
+                ${symbol} — импульс подтверждён
             </div>
-            <div style="font-size:12px;">RVOL x${rvol} | Объём: $${fmt(volume)}</div>
+            <div style="font-size:12px;">
+                RVOL x${rvol} | Цена: ${direction} ${priceChange.toFixed(2)}% за ${priceImpulseWindow}с
+            </div>
             <div style="font-size:10px; color:#999999;">Клик — открыть график</div>
         </div>
     `;
@@ -144,7 +136,7 @@ function showVolumeAlertToast(symbol, rvol, volume) {
         setTimeout(() => toast.remove(), 500);
     };
     document.body.appendChild(toast);
-    if (rvolAlertSoundEnabled) playAlertSound();
+    playAlertSound();
 
     setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(0)'; }, 50);
     setTimeout(() => {
@@ -186,14 +178,16 @@ function renderAlertHistory() {
         body.innerHTML = '<div style="color:#6b7280; text-align:center; padding:20px;">Нет алертов</div>';
         return;
     }
-    body.innerHTML = volumeAlertHistory.map(a => `
-        <div class="alert-history-item" onclick="openChartFromHistory('${a.symbol}')">
+    body.innerHTML = volumeAlertHistory.map(a => {
+        const dir = a.direction || '';
+        const changeTxt = a.priceChange ? `${dir}${a.priceChange.toFixed(1)}%` : '';
+        return `<div class="alert-history-item" onclick="openChartFromHistory('${a.symbol}')">
             <span class="alert-time">${a.time}</span>
             <span class="alert-symbol">${a.symbol}</span>
-            <span class="alert-rvol">x${a.rvol}</span>
+            <span class="alert-rvol">x${a.rvol} ${changeTxt}</span>
             <span class="alert-vol">$${fmt(a.volume)}</span>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 
@@ -206,18 +200,49 @@ function openChartFromHistory(symbol) {
 function checkVolumeAlerts() {
     if (!volumeAlertEnabled) return;
     const now = Date.now();
-    const COOLDOWN = 5 * 60 * 1000;  // 5 минут на монету
+    const nowSec = now / 1000;
+    const COOLDOWN = 5 * 60 * 1000;
 
     for (const coin of allCoins) {
         if (coin.rvol === undefined || coin.rvol === null || coin.rvol === 0) continue;
+        if (coin.price === undefined || coin.price === null || coin.price === 0) continue;
 
-        if (coin.rvol >= volumeAlertThreshold) {
-            const last = volumeAlertCooldown[coin.symbol] || 0;
-            if (now - last >= COOLDOWN) {
-                volumeAlertCooldown[coin.symbol] = now;
-                showVolumeAlertToast(coin.symbol, coin.rvol, coin.volume);
+        // 1. Обновляем историю цен
+        if (!priceHistory[coin.symbol]) priceHistory[coin.symbol] = [];
+        const history = priceHistory[coin.symbol];
+        history.push({ time: nowSec, price: coin.price });
+
+        // Обрезаем до 5 минут
+        while (history.length > 0 && (nowSec - history[0].time) > 300) {
+            history.shift();
+        }
+
+        // 2. Проверяем RVOL
+        if (coin.rvol < volumeAlertThreshold) continue;
+
+        // 3. Проверяем движение цены за окно
+        const targetTime = nowSec - priceImpulseWindow;
+        let referencePrice = null;
+        for (let i = history.length - 1; i >= 0; i--) {
+            if (history[i].time <= targetTime) {
+                referencePrice = history[i].price;
+                break;
             }
         }
+        if (!referencePrice || referencePrice === 0) continue;
+
+        const priceChange = ((coin.price - referencePrice) / referencePrice) * 100;
+        const absPriceChange = Math.abs(priceChange);
+
+        if (absPriceChange < priceImpulseThreshold) continue;
+
+        // 4. Кулдаун
+        const last = volumeAlertCooldown[coin.symbol] || 0;
+        if (now - last < COOLDOWN) continue;
+
+        volumeAlertCooldown[coin.symbol] = now;
+        const direction = priceChange > 0 ? '↑' : '↓';
+        showVolumeAlertToast(coin.symbol, coin.rvol, coin.volume, direction, absPriceChange);
     }
 }
 async function loadAllData() {
@@ -1022,6 +1047,10 @@ function openSettingsModal() {
         toggleReconSettings();
         renderReconSettings();
     }
+    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+    if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
+    const priceImpulseWin = document.getElementById('priceImpulseWindow');
+    if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
 
     const soundCheckbox = document.getElementById('soundToggleModal');
     if (soundCheckbox) {
@@ -1114,6 +1143,22 @@ if (rvolSoundToggle) {
         else stopReconUpdates();
     }
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+}
+    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+if (priceImpulseThr) {
+    const thr = parseFloat(priceImpulseThr.value);
+    if (thr > 0) {
+        priceImpulseThreshold = thr;
+        localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
+    }
+}
+const priceImpulseWin = document.getElementById('priceImpulseWindow');
+if (priceImpulseWin) {
+    const win = parseInt(priceImpulseWin.value);
+    if (win >= 10 && win <= 300) {
+        priceImpulseWindow = win;
+        localStorage.setItem('priceImpulseWindow', priceImpulseWindow);
+    }
 }
 
 async function loadDensities(symbol) {
@@ -1760,6 +1805,7 @@ function closeChart() {
     els.chartWrapper.classList.remove('active');
     els.chartHint.style.display = 'block'; els.chartWatermark.style.display = 'none';
     closeTradesOverlay(); currentSymbol = '';
+    priceHistory = {};
 }
 
 async function openChart(symbol) {

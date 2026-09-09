@@ -55,6 +55,11 @@ let densityMarkets = { future: false, spot: false };
 let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
 let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 
+// Параметры импульса цены (комбинированный сигнал с RVOL)
+let priceImpulseThreshold = parseFloat(localStorage.getItem('priceImpulseThreshold') || '1');
+let priceImpulseWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
+let priceHistory = {};  // symbol -> [{time, price}]
+
 // ==========================================
 // SCALP — настройки по биржам
 // ==========================================

@@ -42,7 +42,7 @@ MIN_VOLUME = 100_000
 
 
 def get_symbols_from_tickers():
-    """Получает список монет с Binance Futures + RVOL для алертов"""
+    """Получает список монет с Binance Futures + RVOL и цена для алертов"""
     try:
         exchange = ccxt.binance({
             'enableRateLimit': True,
@@ -69,17 +69,20 @@ def get_symbols_from_tickers():
             if not clean_symbol.replace('_', '').isalnum():
                 continue
 
-            # Считаем RVOL — использует историю, которую собирает coin_selection
             try:
                 rvol = coin_selection.get_rvol(clean_symbol, volume)
             except Exception:
                 rvol = 0.0
 
+            # ← ДОБАВЛЕНО: цена для импульсов
+            price = float(data.get('last') or data.get('close') or 0)
+
             symbols_with_volume.append({
                 'symbol': clean_symbol,
                 'volume': volume,
                 'change': round(data.get('percentage') or 0, 2),
-                'rvol': round(rvol, 2)
+                'rvol': round(rvol, 2),
+                'price': price
             })
 
         symbols_with_volume.sort(key=lambda x: x['volume'], reverse=True)
@@ -88,9 +91,6 @@ def get_symbols_from_tickers():
     except Exception as e:
         print(f"❌ Ошибка get_symbols_from_tickers: {e}")
         return []
-
-
-_volume_poller_started = False
 
 
 @require_http_methods(["GET"])
