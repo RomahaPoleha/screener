@@ -10,6 +10,7 @@ from . import coin_selection
 
 # Глобальный exchange объект — создаётся один раз
 _binance_exchange_future = None
+_volume_poller_started = False
 
 def get_binance_exchange():
     """Ленивая инициализация exchange (экономит 50-100мс на запрос)"""
