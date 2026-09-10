@@ -1860,8 +1860,9 @@ function renderGroupsModal() {
     for (const c of COIN_COLOR_OPTIONS) {
         const symbols = byColor[c.id];
         if (!symbols || symbols.length === 0) continue;
-        symbols.sort();
-                html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                symbols.sort();
+        html += `<div style="margin-bottom:14px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
             <span style="width:12px; height:12px; background:${c.hex}; display:inline-block;"></span>
             <span style="font-size:11px; font-weight:700; color:${c.hex}; text-transform:uppercase; letter-spacing:1px;">${c.label} (${symbols.length})</span>
             ${symbols.length >= 2 ? `<button onclick="openCollageFromModal('${c.id}')" style="margin-left:auto; padding:2px 8px; background:#2a2a2a; border:1px solid #444444; color:#ffffff; font-size:10px; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">Коллаж</button>` : ''}
@@ -2118,6 +2119,7 @@ function closeChart() {
 
 
 async function openChart(symbol) {
+    if (collageState) exitCollage();
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
@@ -2499,14 +2501,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) hideSearchDropdown(); });
 
-    window.addEventListener('resize', () => {
-            if (collageState) {
+        window.addEventListener('resize', () => {
+        if (collageState) {
             collageCharts.forEach(entry => {
                 if (entry.container) entry.chart.applyOptions({ width: entry.container.clientWidth, height: entry.container.clientHeight });
             });
             return;
         }
-    }
         if (chart && els.chartWrapper.classList.contains('active')) {
             chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
             setTimeout(() => { initPencilCanvas(); }, 200);
