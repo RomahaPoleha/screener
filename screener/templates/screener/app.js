@@ -216,7 +216,6 @@ const AlertManager = {
 // АЛЕРТЫ ПО ОБЪЁМУ (RVOL)
 // ==========================================
 function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
-    // === История ===
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     volumeAlertHistory.unshift({ symbol, rvol, volume, time: timeStr, direction, priceChange });
@@ -225,7 +224,6 @@ function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
     unreadAlerts++;
     updateAlertBadge();
 
-    // === Тост ===
     const existing = document.querySelectorAll('.volume-alert-toast');
     if (existing.length >= 3) existing[0].remove();
     const offset = document.querySelectorAll('.volume-alert-toast').length * 90;
@@ -234,12 +232,12 @@ function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
     const toast = document.createElement('div');
     toast.className = 'volume-alert-toast';
     toast.style.cssText = `
-        position:fixed; left:20px; bottom:${20 + offset}px;
+        position:fixed; right:20px; bottom:${20 + offset}px;
         background:#1a1a1a; border:2px solid ${color};
         color:#ffffff; padding:14px 18px; border-radius:0;
         box-shadow:0 4px 16px rgba(0,0,0,0.5); z-index:10000;
         cursor:pointer; transition:all 0.3s ease;
-        opacity:0; transform:translateX(-400px); display:flex; align-items:center; gap:12px;
+        opacity:0; transform:translateX(400px); display:flex; align-items:center; gap:12px;
     `;
     toast.innerHTML = `
         <div style="font-size:22px; color:${color};">${direction === '↑' ? '▲' : '▼'}</div>
@@ -256,7 +254,7 @@ function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
     toast.onclick = () => {
         openChart(symbol);
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(-400px)';
+        toast.style.transform = 'translateX(400px)';
         setTimeout(() => toast.remove(), 500);
     };
     document.body.appendChild(toast);
@@ -265,7 +263,7 @@ function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
     setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(0)'; }, 50);
     setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(-400px)';
+        toast.style.transform = 'translateX(400px)';
         setTimeout(() => toast.remove(), 500);
     }, 8000);
 }
