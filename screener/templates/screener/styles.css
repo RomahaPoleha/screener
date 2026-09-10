@@ -491,8 +491,8 @@ body {
 .volume-tooltip .vol-down { color: #ef4444; }
 
 .logo-img {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     object-fit: cover;
     margin-right: 8px;
     vertical-align: middle;
