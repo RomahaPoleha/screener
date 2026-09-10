@@ -2479,9 +2479,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('chart-title').addEventListener('click', copySymbolToClipboard);
 
-    document.querySelectorAll('.tf-btn').forEach(btn => {
+        document.querySelectorAll('.tf-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const newTF = e.target.dataset.tf;
+            if (!newTF) return;  // Пропускаем кнопки без data-tf (стрелки коллажа)
             if (newTF === currentTF) return;
             document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
