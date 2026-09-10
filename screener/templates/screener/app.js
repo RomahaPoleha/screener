@@ -1618,24 +1618,40 @@ async function loadScalpDensities(symbol) {
     // Если скальп выключен — очищаем линии и выходим
     if (!scalpEnabled) {
         if (scalpLines.length > 0) clearScalpLines();
+        previousScalpData = {};
         return;
     }
 
     isScalpLoading = true;
     try {
         const loadList = [];
+        const activeKeys = new Set();
+
         for (const exId in scalpExchanges) {
             const ex = scalpExchanges[exId];
             if (!ex.enabled) continue;
-            if (ex.markets.futures) loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
-            if (ex.markets.spot)    loadList.push({ exchange: exId, market: 'spot',    minVol: ex.minVolumeSpot });
+            if (ex.markets.futures) {
+                loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
+                activeKeys.add(`${exId}|futures`);
+            }
+            if (ex.markets.spot) {
+                loadList.push({ exchange: exId, market: 'spot', minVol: ex.minVolumeSpot });
+                activeKeys.add(`${exId}|spot`);
+            }
         }
 
-        // Если нет включённых бирж — очищаем линии
+        // Если нет включённых бирж/рынков — очищаем линии и выходим
         if (loadList.length === 0) {
             if (scalpLines.length > 0) clearScalpLines();
-            previousScalpData = {};  // ← Очищаем кэш
+            previousScalpData = {};
             return;
+        }
+
+        // Удаляем кэш для выключенных бирж/рынков
+        for (const key in previousScalpData) {
+            if (!activeKeys.has(key)) {
+                delete previousScalpData[key];
+            }
         }
 
         const allNewData = {};
@@ -1647,7 +1663,12 @@ async function loadScalpDensities(symbol) {
                 const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`);
                 if (!res.ok) continue;
                 const data = await res.json();
-                const filtered = (data.densities || []).filter(d => (d.exchange || 'binance') === item.exchange);
+                // Фильтруем по бирже И по возрасту >= 180 сек
+                const filtered = (data.densities || []).filter(d => {
+                    if ((d.exchange || 'binance') !== item.exchange) return false;
+                    if ((d.age_seconds || 0) < 180) return false;
+                    return true;
+                });
                 allNewData[key] = filtered;
             } catch (e) {
                 console.error(`Scalp load error (${key}):`, e);
@@ -1655,30 +1676,32 @@ async function loadScalpDensities(symbol) {
             }
         }
 
-        // Очищаем данные для выключенных бирж
-        for (const key in previousScalpData) {
-            if (!(key in allNewData)) {
-                delete previousScalpData[key];
-                hasChanges = true;  // ← Помечаем что были изменения
-            }
-        }
-
+        // Проверяем изменения
         for (const key in allNewData) {
             const newData = allNewData[key];
             const prevData = previousScalpData[key] || [];
             const curSig = JSON.stringify(newData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
             const prevSig = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
-            if (curSig !== prevSig) { hasChanges = true; previousScalpData[key] = newData; }
+            if (curSig !== prevSig) {
+                hasChanges = true;
+                previousScalpData[key] = newData;
+            }
+        }
+
+        // Проверяем удалённые ключи (были изменения)
+        if (Object.keys(previousScalpData).length !== activeKeys.size) {
+            hasChanges = true;
         }
 
         if (!hasChanges) return;
 
-        clearScalpLines();  // ← Очищаем ВСЕ линии перед перерисовкой
+        // Очищаем ВСЕ линии перед перерисовкой
+        clearScalpLines();
 
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
             const densities = allNewData[key];
-            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG'};
+            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG' };
             const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
             const marketSuffix = market === 'futures' ? 'F' : 'S';
             const prefix = `${exchangePrefix}-${marketSuffix}`;
@@ -1698,8 +1721,11 @@ async function loadScalpDensities(symbol) {
                 scalpLines.push(line);
             });
         }
-    } catch (err) { console.error('Scalp load error:', err); }
-    finally { isScalpLoading = false; }
+    } catch (err) {
+        console.error('Scalp load error:', err);
+    } finally {
+        isScalpLoading = false;
+    }
 }
 function clearScalpLines() {
     scalpLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
@@ -1779,20 +1805,31 @@ function applyScalpSettings() {
         scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 200000 : 200000;
     });
 
-    // Сохраняем в localStorage
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
 
-    // Пересчитываем scalpEnabled
     scalpEnabled = Object.values(scalpExchanges).some(cfg =>
         cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
     );
 
-    // Перерисовываем плотности если открыт график
-    if (currentSymbol && scalpEnabled) {
-        startScalpUpdates(currentSymbol);
+    // ← ДОБАВЛЕНО: Всегда очищаем линии перед перерисовкой
+    if (currentSymbol && candleSeries) {
+        clearScalpLines();
+        previousScalpData = {};  // ← Очищаем кэш
     }
 
-    // Закрываем модалку
+    // Перезапускаем обновление (даже если scalpEnabled = false)
+    if (currentSymbol) {
+        if (scalpEnabled) {
+            startScalpUpdates(currentSymbol);
+        } else {
+            // Если скальп выключен — останавливаем обновления
+            if (scalpUpdateTimer) {
+                clearInterval(scalpUpdateTimer);
+                scalpUpdateTimer = null;
+            }
+        }
+    }
+
     const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
     if (modal) modal.hide();
 }
