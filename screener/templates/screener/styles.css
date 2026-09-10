@@ -471,7 +471,7 @@ body {
 .alert-vol { color: #999999; text-align: right; }
 
 .volume-tooltip {
-    position: absolute;
+    position: fixed;
     background: #1a1a1a;
     border: 1px solid #333333;
     color: #e5e5e5;
