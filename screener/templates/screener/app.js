@@ -58,35 +58,159 @@ function playAlertSound() {
     } catch(e) { console.warn('Ошибка звука:', e); }
 }
 
-function showPriceAlertToast(currentPrice, alertPrice, direction) {
+// ==========================================
+// МЕНЕДЖЕР ЦЕНОВЫХ АЛЕРТОВ (фоновый мониторинг)
+// ==========================================
+let chartAlertLines = {};  // id алерта -> линия на текущем графике
+
+function getActiveAlertsFor(symbol) {
+    return (savedAlerts[symbol] || []).filter(a => a.active);
+}
+
+function showTriggeredToast(symbol, price, direction) {
     const toast = document.createElement('div');
     toast.className = 'hour-toast show';
-    toast.innerHTML = `<div class="toast-icon" style="color:#f59e0b;">&#9679;</div><div class="toast-content"><div class="toast-title">Алерт сработал</div><div style="font-size:12px; margin-top:4px;">Цена пересекла ${alertPrice.toFixed(currentPrecision)}<br>Направление: ${direction}</div></div>`;
+    toast.innerHTML = `<div class="toast-icon" style="color:#f59e0b;">&#9679;</div><div class="toast-content"><div class="toast-title">Алерт сработал</div><div style="font-size:12px; margin-top:4px;">${symbol}: цена пересекла ${price}<br>Направление: ${direction}</div></div>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 5000);
 }
 
+const AlertManager = {
+    streams: {},     // symbol -> WebSocket
+    lastPrice: {},   // symbol -> последняя цена
 
-function checkAlerts(currentPrice, prevPrice) {
-    activeAlerts.forEach((alert) => {
-        if (!alert.active) return;
-        const crossedAbove = (prevPrice < alert.price && currentPrice >= alert.price);
-        const crossedBelow = (prevPrice > alert.price && currentPrice <= alert.price);
-        if (crossedAbove || crossedBelow) {
-            const direction = crossedAbove ? 'вверх ↑' : 'вниз ↓';
-            playAlertSound();
-            showPriceAlertToast(currentPrice, alert.price, direction);
-            try { candleSeries.removePriceLine(alert.line); } catch(e) {}
-                        const fadedLine = candleSeries.createPriceLine({
+    save() {
+        localStorage.setItem('savedAlerts', JSON.stringify(savedAlerts));
+    },
+
+    add(symbol, price) {
+        if (!savedAlerts[symbol]) savedAlerts[symbol] = [];
+        const alert = {
+            id: 'al_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+            price: price,
+            active: true,
+            createdAt: Date.now()
+        };
+        savedAlerts[symbol].push(alert);
+        this.save();
+        this.ensureStream(symbol);
+        if (currentSymbol === symbol) this.drawLine(alert);
+        return alert;
+    },
+
+    remove(symbol, id) {
+        if (!savedAlerts[symbol]) return;
+        savedAlerts[symbol] = savedAlerts[symbol].filter(a => a.id !== id);
+        if (savedAlerts[symbol].length === 0) delete savedAlerts[symbol];
+        this.save();
+        this.removeLine(id);
+        this.refreshStream(symbol);
+    },
+
+    clearSymbol(symbol) {
+        delete savedAlerts[symbol];
+        this.save();
+        for (const id of Object.keys(chartAlertLines)) this.removeLine(id);
+        this.stopStream(symbol);
+    },
+
+    ensureStream(symbol) {
+        if (this.streams[symbol]) return;
+        if (!getActiveAlertsFor(symbol).length) return;
+        const url = `wss://fstream.binance.com/market/ws/${symbol.toLowerCase()}usdt@kline_1m`;
+        const ws = new WebSocket(url);
+        this.streams[symbol] = ws;
+        ws.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (!data.k) return;
+                const price = parseFloat(data.k.c);
+                const prev = this.lastPrice[symbol];
+                this.lastPrice[symbol] = price;
+                if (prev === undefined) return;
+                this.checkCross(symbol, price, prev);
+            } catch (err) {}
+        };
+        ws.onclose = () => {
+            if (this.streams[symbol] === ws) {
+                delete this.streams[symbol];
+                if (getActiveAlertsFor(symbol).length) {
+                    setTimeout(() => this.ensureStream(symbol), 3000);
+                }
+            }
+        };
+        ws.onerror = () => { try { ws.close(); } catch(e) {} };
+    },
+
+    stopStream(symbol) {
+        const ws = this.streams[symbol];
+        if (ws) {
+            this.streams[symbol] = null;
+            ws.onclose = null;
+            ws.close();
+            delete this.streams[symbol];
+        }
+    },
+
+    refreshStream(symbol) {
+        if (getActiveAlertsFor(symbol).length) this.ensureStream(symbol);
+        else this.stopStream(symbol);
+    },
+
+    checkCross(symbol, price, prev) {
+        for (const alert of (savedAlerts[symbol] || [])) {
+            if (!alert.active) continue;
+            const up = prev < alert.price && price >= alert.price;
+            const down = prev > alert.price && price <= alert.price;
+            if (up || down) this.trigger(symbol, alert, up ? 'вверх ↑' : 'вниз ↓');
+        }
+    },
+
+    trigger(symbol, alert, direction) {
+        alert.active = false;
+        this.save();
+        playAlertSound();
+        showTriggeredToast(symbol, alert.price, direction);
+        if (currentSymbol === symbol && candleSeries) {
+            this.removeLine(alert.id);
+            const faded = candleSeries.createPriceLine({
                 price: alert.price, color: 'rgba(245, 158, 11, 0.3)', lineWidth: 1,
                 lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true,
                 title: ` ${alert.price.toFixed(currentPrecision)}`
             });
-            alert.line = fadedLine;
-            alert.active = false;
+            chartAlertLines[alert.id] = faded;
         }
-    });
-}
+        this.refreshStream(symbol);
+    },
+
+    drawLine(alert) {
+        if (!candleSeries) return;
+        const line = candleSeries.createPriceLine({
+            price: alert.price,
+            color: alert.active ? '#3b82f6' : 'rgba(245, 158, 11, 0.3)',
+            lineWidth: 2,
+            lineStyle: alert.active ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: true,
+            title: ` ${alert.price.toFixed(currentPrecision)}`
+        });
+        chartAlertLines[alert.id] = line;
+    },
+
+    removeLine(id) {
+        const line = chartAlertLines[id];
+        if (line && candleSeries) { try { candleSeries.removePriceLine(line); } catch(e) {} }
+        delete chartAlertLines[id];
+    },
+
+    restoreLines(symbol) {
+        for (const id of Object.keys(chartAlertLines)) this.removeLine(id);
+        for (const alert of (savedAlerts[symbol] || [])) this.drawLine(alert);
+    },
+
+    startAll() {
+        for (const symbol of Object.keys(savedAlerts)) this.ensureStream(symbol);
+    }
+};
 
 // ==========================================
 // АЛЕРТЫ ПО ОБЪЁМУ (RVOL)
@@ -391,11 +515,7 @@ function startCandleWebSocket(symbol, tf) {
                         window.candleData.push(candle);
                     }
                 }
-                if (activeAlerts.length > 0) {
-                    const prevPrice = lastCandlePrice !== null ? lastCandlePrice : candle.open;
-                    checkAlerts(candle.close, prevPrice);
-                    lastCandlePrice = candle.close;
-                }
+
                 if (volumeSeries) {
                     volumeSeries.update({
                         time: candle.time, value: candle.volume,
@@ -438,9 +558,8 @@ function startTradesStream(symbol) {
 }
 
 function clearSpecificDrawings(type) {
-    if (type === 'alerts') {
-        activeAlerts.forEach(a => { try { candleSeries.removePriceLine(a.line); } catch(e){} });
-        activeAlerts = [];
+        if (type === 'alerts') {
+        if (currentSymbol) AlertManager.clearSymbol(currentSymbol);
     } else if (type === 'trendlines') {
         activeTrendlines = [];
         redrawAllPersistentDrawings();
@@ -730,12 +849,12 @@ function deleteLineAtPoint(x, y) {
     const clickPrice = candleSeries.coordinateToPrice(y);
     if (!clickPrice) return;
     const threshold = 50;
-    for (let i = activeAlerts.length - 1; i >= 0; i--) {
-        const alert = activeAlerts[i];
+        const savedList = savedAlerts[currentSymbol] || [];
+    for (let i = savedList.length - 1; i >= 0; i--) {
+        const alert = savedList[i];
         const alertY = candleSeries.priceToCoordinate(alert.price);
         if (alertY && Math.abs(alertY - y) < threshold) {
-            try { candleSeries.removePriceLine(alert.line); } catch(e) {}
-            activeAlerts.splice(i, 1);
+            AlertManager.remove(currentSymbol, alert.id);
             return;
         }
     }
@@ -784,15 +903,10 @@ function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
     if (isEraserEnabled) { deleteLineAtPoint(param.point.x, param.point.y); return; }
     if (isRulerEnabled) return;
-    if (isAlertModeEnabled) {
+        if (isAlertModeEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
-        const line = candleSeries.createPriceLine({
-            price: price, color: '#3b82f6', lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
-            title: ` ${price.toFixed(currentPrecision)}`
-        });
-        activeAlerts.push({ price: price, line: line, active: true });
+        AlertManager.add(currentSymbol, price);
     }
     else if (isHorizontalLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
@@ -1003,8 +1117,8 @@ function updateMagnetIndicator(param) {
         { type: 'ohlc', price: nearestCandle.low, distance: Math.abs(nearestCandle.low - priceAtCursor) },
         { type: 'ohlc', price: nearestCandle.close, distance: Math.abs(nearestCandle.close - priceAtCursor) }
     ];
-    activeAlerts.forEach(a => {
-        if (a.active) magnetPoints.push({ type: 'alert', price: a.price, distance: Math.abs(a.price - priceAtCursor) });
+        getActiveAlertsFor(currentSymbol).forEach(a => {
+        magnetPoints.push({ type: 'alert', price: a.price, distance: Math.abs(a.price - priceAtCursor) });
     });
     magnetPoints.sort((a, b) => a.distance - b.distance);
     const nearest = magnetPoints[0];
@@ -1788,8 +1902,11 @@ function copySymbolToClipboard() {
     }).catch(err => console.error('Ошибка копирования:', err));
 }
 
-function closeChart() {
-    clearAllDrawings();
+    clearSpecificDrawings('trendlines');
+    clearSpecificDrawings('horizontalLines');
+    clearSpecificDrawings('pencil');
+    clearSpecificDrawings('ruler');
+    for (const id of Object.keys(chartAlertLines)) AlertManager.removeLine(id);
     clearDensityLines();
     if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
     previousDensities = { future: [], spot: [] };
@@ -1800,6 +1917,7 @@ function closeChart() {
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
+    chartAlertLines = {};
     tradeBuffer = []; lastCandlePrice = null;
     els.chartTitle.textContent = '';
     const statsEl = document.getElementById('chartStats');
@@ -2029,6 +2147,7 @@ async function openChart(symbol) {
     } catch (e) { console.error('Chart init error:', e); return; }
 
     await loadChartData(symbol, currentTF);
+    AlertManager.restoreLines(symbol);
     startCandleWebSocket(symbol, currentTF);
     updateWatermark();
     updateChartStats();
@@ -2237,6 +2356,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAlertHistoryVisibility();
     loadAllData();
     startNatrAutoUpdate();
+    AlertManager.startAll();
 });
 
 function initSettingsTabs() {

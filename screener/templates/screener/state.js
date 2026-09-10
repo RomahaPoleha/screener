@@ -159,3 +159,9 @@ let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let lastNotifiedMinute = -1, russianVoice = null, audioCtx = null;
 let sortState = { field: null, direction: 'asc' };
 let natrAutoUpdateTimer = null;
+
+// Постоянные ценовые алерты (symbol -> массив алертов)
+let savedAlerts = {};
+try {
+    savedAlerts = JSON.parse(localStorage.getItem('savedAlerts') || '{}');
+} catch(e) { savedAlerts = {}; }
