@@ -6,8 +6,16 @@
     <button class="tf-btn" data-tf="1h">1ч</button>
     <button class="tf-btn" data-tf="4h">4ч</button>
 
-    <!-- Фильтры (перенесены из правой панели) -->
     <div style="margin-left:auto; display:flex; align-items:center; gap:16px;">
+        <!-- Управление коллажем (видимо только в режиме коллажа) -->
+        <div id="collageControls" style="display:none; align-items:center; gap:6px;">
+            <button class="tf-btn" id="collagePrev" onclick="collagePrevPage()">‹</button>
+            <span id="collagePageInfo" style="font-size:11px; color:#999999; font-weight:700; letter-spacing:0.5px;">1/1</span>
+            <button class="tf-btn" id="collageNext" onclick="collageNextPage()">›</button>
+            <button class="tf-btn" onclick="exitCollage()" style="color:#ef4444; border-color:#7f1d1d;">✕ Коллаж</button>
+            <div style="width:1px; height:16px; background:#333333;"></div>
+        </div>
+
         <label style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
             Объём: <span id="volVal" class="filter-value">$0</span>
             <input type="range" id="volRange" class="filter-slider tf-slider" min="0" max="500000000" step="1000000" value="0">

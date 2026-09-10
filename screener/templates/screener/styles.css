@@ -535,3 +535,13 @@ body {
     width: 130px;
     flex: none;
 }
+.collage-label {
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    z-index: 10;
+    font-size: 11px;
+    pointer-events: none;
+    letter-spacing: 0.5px;
+}
+.tf-slider { width: 130px; flex: none; }
