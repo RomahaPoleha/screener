@@ -1613,7 +1613,14 @@ function renderReconSettings() {
 }
 
 async function loadScalpDensities(symbol) {
-    if (!scalpEnabled || !candleSeries || isScalpLoading) return;
+    if (!candleSeries || isScalpLoading) return;
+
+    // Если скальп выключен — очищаем линии и выходим
+    if (!scalpEnabled) {
+        if (scalpLines.length > 0) clearScalpLines();
+        return;
+    }
+
     isScalpLoading = true;
     try {
         const loadList = [];
@@ -1623,12 +1630,17 @@ async function loadScalpDensities(symbol) {
             if (ex.markets.futures) loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
             if (ex.markets.spot)    loadList.push({ exchange: exId, market: 'spot',    minVol: ex.minVolumeSpot });
         }
+
+        // Если нет включённых бирж — очищаем линии
         if (loadList.length === 0) {
             if (scalpLines.length > 0) clearScalpLines();
+            previousScalpData = {};  // ← Очищаем кэш
             return;
         }
+
         const allNewData = {};
         let hasChanges = false;
+
         for (const item of loadList) {
             const key = `${item.exchange}|${item.market}`;
             try {
@@ -1642,6 +1654,15 @@ async function loadScalpDensities(symbol) {
                 allNewData[key] = previousScalpData[key] || [];
             }
         }
+
+        // Очищаем данные для выключенных бирж
+        for (const key in previousScalpData) {
+            if (!(key in allNewData)) {
+                delete previousScalpData[key];
+                hasChanges = true;  // ← Помечаем что были изменения
+            }
+        }
+
         for (const key in allNewData) {
             const newData = allNewData[key];
             const prevData = previousScalpData[key] || [];
@@ -1649,8 +1670,11 @@ async function loadScalpDensities(symbol) {
             const prevSig = JSON.stringify(prevData.map(d => ({ p: d.price, v: d.volume, s: d.side, e: d.exchange })));
             if (curSig !== prevSig) { hasChanges = true; previousScalpData[key] = newData; }
         }
+
         if (!hasChanges) return;
-        clearScalpLines();
+
+        clearScalpLines();  // ← Очищаем ВСЕ линии перед перерисовкой
+
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
             const densities = allNewData[key];
@@ -1658,12 +1682,14 @@ async function loadScalpDensities(symbol) {
             const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
             const marketSuffix = market === 'futures' ? 'F' : 'S';
             const prefix = `${exchangePrefix}-${marketSuffix}`;
+
             densities.forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
                 const ageText = formatAge(ageSeconds);
                 const volumeText = formatVolumeText(d.volume);
                 const volumeNum = parseFloat(d.volume) || 0;
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
+
                 const line = candleSeries.createPriceLine({
                     price: d.price, color: lineColor, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid,
                     axisLabelVisible: true, axisLabelColor: '#000000', axisLabelBackgroundColor: lineColor,
