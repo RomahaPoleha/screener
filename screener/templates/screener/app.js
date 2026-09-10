@@ -1492,8 +1492,8 @@ async function loadReconDensities(symbol) {
             for (const market of ['spot', 'futures']) {
                 if (!reconMarkets[ex.id][market]) continue;
                 tasks.push(fetchReconMarket(ex.id, symbol, market)
-                    .then(d => ({ ex: ex.id, market,  d }))
-                    .catch(() => ({ ex: ex.id, market,  null })));
+                    .then(d => ({ ex: ex.id, market, data: d }))
+                    .catch(() => ({ ex: ex.id, market, data: null })));
             }
         }
 
