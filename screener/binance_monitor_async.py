@@ -160,7 +160,7 @@ def _init_order_book_sync(symbol, market):
         else:
             ccxt_symbol = f"{symbol}/USDT"
 
-        ob = exchange.fetch_order_book(ccxt_symbol, limit=100)
+        ob = exchange.fetch_order_book(ccxt_symbol, limit=500)
 
         bids = {}
         for price, qty in ob.get('bids', []):
