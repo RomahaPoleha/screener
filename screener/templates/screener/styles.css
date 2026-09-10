@@ -530,3 +530,8 @@ body {
     overflow-y: auto;
     max-height: 65vh;
 }
+
+.tf-slider {
+    width: 130px;
+    flex: none;
+}

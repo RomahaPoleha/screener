@@ -1,8 +1,21 @@
-<div class="tf-bar" id="tfButtons">
+<div class="tf-bar">
     <button class="tf-btn active" data-tf="1m">1м</button>
     <button class="tf-btn" data-tf="5m">5м</button>
     <button class="tf-btn" data-tf="15m">15м</button>
     <button class="tf-btn" data-tf="30m">30м</button>
     <button class="tf-btn" data-tf="1h">1ч</button>
     <button class="tf-btn" data-tf="4h">4ч</button>
+
+    <!-- Фильтры (перенесены из правой панели) -->
+    <div style="margin-left:auto; display:flex; align-items:center; gap:16px;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
+            Объём: <span id="volVal" class="filter-value">$0</span>
+            <input type="range" id="volRange" class="filter-slider tf-slider" min="0" max="500000000" step="1000000" value="0">
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
+            Изм.: <span id="changeVal" class="filter-value">-100%</span>
+            <input type="range" id="changeRange" class="filter-slider tf-slider" min="-100" max="50" step="0.5" value="-100">
+        </label>
+        <button class="tf-btn" onclick="resetFilters()" title="Сбросить фильтры">✕</button>
+    </div>
 </div>

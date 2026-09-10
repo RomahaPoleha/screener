@@ -24,25 +24,16 @@
                 <div id="searchDropdown" class="search-dropdown"></div>
             </div>
         </div>
-        <div class="filter-section">
-            <label class="filter-label">Мин. объём: <span id="volVal" class="filter-value">$0</span></label>
-            <input type="range" id="volRange" class="filter-slider" min="0" max="500000000" step="1000000" value="0">
-        </div>
-        <div class="filter-section">
-            <label class="filter-label">Мин. изменение: <span id="changeVal" class="filter-value">-100%</span></label>
-            <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
-        </div>
-        <div class="filter-section">
-            <button class="reset-filters-btn" onclick="resetFilters()">✕ Сбросить фильтры</button>
-        </div>
     </div>
-            <div class="right-panel-header" style="display:flex; align-items:center; justify-content:space-between;">
-            <span>Монеты (<span id="coinsCount">0</span>)</span>
-            <button class="sound-toggle" id="groupsBtn" onclick="openGroupsModal()"
-                style="padding:2px 10px; font-size:11px; letter-spacing:0.5px;">
-                Группы
-            </button>
-        </div>
+
+    <div class="right-panel-header" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>Монеты (<span id="coinsCount">0</span>)</span>
+        <button class="sound-toggle" id="groupsBtn" onclick="openGroupsModal()"
+            style="padding:2px 10px; font-size:11px; letter-spacing:0.5px;">
+            Группы
+        </button>
+    </div>
+
     <div class="coins-header">
         <div></div>
         <div>Пара</div>
@@ -51,6 +42,7 @@
         <div class="text-end" onclick="sortBy('natr_1m')">NATR 1m <span id="sort-natr_1m"></span></div>
         <div class="text-end" onclick="sortBy('natr_5m')">NATR 5m <span id="sort-natr_5m"></span></div>
     </div>
+
     <div class="coins-table-wrap" id="tableBody">
         <div style="color:#6b7280; text-align:center; padding:20px;">Загрузка...</div>
     </div>
