@@ -65,7 +65,7 @@ def get_symbols_from_tickers():
 
             if '-' in clean_symbol:
                 continue
-            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+            if len(clean_symbol) < 1 or len(clean_symbol) > 15:
                 continue
             if not clean_symbol.replace('_', '').isalnum():
                 continue
