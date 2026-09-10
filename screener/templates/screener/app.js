@@ -1902,6 +1902,7 @@ function copySymbolToClipboard() {
     }).catch(err => console.error('Ошибка копирования:', err));
 }
 
+function closeChart() {
     clearSpecificDrawings('trendlines');
     clearSpecificDrawings('horizontalLines');
     clearSpecificDrawings('pencil');
@@ -1929,6 +1930,8 @@ function copySymbolToClipboard() {
     const tooltip = document.getElementById('volumeTooltip');
     if (tooltip) tooltip.classList.remove('visible');
 }
+
+
 
 async function openChart(symbol) {
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
