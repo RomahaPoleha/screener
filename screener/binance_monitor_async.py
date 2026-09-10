@@ -45,6 +45,9 @@ MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 SYNC_INTERVAL = 3
 
+# Лёгкая статистика объёмов (min/max/sum/count) для проверки стабильности
+binance_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
+binance_spot_volume_stats = {}
 
 # ==========================================
 # ТОП МОНЕТ (через ccxt в executor)
@@ -212,21 +215,23 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             async with binance_futures_lock:
                 book = binance_futures_order_books.get(symbol, {})
                 ts = binance_futures_density_timestamps.get(symbol, {})
+                stats = binance_futures_volume_stats.get(symbol, {})
                 if not book:
                     return 0
-            key = f"scalp:futures:{symbol}"  # ← БЕЗ :binance:
+            key = f"scalp:futures:{symbol}"
         else:
             async with binance_spot_lock:
                 book = binance_spot_order_books.get(symbol, {})
                 ts = binance_spot_density_timestamps.get(symbol, {})
+                stats = binance_spot_volume_stats.get(symbol, {})
                 if not book:
                     return 0
-            key = f"scalp:spot:{symbol}"  # ← БЕЗ :binance:
+            key = f"scalp:spot:{symbol}"
 
         now = time.time()
-
         densities = []
         is_first_load = len(ts) == 0
+        new_stats = {}
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
@@ -234,10 +239,33 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 if volume < 10000:
                     continue
 
+                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
+                prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
+                new_stat = {
+                    'min': min(prev_stat['min'], volume),
+                    'max': max(prev_stat['max'], volume),
+                    'sum': prev_stat['sum'] + volume,
+                    'count': prev_stat['count'] + 1
+                }
+                new_stats[price] = new_stat
+
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
+
+                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
+                    if new_stat['count'] >= 3:
+                        avg = new_stat['sum'] / new_stat['count']
+                        spread = new_stat['max'] - new_stat['min']
+                        stability_ratio = spread / avg if avg > 0 else 0
+
+                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
+                        if stability_ratio > 0.5:
+                            ts[price] = now  # Плотность должна "созревать" заново
+                            # Сбрасываем статистику
+                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
+                            continue
                 else:
                     if is_first_load:
                         ts[price] = now - 20
@@ -262,9 +290,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if market == 'futures':
             async with binance_futures_lock:
                 binance_futures_density_timestamps[symbol] = ts
+                binance_futures_volume_stats[symbol] = new_stats
         else:
             async with binance_spot_lock:
                 binance_spot_density_timestamps[symbol] = ts
+                binance_spot_volume_stats[symbol] = new_stats
 
         return len(densities)
 
