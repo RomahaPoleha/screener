@@ -23,6 +23,9 @@ const els = {
     drawingToolsPanel: document.getElementById('drawingToolsPanel')
 };
 
+
+let isReconLoading = false;
+
 let allCoins = [];
 let natrData = {};
 let chart = null, candleSeries = null, volumeSeries = null;

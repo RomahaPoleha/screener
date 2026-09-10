@@ -1482,32 +1482,53 @@ async function fetchReconMarket(exId, symbol, market) {
     return out;
 }
 async function loadReconDensities(symbol) {
-    if (!reconEnabled || !candleSeries) return;
-    const tasks = [];
-    for (const ex of RECON_EXCHANGES) {
-        for (const market of ['spot', 'futures']) {
-            if (!reconMarkets[ex.id][market]) continue;
-            tasks.push(fetchReconMarket(ex.id, symbol, market)
-                .then(d => ({ ex: ex.id, market, data: d }))
-                .catch(() => ({ ex: ex.id, market, data: null })));
+    if (!reconEnabled || !candleSeries || isReconLoading) return;
+
+    isReconLoading = true;
+
+    try {
+        const tasks = [];
+        for (const ex of RECON_EXCHANGES) {
+            for (const market of ['spot', 'futures']) {
+                if (!reconMarkets[ex.id][market]) continue;
+                tasks.push(fetchReconMarket(ex.id, symbol, market)
+                    .then(d => ({ ex: ex.id, market,  d }))
+                    .catch(() => ({ ex: ex.id, market,  null })));
+            }
         }
-    }
-    const results = await Promise.all(tasks);
-    clearReconLines();
-    for (const r of results) {
-        if (!r.data) continue;
-        const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
-        const suffix = r.market === 'futures' ? 'F' : 'S';
-        const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
-        top.forEach(d => {
-            const line = candleSeries.createPriceLine({
-                price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
-                axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
-                title: `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+
+        // ← ИСПРАВЛЕНИЕ: Если нет включённых бирж — просто очищаем
+        if (tasks.length === 0) {
+            clearReconLines();
+            return;
+        }
+
+        const results = await Promise.all(tasks);
+
+        // ← ИСПРАВЛЕНИЕ: Сначала создаём новые линии
+        const newLines = [];
+        for (const r of results) {
+            if (!r.data) continue;
+            const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
+            const suffix = r.market === 'futures' ? 'F' : 'S';
+            const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+            top.forEach(d => {
+                const line = candleSeries.createPriceLine({
+                    price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+                    axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                    title: `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+                });
+                newLines.push(line);
             });
-            reconLines.push(line);
-        });
+        }
+
+        // ← Потом удаляем старые (без мигания!)
+        clearReconLines();
+        reconLines = newLines;
+
+    } finally {
+        isReconLoading = false;  // ← Освобождаем флаг
     }
 }
 
@@ -1577,7 +1598,18 @@ function toggleReconMarket(exId, market) {
     reconMarkets[exId][market] = !reconMarkets[exId][market];
     localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
     renderReconPanel();
-    if (currentSymbol) loadReconDensities(currentSymbol);
+
+    // ← ИСПРАВЛЕНИЕ: Проверяем есть ли хоть одна включённая биржа
+    const hasEnabled = RECON_EXCHANGES.some(ex =>
+        reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
+    );
+
+    if (currentSymbol && hasEnabled) {
+        loadReconDensities(currentSymbol);
+    } else if (!hasEnabled) {
+        // Все выключены — просто очищаем линии
+        clearReconLines();
+    }
 }
 
 function startReconUpdates(symbol) {
