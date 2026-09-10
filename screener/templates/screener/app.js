@@ -1518,24 +1518,31 @@ function clearReconLines() {
 }
 
 function ensureReconPanel() {
-    removeReconPanel();
-    if (!reconEnabled) return;
-    const tfBtn = document.querySelector('.tf-btn');
-    if (!tfBtn || !tfBtn.parentElement) return;
-    const panel = document.createElement('div');
-    panel.id = 'reconPanel';
-    panel.style.cssText = 'display:flex;flex-direction:row;gap:16px;align-items:center;margin-left:24px;padding:6px 12px;background:rgba(30,41,59,0.9);border:1px solid #475569;border-radius:4px;';
-    panel.addEventListener('click', (e) => {
+    const container = document.getElementById('reconPanelContainer');
+    if (!container) return;
+
+    if (!reconEnabled) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    container.style.display = 'flex';
+    container.addEventListener('click', (e) => {
         const t = e.target.closest('.recon-toggle');
         if (!t) return;
         toggleReconMarket(t.dataset.ex, t.dataset.market);
     });
-    tfBtn.parentElement.appendChild(panel);
-    reconPanelEl = panel;
+    reconPanelEl = container;
+    renderReconPanel();
 }
 
 function removeReconPanel() {
-    if (reconPanelEl && reconPanelEl.parentNode) reconPanelEl.parentNode.removeChild(reconPanelEl);
+    const container = document.getElementById('reconPanelContainer');
+    if (container) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+    }
     reconPanelEl = null;
 }
 
