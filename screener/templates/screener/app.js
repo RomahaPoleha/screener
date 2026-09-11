@@ -446,7 +446,7 @@ function renderTable(data) {
         const isActive = coin.symbol === currentSymbol;
         const activeClass = isActive ? ' active' : '';
 
-        return `<div class="coin-row${activeClass}" onclick="openChart('${coin.symbol}')">
+        return `<div class="coin-row${activeClass}" data-symbol="${coin.symbol}" onclick="openChart('${coin.symbol}')">
             <div class="coin-color-dot" style="background:${colorHex || 'transparent'};"
                  onclick="event.stopPropagation(); openColorPicker(event, '${coin.symbol}')"
                  title="Цвет группы"></div>
@@ -457,6 +457,17 @@ function renderTable(data) {
             <div class="coin-natr ${n5 ? getNatrClass(n5) : 'empty'}">${n5Txt}</div>
         </div>`;
     }).join('');
+}
+
+// Функция быстрого обновления подсветки (без перерисовки таблицы)
+function updateActiveCoinHighlight() {
+    document.querySelectorAll('.coin-row').forEach(row => {
+        if (row.dataset.symbol === currentSymbol) {
+            row.classList.add('active');
+        } else {
+            row.classList.remove('active');
+        }
+    });
 }
 
 function sortBy(field) {
@@ -2213,6 +2224,9 @@ async function openChart(symbol) {
 
 
     currentSymbol = symbol;
+    currentSymbol = symbol;
+    updateActiveCoinHighlight();  // ← ДОБАВЬ ЭТУ СТРОКУ
+    els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
     els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
     tradeBuffer = []; lastCandlePrice = null;
     if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }

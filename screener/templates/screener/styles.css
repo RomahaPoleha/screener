@@ -555,3 +555,12 @@ body {
 .coin-row.active .coin-symbol {
     color: #f59e0b;
 }
+
+.coin-row.active {
+    background: #1f1f1f;
+    border-left: 3px solid #f59e0b;
+    padding-left: 9px;
+}
+.coin-row.active .coin-symbol {
+    color: #f59e0b;
+}
