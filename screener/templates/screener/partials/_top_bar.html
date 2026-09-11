@@ -1,24 +1,46 @@
 <div class="top-bar">
-    <div style="background: #1a1a1a; padding: 8px 16px; border-radius: 0; text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px;">
+    <div style="background: #1a1a1a; padding: 8px 16px; border-radius: 0; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; overflow: hidden;">
+  <style>
+    @keyframes fire-flicker {
+      0%, 100% { opacity: 1; filter: brightness(1); }
+      25% { opacity: 0.9; filter: brightness(1.1); }
+      50% { opacity: 1; filter: brightness(1.2); }
+      75% { opacity: 0.95; filter: brightness(1.05); }
+    }
+  </style>
+  <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 33%; opacity: 0.3; background: radial-gradient(ellipse at bottom, #ff4500 0%, #ff8c00 30%, transparent 70%); animation: fire-flicker 2s ease-in-out infinite;"></div>
   <span style="
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.5rem;
-    font-weight: 300;
-    letter-spacing: 0.2em;
-    color: #d4a853;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    background: linear-gradient(180deg, #fff5e6 0%, #ffcc00 20%, #ff6600 50%, #cc0000 80%, #660000 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
+    animation: fire-flicker 1.5s ease-in-out infinite;
+    position: relative;
   ">RECON</span>
   <span style="
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.1rem;
-    font-style: italic;
-    color: #d4a853;
+    background: linear-gradient(180deg, #fff 0%, #ffcc00 50%, #ff4500 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 1rem;
+    font-weight: bold;
+    filter: drop-shadow(0 0 8px rgba(255, 100, 0, 0.6));
+    position: relative;
   ">&</span>
   <span style="
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.5rem;
-    font-weight: 300;
-    letter-spacing: 0.2em;
-    color: #d4a853;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    background: linear-gradient(180deg, #fff5e6 0%, #ffcc00 20%, #ff6600 50%, #cc0000 80%, #660000 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
+    animation: fire-flicker 1.5s ease-in-out infinite 0.3s;
+    position: relative;
   ">SCALP</span>
 </div>
 
