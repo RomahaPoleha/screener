@@ -2,13 +2,17 @@
     <div style="background: #1a1a1a; padding: 8px 16px; border-radius: 0; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; overflow: hidden;">
   <style>
     @keyframes fire-flicker {
-      0%, 100% { opacity: 1; filter: brightness(1); }
-      25% { opacity: 0.9; filter: brightness(1.1); }
-      50% { opacity: 1; filter: brightness(1.2); }
-      75% { opacity: 0.95; filter: brightness(1.05); }
+      0%, 100% { opacity: 1; text-shadow: 0 0 10px rgba(255, 100, 0, 0.8), 0 0 30px rgba(255, 50, 0, 0.4); }
+      25% { opacity: 0.9; text-shadow: 0 0 15px rgba(255, 100, 0, 1), 0 0 40px rgba(255, 50, 0, 0.6); }
+      50% { opacity: 1; text-shadow: 0 0 20px rgba(255, 100, 0, 1), 0 0 50px rgba(255, 50, 0, 0.8); }
+      75% { opacity: 0.95; text-shadow: 0 0 12px rgba(255, 100, 0, 0.9), 0 0 35px rgba(255, 50, 0, 0.5); }
+    }
+    @keyframes fire-bg {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.5; }
     }
   </style>
-  <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 33%; opacity: 0.3; background: radial-gradient(ellipse at bottom, #ff4500 0%, #ff8c00 30%, transparent 70%); animation: fire-flicker 2s ease-in-out infinite;"></div>
+  <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 33%; background: radial-gradient(ellipse at bottom, #ff4500 0%, #ff8c00 30%, transparent 70%); animation: fire-bg 2s ease-in-out infinite;"></div>
   <span style="
     font-family: 'Montserrat', sans-serif;
     font-size: 1.3rem;
@@ -19,7 +23,6 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
     animation: fire-flicker 1.5s ease-in-out infinite;
     position: relative;
   ">RECON</span>
@@ -31,7 +34,7 @@
     color: transparent;
     font-size: 1rem;
     font-weight: bold;
-    filter: drop-shadow(0 0 8px rgba(255, 100, 0, 0.6));
+    animation: fire-flicker 1.5s ease-in-out infinite 0.2s;
     position: relative;
   ">&</span>
   <span style="
@@ -44,7 +47,6 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
     animation: fire-flicker 1.5s ease-in-out infinite 0.3s;
     position: relative;
   ">SCALP</span>
