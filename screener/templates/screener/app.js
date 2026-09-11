@@ -428,7 +428,6 @@ function resetFilters() {
 
 function renderTable(data) {
     if (els.coinsCount) els.coinsCount.textContent = data.length;
-    const isActive = coin.symbol === currentSymbol;
     if (!data.length) {
         els.table.innerHTML = '<div style="color:#6b7280; text-align:center; padding:20px;">Нет данных</div>';
         return;
@@ -442,7 +441,12 @@ function renderTable(data) {
         const n5Txt = (n5 !== undefined && n5 !== null) ? n5.toFixed(1) : '-';
         const colorId = coinColors[coin.symbol];
         const colorHex = colorId ? (COIN_COLOR_OPTIONS.find(c => c.id === colorId) || {}).hex : null;
-        return `<div class="coin-row${isActive ? ' active' : ''}" onclick="openChart('${coin.symbol}')">
+
+        // Подсветка активной монеты
+        const isActive = coin.symbol === currentSymbol;
+        const activeClass = isActive ? ' active' : '';
+
+        return `<div class="coin-row${activeClass}" onclick="openChart('${coin.symbol}')">
             <div class="coin-color-dot" style="background:${colorHex || 'transparent'};"
                  onclick="event.stopPropagation(); openColorPicker(event, '${coin.symbol}')"
                  title="Цвет группы"></div>
