@@ -545,3 +545,13 @@ body {
     letter-spacing: 0.5px;
 }
 .tf-slider { width: 130px; flex: none; }
+
+
+.coin-row.active {
+    background: #1f1f1f;
+    border-left: 3px solid #f59e0b;
+    padding-left: 9px; /* компенсируем 3px бордер */
+}
+.coin-row.active .coin-symbol {
+    color: #f59e0b;
+}
