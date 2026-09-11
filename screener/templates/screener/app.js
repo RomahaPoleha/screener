@@ -2003,7 +2003,7 @@ function exitCollage() {
 
     els.chartWrapper.style.display = '';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
-    if (titleWrap) titleWrap.style.display = '';
+    if (titleWrap) titleWrap.style.display = 'flex';
     const resetBtn = document.querySelector('.chart-reset-btn');
     if (resetBtn) resetBtn.style.display = '';
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
