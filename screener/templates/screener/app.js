@@ -2669,7 +2669,17 @@ function updateChartStats() {
     const n1Html = n1 !== null ? `<span style="color:${natrColor(n1)}; font-weight:600;">${n1.toFixed(1)}</span>` : '<span style="color:#6b7280;">-</span>';
     const n5Html = n5 !== null ? `<span style="color:${natrColor(n5)}; font-weight:600;">${n5.toFixed(1)}</span>` : '<span style="color:#6b7280;">-</span>';
 
-    el.innerHTML = `Vol: <span style="color:#e5e5e5; font-weight:600;">${vol}</span>` +
+    // 24ч изменение
+    const change24h = coin && coin.change !== undefined && coin.change !== null ? coin.change : null;
+    const changeColor = change24h !== null ? (change24h >= 0 ? '#22c55e' : '#ef4444') : '#6b7280';
+    const changePrefix = change24h !== null ? (change24h >= 0 ? '+' : '') : '';
+    const changeHtml = change24h !== null
+        ? `<span style="color:${changeColor}; font-weight:700;">${changePrefix}${change24h.toFixed(2)}%</span>`
+        : '<span style="color:#6b7280;">—</span>';
+
+    el.innerHTML = `24ч: ${changeHtml}` +
+                   `&nbsp;&nbsp;|&nbsp;&nbsp;` +
+                   `Vol: <span style="color:#e5e5e5; font-weight:600;">${vol}</span>` +
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 1m: ${n1Html}` +
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 5m: ${n5Html}`;
 }
