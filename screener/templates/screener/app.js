@@ -1565,11 +1565,17 @@ function ensureReconPanel() {
     }
 
     container.style.display = 'flex';
-    container.addEventListener('click', (e) => {
-        const t = e.target.closest('.recon-toggle');
-        if (!t) return;
-        toggleReconMarket(t.dataset.ex, t.dataset.market);
-    });
+
+    // Добавляем обработчик только один раз
+    if (!container.dataset.hasClickListener) {
+        container.addEventListener('click', (e) => {
+            const t = e.target.closest('.recon-toggle');
+            if (!t) return;
+            toggleReconMarket(t.dataset.ex, t.dataset.market);
+        });
+        container.dataset.hasClickListener = 'true';
+    }
+
     reconPanelEl = container;
     renderReconPanel();
 }
