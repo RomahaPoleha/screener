@@ -1697,16 +1697,26 @@ function stopReconUpdates() {
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
-    container.innerHTML = RECON_EXCHANGES.map(ex => `
-        <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span>
-            <label style="font-size:11px;color:#94a3b8;">F:</label>
-            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000"
-                style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
-            <label style="font-size:11px;color:#94a3b8;">S:</label>
-            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000"
-                style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
-        </div>`).join('');
+    container.innerHTML = RECON_EXCHANGES.map(ex => {
+        const fVol = reconMinVolumes[ex.id].futures;
+        const sVol = reconMinVolumes[ex.id].spot;
+        return `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#242424;border:1px solid #475569;">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:28px;">
+                    <span style="font-weight:600;font-size:11px;color:${ex.color};line-height:1;">${ex.label}</span>
+                    <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                         onerror="this.style.display='none'"
+                         style="width:14px;height:14px;border-radius:2px;display:block;">
+                </div>
+                <label style="font-size:11px;color:#94a3b8;">F:</label>
+                <input type="number" id="reconMinF_${ex.id}" value="${fVol}" min="1000" step="1000"
+                       style="width:90px;background:#0f0f0f;border:1px solid #444444;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
+                <label style="font-size:11px;color:#94a3b8;">S:</label>
+                <input type="number" id="reconMinS_${ex.id}" value="${sVol}" min="1000" step="1000"
+                       style="width:90px;background:#0f0f0f;border:1px solid #444444;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
+            </div>
+        `;
+    }).join('');
 }
 
 async function loadScalpDensities(symbol) {
@@ -2762,39 +2772,35 @@ function renderScalpCards() {
         const sEnabled = cfg.markets && cfg.markets.spot;
         const fVol = cfg.minVolumeFutures || 300000;
         const sVol = cfg.minVolumeSpot || 200000;
-
-        const mkToggle = (market, letter, vol, inputId) => {
-            const on = isEnabled && (market === 'futures' ? fEnabled : sEnabled);
-            const bg = on ? `rgba(${hexToRgb(ex.color)}, 0.2)` : 'transparent';
-            const border = on ? `1px solid ${ex.color}` : '1px solid #475569';
-            const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:10px;font-weight:bold;">✓</span>` : '';
-            return `
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="font-size:10px;color:#94a3b8;">${letter}:</span>
-                        <input type="number" id="${inputId}" value="${vol}" min="10000" step="10000"
-                               style="width:75px;background:#0f0f0f;border:1px solid #444444;color:#fff;padding:4px 6px;font-size:11px;"
-                               ${!on ? 'disabled' : ''}>
-                    </div>
-                    <div style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${!isEnabled ? 'opacity:0.45;' : ''}"
-                         onclick="toggleScalpMarket('${ex.id}', '${market}')">
-                        ${checkmark}
-                    </div>
-                </div>
-            `;
-        };
-
         return `
-            <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#242424;border:1px solid #475569;">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#242424;border:1px solid #475569;">
                 <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:28px;">
                     <span style="font-weight:600;font-size:11px;color:${ex.color};line-height:1;">${ex.name.substring(0, 2).toUpperCase()}</span>
                     <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
                          onerror="this.style.display='none'"
                          style="width:14px;height:14px;border-radius:2px;display:block;">
                 </div>
-                ${mkToggle('futures', 'F', fVol, `scalp-${ex.id}-fv`)}
-                ${mkToggle('spot', 'S', sVol, `scalp-${ex.id}-sv`)}
-                <label style="position:relative;display:inline-block;width:36px;height:20px;margin-left:auto;cursor:pointer;">
+                <label style="font-size:11px;color:#94a3b8;">F:</label>
+                <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000"
+                       style="width:90px;background:#0f0f0f;border:1px solid #444444;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"
+                       ${!fEnabled || !isEnabled ? 'disabled' : ''}>
+                <label style="font-size:11px;color:#94a3b8;">S:</label>
+                <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000"
+                       style="width:90px;background:#0f0f0f;border:1px solid #444444;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"
+                       ${!sEnabled || !isEnabled ? 'disabled' : ''}>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;margin-left:auto;">
+                    <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
+                           style="accent-color:#f59e0b;width:14px;height:14px;"
+                           onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
+                    <span>F</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
+                    <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
+                           style="accent-color:#f59e0b;width:14px;height:14px;"
+                           onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
+                    <span>S</span>
+                </label>
+                <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">
                     <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
                            style="opacity:0;width:0;height:0;"
                            onchange="toggleScalpExchange('${ex.id}', this.checked)">
@@ -2819,14 +2825,19 @@ function toggleScalpMarket(exchangeId, market) {
 }
 
 function toggleScalpExchange(exchangeId, enabled) {
-    if (!scalpExchanges[exchangeId]) {
-        scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+    const fCheckbox = document.getElementById(`scalp-${exchangeId}-f`);
+    const sCheckbox = document.getElementById(`scalp-${exchangeId}-s`);
+    const fInput = document.getElementById(`scalp-${exchangeId}-fv`);
+    const sInput = document.getElementById(`scalp-${exchangeId}-sv`);
+    if (fCheckbox) fCheckbox.disabled = !enabled;
+    if (sCheckbox) sCheckbox.disabled = !enabled;
+    if (!enabled) {
+        if (fInput) fInput.disabled = true;
+        if (sInput) sInput.disabled = true;
+    } else {
+        if (fInput) fInput.disabled = !fCheckbox.checked;
+        if (sInput) sInput.disabled = !sCheckbox.checked;
     }
-    scalpExchanges[exchangeId].enabled = enabled;
-    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
-    renderScalpCards();
-    applyScalpSettingsSilent();
 }
 
 function applyScalpSettingsSilent() {
