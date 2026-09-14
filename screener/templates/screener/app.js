@@ -1697,7 +1697,20 @@ function stopReconUpdates() {
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
-    container.innerHTML = RECON_EXCHANGES.map(ex => `<div style="display:flex;align-items:center;gap:10px;"> <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span> <label style="font-size:11px;color:#94a3b8;">F:</label> <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000" style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"> <label style="font-size:11px;color:#94a3b8;">S:</label> <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000" style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"> </div>`).join('');
+    container.innerHTML = RECON_EXCHANGES.map(ex => `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                 onerror="this.style.display='none'"
+                 style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
+            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span>
+            <label style="font-size:11px;color:#94a3b8;">F:</label>
+            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000"
+                   style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
+            <label style="font-size:11px;color:#94a3b8;">S:</label>
+            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000"
+                   style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
+        </div>
+    `).join('');
 }
 
 async function loadScalpDensities(symbol) {
@@ -1841,7 +1854,7 @@ function openScalpSettingsModal() {
                                      onerror="this.style.display='none'"
                                      style="position:relative; width:26px; height:26px; border-radius:6px;">
                             </span>
-                        <span style="font-weight:600; color:${ex.color}; font-size:15px;">${ex.name}</span>
+                        <span style="font-weight:600; color:${ex.color}; font-size:14px; min-width:90px;">${ex.label || ex.name}</span>
                     </div>
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0;">
                         <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} style="accent-color:${ex.color}; width:16px; height:16px;">
@@ -2755,6 +2768,9 @@ function renderScalpCards() {
         const sVol = cfg.minVolumeSpot || 200000;
         return `
             <div style="display:flex;align-items:center;gap:10px;">
+                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                     onerror="this.style.display='none'"
+                     style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
                 <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.name.substring(0, 2).toUpperCase()}</span>
                 <label style="font-size:11px;color:#94a3b8;">F:</label>
                 <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000"
