@@ -1686,15 +1686,7 @@ function stopReconUpdates() {
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
-    container.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-            <span style="min-width:28px;"></span>
-            <span style="font-size:10px;color:#94a3b8;min-width:12px;">F:</span>
-            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
-            <span style="font-size:10px;color:#94a3b8;min-width:12px;">S:</span>
-            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
-        </div>
-    ` + RECON_EXCHANGES.map(ex => `
+    container.innerHTML = RECON_EXCHANGES.map(ex => `
         <div style="display:flex;align-items:center;gap:10px;">
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
                  onerror="this.style.display='none'"
@@ -2756,16 +2748,7 @@ function updateChartStats() {
 function renderScalpCards() {
     const container = document.getElementById('scalpExchangesContainer');
     if (!container) return;
-    container.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-            <span style="min-width:28px;"></span>
-            <span style="font-size:10px;color:#94a3b8;min-width:12px;">F:</span>
-            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
-            <span style="font-size:10px;color:#94a3b8;min-width:12px;">S:</span>
-            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
-            <span style="margin-left:auto;min-width:44px;"></span>
-        </div>
-    ` + EXCHANGES_CONFIG.map(ex => {
+    container.innerHTML = EXCHANGES_CONFIG.map(ex => {
         const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
         const isEnabled = cfg.enabled !== false;
         const fEnabled = cfg.markets && cfg.markets.futures;
