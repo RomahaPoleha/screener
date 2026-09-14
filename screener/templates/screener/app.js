@@ -1163,42 +1163,31 @@ function openSettingsModal() {
     const firstContent = document.getElementById('tab-display');
     if (firstTab) firstTab.classList.add('active');
     if (firstContent) firstContent.classList.add('active');
-
     const volHist = document.getElementById('showVolumeHistogram');
     if (volHist) volHist.checked = volumeHistogramEnabled;
     const drawTools = document.getElementById('showDrawingTools');
     if (drawTools) drawTools.checked = showDrawingTools;
-
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
         reconToggle.checked = reconEnabled;
         renderReconSettings();
     }
     renderScalpCards();
-
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
     if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
-
     const soundCheckbox = document.getElementById('soundToggleModal');
     if (soundCheckbox) soundCheckbox.checked = soundEnabled;
-
-
-
-
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
     const volAlertThr = document.getElementById('volumeAlertThreshold');
     if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
-
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) beepSlider.value = alertBeepVolume;
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) hourSlider.value = hourSoundVolume;
-
     initSettingsTabs();
-
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
     modal.show();
 }
@@ -1697,16 +1686,24 @@ function stopReconUpdates() {
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
-    container.innerHTML = RECON_EXCHANGES.map(ex => `
+    container.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="min-width:28px;"></span>
+            <span style="font-size:10px;color:#94a3b8;min-width:12px;">F:</span>
+            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
+            <span style="font-size:10px;color:#94a3b8;min-width:12px;">S:</span>
+            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
+        </div>
+    ` + RECON_EXCHANGES.map(ex => `
         <div style="display:flex;align-items:center;gap:10px;">
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
                  onerror="this.style.display='none'"
                  style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span>
-            <label style="font-size:11px;color:#94a3b8;">F:</label>
+            <span style="font-size:11px;color:#94a3b8;min-width:12px;">F:</span>
             <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000"
                    style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
-            <label style="font-size:11px;color:#94a3b8;">S:</label>
+            <span style="font-size:11px;color:#94a3b8;min-width:12px;">S:</span>
             <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000"
                    style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
         </div>
@@ -2759,7 +2756,16 @@ function updateChartStats() {
 function renderScalpCards() {
     const container = document.getElementById('scalpExchangesContainer');
     if (!container) return;
-    container.innerHTML = EXCHANGES_CONFIG.map(ex => {
+    container.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="min-width:28px;"></span>
+            <span style="font-size:10px;color:#94a3b8;min-width:12px;">F:</span>
+            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
+            <span style="font-size:10px;color:#94a3b8;min-width:12px;">S:</span>
+            <input type="number" disabled style="width:90px;background:#1e293b;border:1px solid #475569;color:#6b7280;padding:4px 8px;border-radius:3px;font-size:11px;" value="">
+            <span style="margin-left:auto;min-width:44px;"></span>
+        </div>
+    ` + EXCHANGES_CONFIG.map(ex => {
         const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
         const isEnabled = cfg.enabled !== false;
         const fEnabled = cfg.markets && cfg.markets.futures;
@@ -2771,12 +2777,12 @@ function renderScalpCards() {
                 <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
                      onerror="this.style.display='none'"
                      style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-                <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.name.substring(0, 2).toUpperCase()}</span>
-                <label style="font-size:11px;color:#94a3b8;">F:</label>
+                <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
+                <span style="font-size:11px;color:#94a3b8;min-width:12px;">F:</span>
                 <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000"
                        style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"
                        ${!fEnabled || !isEnabled ? 'disabled' : ''}>
-                <label style="font-size:11px;color:#94a3b8;">S:</label>
+                <span style="font-size:11px;color:#94a3b8;min-width:12px;">S:</span>
                 <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000"
                        style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"
                        ${!sEnabled || !isEnabled ? 'disabled' : ''}>
