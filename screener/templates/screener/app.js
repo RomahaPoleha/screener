@@ -1455,7 +1455,6 @@ function parseReconLevels(exId, data) {
 
 async function fetchReconMarket(exId, symbol, market) {
     let data;
-
     try {
         if (exId === 'mexc') {
             const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
@@ -1476,10 +1475,29 @@ async function fetchReconMarket(exId, symbol, market) {
         return [];
     }
 
-    if (data && ((data.code !== undefined && data.code !== 0) ||
-                 (data.msg && data.msg.includes('not found')) ||
-                 (data.retCode !== undefined && data.retCode !== 0))) {
-        return [];
+    // === ИСПРАВЛЕННАЯ ПРОВЕРКА ОШИБОК ===
+    // OKX возвращает code: "0" (строка), Bitget code: "00000" (строка)
+    // Bybit возвращает retCode: 0 (число)
+    if (data) {
+        // OKX: code === "0" — успех
+        if (exId === 'okx') {
+            if (data.code !== undefined && data.code !== '0' && data.code !== 0) return [];
+        }
+        // Bitget: code === "00000" — успех
+        else if (exId === 'bitget') {
+            if (data.code !== undefined && data.code !== '00000' && data.code !== 0) return [];
+        }
+        // Bybit: retCode === 0 — успех
+        else if (exId === 'bybit') {
+            if (data.retCode !== undefined && data.retCode !== 0) return [];
+        }
+        // Остальные (Binance и т.д.)
+        else {
+            if (data.code !== undefined && data.code !== 0 && data.code !== '0') return [];
+            if (data.retCode !== undefined && data.retCode !== 0) return [];
+        }
+        // Универсальная проверка "not found"
+        if (data.msg && typeof data.msg === 'string' && data.msg.includes('not found')) return [];
     }
 
     const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
