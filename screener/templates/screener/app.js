@@ -1205,28 +1205,41 @@ function openSettingsModal() {
 }
 
 function applySettings() {
-    // === БИРЖИ (Recon + Scalp) ===
-    applyExchangesSettings();
-
-    // === ОТОБРАЖЕНИЕ ===
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
     if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
+
+    const deltaHist = document.getElementById('showDeltaHistogram');
+    if (deltaHist) {
+        deltaEnabled = deltaHist.checked;
+        localStorage.setItem('deltaEnabled', deltaEnabled);
+        if (deltaSeries) deltaSeries.applyOptions({ visible: deltaEnabled });
+    }
 
     showDrawingTools = document.getElementById('showDrawingTools').checked;
     localStorage.setItem('showDrawingTools', showDrawingTools);
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
 
-    // === ОПОВЕЩЕНИЯ ===
+    const reconToggle = document.getElementById('reconPanelToggle');
+    if (reconToggle) {
+        reconEnabled = reconToggle.checked;
+        localStorage.setItem('reconEnabled', reconEnabled);
+        for (const ex of RECON_EXCHANGES) {
+            const f = document.getElementById(`reconMinF_${ex.id}`);
+            const s = document.getElementById(`reconMinS_${ex.id}`);
+            if (f) reconMinVolumes[ex.id].futures = Math.max(1000, parseInt(f.value) || 50000);
+            if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
+        }
+        localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
+    }
+
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) {
         volumeAlertEnabled = volAlertToggle.checked;
         localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
     }
-
     alertBeepVolume = parseFloat(document.getElementById('alertBeepVolume').value);
     localStorage.setItem('alertBeepVolume', alertBeepVolume);
-
     hourSoundVolume = parseFloat(document.getElementById('hourSoundVolume').value);
     localStorage.setItem('hourSoundVolume', hourSoundVolume);
 
@@ -1247,7 +1260,6 @@ function applySettings() {
             localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
         }
     }
-
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
     if (priceImpulseWin) {
         const win = parseInt(priceImpulseWin.value);
@@ -1259,7 +1271,6 @@ function applySettings() {
 
     updateAlertHistoryVisibility();
 
-    // === КНОПКА НАСТРОЕК ===
     const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
@@ -1271,22 +1282,11 @@ function applySettings() {
         }
     }
 
-    // === ПЕРЕЗАПУСК ОБНОВЛЕНИЙ ===
     if (currentSymbol) {
         if (reconEnabled) startReconUpdates(currentSymbol);
         else stopReconUpdates();
-
-        if (scalpEnabled) startScalpUpdates(currentSymbol);
-        else {
-            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
-            clearScalpLines();
-            previousScalpData = {};
-        }
     }
-
-    // === ЗАКРЫТЬ МОДАЛКУ ===
-    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
-    if (modal) modal.hide();
+    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
 
 async function loadDensities(symbol) {
