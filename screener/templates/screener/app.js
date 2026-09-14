@@ -1172,10 +1172,8 @@ function openSettingsModal() {
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
         reconToggle.checked = reconEnabled;
-        toggleReconSettings();
-        renderReconSettings();
     }
-    renderScalpCards();
+    renderExchangesSettings();
 
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
@@ -2708,6 +2706,130 @@ function updateChartStats() {
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 1m: ${n1Html}` +
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 5m: ${n5Html}`;
 }
+
+function applyExchangesSettings() {
+    // === RECON ===
+    const reconToggle = document.getElementById('reconPanelToggle');
+    if (reconToggle) {
+        reconEnabled = reconToggle.checked;
+        localStorage.setItem('reconEnabled', reconEnabled);
+    }
+
+    for (const ex of RECON_EXCHANGES) {
+        const f = document.getElementById('reconMinF_' + ex.id);
+        const s = document.getElementById('reconMinS_' + ex.id);
+        if (!reconMinVolumes[ex.id]) reconMinVolumes[ex.id] = { futures: 50000, spot: 10000 };
+        if (f) reconMinVolumes[ex.id].futures = Math.max(1000, parseInt(f.value) || 50000);
+        if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
+    }
+    localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
+
+    // === SCALP ===
+    EXCHANGES_CONFIG.forEach(ex => {
+        const enabled = document.getElementById('scalpEnabled_' + ex.id);
+        const fChk = document.getElementById('scalpFutures_' + ex.id);
+        const sChk = document.getElementById('scalpSpot_' + ex.id);
+        const fInp = document.getElementById('scalpMinFutures_' + ex.id);
+        const sInp = document.getElementById('scalpMinSpot_' + ex.id);
+
+        if (!scalpExchanges[ex.id]) {
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+        }
+
+        scalpExchanges[ex.id].enabled = enabled ? enabled.checked : false;
+        scalpExchanges[ex.id].markets.futures = fChk ? fChk.checked : false;
+        scalpExchanges[ex.id].markets.spot = sChk ? sChk.checked : false;
+        scalpExchanges[ex.id].minVolumeFutures = fInp ? parseInt(fInp.value) || 300000 : 300000;
+        scalpExchanges[ex.id].minVolumeSpot = sInp ? parseInt(sInp.value) || 200000 : 200000;
+    });
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
+    scalpEnabled = Object.values(scalpExchanges).some(cfg =>
+        cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
+    );
+
+    // Перезапуск обновлений
+    if (currentSymbol) {
+        if (reconEnabled) startReconUpdates(currentSymbol);
+        else stopReconUpdates();
+
+        if (scalpEnabled) startScalpUpdates(currentSymbol);
+        else {
+            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+            clearScalpLines();
+            previousScalpData = {};
+        }
+    }
+
+    // Закрываем модалку
+    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+    if (modal) modal.hide();
+}
+
+
+function renderExchangesSettings() {
+    // === RECON (слева) ===
+    const reconContainer = document.getElementById('reconSettingsContainer');
+    if (reconContainer) {
+        reconContainer.innerHTML = RECON_EXCHANGES.map(ex => {
+            const vol = reconMinVolumes[ex.id] || { futures: 50000, spot: 10000 };
+            return `<div style="display:flex; align-items:center; gap:8px; padding:8px; background:#1f1f1f; border:1px solid #333;">
+                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                     onerror="this.style.display='none'"
+                     style="width:20px; height:20px; border-radius:3px;" title="${ex.label}">
+                <span style="font-weight:600; font-size:12px; color:${ex.color}; min-width:30px;">${ex.label}</span>
+                <div style="flex:1; display:flex; gap:6px; align-items:center;">
+                    <span style="font-size:10px; color:#94a3b8;">F:</span>
+                    <input type="number" id="reconMinF_${ex.id}" value="${vol.futures}" min="1000" step="1000"
+                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
+                    <span style="font-size:10px; color:#94a3b8;">S:</span>
+                    <input type="number" id="reconMinS_${ex.id}" value="${vol.spot}" min="1000" step="1000"
+                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // === SCALP (справа) ===
+    const scalpContainer = document.getElementById('scalpExchangesContainer');
+    if (scalpContainer) {
+        scalpContainer.innerHTML = EXCHANGES_CONFIG.map(ex => {
+            const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+            return `<div style="padding:8px; background:#1f1f1f; border:1px solid #333;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                         onerror="this.style.display='none'"
+                         style="width:20px; height:20px; border-radius:3px;">
+                    <span style="font-weight:600; font-size:12px; color:${ex.color}; flex:1;">${ex.name}</span>
+                    <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''}
+                           style="accent-color:${ex.color}; width:14px; height:14px;">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                    <div>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:10px; color:#94a3b8; margin-bottom:4px;">
+                            <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''}
+                                   style="accent-color:${ex.color}; width:12px; height:12px;">
+                            <span>Futures</span>
+                        </label>
+                        <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
+                               style="width:100%; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 6px; font-size:10px;">
+                    </div>
+                    <div>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:10px; color:#94a3b8; margin-bottom:4px;">
+                            <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''}
+                                   style="accent-color:${ex.color}; width:12px; height:12px;">
+                            <span>Spot</span>
+                        </label>
+                        <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
+                               style="width:100%; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 6px; font-size:10px;">
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+}
+
+
 
 function renderScalpCards() {
     const container = document.getElementById('scalpExchangesContainer');
