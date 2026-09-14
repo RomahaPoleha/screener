@@ -1170,10 +1170,10 @@ function openSettingsModal() {
     if (drawTools) drawTools.checked = showDrawingTools;
 
     const reconToggle = document.getElementById('reconPanelToggle');
-    if (reconToggle) {
-        reconToggle.checked = reconEnabled;
-    }
-    renderExchangesSettings();
+if (reconToggle) {
+    reconToggle.checked = reconEnabled;
+}
+renderExchangesSettings();
 
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
@@ -1216,18 +1216,45 @@ function applySettings() {
     localStorage.setItem('showDrawingTools', showDrawingTools);
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
 
-    const reconToggle = document.getElementById('reconPanelToggle');
-    if (reconToggle) {
-        reconEnabled = reconToggle.checked;
-        localStorage.setItem('reconEnabled', reconEnabled);
-        for (const ex of RECON_EXCHANGES) {
-            const f = document.getElementById(`reconMinF_${ex.id}`);
-            const s = document.getElementById(`reconMinS_${ex.id}`);
-            if (f) reconMinVolumes[ex.id].futures = Math.max(1000, parseInt(f.value) || 50000);
-            if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
-        }
-        localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
+    // === RECON ===
+const reconToggle = document.getElementById('reconPanelToggle');
+if (reconToggle) {
+    reconEnabled = reconToggle.checked;
+    localStorage.setItem('reconEnabled', reconEnabled);
+}
+
+for (const ex of RECON_EXCHANGES) {
+    const f = document.getElementById('reconMinF_' + ex.id);
+    const s = document.getElementById('reconMinS_' + ex.id);
+    if (!reconMinVolumes[ex.id]) reconMinVolumes[ex.id] = { futures: 50000, spot: 10000 };
+    if (f) reconMinVolumes[ex.id].futures = Math.max(1000, parseInt(f.value) || 50000);
+    if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
+}
+localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
+
+// === SCALP ===
+EXCHANGES_CONFIG.forEach(ex => {
+    const enabled = document.getElementById('scalpEnabled_' + ex.id);
+    const fChk = document.getElementById('scalpFutures_' + ex.id);
+    const sChk = document.getElementById('scalpSpot_' + ex.id);
+    const fInp = document.getElementById('scalpMinFutures_' + ex.id);
+    const sInp = document.getElementById('scalpMinSpot_' + ex.id);
+
+    if (!scalpExchanges[ex.id]) {
+        scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
     }
+
+    scalpExchanges[ex.id].enabled = enabled ? enabled.checked : false;
+    scalpExchanges[ex.id].markets.futures = fChk ? fChk.checked : false;
+    scalpExchanges[ex.id].markets.spot = sChk ? sChk.checked : false;
+    scalpExchanges[ex.id].minVolumeFutures = fInp ? parseInt(fInp.value) || 300000 : 300000;
+    scalpExchanges[ex.id].minVolumeSpot = sInp ? parseInt(sInp.value) || 200000 : 200000;
+});
+localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
+scalpEnabled = Object.values(scalpExchanges).some(cfg =>
+    cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
+);
 
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) {
@@ -1279,9 +1306,16 @@ function applySettings() {
     }
 
     if (currentSymbol) {
-        if (reconEnabled) startReconUpdates(currentSymbol);
-        else stopReconUpdates();
+    if (reconEnabled) startReconUpdates(currentSymbol);
+    else stopReconUpdates();
+
+    if (scalpEnabled) startScalpUpdates(currentSymbol);
+    else {
+        if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+        clearScalpLines();
+        previousScalpData = {};
     }
+}
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
 
