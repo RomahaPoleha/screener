@@ -1166,17 +1166,20 @@ function openSettingsModal() {
 
     const volHist = document.getElementById('showVolumeHistogram');
     if (volHist) volHist.checked = volumeHistogramEnabled;
+
     const drawTools = document.getElementById('showDrawingTools');
     if (drawTools) drawTools.checked = showDrawingTools;
 
     const reconToggle = document.getElementById('reconPanelToggle');
-if (reconToggle) {
-    reconToggle.checked = reconEnabled;
-}
-renderExchangesSettings();
+    if (reconToggle) {
+        reconToggle.checked = reconEnabled;
+    }
+
+    renderExchangesSettings();  // ← ПРАВИЛЬНАЯ функция
 
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
+
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
     if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
 
@@ -1185,11 +1188,13 @@ renderExchangesSettings();
 
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
+
     const volAlertThr = document.getElementById('volumeAlertThreshold');
     if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
 
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) beepSlider.value = alertBeepVolume;
+
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) hourSlider.value = hourSoundVolume;
 
@@ -1200,69 +1205,28 @@ renderExchangesSettings();
 }
 
 function applySettings() {
-     applyExchangesSettings();
+    // === БИРЖИ (Recon + Scalp) ===
+    applyExchangesSettings();
+
+    // === ОТОБРАЖЕНИЕ ===
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
     if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
-
-    const deltaHist = document.getElementById('showDeltaHistogram');
-    if (deltaHist) {
-        deltaEnabled = deltaHist.checked;
-        localStorage.setItem('deltaEnabled', deltaEnabled);
-        if (deltaSeries) deltaSeries.applyOptions({ visible: deltaEnabled });
-    }
 
     showDrawingTools = document.getElementById('showDrawingTools').checked;
     localStorage.setItem('showDrawingTools', showDrawingTools);
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
 
-    // === RECON ===
-const reconToggle = document.getElementById('reconPanelToggle');
-if (reconToggle) {
-    reconEnabled = reconToggle.checked;
-    localStorage.setItem('reconEnabled', reconEnabled);
-}
-
-for (const ex of RECON_EXCHANGES) {
-    const f = document.getElementById('reconMinF_' + ex.id);
-    const s = document.getElementById('reconMinS_' + ex.id);
-    if (!reconMinVolumes[ex.id]) reconMinVolumes[ex.id] = { futures: 50000, spot: 10000 };
-    if (f) reconMinVolumes[ex.id].futures = Math.max(1000, parseInt(f.value) || 50000);
-    if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
-}
-localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
-
-// === SCALP ===
-EXCHANGES_CONFIG.forEach(ex => {
-    const enabled = document.getElementById('scalpEnabled_' + ex.id);
-    const fChk = document.getElementById('scalpFutures_' + ex.id);
-    const sChk = document.getElementById('scalpSpot_' + ex.id);
-    const fInp = document.getElementById('scalpMinFutures_' + ex.id);
-    const sInp = document.getElementById('scalpMinSpot_' + ex.id);
-
-    if (!scalpExchanges[ex.id]) {
-        scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
-    }
-
-    scalpExchanges[ex.id].enabled = enabled ? enabled.checked : false;
-    scalpExchanges[ex.id].markets.futures = fChk ? fChk.checked : false;
-    scalpExchanges[ex.id].markets.spot = sChk ? sChk.checked : false;
-    scalpExchanges[ex.id].minVolumeFutures = fInp ? parseInt(fInp.value) || 300000 : 300000;
-    scalpExchanges[ex.id].minVolumeSpot = sInp ? parseInt(sInp.value) || 200000 : 200000;
-});
-localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
-scalpEnabled = Object.values(scalpExchanges).some(cfg =>
-    cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
-);
-
+    // === ОПОВЕЩЕНИЯ ===
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) {
         volumeAlertEnabled = volAlertToggle.checked;
         localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
     }
+
     alertBeepVolume = parseFloat(document.getElementById('alertBeepVolume').value);
     localStorage.setItem('alertBeepVolume', alertBeepVolume);
+
     hourSoundVolume = parseFloat(document.getElementById('hourSoundVolume').value);
     localStorage.setItem('hourSoundVolume', hourSoundVolume);
 
@@ -1283,6 +1247,7 @@ scalpEnabled = Object.values(scalpExchanges).some(cfg =>
             localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
         }
     }
+
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
     if (priceImpulseWin) {
         const win = parseInt(priceImpulseWin.value);
@@ -1294,6 +1259,7 @@ scalpEnabled = Object.values(scalpExchanges).some(cfg =>
 
     updateAlertHistoryVisibility();
 
+    // === КНОПКА НАСТРОЕК ===
     const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
@@ -1305,18 +1271,22 @@ scalpEnabled = Object.values(scalpExchanges).some(cfg =>
         }
     }
 
+    // === ПЕРЕЗАПУСК ОБНОВЛЕНИЙ ===
     if (currentSymbol) {
-    if (reconEnabled) startReconUpdates(currentSymbol);
-    else stopReconUpdates();
+        if (reconEnabled) startReconUpdates(currentSymbol);
+        else stopReconUpdates();
 
-    if (scalpEnabled) startScalpUpdates(currentSymbol);
-    else {
-        if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
-        clearScalpLines();
-        previousScalpData = {};
+        if (scalpEnabled) startScalpUpdates(currentSymbol);
+        else {
+            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+            clearScalpLines();
+            previousScalpData = {};
+        }
     }
-}
-    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+
+    // === ЗАКРЫТЬ МОДАЛКУ ===
+    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+    if (modal) modal.hide();
 }
 
 async function loadDensities(symbol) {
