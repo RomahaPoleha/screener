@@ -48,21 +48,10 @@ body {
 
 .main-layout { display: flex; height: calc(100vh - 110px); }
 .left-panel {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    border-right: 2px solid #333333;
-    overflow: hidden;
+    flex: 1; display: flex; flex-direction: column;
+    min-width: 0; border-right: 2px solid #333333;
 }
-.chart-area {
-    flex: 1;
-    position: relative;
-    background: #0f0f0f;
-    min-height: 400px;
-    width: 100%;
-    max-width: 100%;
-}
+.chart-area { flex: 1; position: relative; background: #0f0f0f; min-height: 400px; }
 #chart-container { width: 100%; height: 100%; visibility: hidden; }
 #chart-container.active { visibility: visible; }
 #chart-hint {
@@ -574,92 +563,4 @@ body {
 }
 .coin-row.active .coin-symbol {
     color: #f59e0b;
-}
-
-/* Toggle Switch для настроек */
-.toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 36px;
-    height: 20px;
-}
-
-.toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #444;
-    transition: .3s;
-    border-radius: 20px;
-}
-
-.toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 14px;
-    width: 14px;
-    left: 3px;
-    bottom: 3px;
-    background-color: #fff;
-    transition: .3s;
-    border-radius: 50%;
-}
-
-input:checked + .toggle-slider {
-    background-color: #f59e0b;
-}
-
-input:checked + .toggle-slider:before {
-    transform: translateX(16px);
-}
-
-/* ===== Фикс: Ценовая шкала не заходит под монеты ===== */
-
-/* Ограничиваем правую панель по z-index */
-.right-panel {
-    position: relative;
-    z-index: 100;
-}
-
-/* Ценовая шкала графика не выходит за границы */
-.tv-lightweight-charts .tv-price-scale {
-    max-width: 100% !important;
-    overflow: hidden !important;
-}
-
-/* Контейнер графика обрезает всё лишнее */
-#chart-container {
-    overflow: hidden !important;
-}
-
-/* Правая панель всегда поверх графика */
-.right-panel,
-.coins-table-wrap,
-.filters-panel {
-    position: relative;
-    z-index: 100 ;
-}
-
-/* Жёсткое ограничение ценовой шкалы */
-.tv-lightweight-charts {
-    overflow: hidden !important;
-    max-width: 100% !important;
-}
-
-/* Ценовая ось не выходит за контейнер */
-.tv-price-scale,
-.price-axis,
-.y-axis {
-    position: relative !important;
-    z-index: 1 !important;
-    max-width: 80px !important;
 }

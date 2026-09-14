@@ -1166,20 +1166,19 @@ function openSettingsModal() {
 
     const volHist = document.getElementById('showVolumeHistogram');
     if (volHist) volHist.checked = volumeHistogramEnabled;
-
     const drawTools = document.getElementById('showDrawingTools');
     if (drawTools) drawTools.checked = showDrawingTools;
 
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
         reconToggle.checked = reconEnabled;
+        toggleReconSettings();
+        renderReconSettings();
     }
-
-    renderExchangesSettings();  // ← ПРАВИЛЬНАЯ функция
+    renderScalpCards();
 
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
-
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
     if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
 
@@ -1188,13 +1187,11 @@ function openSettingsModal() {
 
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
-
     const volAlertThr = document.getElementById('volumeAlertThreshold');
     if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
 
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) beepSlider.value = alertBeepVolume;
-
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) hourSlider.value = hourSoundVolume;
 
@@ -1458,6 +1455,7 @@ function parseReconLevels(exId, data) {
 
 async function fetchReconMarket(exId, symbol, market) {
     let data;
+
     try {
         if (exId === 'mexc') {
             const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
@@ -1478,29 +1476,10 @@ async function fetchReconMarket(exId, symbol, market) {
         return [];
     }
 
-    // === ИСПРАВЛЕННАЯ ПРОВЕРКА ОШИБОК ===
-    // OKX возвращает code: "0" (строка), Bitget code: "00000" (строка)
-    // Bybit возвращает retCode: 0 (число)
-    if (data) {
-        // OKX: code === "0" — успех
-        if (exId === 'okx') {
-            if (data.code !== undefined && data.code !== '0' && data.code !== 0) return [];
-        }
-        // Bitget: code === "00000" — успех
-        else if (exId === 'bitget') {
-            if (data.code !== undefined && data.code !== '00000' && data.code !== 0) return [];
-        }
-        // Bybit: retCode === 0 — успех
-        else if (exId === 'bybit') {
-            if (data.retCode !== undefined && data.retCode !== 0) return [];
-        }
-        // Остальные (Binance и т.д.)
-        else {
-            if (data.code !== undefined && data.code !== 0 && data.code !== '0') return [];
-            if (data.retCode !== undefined && data.retCode !== 0) return [];
-        }
-        // Универсальная проверка "not found"
-        if (data.msg && typeof data.msg === 'string' && data.msg.includes('not found')) return [];
+    if (data && ((data.code !== undefined && data.code !== 0) ||
+                 (data.msg && data.msg.includes('not found')) ||
+                 (data.retCode !== undefined && data.retCode !== 0))) {
+        return [];
     }
 
     const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
@@ -2729,118 +2708,6 @@ function updateChartStats() {
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 1m: ${n1Html}` +
                    `&nbsp;&nbsp;|&nbsp;&nbsp;NATR 5m: ${n5Html}`;
 }
-
-function applyExchangesSettings() {
-    // === RECON ===
-    const reconToggle = document.getElementById('reconPanelToggle');
-    if (reconToggle) {
-        reconEnabled = reconToggle.checked;
-        localStorage.setItem('reconEnabled', reconEnabled);
-    }
-
-    for (const ex of RECON_EXCHANGES) {
-        const f = document.getElementById('reconMinF_' + ex.id);
-        const s = document.getElementById('reconMinS_' + ex.id);
-        if (!reconMinVolumes[ex.id]) reconMinVolumes[ex.id] = { futures: 50000, spot: 10000 };
-        if (f) reconMinVolumes[ex.id].futures = Math.max(1000, parseInt(f.value) || 50000);
-        if (s) reconMinVolumes[ex.id].spot = Math.max(1000, parseInt(s.value) || 10000);
-    }
-    localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
-
-    // === SCALP ===
-    EXCHANGES_CONFIG.forEach(ex => {
-        const enabled = document.getElementById('scalpEnabled_' + ex.id);
-        const fChk = document.getElementById('scalpFutures_' + ex.id);
-        const sChk = document.getElementById('scalpSpot_' + ex.id);
-        const fInp = document.getElementById('scalpMinFutures_' + ex.id);
-        const sInp = document.getElementById('scalpMinSpot_' + ex.id);
-
-        if (!scalpExchanges[ex.id]) {
-            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
-        }
-
-        scalpExchanges[ex.id].enabled = enabled ? enabled.checked : false;
-        scalpExchanges[ex.id].markets.futures = fChk ? fChk.checked : false;
-        scalpExchanges[ex.id].markets.spot = sChk ? sChk.checked : false;
-        scalpExchanges[ex.id].minVolumeFutures = fInp ? parseInt(fInp.value) || 300000 : 300000;
-        scalpExchanges[ex.id].minVolumeSpot = sInp ? parseInt(sInp.value) || 200000 : 200000;
-    });
-    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
-    scalpEnabled = Object.values(scalpExchanges).some(cfg =>
-        cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
-    );
-
-    // Перезапуск обновлений
-    if (currentSymbol) {
-        if (reconEnabled) startReconUpdates(currentSymbol);
-        else stopReconUpdates();
-
-        if (scalpEnabled) startScalpUpdates(currentSymbol);
-        else {
-            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
-            clearScalpLines();
-            previousScalpData = {};
-        }
-    }
-}
-
-
-function renderExchangesSettings() {
-    // === RECON (слева) ===
-    const reconContainer = document.getElementById('reconSettingsContainer');
-    if (reconContainer) {
-        reconContainer.innerHTML = RECON_EXCHANGES.map(ex => {
-            const vol = reconMinVolumes[ex.id] || { futures: 50000, spot: 10000 };
-            return `<div style="display:flex; align-items:center; gap:6px; padding:6px 8px; background:#1f1f1f; border:1px solid #333; font-size:11px;">
-                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
-                     onerror="this.style.display='none'"
-                     style="width:16px; height:16px; border-radius:2px;" title="${ex.label}">
-                <span style="font-weight:600; font-size:11px; color:${ex.color}; min-width:28px;">${ex.label}</span>
-                <div style="flex:1; display:flex; gap:4px; align-items:center;">
-                    <span style="font-size:9px; color:#94a3b8;">F:</span>
-                    <input type="number" id="reconMinF_${ex.id}" value="${vol.futures}" min="1000" step="1000"
-                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
-                    <span style="font-size:9px; color:#94a3b8;">S:</span>
-                    <input type="number" id="reconMinS_${ex.id}" value="${vol.spot}" min="1000" step="1000"
-                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
-                </div>
-            </div>`;
-        }).join('');
-    }
-
-    // === SCALP (справа) ===
-    const scalpContainer = document.getElementById('scalpExchangesContainer');
-    if (scalpContainer) {
-        scalpContainer.innerHTML = EXCHANGES_CONFIG.map(ex => {
-            const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
-            return `<div style="display:flex; align-items:center; gap:6px; padding:6px 8px; background:#1f1f1f; border:1px solid #333; font-size:11px;">
-                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
-                     onerror="this.style.display='none'"
-                     style="width:16px; height:16px; border-radius:2px;" title="${ex.name}">
-                <span style="font-weight:600; font-size:11px; color:${ex.color}; min-width:28px;">${ex.name.substring(0, 2).toUpperCase()}</span>
-                <label class="toggle-switch" style="margin-right:4px;">
-                    <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''}>
-                    <span class="toggle-slider"></span>
-                </label>
-                <div style="flex:1; display:flex; gap:4px; align-items:center;">
-                    <span style="font-size:9px; color:#94a3b8;">F:</span>
-                    <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''}
-                           style="accent-color:${ex.color}; width:11px; height:11px;">
-                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
-                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
-                    <span style="font-size:9px; color:#94a3b8;">S:</span>
-                    <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''}
-                           style="accent-color:${ex.color}; width:11px; height:11px;">
-                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
-                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
-                </div>
-            </div>`;
-        }).join('');
-    }
-}
-
-
 
 function renderScalpCards() {
     const container = document.getElementById('scalpExchangesContainer');
