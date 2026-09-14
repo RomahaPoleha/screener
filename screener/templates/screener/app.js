@@ -1172,7 +1172,6 @@ function openSettingsModal() {
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
         reconToggle.checked = reconEnabled;
-        toggleReconSettings();
         renderReconSettings();
     }
     renderScalpCards();
@@ -1184,6 +1183,9 @@ function openSettingsModal() {
 
     const soundCheckbox = document.getElementById('soundToggleModal');
     if (soundCheckbox) soundCheckbox.checked = soundEnabled;
+
+
+
 
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
@@ -1205,18 +1207,15 @@ function applySettings() {
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
     if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
-
     const deltaHist = document.getElementById('showDeltaHistogram');
     if (deltaHist) {
         deltaEnabled = deltaHist.checked;
         localStorage.setItem('deltaEnabled', deltaEnabled);
         if (deltaSeries) deltaSeries.applyOptions({ visible: deltaEnabled });
     }
-
     showDrawingTools = document.getElementById('showDrawingTools').checked;
     localStorage.setItem('showDrawingTools', showDrawingTools);
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
-
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
         reconEnabled = reconToggle.checked;
@@ -1229,7 +1228,38 @@ function applySettings() {
         }
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
-
+    // Применяем настройки скальпа
+    EXCHANGES_CONFIG.forEach(ex => {
+        const enabledCheckbox = document.getElementById(`scalp-${ex.id}-toggle`);
+        const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
+        const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
+        const fInput = document.getElementById(`scalp-${ex.id}-fv`);
+        const sInput = document.getElementById(`scalp-${ex.id}-sv`);
+        if (!scalpExchanges[ex.id]) {
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+        }
+        scalpExchanges[ex.id].enabled = enabledCheckbox ? enabledCheckbox.checked : false;
+        scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
+        scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
+        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 300000 : 300000;
+        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 200000 : 200000;
+    });
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+    scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
+    if (currentSymbol && candleSeries) {
+        clearScalpLines();
+        previousScalpData = {};
+    }
+    if (currentSymbol) {
+        if (scalpEnabled) {
+            startScalpUpdates(currentSymbol);
+        } else {
+            if (scalpUpdateTimer) {
+                clearInterval(scalpUpdateTimer);
+                scalpUpdateTimer = null;
+            }
+        }
+    }
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) {
         volumeAlertEnabled = volAlertToggle.checked;
@@ -1239,7 +1269,6 @@ function applySettings() {
     localStorage.setItem('alertBeepVolume', alertBeepVolume);
     hourSoundVolume = parseFloat(document.getElementById('hourSoundVolume').value);
     localStorage.setItem('hourSoundVolume', hourSoundVolume);
-
     const volAlertThr = document.getElementById('volumeAlertThreshold');
     if (volAlertThr) {
         const thr = parseFloat(volAlertThr.value);
@@ -1248,7 +1277,6 @@ function applySettings() {
             localStorage.setItem('volumeAlertThreshold', volumeAlertThreshold);
         }
     }
-
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) {
         const thr = parseFloat(priceImpulseThr.value);
@@ -1265,9 +1293,7 @@ function applySettings() {
             localStorage.setItem('priceImpulseWindow', priceImpulseWindow);
         }
     }
-
     updateAlertHistoryVisibility();
-
     const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
@@ -1278,7 +1304,6 @@ function applySettings() {
             btn.style.color = '#ffffff';
         }
     }
-
     if (currentSymbol) {
         if (reconEnabled) startReconUpdates(currentSymbol);
         else stopReconUpdates();
@@ -2770,29 +2795,17 @@ function renderScalpCards() {
 }
 
 function toggleScalpExchange(exchangeId, enabled) {
-    // Блокируем/разблокируем галочки F/S и вводы
     const fCheckbox = document.getElementById(`scalp-${exchangeId}-f`);
     const sCheckbox = document.getElementById(`scalp-${exchangeId}-s`);
     const fInput = document.getElementById(`scalp-${exchangeId}-fv`);
     const sInput = document.getElementById(`scalp-${exchangeId}-sv`);
-
     if (fCheckbox) fCheckbox.disabled = !enabled;
     if (sCheckbox) sCheckbox.disabled = !enabled;
-
     if (!enabled) {
         if (fInput) fInput.disabled = true;
         if (sInput) sInput.disabled = true;
     } else {
         if (fInput) fInput.disabled = !fCheckbox.checked;
         if (sInput) sInput.disabled = !sCheckbox.checked;
-    }
-
-    // Обновляем цвет тумблера
-    const toggle = document.getElementById(`scalp-${exchangeId}-toggle`);
-    if (toggle) {
-        const slider = toggle.nextElementSibling;
-        const dot = slider.querySelector('span');
-        slider.style.background = enabled ? '#f59e0b' : '#475569';
-        dot.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
     }
 }
