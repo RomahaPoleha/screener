@@ -2769,18 +2769,18 @@ function renderExchangesSettings() {
     if (reconContainer) {
         reconContainer.innerHTML = RECON_EXCHANGES.map(ex => {
             const vol = reconMinVolumes[ex.id] || { futures: 50000, spot: 10000 };
-            return `<div style="display:flex; align-items:center; gap:8px; padding:8px; background:#1f1f1f; border:1px solid #333;">
+            return `<div style="display:flex; align-items:center; gap:6px; padding:6px 8px; background:#1f1f1f; border:1px solid #333; font-size:11px;">
                 <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
                      onerror="this.style.display='none'"
-                     style="width:20px; height:20px; border-radius:3px;" title="${ex.label}">
-                <span style="font-weight:600; font-size:12px; color:${ex.color}; min-width:30px;">${ex.label}</span>
-                <div style="flex:1; display:flex; gap:6px; align-items:center;">
-                    <span style="font-size:10px; color:#94a3b8;">F:</span>
+                     style="width:16px; height:16px; border-radius:2px;" title="${ex.label}">
+                <span style="font-weight:600; font-size:11px; color:${ex.color}; min-width:28px;">${ex.label}</span>
+                <div style="flex:1; display:flex; gap:4px; align-items:center;">
+                    <span style="font-size:9px; color:#94a3b8;">F:</span>
                     <input type="number" id="reconMinF_${ex.id}" value="${vol.futures}" min="1000" step="1000"
-                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
-                    <span style="font-size:10px; color:#94a3b8;">S:</span>
+                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
+                    <span style="font-size:9px; color:#94a3b8;">S:</span>
                     <input type="number" id="reconMinS_${ex.id}" value="${vol.spot}" min="1000" step="1000"
-                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
+                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
                 </div>
             </div>`;
         }).join('');
@@ -2791,26 +2791,26 @@ function renderExchangesSettings() {
     if (scalpContainer) {
         scalpContainer.innerHTML = EXCHANGES_CONFIG.map(ex => {
             const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
-            return `<div style="display:flex; align-items:center; gap:8px; padding:8px; background:#1f1f1f; border:1px solid #333;">
+            return `<div style="display:flex; align-items:center; gap:6px; padding:6px 8px; background:#1f1f1f; border:1px solid #333; font-size:11px;">
                 <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
                      onerror="this.style.display='none'"
-                     style="width:20px; height:20px; border-radius:3px;" title="${ex.name}">
-                <span style="font-weight:600; font-size:12px; color:${ex.color}; min-width:30px;">${ex.name.substring(0, 2).toUpperCase()}</span>
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
-                    <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''}
-                           style="accent-color:${ex.color}; width:14px; height:14px;">
+                     style="width:16px; height:16px; border-radius:2px;" title="${ex.name}">
+                <span style="font-weight:600; font-size:11px; color:${ex.color}; min-width:28px;">${ex.name.substring(0, 2).toUpperCase()}</span>
+                <label class="toggle-switch" style="margin-right:4px;">
+                    <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
                 </label>
-                <div style="flex:1; display:flex; gap:6px; align-items:center;">
-                    <span style="font-size:10px; color:#94a3b8;">F:</span>
+                <div style="flex:1; display:flex; gap:4px; align-items:center;">
+                    <span style="font-size:9px; color:#94a3b8;">F:</span>
                     <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''}
-                           style="accent-color:${ex.color}; width:12px; height:12px;">
+                           style="accent-color:${ex.color}; width:11px; height:11px;">
                     <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
-                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
-                    <span style="font-size:10px; color:#94a3b8;">S:</span>
+                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
+                    <span style="font-size:9px; color:#94a3b8;">S:</span>
                     <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''}
-                           style="accent-color:${ex.color}; width:12px; height:12px;">
+                           style="accent-color:${ex.color}; width:11px; height:11px;">
                     <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
-                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
+                           style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 4px; font-size:10px;">
                 </div>
             </div>`;
         }).join('');
