@@ -35,33 +35,29 @@
                     </div>
 
                     <!-- БИРЖИ (объединённая вкладка Recon + Scalp) -->
-                    <div class="settings-tab-content" id="tab-exchanges">
-                        <div style="margin-bottom:16px;">
-                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5;">
-                                <input type="checkbox" id="reconPanelToggle" style="accent-color:#f59e0b; width:16px; height:16px;">
-                                <span>Показывать панель Recon на графике</span>
-                            </label>
-                        </div>
+                    <!-- БИРЖИ (объединённая вкладка Recon + Scalp) -->
+<div class="settings-tab-content" id="tab-exchanges">
+    <div style="margin-bottom:16px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5;">
+            <input type="checkbox" id="reconPanelToggle" style="accent-color:#f59e0b; width:16px; height:16px;">
+            <span>Показывать панель Recon на графике</span>
+        </label>
+    </div>
 
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
-                            <!-- RECON (слева) -->
-                            <div>
-                                <div class="modal-section-title" style="color:#3b82f6; margin-bottom:12px;">RECON — Плотности</div>
-                                <div id="reconSettingsContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
-                            </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+        <!-- RECON (слева) -->
+        <div>
+            <div class="modal-section-title" style="color:#3b82f6; margin-bottom:12px;">RECON — Плотности</div>
+            <div id="reconSettingsContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
 
-                            <!-- SCALP (справа) -->
-                            <div>
-                                <div class="modal-section-title" style="color:#22c55e; margin-bottom:12px;">SCALP — Уровни</div>
-                                <div id="scalpExchangesContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="applyExchangesSettings()"
-                                style="margin-top:16px; padding:8px 16px; background:#f59e0b; border:none; color:#000; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">
-                            Применить
-                        </button>
-                    </div>
+        <!-- SCALP (справа) -->
+        <div>
+            <div class="modal-section-title" style="color:#22c55e; margin-bottom:12px;">SCALP — Уровни</div>
+            <div id="scalpExchangesContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+    </div>
+</div>
 
                     <!-- ОПОВЕЩЕНИЯ -->
                     <div class="settings-tab-content" id="tab-alerts">

@@ -2760,10 +2760,6 @@ function applyExchangesSettings() {
             previousScalpData = {};
         }
     }
-
-    // Закрываем модалку
-    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
-    if (modal) modal.hide();
 }
 
 
@@ -2795,34 +2791,26 @@ function renderExchangesSettings() {
     if (scalpContainer) {
         scalpContainer.innerHTML = EXCHANGES_CONFIG.map(ex => {
             const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
-            return `<div style="padding:8px; background:#1f1f1f; border:1px solid #333;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                    <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
-                         onerror="this.style.display='none'"
-                         style="width:20px; height:20px; border-radius:3px;">
-                    <span style="font-weight:600; font-size:12px; color:${ex.color}; flex:1;">${ex.name}</span>
+            return `<div style="display:flex; align-items:center; gap:8px; padding:8px; background:#1f1f1f; border:1px solid #333;">
+                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                     onerror="this.style.display='none'"
+                     style="width:20px; height:20px; border-radius:3px;" title="${ex.name}">
+                <span style="font-weight:600; font-size:12px; color:${ex.color}; min-width:30px;">${ex.name.substring(0, 2).toUpperCase()}</span>
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
                     <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''}
                            style="accent-color:${ex.color}; width:14px; height:14px;">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                    <div>
-                        <label style="display:flex; align-items:center; gap:4px; font-size:10px; color:#94a3b8; margin-bottom:4px;">
-                            <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''}
-                                   style="accent-color:${ex.color}; width:12px; height:12px;">
-                            <span>Futures</span>
-                        </label>
-                        <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
-                               style="width:100%; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 6px; font-size:10px;">
-                    </div>
-                    <div>
-                        <label style="display:flex; align-items:center; gap:4px; font-size:10px; color:#94a3b8; margin-bottom:4px;">
-                            <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''}
-                                   style="accent-color:${ex.color}; width:12px; height:12px;">
-                            <span>Spot</span>
-                        </label>
-                        <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
-                               style="width:100%; background:#0f0f0f; border:1px solid #444; color:#fff; padding:3px 6px; font-size:10px;">
-                    </div>
+                </label>
+                <div style="flex:1; display:flex; gap:6px; align-items:center;">
+                    <span style="font-size:10px; color:#94a3b8;">F:</span>
+                    <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''}
+                           style="accent-color:${ex.color}; width:12px; height:12px;">
+                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000"
+                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
+                    <span style="font-size:10px; color:#94a3b8;">S:</span>
+                    <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''}
+                           style="accent-color:${ex.color}; width:12px; height:12px;">
+                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000"
+                           style="width:75px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 6px; font-size:11px;">
                 </div>
             </div>`;
         }).join('');
