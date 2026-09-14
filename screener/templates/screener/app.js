@@ -2730,7 +2730,6 @@ function updateChartStats() {
 function renderScalpCards() {
     const container = document.getElementById('scalpExchangesContainer');
     if (!container) return;
-
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
         const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
         const isEnabled = cfg.enabled !== false;
@@ -2738,39 +2737,31 @@ function renderScalpCards() {
         const sEnabled = cfg.markets && cfg.markets.spot;
         const fVol = cfg.minVolumeFutures || 300000;
         const sVol = cfg.minVolumeSpot || 200000;
-
         return `
-            <div style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:#242424; border:1px solid #475569;">
-                <span style="font-weight:600; color:${ex.color}; font-size:14px; min-width:90px;">${ex.name}</span>
-
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px;">
-                        <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
-                            style="accent-color:#f59e0b; width:16px; height:16px; cursor:pointer;"
-                            onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-                        <span style="color:#999999; cursor:pointer; user-select:none;">F</span>
-                    </label>
-                    <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000" ${!fEnabled || !isEnabled ? 'disabled' : ''}
-                        style="width:100px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:6px 8px; font-size:12px;">
-                </div>
-
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px;">
-                        <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
-                            style="accent-color:#f59e0b; width:16px; height:16px; cursor:pointer;"
-                            onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
-                        <span style="color:#999999; cursor:pointer; user-select:none;">S</span>
-                    </label>
-                    <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000" ${!sEnabled || !isEnabled ? 'disabled' : ''}
-                        style="width:100px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:6px 8px; font-size:12px;">
-                </div>
-
-                <label style="position:relative; display:inline-block; width:44px; height:24px; margin-left:auto; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#242424; border:1px solid #475569;">
+                <span style="font-weight:600; color:${ex.color}; font-size:12px; min-width:32px;">${ex.name}</span>
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
+                    <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
+                        style="accent-color:#f59e0b; width:14px; height:14px; cursor:pointer;"
+                        onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
+                    <span style="color:#999999;">F:</span>
+                </label>
+                <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000" ${!fEnabled || !isEnabled ? 'disabled' : ''}
+                    style="width:75px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 6px; font-size:11px;">
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
+                    <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
+                        style="accent-color:#f59e0b; width:14px; height:14px; cursor:pointer;"
+                        onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
+                    <span style="color:#999999;">S:</span>
+                </label>
+                <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000" ${!sEnabled || !isEnabled ? 'disabled' : ''}
+                    style="width:75px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 6px; font-size:11px;">
+                <label style="position:relative; display:inline-block; width:36px; height:20px; margin-left:auto; cursor:pointer;">
                     <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
                         style="opacity:0; width:0; height:0;"
                         onchange="toggleScalpExchange('${ex.id}', this.checked)">
-                    <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:${isEnabled ? '#f59e0b' : '#475569'}; border-radius:24px; transition:.3s;">
-                        <span style="position:absolute; height:18px; width:18px; left:3px; bottom:3px; background:#ffffff; border-radius:50%; transition:.3s; transform:${isEnabled ? 'translateX(20px)' : 'translateX(0)'};"></span>
+                    <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:${isEnabled ? '#f59e0b' : '#475569'}; border-radius:20px; transition:.3s;">
+                        <span style="position:absolute; height:14px; width:14px; left:3px; bottom:3px; background:#ffffff; border-radius:50%; transition:.3s; transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
                     </span>
                 </label>
             </div>
