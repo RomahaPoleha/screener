@@ -2762,31 +2762,44 @@ function renderScalpCards() {
         const sEnabled = cfg.markets && cfg.markets.spot;
         const fVol = cfg.minVolumeFutures || 300000;
         const sVol = cfg.minVolumeSpot || 200000;
+
+        const mkToggle = (market, letter, vol, inputId) => {
+            const on = isEnabled && (market === 'futures' ? fEnabled : sEnabled);
+            const bg = on ? `rgba(${hexToRgb(ex.color)}, 0.2)` : 'transparent';
+            const border = on ? `1px solid ${ex.color}` : '1px solid #475569';
+            const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:10px;font-weight:bold;">✓</span>` : '';
+            return `
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <label style="font-size:10px;color:#94a3b8;">${letter}:</label>
+                        <input type="number" id="${inputId}" value="${vol}" min="10000" step="10000"
+                               style="width:75px;background:#0f0f0f;border:1px solid #444444;color:#fff;padding:4px 6px;font-size:11px;"
+                               ${!on ? 'disabled' : ''}>
+                    </div>
+                    <div style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${!isEnabled ? 'opacity:0.45;' : ''}"
+                         onclick="toggleScalpMarket('${ex.id}', '${market}')">
+                        ${checkmark}
+                    </div>
+                </div>
+            `;
+        };
+
         return `
-            <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#242424; border:1px solid #475569;">
-                <span style="font-weight:600; color:${ex.color}; font-size:12px; min-width:32px;">${ex.name}</span>
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
-                    <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
-                        style="accent-color:#f59e0b; width:14px; height:14px; cursor:pointer;"
-                        onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-                    <span style="color:#999999;">F:</span>
-                </label>
-                <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000" ${!fEnabled || !isEnabled ? 'disabled' : ''}
-                    style="width:75px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 6px; font-size:11px;">
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
-                    <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
-                        style="accent-color:#f59e0b; width:14px; height:14px; cursor:pointer;"
-                        onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
-                    <span style="color:#999999;">S:</span>
-                </label>
-                <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000" ${!sEnabled || !isEnabled ? 'disabled' : ''}
-                    style="width:75px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 6px; font-size:11px;">
-                <label style="position:relative; display:inline-block; width:36px; height:20px; margin-left:auto; cursor:pointer;">
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#242424;border:1px solid #475569;">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:28px;">
+                    <span style="font-weight:600;font-size:11px;color:${ex.color};line-height:1;">${ex.name.substring(0, 2).toUpperCase()}</span>
+                    <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
+                         onerror="this.style.display='none'"
+                         style="width:14px;height:14px;border-radius:2px;display:block;">
+                </div>
+                ${mkToggle('futures', 'F', fVol, `scalp-${ex.id}-fv`)}
+                ${mkToggle('spot', 'S', sVol, `scalp-${ex.id}-sv`)}
+                <label style="position:relative;display:inline-block;width:36px;height:20px;margin-left:auto;cursor:pointer;">
                     <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
-                        style="opacity:0; width:0; height:0;"
-                        onchange="toggleScalpExchange('${ex.id}', this.checked)">
-                    <span style="position:absolute; top:0; left:0; right:0; bottom:0; background:${isEnabled ? '#f59e0b' : '#475569'}; border-radius:20px; transition:.3s;">
-                        <span style="position:absolute; height:14px; width:14px; left:3px; bottom:3px; background:#ffffff; border-radius:50%; transition:.3s; transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
+                           style="opacity:0;width:0;height:0;"
+                           onchange="toggleScalpExchange('${ex.id}', this.checked)">
+                    <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? '#f59e0b' : '#475569'};border-radius:20px;transition:.3s;">
+                        <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
                     </span>
                 </label>
             </div>
@@ -2794,18 +2807,73 @@ function renderScalpCards() {
     }).join('');
 }
 
+function toggleScalpMarket(exchangeId, market) {
+    const cfg = scalpExchanges[exchangeId];
+    if (!cfg || !cfg.enabled) return;
+
+    // Переключаем рынок
+    cfg.markets[market] = !cfg.markets[market];
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
+    // Перерисовываем
+    renderScalpCards();
+
+    // Применяем сразу
+    applyScalpSettingsSilent();
+}
+
 function toggleScalpExchange(exchangeId, enabled) {
-    const fCheckbox = document.getElementById(`scalp-${exchangeId}-f`);
-    const sCheckbox = document.getElementById(`scalp-${exchangeId}-s`);
-    const fInput = document.getElementById(`scalp-${exchangeId}-fv`);
-    const sInput = document.getElementById(`scalp-${exchangeId}-sv`);
-    if (fCheckbox) fCheckbox.disabled = !enabled;
-    if (sCheckbox) sCheckbox.disabled = !enabled;
-    if (!enabled) {
-        if (fInput) fInput.disabled = true;
-        if (sInput) sInput.disabled = true;
-    } else {
-        if (fInput) fInput.disabled = !fCheckbox.checked;
-        if (sInput) sInput.disabled = !sCheckbox.checked;
+    if (!scalpExchanges[exchangeId]) {
+        scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
     }
+    scalpExchanges[exchangeId].enabled = enabled;
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
+    // Перерисовываем
+    renderScalpCards();
+
+    // Применяем сразу
+    applyScalpSettingsSilent();
+}
+
+function applyScalpSettingsSilent() {
+    // Пересчитываем scalpEnabled
+    scalpEnabled = Object.values(scalpExchanges).some(cfg =>
+        cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
+    );
+
+    // Очищаем и перезапускаем если нужно
+    if (currentSymbol && candleSeries) {
+        clearScalpLines();
+        previousScalpData = {};
+    }
+
+    if (currentSymbol) {
+        if (scalpEnabled) {
+            startScalpUpdates(currentSymbol);
+        } else {
+            if (scalpUpdateTimer) {
+                clearInterval(scalpUpdateTimer);
+                scalpUpdateTimer = null;
+            }
+        }
+    }
+
+    // Обновляем кнопку настроек
+    const btn = document.getElementById('settingsBtn');
+    if (btn) {
+        if (densityEnabled || scalpEnabled || reconEnabled) {
+            btn.style.background = '#f59e0b';
+            btn.style.color = '#000000';
+        } else {
+            btn.style.background = '#2a2a2a';
+            btn.style.color = '#ffffff';
+        }
+    }
+}
+
+// Вспомогательная функция для конвертации hex в rgb
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '245, 158, 11';
 }
