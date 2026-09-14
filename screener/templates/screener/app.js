@@ -2771,7 +2771,7 @@ function renderScalpCards() {
             return `
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <div style="display:flex;align-items:center;gap:6px;">
-                        <label style="font-size:10px;color:#94a3b8;">${letter}:</label>
+                        <span style="font-size:10px;color:#94a3b8;">${letter}:</span>
                         <input type="number" id="${inputId}" value="${vol}" min="10000" step="10000"
                                style="width:75px;background:#0f0f0f;border:1px solid #444444;color:#fff;padding:4px 6px;font-size:11px;"
                                ${!on ? 'disabled' : ''}>
@@ -2811,14 +2811,10 @@ function toggleScalpMarket(exchangeId, market) {
     const cfg = scalpExchanges[exchangeId];
     if (!cfg || !cfg.enabled) return;
 
-    // Переключаем рынок
     cfg.markets[market] = !cfg.markets[market];
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
 
-    // Перерисовываем
     renderScalpCards();
-
-    // Применяем сразу
     applyScalpSettingsSilent();
 }
 
@@ -2829,20 +2825,15 @@ function toggleScalpExchange(exchangeId, enabled) {
     scalpExchanges[exchangeId].enabled = enabled;
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
 
-    // Перерисовываем
     renderScalpCards();
-
-    // Применяем сразу
     applyScalpSettingsSilent();
 }
 
 function applyScalpSettingsSilent() {
-    // Пересчитываем scalpEnabled
     scalpEnabled = Object.values(scalpExchanges).some(cfg =>
         cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
     );
 
-    // Очищаем и перезапускаем если нужно
     if (currentSymbol && candleSeries) {
         clearScalpLines();
         previousScalpData = {};
@@ -2859,7 +2850,6 @@ function applyScalpSettingsSilent() {
         }
     }
 
-    // Обновляем кнопку настроек
     const btn = document.getElementById('settingsBtn');
     if (btn) {
         if (densityEnabled || scalpEnabled || reconEnabled) {
@@ -2872,7 +2862,6 @@ function applyScalpSettingsSilent() {
     }
 }
 
-// Вспомогательная функция для конвертации hex в rgb
 function hexToRgb(hex) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '245, 158, 11';
