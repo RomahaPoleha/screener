@@ -646,5 +646,20 @@ input:checked + .toggle-slider:before {
 .coins-table-wrap,
 .filters-panel {
     position: relative;
-    z-index: 100;
+    z-index: 100 ;
+}
+
+/* Жёсткое ограничение ценовой шкалы */
+.tv-lightweight-charts {
+    overflow: hidden !important;
+    max-width: 100% !important;
+}
+
+/* Ценовая ось не выходит за контейнер */
+.tv-price-scale,
+.price-axis,
+.y-axis {
+    position: relative !important;
+    z-index: 1 !important;
+    max-width: 80px !important;
 }
