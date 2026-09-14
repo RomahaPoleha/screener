@@ -1200,6 +1200,7 @@ function openSettingsModal() {
 }
 
 function applySettings() {
+     applyExchangesSettings();
     volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
     localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
     if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
