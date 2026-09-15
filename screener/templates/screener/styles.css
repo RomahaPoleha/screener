@@ -526,7 +526,7 @@ body {
 .settings-nav-item.active { color: #f59e0b; border-left-color: #f59e0b; background: #1a1a1a; }
 .settings-content {
     flex: 1;
-    padding: 16px 20px;
+    padding: 12px 14px;
     overflow-y: auto;
     max-height: 65vh;
 }

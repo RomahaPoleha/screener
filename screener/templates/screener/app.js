@@ -1754,20 +1754,14 @@ function stopReconUpdates() {
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
-    container.innerHTML = RECON_EXCHANGES.map(ex => `
-        <div style="display:flex;align-items:center;gap:10px;">
-            <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
-                 onerror="this.style.display='none'"
-                 style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label}</span>
-            <span style="font-size:11px;color:#94a3b8;min-width:12px;">F:</span>
-            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000"
-                   style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
-            <span style="font-size:11px;color:#94a3b8;min-width:12px;">S:</span>
-            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000"
-                   style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;">
-        </div>
-    `).join('');
+    container.innerHTML = RECON_EXCHANGES.map(ex => `<div style="display:flex;align-items:center;gap:6px;">
+        <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
+        <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
+        <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+        <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+        <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+        <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+    </div>`).join('');
 }
 
 async function loadScalpDensities(symbol) {
@@ -2827,42 +2821,28 @@ function renderScalpCards() {
         const sEnabled = cfg.markets && cfg.markets.spot;
         const fVol = cfg.minVolumeFutures || 300000;
         const sVol = cfg.minVolumeSpot || 200000;
-        return `
-            <div style="display:flex;align-items:center;gap:10px;">
-                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32"
-                     onerror="this.style.display='none'"
-                     style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-                <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:28px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
-                <span style="font-size:11px;color:#94a3b8;min-width:12px;">F:</span>
-                <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000"
-                       style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"
-                       ${!fEnabled || !isEnabled ? 'disabled' : ''}>
-                <span style="font-size:11px;color:#94a3b8;min-width:12px;">S:</span>
-                <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000"
-                       style="width:90px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 8px;border-radius:3px;font-size:12px;"
-                       ${!sEnabled || !isEnabled ? 'disabled' : ''}>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;margin-left:auto;">
-                    <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
-                           style="accent-color:#f59e0b;width:14px;height:14px;"
-                           onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-                    <span>F</span>
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-                    <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}
-                           style="accent-color:#f59e0b;width:14px;height:14px;"
-                           onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
-                    <span>S</span>
-                </label>
-                <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">
-                    <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
-                           style="opacity:0;width:0;height:0;"
-                           onchange="toggleScalpExchange('${ex.id}', this.checked)">
-                    <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? '#f59e0b' : '#475569'};border-radius:20px;transition:.3s;">
-                        <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
-                    </span>
-                </label>
-            </div>
-        `;
+        return `<div style="display:flex;align-items:center;gap:6px;">
+            <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
+            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
+            <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+            <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!fEnabled || !isEnabled ? 'disabled' : ''}>
+            <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+            <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!sEnabled || !isEnabled ? 'disabled' : ''}>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;margin-left:auto;">
+                <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
+                <span>F</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
+                <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
+                <span>S</span>
+            </label>
+            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">
+                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} style="opacity:0;width:0;height:0;" onchange="toggleScalpExchange('${ex.id}', this.checked)">
+                <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? '#f59e0b' : '#475569'};border-radius:20px;transition:.3s;">
+                    <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
+                </span>
+            </label>
+        </div>`;
     }).join('');
 }
 
