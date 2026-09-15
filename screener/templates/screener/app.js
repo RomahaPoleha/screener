@@ -2317,7 +2317,6 @@ function closeChart() {
     els.chartWrapper.classList.remove('active');
     els.chartHint.style.display = 'block'; els.chartWatermark.style.display = 'none';
     closeTradesOverlay(); currentSymbol = '';
-    priceHistory = {};
     const tooltip = document.getElementById('volumeTooltip');
     if (tooltip) tooltip.classList.remove('visible');
 }
