@@ -392,7 +392,7 @@ function checkVolumeAlerts() {
 
     const now = Date.now();
     const nowSec = now / 1000;
-    const COOLDOWN = 5 * 60 * 1000;
+    const COOLDOWN = Math.max(30000, Math.min(300000, priceImpulseWindow * 2000));
 
     for (const coin of allCoins) {
         const history = priceHistory[coin.symbol] || [];
