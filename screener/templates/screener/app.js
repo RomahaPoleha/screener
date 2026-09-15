@@ -64,7 +64,7 @@ function playAlertSound() {
 function startImpulseWebSocket() {
     if (impulseWsEnabled || impulseWs) return;
     try {
-        impulseWs = new WebSocket('wss://fstream.binance.com/ws/!miniTicker@arr');
+        impulseWs = new WebSocket('wss://fstream.binance.com/market/ws/!miniTicker@arr');
         impulseWsEnabled = true;
 
         impulseWs.onmessage = (e) => {
