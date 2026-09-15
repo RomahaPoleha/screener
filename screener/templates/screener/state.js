@@ -36,7 +36,7 @@ let currentTF = '1m', currentSymbol = '', lastCandlePrice = null;
 
 // Volume alerts
 let volumeAlertEnabled = localStorage.getItem('volumeAlertEnabled') === 'true';
-let volumeAlertThreshold = parseFloat(localStorage.getItem('volumeAlertThreshold') || '3');
+
 let volumeAlertCooldown = {};  // symbol -> timestamp последнего алерта
 
 // Громкость звуков (микшер)

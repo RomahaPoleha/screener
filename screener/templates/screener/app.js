@@ -215,10 +215,10 @@ const AlertManager = {
 // ==========================================
 // АЛЕРТЫ ПО ОБЪЁМУ (RVOL)
 // ==========================================
-function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
+function showVolumeAlertToast(symbol, volume, direction, priceChange) {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    volumeAlertHistory.unshift({ symbol, rvol, volume, time: timeStr, direction, priceChange });
+    volumeAlertHistory.unshift({ symbol, volume, time: timeStr, direction, priceChange });
     if (volumeAlertHistory.length > 20) volumeAlertHistory.pop();
     localStorage.setItem('volumeAlertHistory', JSON.stringify(volumeAlertHistory));
     unreadAlerts++;
@@ -243,10 +243,10 @@ function showVolumeAlertToast(symbol, rvol, volume, direction, priceChange) {
         <div style="font-size:22px; color:${color};">${direction === '↑' ? '▲' : '▼'}</div>
         <div style="display:flex; flex-direction:column; gap:3px;">
             <div style="font-size:13px; font-weight:700; text-transform:uppercase;">
-                ${symbol} — импульс подтверждён
+                ${symbol} — импульс
             </div>
             <div style="font-size:12px;">
-                RVOL x${rvol} | Цена: ${direction} ${priceChange.toFixed(2)}% за ${priceImpulseWindow}с
+                Цена: ${direction} ${priceChange.toFixed(2)}% за ${priceImpulseWindow}с
             </div>
             <div style="font-size:10px; color:#999999;">Клик — открыть график</div>
         </div>
@@ -306,7 +306,7 @@ function renderAlertHistory() {
         return `<div class="alert-history-item" onclick="openChartFromHistory('${a.symbol}')">
             <span class="alert-time">${a.time}</span>
             <span class="alert-symbol">${a.symbol}</span>
-            <span class="alert-rvol">x${a.rvol} ${changeTxt}</span>
+            <span class="alert-rvol">${changeTxt}</span>
             <span class="alert-vol">$${fmt(a.volume)}</span>
         </div>`;
     }).join('');
@@ -326,7 +326,6 @@ function checkVolumeAlerts() {
     const COOLDOWN = 5 * 60 * 1000;
 
     for (const coin of allCoins) {
-        if (coin.rvol === undefined || coin.rvol === null || coin.rvol === 0) continue;
         if (coin.price === undefined || coin.price === null || coin.price === 0) continue;
 
         // 1. Обновляем историю цен
@@ -339,10 +338,7 @@ function checkVolumeAlerts() {
             history.shift();
         }
 
-        // 2. Проверяем RVOL
-        if (coin.rvol < volumeAlertThreshold) continue;
-
-        // 3. Проверяем движение цены за окно
+        // 2. Проверяем движение цены за окно (без RVOL)
         const targetTime = nowSec - priceImpulseWindow;
         let referencePrice = null;
         for (let i = history.length - 1; i >= 0; i--) {
@@ -358,15 +354,16 @@ function checkVolumeAlerts() {
 
         if (absPriceChange < priceImpulseThreshold) continue;
 
-        // 4. Кулдаун
+        // 3. Кулдаун
         const last = volumeAlertCooldown[coin.symbol] || 0;
         if (now - last < COOLDOWN) continue;
 
         volumeAlertCooldown[coin.symbol] = now;
         const direction = priceChange > 0 ? '↑' : '↓';
-        showVolumeAlertToast(coin.symbol, coin.rvol, coin.volume, direction, absPriceChange);
+        showVolumeAlertToast(coin.symbol, coin.volume, direction, absPriceChange);
     }
 }
+
 async function loadAllData() {
     try {
         const res = await fetch(`/api/data/`);
@@ -1181,8 +1178,7 @@ function openSettingsModal() {
     if (soundCheckbox) soundCheckbox.checked = soundEnabled;
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
-    const volAlertThr = document.getElementById('volumeAlertThreshold');
-    if (volAlertThr) volAlertThr.value = volumeAlertThreshold;
+
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) beepSlider.value = alertBeepVolume;
     const hourSlider = document.getElementById('hourSoundVolume');
@@ -1258,14 +1254,7 @@ function applySettings() {
     localStorage.setItem('alertBeepVolume', alertBeepVolume);
     hourSoundVolume = parseFloat(document.getElementById('hourSoundVolume').value);
     localStorage.setItem('hourSoundVolume', hourSoundVolume);
-    const volAlertThr = document.getElementById('volumeAlertThreshold');
-    if (volAlertThr) {
-        const thr = parseFloat(volAlertThr.value);
-        if (thr >= 1) {
-            volumeAlertThreshold = thr;
-            localStorage.setItem('volumeAlertThreshold', volumeAlertThreshold);
-        }
-    }
+
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     if (priceImpulseThr) {
         const thr = parseFloat(priceImpulseThr.value);
