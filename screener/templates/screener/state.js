@@ -44,6 +44,10 @@ let alertBeepVolume = parseFloat(localStorage.getItem('alertBeepVolume') || '0.3
 let hourSoundVolume = parseFloat(localStorage.getItem('hourSoundVolume') || '1');
 
 
+// WebSocket для real-time цен (импульс с малым окном)
+let impulseWs = null;
+let impulseWsEnabled = false;
+
 // История алертов по объёму
 let volumeAlertHistory = [];
 try {
