@@ -2668,6 +2668,14 @@ function checkHourTransition() {
 }
 setInterval(checkHourTransition, 1000);
 
+function updateSliderFill(el) {
+    const min = parseFloat(el.min) || 0;
+    const max = parseFloat(el.max) || 100;
+    const val = parseFloat(el.value) || min;
+    const percent = ((val - min) / (max - min)) * 100;
+    el.style.background = `linear-gradient(to right, rgba(245, 158, 11, 0.35) ${percent}%, #333333 ${percent}%)`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     if (!els.tradesThresholdSlider || !els.search) {
         console.error('Критическая ошибка: DOM-элементы не найдены. Проверьте HTML.');
@@ -2698,8 +2706,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    els.vol.addEventListener('input', (e) => { els.volVal.innerText = '$' + fmt(e.target.value); applyLocalFilters(); });
-    els.change.addEventListener('input', (e) => { els.changeVal.innerText = e.target.value + '%'; applyLocalFilters(); });
+    els.vol.addEventListener('input', (e) => {
+    els.volVal.innerText = '$' + fmt(e.target.value);
+    updateSliderFill(e.target);
+    applyLocalFilters();
+});
+els.change.addEventListener('input', (e) => {
+    els.changeVal.innerText = e.target.value + '%';
+    updateSliderFill(e.target);
+    applyLocalFilters();
+});
     els.search.addEventListener('input', (e) => { showSearchDropdown(e.target.value); applyLocalFilters(); });
 
     document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) hideSearchDropdown(); });
@@ -2754,6 +2770,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (applyScalpBtn) applyScalpBtn.addEventListener('click', applyScalpSettings);
     updateAlertHistoryVisibility();
     loadAllData();
+    // Инициализация заполнения ползунков
+    if (els.vol) updateSliderFill(els.vol);
+    if (els.change) updateSliderFill(els.change);
     startNatrAutoUpdate();
     AlertManager.startAll();
 // Если импульс включён — запускаем WS и таймер
