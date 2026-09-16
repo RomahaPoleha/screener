@@ -246,38 +246,72 @@ body {
 .search-dropdown-item:hover { background: #1f1f1f; color: #f59e0b; }
 .search-dropdown-item .symbol { font-weight: 700; color: #ffffff; }
 .search-dropdown-item .name { color: #999999; font-size: 11px; margin-left: 6px; }
+/* ==========================================
+   КАСТОМНЫЙ ПОЛЗУНОК С ТРЕУГОЛЬНИКОМ
+   ========================================== */
 .filter-slider {
     width: 100%;
-    height: 6px;
-    background: #333333;
+    height: 8px; /* Высота полоски, чтобы было видно наполняемость */
+    background: #333333; /* Базовый цвет (правая, незаполненная часть) */
     border-radius: 0;
     outline: none;
     -webkit-appearance: none;
     appearance: none;
     cursor: pointer;
+    margin: 12px 0; /* Отступы сверху и снизу */
 }
+
+/* --- Трек (дорожка) для WebKit (Chrome, Safari, Edge) --- */
+.filter-slider::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: 0;
+    background: transparent; /* Прозрачный, чтобы видеть градиент из JS */
+}
+
+/* --- Бегунок-треугольник для WebKit --- */
 .filter-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 0;
     height: 0;
     background: transparent;
-    border: none;
+    /* Рисуем треугольник, указывающий вверх */
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-bottom: 12px solid #f59e0b;
     cursor: pointer;
+    margin-top: -2px; /* Центрируем треугольник относительно полоски 8px */
+    transition: transform 0.15s ease, border-bottom-color 0.15s ease;
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6)); /* Легкое свечение */
 }
-.filter-slider::-moz-range-thumb {
-    width: 0;
-    height: 0;
-    background: transparent;
-    border: none;
-    cursor: pointer;
+
+.filter-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2) translateY(-1px);
+    border-bottom-color: #ffffff; /* При наведении становится белым */
 }
-.filter-slider::-webkit-slider-runnable-track {
-    height: 6px;
-    background: transparent;
-}
+
+/* --- Трек (дорожка) для Firefox --- */
 .filter-slider::-moz-range-track {
-    height: 6px;
-    background: transparent;
+    height: 8px;
+    border-radius: 0;
+    background: transparent; /* Прозрачный для градиента из JS */
+}
+
+/* --- Бегунок-треугольник для Firefox --- */
+.filter-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: #f59e0b;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    /* Вырезаем форму треугольника */
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.filter-slider::-moz-range-thumb:hover {
+    transform: scale(1.2) translateY(-1px);
+    background: #ffffff;
 }
 .reset-filters-btn {
     width: 100%; padding: 6px; background: #2a2a2a; border: 1px solid #444444;

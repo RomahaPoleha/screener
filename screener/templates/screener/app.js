@@ -2866,12 +2866,27 @@ function renderScalpCards() {
 }
 
 function toggleScalpExchange(exchangeId, enabled) {
+    // 1. Обновляем состояние в объекте и localStorage
+    if (!scalpExchanges[exchangeId]) {
+        scalpExchanges[exchangeId] = {
+            enabled: false,
+            markets: { futures: false, spot: false },
+            minVolumeFutures: 300000,
+            minVolumeSpot: 200000
+        };
+    }
+    scalpExchanges[exchangeId].enabled = enabled;
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
+    // 2. Обновляем UI (блокировка/разблокировка инпутов)
     const fCheckbox = document.getElementById(`scalp-${exchangeId}-f`);
     const sCheckbox = document.getElementById(`scalp-${exchangeId}-s`);
     const fInput = document.getElementById(`scalp-${exchangeId}-fv`);
     const sInput = document.getElementById(`scalp-${exchangeId}-sv`);
+
     if (fCheckbox) fCheckbox.disabled = !enabled;
     if (sCheckbox) sCheckbox.disabled = !enabled;
+
     if (!enabled) {
         if (fInput) fInput.disabled = true;
         if (sInput) sInput.disabled = true;
@@ -2879,16 +2894,8 @@ function toggleScalpExchange(exchangeId, enabled) {
         if (fInput) fInput.disabled = !fCheckbox.checked;
         if (sInput) sInput.disabled = !sCheckbox.checked;
     }
-}
 
-
-function toggleScalpExchange(exchangeId, enabled) {
-    if (!scalpExchanges[exchangeId]) {
-        scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
-    }
-    scalpExchanges[exchangeId].enabled = enabled;
-    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
+    // 3. Перерисовываем карточки и применяем настройки
     renderScalpCards();
     applyScalpSettingsSilent();
 }
