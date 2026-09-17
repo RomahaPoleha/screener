@@ -261,57 +261,93 @@ body {
     margin: 12px 0; /* Отступы сверху и снизу */
 }
 
-/* --- Трек (дорожка) для WebKit (Chrome, Safari, Edge) --- */
-.filter-slider::-webkit-slider-runnable-track {
-    height: 8px;
+/* ==========================================
+   КАСТОМНЫЙ СЛАЙДЕР С ТЕКСТОМ ВНУТРИ
+   ========================================== */
+.slider-container {
+    position: relative;
+    width: 130px;
+    height: 24px;
+    background: #1a1a1a;
+    border: 1px solid #333333;
     border-radius: 0;
-    background: transparent; /* Прозрачный, чтобы видеть градиент из JS */
-}
-
-/* --- Бегунок-треугольник для WebKit --- */
-.filter-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 0;
-    height: 0;
-    background: transparent;
-    /* Рисуем треугольник, указывающий вверх */
-    border-left: 7px solid transparent;
-    border-right: 7px solid transparent;
-    border-bottom: 12px solid #f59e0b;
+    overflow: hidden;
     cursor: pointer;
-    margin-top: -2px; /* Центрируем треугольник относительно полоски 8px */
-    transition: transform 0.15s ease, border-bottom-color 0.15s ease;
-    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6)); /* Легкое свечение */
 }
 
-.filter-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.2) translateY(-1px);
-    border-bottom-color: #ffffff; /* При наведении становится белым */
+/* Заполненная часть (слева) */
+.slider-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    background: rgba(245, 158, 11, 0.25);
+    border-right: 2px solid #f59e0b;
+    transition: width 0.08s ease-out;
+    pointer-events: none;
 }
 
-/* --- Трек (дорожка) для Firefox --- */
-.filter-slider::-moz-range-track {
-    height: 8px;
-    border-radius: 0;
-    background: transparent; /* Прозрачный для градиента из JS */
-}
-
-/* --- Бегунок-треугольник для Firefox --- */
-.filter-slider::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+/* Вертикальная полоска-маркер */
+.slider-thumb {
+    position: absolute;
+    top: 0;
+    left: 0%;
+    width: 3px;
+    height: 100%;
     background: #f59e0b;
-    border: none;
-    border-radius: 0;
-    cursor: pointer;
-    /* Вырезаем форму треугольника */
-    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-    transition: transform 0.15s ease, background 0.15s ease;
+    transform: translateX(-50%);
+    pointer-events: none;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+    transition: left 0.08s ease-out;
 }
 
-.filter-slider::-moz-range-thumb:hover {
-    transform: scale(1.2) translateY(-1px);
-    background: #ffffff;
+/* Текст внутри слайдера */
+.slider-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    pointer-events: none;
+    z-index: 2;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    white-space: nowrap;
+}
+
+/* ДЕЛАЕМ НАТИВНЫЙ INPUT НЕВИДИМЫМ, НО КЛИКАБЕЛЬНЫМ */
+.filter-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 3;
+    margin: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: none;
+    outline: none;
+}
+
+/* Ховер эффекты */
+.slider-container:hover .slider-fill {
+    background: rgba(245, 158, 11, 0.35);
+}
+
+.slider-container:hover .slider-thumb {
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.9);
+}
+
+.slider-container:hover .slider-label {
+    color: #f59e0b;
 }
 .reset-filters-btn {
     width: 100%; padding: 6px; background: #2a2a2a; border: 1px solid #444444;

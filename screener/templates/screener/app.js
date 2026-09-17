@@ -2668,13 +2668,48 @@ function checkHourTransition() {
 }
 setInterval(checkHourTransition, 1000);
 
+// Обновление визуала слайдера
 function updateSliderFill(el) {
+    if (!el) return;
+
     const min = parseFloat(el.min) || 0;
     const max = parseFloat(el.max) || 100;
     const val = parseFloat(el.value) || min;
     const percent = ((val - min) / (max - min)) * 100;
-    el.style.background = `linear-gradient(to right, rgba(245, 158, 11, 0.35) ${percent}%, #333333 ${percent}%)`;
+
+    // Находим контейнер этого слайдера
+    const container = el.closest('.slider-container');
+    if (!container) return;
+
+    const fill = container.querySelector('.slider-fill');
+    const thumb = container.querySelector('.slider-thumb');
+    const label = container.querySelector('.slider-label');
+
+    if (fill) fill.style.width = percent + '%';
+    if (thumb) thumb.style.left = percent + '%';
+
+    // Обновляем текст внутри слайдера
+    if (label) {
+        if (el.id === 'volRange') {
+            label.textContent = '$' + fmt(val);
+        } else if (el.id === 'changeRange') {
+            label.textContent = val + '%';
+        }
+    }
 }
+
+// Обработчики событий (в DOMContentLoaded)
+els.vol.addEventListener('input', (e) => {
+    els.volVal.innerText = '$' + fmt(e.target.value);
+    updateSliderFill(e.target);
+    applyLocalFilters();
+});
+
+els.change.addEventListener('input', (e) => {
+    els.changeVal.innerText = e.target.value + '%';
+    updateSliderFill(e.target);
+    applyLocalFilters();
+});
 
 document.addEventListener('DOMContentLoaded', () => {
     if (!els.tradesThresholdSlider || !els.search) {

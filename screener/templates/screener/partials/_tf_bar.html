@@ -1,4 +1,3 @@
-
 <div class="tf-bar">
     <button class="tf-btn active" data-tf="1m">1м</button>
     <button class="tf-btn" data-tf="5m">5м</button>
@@ -7,11 +6,9 @@
     <button class="tf-btn" data-tf="1h">1ч</button>
     <button class="tf-btn" data-tf="4h">4ч</button>
 
-    <!-- Recon панель управления биржами -->
     <div id="reconPanelContainer" style="display:none; flex-direction:row; gap:16px; align-items:center; margin-left:24px; padding:6px 12px; background:rgba(30,41,59,0.9); border:1px solid #475569; border-radius:4px;"></div>
 
     <div style="margin-left:auto; display:flex; align-items:center; gap:16px;">
-        <!-- Управление коллажем (видимо только в режиме коллажа) -->
         <div id="collageControls" style="display:none; align-items:center; gap:6px;">
             <button class="tf-btn" id="collagePrev" onclick="collagePrevPage()">‹</button>
             <span id="collagePageInfo" style="font-size:11px; color:#999999; font-weight:700; letter-spacing:0.5px;">1/1</span>
@@ -20,14 +17,30 @@
             <div style="width:1px; height:16px; background:#333333;"></div>
         </div>
 
-        <label style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
-            Объём: <span id="volVal" class="filter-value">$0</span>
-            <input type="range" id="volRange" class="filter-slider tf-slider" min="0" max="500000000" step="1000000" value="0">
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
-            Изм.: <span id="changeVal" class="filter-value">-100%</span>
-            <input type="range" id="changeRange" class="filter-slider tf-slider" min="-100" max="50" step="0.5" value="-100">
-        </label>
+        <!-- МИН. ОБЪЁМ -->
+        <div style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
+            <span>Объём:</span>
+            <div class="slider-container tf-slider">
+                <div class="slider-fill" id="volFill"></div>
+                <div class="slider-thumb" id="volThumb"></div>
+                <div class="slider-label" id="volLabel">$0</div>
+                <input type="range" id="volRange" class="filter-slider" min="0" max="500000000" step="1000000" value="0">
+            </div>
+            <span id="volVal" class="filter-value" style="min-width:50px; text-align:right;">$0</span>
+        </div>
+
+        <!-- МИН. ИЗМЕНЕНИЕ -->
+        <div style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
+            <span>Изм.:</span>
+            <div class="slider-container tf-slider">
+                <div class="slider-fill" id="changeFill"></div>
+                <div class="slider-thumb" id="changeThumb"></div>
+                <div class="slider-label" id="changeLabel">-100%</div>
+                <input type="range" id="changeRange" class="filter-slider" min="-100" max="50" step="0.5" value="-100">
+            </div>
+            <span id="changeVal" class="filter-value" style="min-width:45px; text-align:right;">-100%</span>
+        </div>
+
         <button class="tf-btn" onclick="resetFilters()" title="Сбросить фильтры">✕</button>
     </div>
 </div>
