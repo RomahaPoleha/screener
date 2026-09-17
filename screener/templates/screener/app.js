@@ -483,8 +483,6 @@ function resetFilters() {
     document.getElementById('searchInput').value = '';
     document.getElementById('volRange').value = 0;
     document.getElementById('changeRange').value = -100;
-    document.getElementById('volVal').textContent = '$0';
-    document.getElementById('changeVal').textContent = '-100%';
     applyLocalFilters();
 }
 
@@ -2742,12 +2740,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     els.vol.addEventListener('input', (e) => {
-    els.volVal.innerText = '$' + fmt(e.target.value);
     updateSliderFill(e.target);
     applyLocalFilters();
 });
 els.change.addEventListener('input', (e) => {
-    els.changeVal.innerText = e.target.value + '%';
     updateSliderFill(e.target);
     applyLocalFilters();
 });

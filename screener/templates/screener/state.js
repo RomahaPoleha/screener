@@ -2,8 +2,6 @@ const els = {
     search: document.getElementById('searchInput'),
     vol: document.getElementById('volRange'),
     change: document.getElementById('changeRange'),
-    volVal: document.getElementById('volVal'),
-    changeVal: document.getElementById('changeVal'),
     table: document.getElementById('tableBody'),
     chartWrapper: document.getElementById('chart-container'),
     chartHint: document.getElementById('chart-hint'),
