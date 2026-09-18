@@ -630,21 +630,19 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 # ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
 # ==========================================
 async def periodic_refresh(log_func=print):
+    # ИСПРАВЛЕНО: используем правильные имена глобальных переменных
     global bitget_futures_symbols, bitget_spot_symbols
 
     while True:
         await asyncio.sleep(300)  # 5 минут
 
         try:
-            # Белый список НЕ обновляем — используем тот что при старте
-            # (он сохраняется в stable_futures_symbols и stable_spot_symbols)
-
             # --- Futures ротация ---
-            candidates_f = await get_top_symbols_async('futures')
-            old_symbols = set(futures_symbols)
+            # ИСПРАВЛЕНО: для Bitget в ccxt правильно использовать 'swap', а не 'futures'
+            candidates_f = await get_top_symbols_async('swap')
+            old_symbols = set(bitget_futures_symbols)  # ИСПРАВЛЕНО
             new_active = []
 
-            # Шаг 1: Сохраняем монеты из белого списка (без обновления)
             for symbol in stable_futures_symbols:
                 if symbol in old_symbols:
                     new_active.append(symbol)
@@ -654,7 +652,6 @@ async def periodic_refresh(log_func=print):
                         new_active.append(symbol)
                         log_func(f"✅ bitget futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
-            # Шаг 2: Добавляем топ по формуле
             for symbol in candidates_f:
                 if len(new_active) >= 30:
                     break
@@ -672,7 +669,8 @@ async def periodic_refresh(log_func=print):
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
-            futures_symbols = new_active
+            bitget_futures_symbols = new_active  # ИСПРАВЛЕНО
+
             if removed:
                 async with bitget_futures_lock:
                     for sym in removed:
@@ -688,7 +686,7 @@ async def periodic_refresh(log_func=print):
 
             # --- Spot ротация ---
             candidates_s = await get_top_symbols_async('spot')
-            old_symbols = set(spot_symbols)
+            old_symbols = set(bitget_spot_symbols)  # ИСПРАВЛЕНО
             new_active = []
 
             for symbol in stable_spot_symbols:
@@ -717,7 +715,8 @@ async def periodic_refresh(log_func=print):
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
-            spot_symbols = new_active
+            bitget_spot_symbols = new_active  # ИСПРАВЛЕНО
+
             if removed:
                 async with bitget_spot_lock:
                     for sym in removed:
@@ -738,7 +737,7 @@ async def periodic_refresh(log_func=print):
 # ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
 async def main_async(log_func=print):
-    global futures_symbols, spot_symbols, stable_futures_symbols, stable_spot_symbols
+    global bitget_futures_symbols, bitget_spot_symbols, stable_futures_symbols, stable_spot_symbo
 
     log_func("🚀 Запуск Bitget Async Monitor...")
 
@@ -786,8 +785,8 @@ async def main_async(log_func=print):
             active_spot.append(symbol)
             log_func(f"✅ bitget spot {symbol}: принят (плотностей: {saved_count})")
 
-    futures_symbols = active_futures
-    spot_symbols = active_spot
+    bitget_futures_symbols = active_futures
+    bitget_spot_symbols = active_spot
 
     log_func(f"✅ Bitget Async Monitor инициализирован: {len(active_futures)} futures, {len(active_spot)} spot")
 
