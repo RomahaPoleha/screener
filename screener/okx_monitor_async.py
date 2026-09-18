@@ -1,6 +1,7 @@
 """
 OKX Monitor ASYNC — асинхронная версия
 Адаптация по образцу bitget_monitor_async.py / bybit_monitor_async.py
+Добавлена формула стабильности объёма (как на Binance)
 """
 import asyncio
 import json
@@ -20,6 +21,7 @@ okx_futures_symbols = []
 okx_futures_message_queue = asyncio.Queue(maxsize=10000)
 okx_futures_lock = asyncio.Lock()
 okx_futures_reconnect_event = asyncio.Event()
+okx_futures_volume_stats = {}  # ← ДОБАВЛЕНО: symbol -> {price: {min, max, sum, count}}
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
@@ -30,6 +32,7 @@ okx_spot_symbols = []
 okx_spot_message_queue = asyncio.Queue(maxsize=10000)
 okx_spot_lock = asyncio.Lock()
 okx_spot_reconnect_event = asyncio.Event()
+okx_spot_volume_stats = {}  # ← ДОБАВЛЕНО: symbol -> {price: {min, max, sum, count}}
 
 # URLs — У OKX один и тот же WS URL для futures и spot!
 OKX_WS_URL = "wss://ws.okx.com:8443/ws/v5/public"
@@ -39,7 +42,8 @@ OKX_SPOT_REST_URL = "https://www.okx.com/api/v5/market/books?instId={}-USDT&sz=2
 # Rate limiting
 last_sync_time = {}
 
-MIN_AGE_SECONDS = 30
+# ← ИЗМЕНЕНО: 180 секунд, чтобы формула стабильности работала так же, как на Binance
+MIN_AGE_SECONDS = 180
 CACHE_TTL = 900
 
 _http_client = None
@@ -184,6 +188,8 @@ async def get_stable_coins_async(market_type='swap', limit=10):
     """Асинхронная обёртка — топ монет по абсолютному объёму"""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_stable_coins_sync, market_type, limit)
+
+
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
 # ==========================================
@@ -260,6 +266,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS (async)
+# ← ДОБАВЛЕНА ПРОВЕРКА СТАБИЛЬНОСТИ (как на Binance)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -267,12 +274,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             async with okx_futures_lock:
                 book = okx_futures_order_books.get(symbol, {})
                 ts = okx_futures_density_timestamps.get(symbol, {})
+                stats = okx_futures_volume_stats.get(symbol, {})
                 if not book:
                     return 0
         else:
             async with okx_spot_lock:
                 book = okx_spot_order_books.get(symbol, {})
                 ts = okx_spot_density_timestamps.get(symbol, {})
+                stats = okx_spot_volume_stats.get(symbol, {})
                 if not book:
                     return 0
 
@@ -281,6 +290,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         densities = []
         is_first_load = len(ts) == 0
+        new_stats = {}
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
@@ -288,10 +298,33 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 if volume < 10000:
                     continue
 
+                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
+                prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
+                new_stat = {
+                    'min': min(prev_stat['min'], volume),
+                    'max': max(prev_stat['max'], volume),
+                    'sum': prev_stat['sum'] + volume,
+                    'count': prev_stat['count'] + 1
+                }
+                new_stats[price] = new_stat
+
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
+
+                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
+                    if new_stat['count'] >= 3:
+                        avg = new_stat['sum'] / new_stat['count']
+                        spread = new_stat['max'] - new_stat['min']
+                        stability_ratio = spread / avg if avg > 0 else 0
+
+                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
+                        if stability_ratio > 0.5:
+                            ts[price] = now  # Плотность должна "созревать" заново
+                            # Сбрасываем статистику
+                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
+                            continue
                 else:
                     if is_first_load:
                         ts[price] = now - 20
@@ -316,9 +349,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if market == 'futures':
             async with okx_futures_lock:
                 okx_futures_density_timestamps[symbol] = ts
+                okx_futures_volume_stats[symbol] = new_stats
         else:
             async with okx_spot_lock:
                 okx_spot_density_timestamps[symbol] = ts
+                okx_spot_volume_stats[symbol] = new_stats
 
         return len(densities)
 
@@ -484,29 +519,43 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     if market == 'futures':
         async with okx_futures_lock:
             old_ts = okx_futures_density_timestamps.get(symbol, {})
+            old_stats = okx_futures_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
             new_ts = {}
+            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
 
             okx_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             okx_futures_density_timestamps[symbol] = new_ts
+            okx_futures_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ
     else:
         async with okx_spot_lock:
             old_ts = okx_spot_density_timestamps.get(symbol, {})
+            old_stats = okx_spot_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
             new_ts = {}
+            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
 
             okx_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             okx_spot_density_timestamps[symbol] = new_ts
+            okx_spot_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ
 
     await sync_to_cache_async(symbol, market, log_func)
 

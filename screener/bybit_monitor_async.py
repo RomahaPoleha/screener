@@ -467,29 +467,43 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     if market == 'futures':
         async with bybit_futures_lock:
             old_ts = bybit_futures_density_timestamps.get(symbol, {})
+            old_stats = bybit_futures_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
             new_ts = {}
+            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
 
             bybit_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bybit_futures_density_timestamps[symbol] = new_ts
+            bybit_futures_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ И ОЧИЩАЕМ ОТ МУСОРА
     else:
         async with bybit_spot_lock:
             old_ts = bybit_spot_density_timestamps.get(symbol, {})
+            old_stats = bybit_spot_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
             new_ts = {}
+            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
 
             bybit_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bybit_spot_density_timestamps[symbol] = new_ts
+            bybit_spot_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ И ОЧИЩАЕМ ОТ МУСОРА
 
     await sync_to_cache_async(symbol, market, log_func)
 
