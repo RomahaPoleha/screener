@@ -230,10 +230,8 @@ def api_scalp(request, symbol):
     result_by_exchange = {ex: [] for ex in EXCHANGES}
 
     for exchange in EXCHANGES:
-        if exchange == 'binance':
-            key = f"scalp:{market}:{symbol_upper}"
-        else:
-            key = f"scalp:{market}:{exchange}:{symbol_upper}"
+        # Единый формат ключей для ВСЕХ бирж: scalp:{market}:{exchange}:{symbol}
+        key = f"scalp:{market}:{exchange}:{symbol_upper}"
 
         data = cache.get(key)
         if not data:
@@ -320,10 +318,12 @@ def api_scalp_debug(request, symbol):
     symbol_upper = symbol.upper()
 
     keys = {
-        'binance_futures': f"scalp:futures:{symbol_upper}",
+        'binance_futures': f"scalp:futures:binance:{symbol_upper}",
         'bybit_futures': f"scalp:futures:bybit:{symbol_upper}",
-        'binance_spot': f"scalp:spot:{symbol_upper}",
+        'okx_futures': f"scalp:futures:okx:{symbol_upper}",
+        'binance_spot': f"scalp:spot:binance:{symbol_upper}",
         'bybit_spot': f"scalp:spot:bybit:{symbol_upper}",
+        'okx_spot': f"scalp:spot:okx:{symbol_upper}",
     }
 
     result = {}
@@ -357,10 +357,12 @@ def api_scalp_active(request):
 
     for symbol in all_symbols:
         keys = [
-            f"scalp:futures:{symbol}",
+            f"scalp:futures:binance:{symbol}",
             f"scalp:futures:bybit:{symbol}",
-            f"scalp:spot:{symbol}",
+            f"scalp:futures:okx:{symbol}",
+            f"scalp:spot:binance:{symbol}",
             f"scalp:spot:bybit:{symbol}",
+            f"scalp:spot:okx:{symbol}",
         ]
 
         total_count = 0
