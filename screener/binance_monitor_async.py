@@ -1,8 +1,8 @@
 """
 Binance Monitor ASYNC — асинхронная версия
 Сохранена вся специфика Binance:
-  - REST инициализация через ccxt (fetch_order_book)
-  - Ключи Redis БЕЗ имени биржи (для совместимости): scalp:futures:{symbol}, scalp:spot:{symbol}
+REST инициализация через ccxt (fetch_order_book)
+Ключи Redis С именем биржи: scalp:futures:binance:{symbol}, scalp:spot:binance:{symbol}
   - TARGET=20 при старте, TARGET=30 при ротации
   - Имена переменных futures_symbols/spot_symbols (как в оригинале)
 """
@@ -207,7 +207,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS
-# ВНИМАНИЕ: Ключи БЕЗ имени биржи! scalp:futures:{symbol}, scalp:spot:{symbol}
+# Ключи С именем биржи: scalp:futures:binance:{symbol}, scalp:spot:binance:{symbol}
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -218,7 +218,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 stats = binance_futures_volume_stats.get(symbol, {})
                 if not book:
                     return 0
-            key = f"scalp:futures:{symbol}"
+                key = f"scalp:futures:binance:{symbol}"
         else:
             async with binance_spot_lock:
                 book = binance_spot_order_books.get(symbol, {})
@@ -226,7 +226,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 stats = binance_spot_volume_stats.get(symbol, {})
                 if not book:
                     return 0
-            key = f"scalp:spot:{symbol}"
+                key = f"scalp:spot:binance:{symbol}"
 
         now = time.time()
         densities = []
