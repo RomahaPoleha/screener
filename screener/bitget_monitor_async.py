@@ -17,6 +17,7 @@ from . import coin_selection
 # ==========================================
 bitget_futures_order_books = {}
 bitget_futures_density_timestamps = {}
+bitget_futures_volume_stats = {}  # <-- ДОБАВИТЬ: статистика объемов для проверки стабильности
 bitget_futures_symbols = []
 bitget_futures_message_queue = asyncio.Queue(maxsize=10000)
 bitget_futures_lock = asyncio.Lock()
@@ -24,6 +25,7 @@ bitget_futures_reconnect_event = asyncio.Event()
 
 bitget_spot_order_books = {}
 bitget_spot_density_timestamps = {}
+bitget_spot_volume_stats = {}     # <-- ДОБАВИТЬ: статистика объемов для проверки стабильности
 bitget_spot_symbols = []
 bitget_spot_message_queue = asyncio.Queue(maxsize=10000)
 bitget_spot_lock = asyncio.Lock()
@@ -228,12 +230,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             async with bitget_futures_lock:
                 book = bitget_futures_order_books.get(symbol, {})
                 ts = bitget_futures_density_timestamps.get(symbol, {})
+                stats = bitget_futures_volume_stats.get(symbol, {})  # <-- ДОБАВИТЬ
                 if not book:
                     return 0
         else:
             async with bitget_spot_lock:
                 book = bitget_spot_order_books.get(symbol, {})
                 ts = bitget_spot_density_timestamps.get(symbol, {})
+                stats = bitget_spot_volume_stats.get(symbol, {})     # <-- ДОБАВИТЬ
                 if not book:
                     return 0
 
@@ -242,6 +246,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         densities = []
         is_first_load = len(ts) == 0
+        new_stats = {}  # <-- ДОБАВИТЬ
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
@@ -249,10 +254,32 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 if volume < 10000:
                     continue
 
+                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
+                prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
+                new_stat = {
+                    'min': min(prev_stat['min'], volume),
+                    'max': max(prev_stat['max'], volume),
+                    'sum': prev_stat['sum'] + volume,
+                    'count': prev_stat['count'] + 1
+                }
+                new_stats[price] = new_stat
+
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
+
+                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
+                    if new_stat['count'] >= 3:
+                        avg = new_stat['sum'] / new_stat['count']
+                        spread = new_stat['max'] - new_stat['min']
+                        stability_ratio = spread / avg if avg > 0 else 0
+
+                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
+                        if stability_ratio > 0.5:
+                            ts[price] = now  # Плотность должна "созревать" заново
+                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
+                            continue
                 else:
                     if is_first_load:
                         ts[price] = now - 20
@@ -273,15 +300,16 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
         except RuntimeError:
-            # Event loop закрыт — пропускаем
             pass
 
         if market == 'futures':
             async with bitget_futures_lock:
                 bitget_futures_density_timestamps[symbol] = ts
+                bitget_futures_volume_stats[symbol] = new_stats  # <-- ДОБАВИТЬ: сохраняем обновленную статистику
         else:
             async with bitget_spot_lock:
                 bitget_spot_density_timestamps[symbol] = ts
+                bitget_spot_volume_stats[symbol] = new_stats     # <-- ДОБАВИТЬ: сохраняем обновленную статистику
 
         return len(densities)
 
@@ -468,6 +496,7 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
 
             bitget_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bitget_futures_density_timestamps[symbol] = new_ts
+            bitget_futures_volume_stats[symbol] = {}  # <-- ДОБАВИТЬ: сброс статистики при снепшоте
     else:
         async with bitget_spot_lock:
             old_ts = bitget_spot_density_timestamps.get(symbol, {})
@@ -481,6 +510,7 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
 
             bitget_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bitget_spot_density_timestamps[symbol] = new_ts
+            bitget_spot_volume_stats[symbol] = {}     # <-- ДОБАВИТЬ: сброс статистики при снепшоте
 
     await sync_to_cache_async(symbol, market, log_func)
 
@@ -600,7 +630,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 # ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
 # ==========================================
 async def periodic_refresh(log_func=print):
-    global futures_symbols, spot_symbols
+    global bitget_futures_symbols, bitget_spot_symbols
 
     while True:
         await asyncio.sleep(300)  # 5 минут
