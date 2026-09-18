@@ -42,7 +42,7 @@ SPOT_WS_URL = "wss://stream.binance.com:9443/ws"
 last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
-CACHE_TTL = 900
+CACHE_TTL = 30
 SYNC_INTERVAL = 3
 
 # Лёгкая статистика объёмов (min/max/sum/count) для проверки стабильности
@@ -455,6 +455,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
             if changed:
                 binance_futures_density_timestamps[symbol] = ts
+
     else:
         async with binance_spot_lock:
             if symbol not in binance_spot_order_books:
@@ -503,15 +504,18 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                 except Exception:
                     continue
 
+            # ← ИСПРАВЛЕНО: этот блок должен быть на одном уровне с циклами for, а не внутри них!
             if changed:
                 binance_spot_density_timestamps[symbol] = ts
 
-    # Rate limit: 3 сек
-    key = f"binance:{market}:{symbol}"
-    now = time.time()
-    if key not in last_sync_time or (now - last_sync_time[key]) >= SYNC_INTERVAL:
-        await sync_to_cache_async(symbol, market, log_func)
-        last_sync_time[key] = now
+    # Rate limit: 3 сек, НО ТОЛЬКО если были реальные изменения в стакане!
+    # ← Этот блок тоже на правильном месте (вне if/else market)
+    if changed:
+        key = f"binance:{market}:{symbol}"
+        now = time.time()
+        if key not in last_sync_time or (now - last_sync_time[key]) >= SYNC_INTERVAL:
+            await sync_to_cache_async(symbol, market, log_func)
+            last_sync_time[key] = now
 
 
 # ==========================================

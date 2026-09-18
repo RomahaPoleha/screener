@@ -38,7 +38,7 @@ BITGET_SPOT_REST_URL = "https://api.bitget.com/api/v2/spot/market/merge-depth?sy
 last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
-CACHE_TTL = 900
+CACHE_TTL = 30
 
 # Глобальный aiohttp клиент (создаётся один раз)
 _http_client = None

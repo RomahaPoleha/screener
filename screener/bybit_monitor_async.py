@@ -43,8 +43,7 @@ BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&s
 last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
-CACHE_TTL = 900
-
+CACHE_TTL = 30
 _http_client = None
 
 
@@ -611,12 +610,13 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             if changed:
                 bybit_spot_density_timestamps[symbol] = ts
 
-    # Rate limit: sync раз в 3 секунды
-    key = f"bybit:{market}:{symbol}"
-    now = time.time()
-    if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
-        await sync_to_cache_async(symbol, market, log_func)
-        last_sync_time[key] = now
+    # Rate limit: sync раз в 3 секунды, НО ТОЛЬКО если были реальные изменения в стакане!
+    if changed:
+        key = f"bybit:{market}:{symbol}"
+        now = time.time()
+        if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
+            await sync_to_cache_async(symbol, market, log_func)
+            last_sync_time[key] = now
 
 
 # ==========================================

@@ -47,7 +47,7 @@ last_sync_time = {}
 gate_spot_last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
-CACHE_TTL = 900
+CACHE_TTL = 30
 SYNC_INTERVAL = 10  # Gate специфика
 
 _http_client = None

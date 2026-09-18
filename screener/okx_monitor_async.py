@@ -44,7 +44,7 @@ last_sync_time = {}
 
 # ← ИЗМЕНЕНО: 180 секунд, чтобы формула стабильности работала так же, как на Binance
 MIN_AGE_SECONDS = 180
-CACHE_TTL = 900
+CACHE_TTL = 30
 
 _http_client = None
 
@@ -663,12 +663,13 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             if changed:
                 okx_spot_density_timestamps[symbol] = ts
 
-    # Rate limit: sync раз в 3 секунды
-    key = f"okx:{market}:{symbol}"
-    now = time.time()
-    if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
-        await sync_to_cache_async(symbol, market, log_func)
-        last_sync_time[key] = now
+    # Rate limit: sync раз в 3 секунды, НО ТОЛЬКО если были реальные изменения в стакане!
+    if changed:
+        key = f"okx:{market}:{symbol}"
+        now = time.time()
+        if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
+            await sync_to_cache_async(symbol, market, log_func)
+            last_sync_time[key] = now
 
 
 # ==========================================

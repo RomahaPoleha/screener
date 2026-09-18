@@ -44,7 +44,7 @@ MEXC_SPOT_REST_URL = "https://api.mexc.com/api/v3/depth?symbol={}USDT&limit=100"
 last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
-CACHE_TTL = 900
+CACHE_TTL = 30
 SYNC_INTERVAL = 3
 
 _http_client = None
