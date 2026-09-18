@@ -20,6 +20,7 @@ bybit_futures_symbols = []
 bybit_futures_message_queue = asyncio.Queue(maxsize=10000)
 bybit_futures_lock = asyncio.Lock()
 bybit_futures_reconnect_event = asyncio.Event()
+bybit_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
@@ -30,6 +31,7 @@ bybit_spot_symbols = []
 bybit_spot_message_queue = asyncio.Queue(maxsize=10000)
 bybit_spot_lock = asyncio.Lock()
 bybit_spot_reconnect_event = asyncio.Event()
+bybit_spot_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
 
 # URLs
 BYBIT_FUTURES_WS_URL = "wss://stream.bybit.com/v5/public/linear"
@@ -221,6 +223,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS (async)
+# Теперь с проверкой стабильности (как на Binance)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -228,20 +231,23 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             async with bybit_futures_lock:
                 book = bybit_futures_order_books.get(symbol, {})
                 ts = bybit_futures_density_timestamps.get(symbol, {})
+                stats = bybit_futures_volume_stats.get(symbol, {})
                 if not book:
                     return 0
         else:
             async with bybit_spot_lock:
                 book = bybit_spot_order_books.get(symbol, {})
                 ts = bybit_spot_density_timestamps.get(symbol, {})
+                stats = bybit_spot_volume_stats.get(symbol, {})
                 if not book:
                     return 0
 
         key = f"scalp:{market}:bybit:{symbol}"
-        now = time.time()
 
+        now = time.time()
         densities = []
         is_first_load = len(ts) == 0
+        new_stats = {}
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
@@ -249,10 +255,33 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 if volume < 10000:
                     continue
 
+                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
+                prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
+                new_stat = {
+                    'min': min(prev_stat['min'], volume),
+                    'max': max(prev_stat['max'], volume),
+                    'sum': prev_stat['sum'] + volume,
+                    'count': prev_stat['count'] + 1
+                }
+                new_stats[price] = new_stat
+
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
+
+                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
+                    if new_stat['count'] >= 3:
+                        avg = new_stat['sum'] / new_stat['count']
+                        spread = new_stat['max'] - new_stat['min']
+                        stability_ratio = spread / avg if avg > 0 else 0
+
+                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
+                        if stability_ratio > 0.5:
+                            ts[price] = now  # Плотность должна "созревать" заново
+                            # Сбрасываем статистику
+                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
+                            continue
                 else:
                     if is_first_load:
                         ts[price] = now - 20
@@ -277,9 +306,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if market == 'futures':
             async with bybit_futures_lock:
                 bybit_futures_density_timestamps[symbol] = ts
+                bybit_futures_volume_stats[symbol] = new_stats
         else:
             async with bybit_spot_lock:
                 bybit_spot_density_timestamps[symbol] = ts
+                bybit_spot_volume_stats[symbol] = new_stats
 
         return len(densities)
 
