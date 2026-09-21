@@ -5,14 +5,44 @@ REST инициализация через ccxt (fetch_order_book)
 Ключи Redis С именем биржи: scalp:futures:binance:{symbol}, scalp:spot:binance:{symbol}
   - TARGET=20 при старте, TARGET=30 при ротации
   - Имена переменных futures_symbols/spot_symbols (как в оригинале)
+
+ОПТИМИЗАЦИИ:
+1. Использование orjson (с фоллбэком на json) для ускорения парсинга WS.
+2. Глобальные экземпляры CCXT для исключения повторной загрузки рынков (load_markets).
+3. Очистка volume_stats и last_sync_time при ротации для предотвращения утечек памяти.
 """
 import asyncio
-import json
+try:
+    import orjson as json  # Работает в 3-5 раз быстрее, синтаксис тот же
+except ImportError:
+    import json            # Если библиотеки нет, код продолжит работать как раньше
 import time
 import websockets
 from django.core.cache import cache
 import ccxt
 from . import coin_selection
+
+# ==========================================
+# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Оптимизация)
+# Создаются один раз при импорте модуля, load_markets вызывается один раз.
+# ==========================================
+ccxt_futures_exchange = ccxt.binance({
+    'enableRateLimit': True,
+    'timeout': 10000,
+    'options': {'defaultType': 'future'}
+})
+ccxt_spot_exchange = ccxt.binance({
+    'enableRateLimit': True,
+    'timeout': 10000,
+    'options': {'defaultType': 'spot'}
+})
+
+try:
+    ccxt_futures_exchange.load_markets()
+    ccxt_spot_exchange.load_markets()
+except Exception as e:
+    print(f"⚠️ Предупреждение при загрузке рынков CCXT: {e}")
+
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
@@ -49,17 +79,15 @@ SYNC_INTERVAL = 3
 binance_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
 binance_spot_volume_stats = {}
 
+
 # ==========================================
 # ТОП МОНЕТ (через ccxt в executor)
 # ==========================================
 def _fetch_top_symbols_sync(market='futures'):
     try:
-        ccxt_market = 'future' if market == 'futures' else 'spot'  # Binance специфика: 'future'!
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': ccxt_market}
-        })
+        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр вместо создания нового
+        exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
+
         tickers = exchange.fetch_tickers()
 
         clean_fn = coin_selection.clean_swap if market == 'futures' else coin_selection.clean_spot
@@ -78,6 +106,8 @@ def _fetch_top_symbols_sync(market='futures'):
 async def get_top_symbols_async(market='futures'):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market)
+
+
 # ==========================================
 # БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
 # ==========================================
@@ -91,12 +121,9 @@ stable_spot_symbols = []
 def _fetch_stable_coins_sync(market='futures', limit=10):
     """Синхронная функция — топ монет по абсолютному объёму"""
     try:
-        ccxt_market = 'future' if market == 'futures' else 'spot'
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': ccxt_market}
-        })
+        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
+        exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
+
         tickers = exchange.fetch_tickers()
 
         # Собираем монеты с объёмами
@@ -141,19 +168,15 @@ async def get_stable_coins_async(market='futures', limit=10):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
 
+
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНА через ccxt.fetch_order_book
 # ==========================================
 def _init_order_book_sync(symbol, market):
     """Синхронная функция — использует ccxt для инициализации"""
     try:
-        ccxt_market = 'future' if market == 'futures' else 'spot'
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': ccxt_market}
-        })
-        exchange.load_markets()
+        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр, load_markets уже вызван
+        exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
 
         if market == 'futures':
             ccxt_symbol = f"{symbol}/USDT:USDT"
@@ -565,11 +588,15 @@ async def periodic_refresh(log_func=print):
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
             futures_symbols = new_active
+
             if removed:
                 async with binance_futures_lock:
                     for sym in removed:
                         binance_futures_order_books.pop(sym, None)
                         binance_futures_density_timestamps.pop(sym, None)
+                        # ОПТИМИЗАЦИЯ: очистка памяти от устаревших ключей
+                        binance_futures_volume_stats.pop(sym, None)
+                        last_sync_time.pop(f"binance:futures:{sym}", None)
                 log_func(f"🗑️ binance futures удалены: {', '.join(sorted(removed))}")
 
             if removed or added:
@@ -610,11 +637,15 @@ async def periodic_refresh(log_func=print):
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
             spot_symbols = new_active
+
             if removed:
                 async with binance_spot_lock:
                     for sym in removed:
                         binance_spot_order_books.pop(sym, None)
                         binance_spot_density_timestamps.pop(sym, None)
+                        # ОПТИМИЗАЦИЯ: очистка памяти от устаревших ключей
+                        binance_spot_volume_stats.pop(sym, None)
+                        last_sync_time.pop(f"binance:spot:{sym}", None)
                 log_func(f"🗑️ binance spot удалены: {', '.join(sorted(removed))}")
 
             if removed or added:
