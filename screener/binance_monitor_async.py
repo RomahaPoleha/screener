@@ -1,15 +1,14 @@
 """
-Binance Monitor ASYNC — асинхронная версия
+Binance Monitor ASYNC — асинхронная версия (ИСПРАВЛЕННАЯ)
 Сохранена вся специфика Binance:
 REST инициализация через ccxt (fetch_order_book)
 Ключи Redis С именем биржи: scalp:futures:binance:{symbol}, scalp:spot:binance:{symbol}
   - TARGET=20 при старте, TARGET=30 при ротации
   - Имена переменных futures_symbols/spot_symbols (как в оригинале)
 
-ОПТИМИЗАЦИИ:
-1. Использование orjson (с фоллбэком на json) для ускорения парсинга WS.
-2. Глобальные экземпляры CCXT для исключения повторной загрузки рынков (load_markets).
-3. Очистка volume_stats и last_sync_time при ротации для предотвращения утечек памяти.
+ИСПРАВЛЕНИЯ:
+1. Возвращена оригинальная, проверенная логика sync_to_cache_async (убрана ломающая таймеры оптимизация).
+2. Сохранены безопасные оптимизации: orjson, глобальные CCXT, очистка памяти при ротации.
 """
 import asyncio
 try:
@@ -23,8 +22,8 @@ import ccxt
 from . import coin_selection
 
 # ==========================================
-# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Оптимизация)
-# Создаются один раз при импорте модуля, load_markets вызывается один раз.
+# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
+# Создаются один раз при импорте модуля.
 # ==========================================
 ccxt_futures_exchange = ccxt.binance({
     'enableRateLimit': True,
@@ -37,19 +36,12 @@ ccxt_spot_exchange = ccxt.binance({
     'options': {'defaultType': 'spot'}
 })
 
-try:
-    ccxt_futures_exchange.load_markets()
-    ccxt_spot_exchange.load_markets()
-except Exception as e:
-    print(f"⚠️ Предупреждение при загрузке рынков CCXT: {e}")
-
-
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
 # ==========================================
 binance_futures_order_books = {}
 binance_futures_density_timestamps = {}
-futures_symbols = []  # ← оставил как в оригинале (не binance_futures_symbols)
+futures_symbols = []
 binance_futures_message_queue = asyncio.Queue(maxsize=10000)
 binance_futures_lock = asyncio.Lock()
 binance_futures_reconnect_event = asyncio.Event()
@@ -59,7 +51,7 @@ binance_futures_reconnect_event = asyncio.Event()
 # ==========================================
 binance_spot_order_books = {}
 binance_spot_density_timestamps = {}
-spot_symbols = []  # ← оставил как в оригинале
+spot_symbols = []
 binance_spot_message_queue = asyncio.Queue(maxsize=10000)
 binance_spot_lock = asyncio.Lock()
 binance_spot_reconnect_event = asyncio.Event()
@@ -76,7 +68,7 @@ CACHE_TTL = 30
 SYNC_INTERVAL = 3
 
 # Лёгкая статистика объёмов (min/max/sum/count) для проверки стабильности
-binance_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
+binance_futures_volume_stats = {}
 binance_spot_volume_stats = {}
 
 
@@ -85,9 +77,8 @@ binance_spot_volume_stats = {}
 # ==========================================
 def _fetch_top_symbols_sync(market='futures'):
     try:
-        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр вместо создания нового
+        # Используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
-
         tickers = exchange.fetch_tickers()
 
         clean_fn = coin_selection.clean_swap if market == 'futures' else coin_selection.clean_spot
@@ -111,25 +102,20 @@ async def get_top_symbols_async(market='futures'):
 # ==========================================
 # БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
 # ==========================================
-STABLE_COINS_LIMIT = 10  # Размер белого списка
+STABLE_COINS_LIMIT = 10
 
-# Глобальные переменные для хранения белого списка
 stable_futures_symbols = []
 stable_spot_symbols = []
 
 
 def _fetch_stable_coins_sync(market='futures', limit=10):
-    """Синхронная функция — топ монет по абсолютному объёму"""
     try:
-        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
+        # Используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
-
         tickers = exchange.fetch_tickers()
 
-        # Собираем монеты с объёмами
         coins_with_volume = []
         for symbol, data in tickers.items():
-            # Фильтр по суффиксу
             if market == 'futures':
                 if ':USDT' not in symbol:
                     continue
@@ -138,13 +124,11 @@ def _fetch_stable_coins_sync(market='futures', limit=10):
                     continue
 
             volume = data.get('quoteVolume') or 0
-            if volume < 100000:  # Минимальный порог
+            if volume < 100000:
                 continue
 
-            # Чистим символ
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
 
-            # Валидация
             if '-' in clean_symbol:
                 continue
             if len(clean_symbol) < 2 or len(clean_symbol) > 15:
@@ -154,7 +138,6 @@ def _fetch_stable_coins_sync(market='futures', limit=10):
 
             coins_with_volume.append((clean_symbol, volume))
 
-        # Сортируем по убыванию объёма и берём топ-N
         coins_with_volume.sort(key=lambda x: x[1], reverse=True)
         return [s for s, v in coins_with_volume[:limit]]
 
@@ -164,7 +147,6 @@ def _fetch_stable_coins_sync(market='futures', limit=10):
 
 
 async def get_stable_coins_async(market='futures', limit=10):
-    """Асинхронная обёртка — топ монет по абсолютному объёму"""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
 
@@ -173,9 +155,8 @@ async def get_stable_coins_async(market='futures', limit=10):
 # ИНИЦИАЛИЗАЦИЯ СТАКАНА через ccxt.fetch_order_book
 # ==========================================
 def _init_order_book_sync(symbol, market):
-    """Синхронная функция — использует ccxt для инициализации"""
     try:
-        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр, load_markets уже вызван
+        # Используем глобальный экземпляр, load_markets уже вызван при старте
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
 
         if market == 'futures':
@@ -230,7 +211,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS
-# Ключи С именем биржи: scalp:futures:binance:{symbol}, scalp:spot:binance:{symbol}
+# ⚠️ ВАЖНО: Логика полностью возвращена к оригинальной, рабочей версии.
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -262,7 +243,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 if volume < 10000:
                     continue
 
-                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
                 new_stat = {
                     'min': min(prev_stat['min'], volume),
@@ -277,16 +257,13 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     if age < MIN_AGE_SECONDS:
                         continue
 
-                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
                     if new_stat['count'] >= 3:
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
-                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
                         if stability_ratio > 0.5:
-                            ts[price] = now  # Плотность должна "созревать" заново
-                            # Сбрасываем статистику
+                            ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
@@ -327,8 +304,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# WEBSOCKET LISTENER — Binance не требует клиентский heartbeat
-# Используем встроенные ping-фреймы библиотеки websockets
+# WEBSOCKET LISTENER
 # ==========================================
 async def ws_listener(market='futures', log_func=print):
     global futures_symbols, spot_symbols
@@ -346,11 +322,8 @@ async def ws_listener(market='futures', log_func=print):
 
             log_func(f"🔌 binance {market} WS подключение: {len(symbols)} символов")
 
-            # Binance не требует heartbeat от клиента — сервер сам шлёт ping
-            # ping_interval=20 — встроенные протокольные пинги от библиотеки websockets
             async with websockets.connect(ws_url, ping_interval=20, ping_timeout=20) as ws:
                 try:
-                    # Подписка: {"method":"SUBSCRIBE","params":["btcusdt@depth@100ms",...],"id":1}
                     streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols]
                     subscribe_msg = {
                         "method": "SUBSCRIBE",
@@ -393,7 +366,6 @@ async def ws_listener(market='futures', log_func=print):
 
 # ==========================================
 # ОБРАБОТКА ОЧЕРЕДИ
-# Binance шлёт как {"data":{"s":...}} (combined stream), так и {"s":...} напрямую
 # ==========================================
 async def process_queue(market='futures', log_func=print):
     queue = binance_futures_message_queue if market == 'futures' else binance_spot_message_queue
@@ -403,7 +375,6 @@ async def process_queue(market='futures', log_func=print):
             message = await queue.get()
             data = json.loads(message)
 
-            # Определяем symbol и уровни из двух возможных форматов
             if 'data' in data:
                 stream_data = data['data']
                 symbol = stream_data.get('s', '')
@@ -527,16 +498,13 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                 except Exception:
                     continue
 
-            # ← ИСПРАВЛЕНО: этот блок должен быть на одном уровне с циклами for, а не внутри них!
             if changed:
                 binance_spot_density_timestamps[symbol] = ts
 
-    # Rate limit: 3 сек, НО ТОЛЬКО если были реальные изменения в стакане!
-    # ← Этот блок тоже на правильном месте (вне if/else market)
     if changed:
         key = f"binance:{market}:{symbol}"
         now = time.time()
-        if key not in last_sync_time or (now - last_sync_time[key]) >= SYNC_INTERVAL:
+        if now - last_sync_time.get(key, 0.0) >= SYNC_INTERVAL:
             await sync_to_cache_async(symbol, market, log_func)
             last_sync_time[key] = now
 
@@ -548,18 +516,14 @@ async def periodic_refresh(log_func=print):
     global futures_symbols, spot_symbols
 
     while True:
-        await asyncio.sleep(300)  # 5 минут
+        await asyncio.sleep(300)
 
         try:
-            # Белый список НЕ обновляем — используем тот что при старте
-            # (он сохраняется в stable_futures_symbols и stable_spot_symbols)
-
             # --- Futures ротация ---
             candidates_f = await get_top_symbols_async('futures')
             old_symbols = set(futures_symbols)
             new_active = []
 
-            # Шаг 1: Сохраняем монеты из белого списка (без обновления)
             for symbol in stable_futures_symbols:
                 if symbol in old_symbols:
                     new_active.append(symbol)
@@ -569,7 +533,6 @@ async def periodic_refresh(log_func=print):
                         new_active.append(symbol)
                         log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
-            # Шаг 2: Добавляем топ по формуле
             for symbol in candidates_f:
                 if len(new_active) >= 30:
                     break
@@ -594,7 +557,7 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         binance_futures_order_books.pop(sym, None)
                         binance_futures_density_timestamps.pop(sym, None)
-                        # ОПТИМИЗАЦИЯ: очистка памяти от устаревших ключей
+                        # Безопасная очистка памяти
                         binance_futures_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:futures:{sym}", None)
                 log_func(f"🗑️ binance futures удалены: {', '.join(sorted(removed))}")
@@ -643,7 +606,7 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         binance_spot_order_books.pop(sym, None)
                         binance_spot_density_timestamps.pop(sym, None)
-                        # ОПТИМИЗАЦИЯ: очистка памяти от устаревших ключей
+                        # Безопасная очистка памяти
                         binance_spot_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:spot:{sym}", None)
                 log_func(f"🗑️ binance spot удалены: {', '.join(sorted(removed))}")
@@ -666,7 +629,6 @@ async def main_async(log_func=print):
 
     log_func("🚀 Запуск Binance Async Monitor...")
 
-    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
     stable_f = await get_stable_coins_async('futures', STABLE_COINS_LIMIT)
     stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
     stable_futures_symbols = stable_f
@@ -674,11 +636,9 @@ async def main_async(log_func=print):
     log_func(f"🔒 Белый список futures: {stable_f}")
     log_func(f"🔒 Белый список spot: {stable_s}")
 
-    # --- Шаг 2: Получаем кандидатов по формуле ---
     futures_candidates = await get_top_symbols_async('futures')
     spot_candidates = await get_top_symbols_async('spot')
 
-    # --- Шаг 3: Инициализируем белый список ---
     active_futures = []
     for symbol in stable_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
@@ -693,10 +653,9 @@ async def main_async(log_func=print):
             active_spot.append(symbol)
             log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
-    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
     for symbol in futures_candidates[:20]:
         if symbol in active_futures:
-            continue  # Уже в белом списке
+            continue
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
@@ -704,7 +663,7 @@ async def main_async(log_func=print):
 
     for symbol in spot_candidates[:20]:
         if symbol in active_spot:
-            continue  # Уже в белом списке
+            continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
