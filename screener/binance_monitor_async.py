@@ -1,6 +1,6 @@
 """
 Binance Monitor ASYNC — ИСПРАВЛЕННАЯ И СТАБИЛЬНАЯ ВЕРСИЯ
-Найдена и исправлена критическая логическая ошибка в расчете возраста плотности (now - 20 vs 180 сек).
+С добавлением гистерезиса для предотвращения мерцания зрелых плотностей.
 """
 import asyncio
 import json  # Вернули стандартный json для 100% совместимости с JS
@@ -195,7 +195,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS
-# 🔧 ИСПРАВЛЕНИЕ: now - 20 заменено на now - MIN_AGE_SECONDS, чтобы плотности не исчезали после первого цикла
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -224,7 +223,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-                if volume < 10000:
+
+                # 🔧 ГИСТЕРЕЗИС: Защита от мерцания зрелых плотностей
+                # Если плотность уже прожила MIN_AGE_SECONDS, снижаем порог до 7000,
+                # чтобы она не исчезала при частичном исполнении ордера.
+                is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
+                min_volume = 7000 if is_mature else 10000
+
+                if volume < min_volume:
                     continue
 
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
@@ -252,8 +258,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             continue
                 else:
                     if is_first_load:
-                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела, иначе на следующем цикле (через 3 сек)
-                        # age будет ~23, что меньше 180, и сработает continue, скрыв плотность навсегда.
+                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
