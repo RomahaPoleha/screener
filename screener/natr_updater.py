@@ -93,7 +93,7 @@ def calculate_natr(ohlcv, period=14):
 def is_valid_symbol(symbol, market_type):
     if '-' in symbol:
         return False
-    if len(symbol) < 2 or len(symbol) > 15:
+    if len(symbol) < 1 or len(symbol) > 15:
         return False
     if not symbol.replace('_', '').isalnum():
         return False
