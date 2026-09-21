@@ -1,20 +1,9 @@
 """
-Binance Monitor ASYNC — асинхронная версия (ИСПРАВЛЕННАЯ)
-Сохранена вся специфика Binance:
-REST инициализация через ccxt (fetch_order_book)
-Ключи Redis С именем биржи: scalp:futures:binance:{symbol}, scalp:spot:binance:{symbol}
-  - TARGET=20 при старте, TARGET=30 при ротации
-  - Имена переменных futures_symbols/spot_symbols (как в оригинале)
-
-ИСПРАВЛЕНИЯ:
-1. Возвращена оригинальная, проверенная логика sync_to_cache_async (убрана ломающая таймеры оптимизация).
-2. Сохранены безопасные оптимизации: orjson, глобальные CCXT, очистка памяти при ротации.
+Binance Monitor ASYNC — ИСПРАВЛЕННАЯ И СТАБИЛЬНАЯ ВЕРСИЯ
+Найдена и исправлена критическая логическая ошибка в расчете возраста плотности (now - 20 vs 180 сек).
 """
 import asyncio
-try:
-    import orjson as json  # Работает в 3-5 раз быстрее, синтаксис тот же
-except ImportError:
-    import json            # Если библиотеки нет, код продолжит работать как раньше
+import json  # Вернули стандартный json для 100% совместимости с JS
 import time
 import websockets
 from django.core.cache import cache
@@ -23,7 +12,6 @@ from . import coin_selection
 
 # ==========================================
 # ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
-# Создаются один раз при импорте модуля.
 # ==========================================
 ccxt_futures_exchange = ccxt.binance({
     'enableRateLimit': True,
@@ -67,17 +55,16 @@ MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
 SYNC_INTERVAL = 3
 
-# Лёгкая статистика объёмов (min/max/sum/count) для проверки стабильности
+# Лёгкая статистика объёмов
 binance_futures_volume_stats = {}
 binance_spot_volume_stats = {}
 
 
 # ==========================================
-# ТОП МОНЕТ (через ccxt в executor)
+# ТОП МОНЕТ
 # ==========================================
 def _fetch_top_symbols_sync(market='futures'):
     try:
-        # Используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
@@ -100,17 +87,15 @@ async def get_top_symbols_async(market='futures'):
 
 
 # ==========================================
-# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
+# БЕЛЫЙ СПИСОК
 # ==========================================
 STABLE_COINS_LIMIT = 10
-
 stable_futures_symbols = []
 stable_spot_symbols = []
 
 
 def _fetch_stable_coins_sync(market='futures', limit=10):
     try:
-        # Используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
@@ -152,11 +137,10 @@ async def get_stable_coins_async(market='futures', limit=10):
 
 
 # ==========================================
-# ИНИЦИАЛИЗАЦИЯ СТАКАНА через ccxt.fetch_order_book
+# ИНИЦИАЛИЗАЦИЯ СТАКАНА
 # ==========================================
 def _init_order_book_sync(symbol, market):
     try:
-        # Используем глобальный экземпляр, load_markets уже вызван при старте
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
 
         if market == 'futures':
@@ -211,7 +195,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS
-# ⚠️ ВАЖНО: Логика полностью возвращена к оригинальной, рабочей версии.
+# 🔧 ИСПРАВЛЕНИЕ: now - 20 заменено на now - MIN_AGE_SECONDS, чтобы плотности не исчезали после первого цикла
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -268,7 +252,9 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             continue
                 else:
                     if is_first_load:
-                        ts[price] = now - 20
+                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела, иначе на следующем цикле (через 3 сек)
+                        # age будет ~23, что меньше 180, и сработает continue, скрыв плотность навсегда.
+                        ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
@@ -557,7 +543,6 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         binance_futures_order_books.pop(sym, None)
                         binance_futures_density_timestamps.pop(sym, None)
-                        # Безопасная очистка памяти
                         binance_futures_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:futures:{sym}", None)
                 log_func(f"🗑️ binance futures удалены: {', '.join(sorted(removed))}")
@@ -606,7 +591,6 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         binance_spot_order_books.pop(sym, None)
                         binance_spot_density_timestamps.pop(sym, None)
-                        # Безопасная очистка памяти
                         binance_spot_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:spot:{sym}", None)
                 log_func(f"🗑️ binance spot удалены: {', '.join(sorted(removed))}")
