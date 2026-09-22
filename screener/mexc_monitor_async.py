@@ -1,8 +1,9 @@
 """
-MEXC Monitor ASYNC — ИСПРАВЛЕННАЯ И СТАБИЛЬНАЯ ВЕРСИЯ
-КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ:
-1. MEXC Spot: Символ теперь корректно извлекается из поля 'c' или 'r' (например, "spot@public.depth.v3.api@BTCUSDT"), так как поля 's' не существует.
-2. MEXC Futures: Символ теперь корректно извлекается из inner.get('symbol'), так как он находится внутри объекта 'data'.
+MEXC Monitor ASYNC — асинхронная версия
+MEXC специфика:
+  - Futures: push.depth (дельта), sub.depth, символы с _USDT
+  - Spot: spot@public.depth.v3.api (полная замена каждый раз), символы USDT
+  - Heartbeat JSON: {"method": "ping"} каждые 15 сек
 """
 import asyncio
 import json
@@ -14,20 +15,6 @@ import ccxt
 from . import coin_selection
 
 # ==========================================
-# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
-# ==========================================
-ccxt_futures_exchange = ccxt.mexc({
-    'enableRateLimit': True,
-    'timeout': 15000,
-    'options': {'defaultType': 'swap'}
-})
-ccxt_spot_exchange = ccxt.mexc({
-    'enableRateLimit': True,
-    'timeout': 15000,
-    'options': {'defaultType': 'spot'}
-})
-
-# ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
 # ==========================================
 mexc_futures_order_books = {}
@@ -36,7 +23,6 @@ mexc_futures_symbols = []
 mexc_futures_message_queue = asyncio.Queue(maxsize=10000)
 mexc_futures_lock = asyncio.Lock()
 mexc_futures_reconnect_event = asyncio.Event()
-mexc_futures_volume_stats = {}
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
@@ -47,9 +33,8 @@ mexc_spot_symbols = []
 mexc_spot_message_queue = asyncio.Queue(maxsize=10000)
 mexc_spot_lock = asyncio.Lock()
 mexc_spot_reconnect_event = asyncio.Event()
-mexc_spot_volume_stats = {}
 
-# URLs
+# URLs — У MEXC РАЗНЫЕ WS/REST для futures и spot
 MEXC_FUTURES_WS_URL = "wss://contract.mexc.com/edge"
 MEXC_SPOT_WS_URL = "wss://wbs.mexc.com/ws"
 MEXC_FUTURES_REST_URL = "https://contract.mexc.com/api/v1/contract/depth/{}_USDT?limit=100"
@@ -80,9 +65,14 @@ async def get_http_client():
 # ==========================================
 def _fetch_top_symbols_sync(market='swap', log_func=print):
     try:
-        exchange = ccxt_futures_exchange if market == 'swap' else ccxt_spot_exchange
+        exchange = ccxt.mexc({
+            'enableRateLimit': True,
+            'timeout': 15000,
+            'options': {'defaultType': market}
+        })
         tickers = exchange.fetch_tickers()
 
+        # MEXC futures специфика: пересчёт volume → quoteVolume
         if market == 'swap':
             for symbol, data in tickers.items():
                 if not (data.get('quoteVolume') or 0):
@@ -115,20 +105,27 @@ async def get_top_symbols_async(market='swap', log_func=print):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market, log_func)
 
+# ==========================================
+# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
+# ==========================================
+STABLE_COINS_LIMIT = 10  # Размер белого списка
 
-# ==========================================
-# БЕЛЫЙ СПИСОК
-# ==========================================
-STABLE_COINS_LIMIT = 10
+# Глобальные переменные для хранения белого списка
 stable_futures_symbols = []
 stable_spot_symbols = []
 
 
 def _fetch_stable_coins_sync(market='swap', limit=10):
+    """Синхронная функция — топ монет по абсолютному объёму"""
     try:
-        exchange = ccxt_futures_exchange if market == 'swap' else ccxt_spot_exchange
+        exchange = ccxt.mexc({
+            'enableRateLimit': True,
+            'timeout': 15000,
+            'options': {'defaultType': market}
+        })
         tickers = exchange.fetch_tickers()
 
+        # MEXC futures специфика: пересчёт volume → quoteVolume
         if market == 'swap':
             for symbol, data in tickers.items():
                 if not (data.get('quoteVolume') or 0):
@@ -144,27 +141,34 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
                     except Exception:
                         pass
 
+        # Собираем монеты с объёмами
         coins_with_volume = []
         for symbol, data in tickers.items():
+            # MEXC ccxt форматы:
+            # - spot: BTC/USDT
+            # - swap: может быть BTC_USDT, BTC/USDT:USDT, или BTC/USDT
             if market == 'swap':
                 if '_USDT' in symbol:
+                    # Формат: BTC_USDT
                     clean_symbol = symbol.replace('_USDT', '')
                 elif ':USDT' in symbol:
+                    # Формат: BTC/USDT:USDT
                     clean_symbol = symbol.split(':')[0].split('/')[0]
                 elif '/USDT' in symbol:
-                    clean_symbol = symbol.split('/')[0]
+                    # Формат: BTC/USDT
+                    clean_symbol = symbol.replace('/USDT', '')
                 else:
                     continue
             else:
-                if '/USDT' in symbol:
-                    clean_symbol = symbol.split('/')[0]
-                else:
+                if '/USDT' not in symbol:
                     continue
+                clean_symbol = symbol.replace('/USDT', '')
 
             volume = data.get('quoteVolume') or 0
-            if volume < 100000:
+            if volume < 100000:  # Минимальный порог
                 continue
 
+            # Валидация
             if not clean_symbol:
                 continue
             if len(clean_symbol) < 2 or len(clean_symbol) > 15:
@@ -174,6 +178,7 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
 
             coins_with_volume.append((clean_symbol, volume))
 
+        # Сортируем по убыванию объёма и берём топ-N
         coins_with_volume.sort(key=lambda x: x[1], reverse=True)
         return [s for s, v in coins_with_volume[:limit]]
 
@@ -183,12 +188,12 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
 
 
 async def get_stable_coins_async(market='swap', limit=10):
+    """Асинхронная обёртка — топ монет по абсолютному объёму"""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
 
-
 # ==========================================
-# ИНИЦИАЛИЗАЦИЯ СТАКАНОВ
+# ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
 # ==========================================
 async def init_order_book_async(symbol, market='futures', log_func=print):
     try:
@@ -202,6 +207,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
             data = await resp.json()
 
         if market == 'futures':
+            # Futures формат: {success: true, data: {bids, asks}}
             if not isinstance(data, dict) or data.get('success') is False:
                 log_func(f"⚠️ mexc futures {symbol}: API ошибка: {str(data)[:200]}")
                 return 0
@@ -209,6 +215,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
             raw_bids = inner.get('bids') or []
             raw_asks = inner.get('asks') or []
         else:
+            # Spot формат: {bids, asks} или {code: 0, data: ...}
             if isinstance(data, list):
                 return 0
             if not isinstance(data, dict):
@@ -222,6 +229,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         bids = {}
         asks = {}
 
+        # Формат: [price, qty, orderCount?] — берём первые два элемента
         for row in raw_bids:
             try:
                 if isinstance(row, (list, tuple)) and len(row) >= 2:
@@ -273,14 +281,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             async with mexc_futures_lock:
                 book = mexc_futures_order_books.get(symbol, {})
                 ts = mexc_futures_density_timestamps.get(symbol, {})
-                stats = mexc_futures_volume_stats.get(symbol, {})
                 if not book:
                     return 0
         else:
             async with mexc_spot_lock:
                 book = mexc_spot_order_books.get(symbol, {})
                 ts = mexc_spot_density_timestamps.get(symbol, {})
-                stats = mexc_spot_volume_stats.get(symbol, {})
                 if not book:
                     return 0
 
@@ -289,44 +295,20 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         densities = []
         is_first_load = len(ts) == 0
-        new_stats = {}
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-
-                is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
-                min_volume = 7000 if is_mature else 10000
-
-                if volume < min_volume:
+                if volume < 10000:
                     continue
-
-                prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
-                new_stat = {
-                    'min': min(prev_stat['min'], volume),
-                    'max': max(prev_stat['max'], volume),
-                    'sum': prev_stat['sum'] + volume,
-                    'count': prev_stat['count'] + 1
-                }
-                new_stats[price] = new_stat
 
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
-
-                    if new_stat['count'] >= 3:
-                        avg = new_stat['sum'] / new_stat['count']
-                        spread = new_stat['max'] - new_stat['min']
-                        stability_ratio = spread / avg if avg > 0 else 0
-
-                        if stability_ratio > 0.5:
-                            ts[price] = now
-                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
-                            continue
                 else:
                     if is_first_load:
-                        ts[price] = now - MIN_AGE_SECONDS
+                        ts[price] = now - 20
                     else:
                         ts[price] = now
                         continue
@@ -348,11 +330,9 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if market == 'futures':
             async with mexc_futures_lock:
                 mexc_futures_density_timestamps[symbol] = ts
-                mexc_futures_volume_stats[symbol] = new_stats
         else:
             async with mexc_spot_lock:
                 mexc_spot_density_timestamps[symbol] = ts
-                mexc_spot_volume_stats[symbol] = new_stats
 
         return len(densities)
 
@@ -362,14 +342,15 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# HEARTBEAT
+# HEARTBEAT — JSON {"method":"ping"} для MEXC
 # ==========================================
 async def ws_heartbeat(ws, market='futures', log_func=print):
+    """MEXC: JSON {"method": "ping"} для ОБЕИХ рынков (как в оригинале)"""
     try:
         while True:
             await asyncio.sleep(15)
             try:
-                await ws.send(json.dumps({"method": "ping"}))
+                await ws.send(json.dumps({"method": "ping"}))  # ← ОДИН ФОРМАТ для обоих!
             except (websockets.exceptions.ConnectionClosed, Exception) as e:
                 log_func(f"⚠️ mexc {market} heartbeat завершён: {e}")
                 return
@@ -378,7 +359,7 @@ async def ws_heartbeat(ws, market='futures', log_func=print):
 
 
 # ==========================================
-# WEBSOCKET LISTENER
+# WEBSOCKET LISTENER (разные URL для futures/spot)
 # ==========================================
 async def ws_listener(market='futures', log_func=print):
     global mexc_futures_symbols, mexc_spot_symbols
@@ -400,7 +381,9 @@ async def ws_listener(market='futures', log_func=print):
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
+                    # Разная подписка для futures и spot
                     if market == 'futures':
+                        # Futures: каждая монета отдельным сообщением
                         for symbol in symbols:
                             msg = {
                                 "method": "sub.depth",
@@ -408,6 +391,7 @@ async def ws_listener(market='futures', log_func=print):
                             }
                             await ws.send(json.dumps(msg))
                     else:
+                        # Spot: один SUBSCRIPTION со списком параметров
                         params = [f"spot@public.depth.v3.api@{s}USDT" for s in symbols]
                         msg = {"method": "SUBSCRIPTION", "params": params}
                         await ws.send(json.dumps(msg))
@@ -447,9 +431,10 @@ async def ws_listener(market='futures', log_func=print):
 
 
 # ==========================================
-# ОБРАБОТКА ОЧЕРЕДИ (🔧 КРИТИЧЕСКИ ИСПРАВЛЕНО)
+# ОБРАБОТКА ОЧЕРЕДИ
 # ==========================================
 async def process_queue(market='futures', log_func=print):
+    """Обработка очереди. MEXC имеет РАЗНЫЕ форматы для futures и spot!"""
     queue = mexc_futures_message_queue if market == 'futures' else mexc_spot_message_queue
 
     while True:
@@ -463,11 +448,10 @@ async def process_queue(market='futures', log_func=print):
                 if channel != 'push.depth':
                     continue
 
-                # 🔧 ИСПРАВЛЕНИЕ: symbol находится внутри объекта 'data'
-                inner = data.get('data') or {}
-                sym = inner.get('symbol', '')
+                sym = data.get('symbol', '')
                 symbol = sym[:-5] if sym.endswith('_USDT') else sym
 
+                inner = data.get('data') or {}
                 raw_bids = inner.get('bids') or []
                 raw_asks = inner.get('asks') or []
 
@@ -482,15 +466,7 @@ async def process_queue(market='futures', log_func=print):
                 if not channel.startswith('spot@public.depth'):
                     continue
 
-                # 🔧 ИСПРАВЛЕНИЕ: У MEXC Spot v3 нет поля 's' на верхнем уровне.
-                # Символ извлекается из канала 'c' или 'r', например: "spot@public.depth.v3.api@BTCUSDT"
-                ref = data.get('r', '') or channel
-                sym = ""
-                if '@' in ref:
-                    sym = ref.split('@')[-1]  # Извлекаем "BTCUSDT"
-                else:
-                    sym = data.get('s', '')    # Фоллбэк на всякий случай
-
+                sym = data.get('s', '')
                 symbol = sym[:-4] if sym.endswith('USDT') else sym
 
                 inner = data.get('d') or {}
@@ -508,6 +484,7 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
+    """Обработка снапшота — полная замена стакана"""
     new_bids = {}
     new_asks = {}
 
@@ -532,56 +509,43 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     if market == 'futures':
         async with mexc_futures_lock:
             old_ts = mexc_futures_density_timestamps.get(symbol, {})
-            old_stats = mexc_futures_volume_stats.get(symbol, {})
             new_ts = {}
-            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    new_ts[p] = time.time()
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    new_ts[p] = time.time()
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
 
             mexc_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             mexc_futures_density_timestamps[symbol] = new_ts
-            mexc_futures_volume_stats[symbol] = new_stats
     else:
         async with mexc_spot_lock:
             old_ts = mexc_spot_density_timestamps.get(symbol, {})
-            old_stats = mexc_spot_volume_stats.get(symbol, {})
             new_ts = {}
-            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    new_ts[p] = time.time()
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
             for p in new_asks:
                 if p in old_ts:
-                    new_ts[p] = old_ts[p]
+                        new_ts[p] = old_ts[p]
                 else:
-                    new_ts[p] = time.time()
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]
+                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
 
             mexc_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             mexc_spot_density_timestamps[symbol] = new_ts
-            mexc_spot_volume_stats[symbol] = new_stats
 
     await sync_to_cache_async(symbol, market, log_func)
 
 
 async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
+    """Обработка дельты — обновление стакана"""
     if market == 'futures':
         async with mexc_futures_lock:
             if symbol not in mexc_futures_order_books:
@@ -683,9 +647,10 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             if changed:
                 mexc_spot_density_timestamps[symbol] = ts
 
+    # Rate limit: 3 сек
     key = f"mexc:{market}:{symbol}"
     now = time.time()
-    if now - last_sync_time.get(key, 0.0) >= SYNC_INTERVAL:
+    if key not in last_sync_time or (now - last_sync_time[key]) >= SYNC_INTERVAL:
         await sync_to_cache_async(symbol, market, log_func)
         last_sync_time[key] = now
 
@@ -709,6 +674,7 @@ async def periodic_refresh(market='futures', log_func=print):
             new_active = []
             TARGET = 30
 
+            # ШАГ 1: Сохраняем монеты из белого списка (без обновления)
             for symbol in stable_symbols:
                 if len(new_active) >= TARGET:
                     break
@@ -720,6 +686,7 @@ async def periodic_refresh(market='futures', log_func=print):
                         new_active.append(symbol)
                         log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
+            # ШАГ 2: Добавляем топ по формуле
             for symbol in candidates:
                 if len(new_active) >= TARGET:
                     break
@@ -741,8 +708,6 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             mexc_futures_order_books.pop(sym, None)
                             mexc_futures_density_timestamps.pop(sym, None)
-                            mexc_futures_volume_stats.pop(sym, None)
-                            last_sync_time.pop(f"mexc:futures:{sym}", None)
                     log_func(f"🗑️ mexc futures удалены: {', '.join(sorted(removed))}")
 
                 if removed or added:
@@ -759,8 +724,6 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             mexc_spot_order_books.pop(sym, None)
                             mexc_spot_density_timestamps.pop(sym, None)
-                            mexc_spot_volume_stats.pop(sym, None)
-                            last_sync_time.pop(f"mexc:spot:{sym}", None)
                     log_func(f"🗑️ mexc spot удалены: {', '.join(sorted(removed))}")
 
                 if removed or added:
@@ -772,7 +735,6 @@ async def periodic_refresh(market='futures', log_func=print):
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(mexc {market}): {e}")
 
-
 # ==========================================
 # ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
@@ -781,6 +743,7 @@ async def main_async(log_func=print):
 
     log_func("🚀 Запуск MEXC Async Monitor...")
 
+    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
     stable_f = await get_stable_coins_async('swap', STABLE_COINS_LIMIT)
     stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
     stable_futures_symbols = stable_f
@@ -788,9 +751,11 @@ async def main_async(log_func=print):
     log_func(f"🔒 Белый список futures: {stable_f}")
     log_func(f"🔒 Белый список spot: {stable_s}")
 
+    # --- Шаг 2: Получаем кандидатов по формуле ---
     futures_candidates = await get_top_symbols_async('swap', log_func)
     spot_candidates = await get_top_symbols_async('spot', log_func)
 
+    # --- Шаг 3: Инициализируем белый список ---
     active_futures = []
     for symbol in stable_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
@@ -805,9 +770,10 @@ async def main_async(log_func=print):
             active_spot.append(symbol)
             log_func(f"✅ mexc spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
+    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
     for symbol in futures_candidates[:30]:
         if symbol in active_futures:
-            continue
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
@@ -815,7 +781,7 @@ async def main_async(log_func=print):
 
     for symbol in spot_candidates[:30]:
         if symbol in active_spot:
-            continue
+            continue  # Уже в белом списке
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
@@ -836,7 +802,6 @@ async def main_async(log_func=print):
     ]
 
     await asyncio.gather(*tasks)
-
 
 def start_mexc_async_monitor(log_func=print):
     loop = asyncio.new_event_loop()
