@@ -113,30 +113,49 @@ stable_spot_symbols = []
 def _fetch_stable_coins_sync(market_type='linear', limit=10):
     """Синхронная функция — топ монет по абсолютному объёму"""
     try:
-        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market_type == 'linear' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
-        # Собираем монеты с объёмами
+        # 🔧 ИСПРАВЛЕНИЕ 1: Гарантированный пересчет объема, если CCXT его не дал (специфика Bybit)
+        if market_type == 'linear':
+            for symbol, data in tickers.items():
+                if not (data.get('quoteVolume') or 0):
+                    try:
+                        info = data.get('info', {}) or {}
+                        # Bybit V5 предоставляет turnover24h (это и есть объем в валюте котировки, т.е. в USDT)
+                        turnover = float(info.get('turnover24h') or 0)
+                        if turnover > 0:
+                            data['quoteVolume'] = turnover
+                    except Exception:
+                        pass
+
         coins_with_volume = []
         for symbol, data in tickers.items():
-            # Фильтр по суффиксу
+            # 🔧 ИСПРАВЛЕНИЕ 2: Надежный парсинг символа (как в OKX), а не хрупкий .replace()
             if market_type == 'linear':
-                if ':USDT' not in symbol:
+                if ':USDT' in symbol:
+                    # Формат CCXT: BTC/USDT:USDT -> берем часть до ':', потом до '/' -> BTC
+                    clean_symbol = symbol.split(':')[0].split('/')[0]
+                elif '/USDT' in symbol:
+                    # Формат: BTC/USDT -> BTC
+                    clean_symbol = symbol.split('/')[0]
+                elif '-USDT' in symbol:
+                    # Формат (редкий, но бывает): BTC-USDT -> BTC
+                    clean_symbol = symbol.replace('-USDT', '')
+                else:
                     continue
             else:
-                if '/USDT' not in symbol:
+                if '/USDT' in symbol:
+                    clean_symbol = symbol.split('/')[0]
+                else:
                     continue
 
             volume = data.get('quoteVolume') or 0
-            if volume < 100000:  # Минимальный порог
+            if volume < 100000:
                 continue
 
-            # Чистим символ
-            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-
             # Валидация
-            if '-' in clean_symbol:
+            if not clean_symbol:
                 continue
             if len(clean_symbol) < 2 or len(clean_symbol) > 15:
                 continue
@@ -147,12 +166,17 @@ def _fetch_stable_coins_sync(market_type='linear', limit=10):
 
         # Сортируем по убыванию объёма и берём топ-N
         coins_with_volume.sort(key=lambda x: x[1], reverse=True)
-        return [s for s, v in coins_with_volume[:limit]]
+        result = [s for s, v in coins_with_volume[:limit]]
+
+        # Для отладки (можно убрать потом)
+        print(f"✅ Bybit {market_type} — топ-{limit} стабильных: {result}")
+        return result
 
     except Exception as e:
         print(f"❌ Ошибка _fetch_stable_coins(bybit {market_type}): {e}")
+        import traceback
+        traceback.print_exc()
         return []
-
 
 async def get_stable_coins_async(market_type='linear', limit=10):
     """Асинхронная обёртка — топ монет по абсолютному объёму"""
