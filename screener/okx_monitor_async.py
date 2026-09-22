@@ -1,7 +1,5 @@
 """
-OKX Monitor ASYNC — асинхронная версия
-Адаптация по образцу bitget_monitor_async.py / bybit_monitor_async.py
-Добавлена формула стабильности объёма (как на Binance)
+OKX Monitor ASYNC
 """
 import asyncio
 import json
@@ -13,6 +11,20 @@ import ccxt
 from . import coin_selection
 
 # ==========================================
+# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
+# ==========================================
+ccxt_futures_exchange = ccxt.okx({
+    'enableRateLimit': True,
+    'timeout': 10000,
+    'options': {'defaultType': 'swap'}
+})
+ccxt_spot_exchange = ccxt.okx({
+    'enableRateLimit': True,
+    'timeout': 10000,
+    'options': {'defaultType': 'spot'}
+})
+
+# ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
 # ==========================================
 okx_futures_order_books = {}
@@ -21,7 +33,7 @@ okx_futures_symbols = []
 okx_futures_message_queue = asyncio.Queue(maxsize=10000)
 okx_futures_lock = asyncio.Lock()
 okx_futures_reconnect_event = asyncio.Event()
-okx_futures_volume_stats = {}  # ← ДОБАВЛЕНО: symbol -> {price: {min, max, sum, count}}
+okx_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
@@ -32,7 +44,7 @@ okx_spot_symbols = []
 okx_spot_message_queue = asyncio.Queue(maxsize=10000)
 okx_spot_lock = asyncio.Lock()
 okx_spot_reconnect_event = asyncio.Event()
-okx_spot_volume_stats = {}  # ← ДОБАВЛЕНО: symbol -> {price: {min, max, sum, count}}
+okx_spot_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
 
 # URLs — У OKX один и тот же WS URL для futures и spot!
 OKX_WS_URL = "wss://ws.okx.com:8443/ws/v5/public"
@@ -42,9 +54,9 @@ OKX_SPOT_REST_URL = "https://www.okx.com/api/v5/market/books?instId={}-USDT&sz=2
 # Rate limiting
 last_sync_time = {}
 
-# ← ИЗМЕНЕНО: 180 секунд, чтобы формула стабильности работала так же, как на Binance
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
+SYNC_INTERVAL = 3
 
 _http_client = None
 
@@ -66,11 +78,8 @@ async def get_http_client():
 def _fetch_top_symbols_sync(market_type='swap'):
     """Синхронная функция для ccxt"""
     try:
-        exchange = ccxt.okx({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': market_type}
-        })
+        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
+        exchange = ccxt_futures_exchange if market_type == 'swap' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
         # OKX специфика: для swap volCcy24h в базовой валюте, пересчитываем в USDT
@@ -102,6 +111,7 @@ async def get_top_symbols_async(market_type='swap'):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market_type)
 
+
 # ==========================================
 # БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
 # ==========================================
@@ -115,11 +125,8 @@ stable_spot_symbols = []
 def _fetch_stable_coins_sync(market_type='swap', limit=10):
     """Синхронная функция — топ монет по абсолютному объёму"""
     try:
-        exchange = ccxt.okx({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': market_type}
-        })
+        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
+        exchange = ccxt_futures_exchange if market_type == 'swap' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
         # ОТЛАДКА: показать первые 10 символов чтобы понять формат
@@ -266,7 +273,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS (async)
-# ← ДОБАВЛЕНА ПРОВЕРКА СТАБИЛЬНОСТИ (как на Binance)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -295,7 +301,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-                if volume < 10000:
+
+                # 🔧 ГИСТЕРЕЗИС: Защита от мерцания зрелых плотностей
+                # Если плотность уже прожила MIN_AGE_SECONDS, снижаем порог до 7000,
+                # чтобы она не исчезала при частичном исполнении ордера.
+                is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
+                min_volume = 7000 if is_mature else 10000
+
+                if volume < min_volume:
                     continue
 
                 # Обновляем статистику объёма (лёгкая версия — только 4 числа)
@@ -327,7 +340,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             continue
                 else:
                     if is_first_load:
-                        ts[price] = now - 20
+                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела
+                        ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
@@ -667,7 +681,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
     if changed:
         key = f"okx:{market}:{symbol}"
         now = time.time()
-        if key not in last_sync_time or (now - last_sync_time[key]) >= 3:
+        if now - last_sync_time.get(key, 0.0) >= SYNC_INTERVAL:
             await sync_to_cache_async(symbol, market, log_func)
             last_sync_time[key] = now
 
@@ -725,6 +739,9 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             okx_futures_order_books.pop(sym, None)
                             okx_futures_density_timestamps.pop(sym, None)
+                            # Очистка памяти от устаревших ключей
+                            okx_futures_volume_stats.pop(sym, None)
+                            last_sync_time.pop(f"okx:futures:{sym}", None)
                     log_func(f"🗑️ okx futures удалены: {', '.join(sorted(removed))}")
 
                 okx_futures_reconnect_event.set()
@@ -736,6 +753,9 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             okx_spot_order_books.pop(sym, None)
                             okx_spot_density_timestamps.pop(sym, None)
+                            # Очистка памяти от устаревших ключей
+                            okx_spot_volume_stats.pop(sym, None)
+                            last_sync_time.pop(f"okx:spot:{sym}", None)
                     log_func(f"🗑️ okx spot удалены: {', '.join(sorted(removed))}")
 
                 okx_spot_reconnect_event.set()
