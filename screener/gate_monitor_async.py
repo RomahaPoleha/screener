@@ -1,6 +1,5 @@
 """
-Gate Monitor ASYNC — асинхронная версия
-Сохранена вся специфика Gate: два WS URL, серверный time в heartbeat, два формата уровней
+Gate Monitor ASYNC
 """
 import asyncio
 import json
@@ -17,6 +16,20 @@ if GateExchange is None:
     raise ImportError("ccxt не поддерживает Gate.io (нет ни 'gateio' ни 'gate')")
 
 # ==========================================
+# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
+# ==========================================
+ccxt_futures_exchange = GateExchange({
+    'enableRateLimit': True,
+    'timeout': 15000,
+    'options': {'defaultType': 'swap'}
+})
+ccxt_spot_exchange = GateExchange({
+    'enableRateLimit': True,
+    'timeout': 15000,
+    'options': {'defaultType': 'spot'}
+})
+
+# ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
 # ==========================================
 gate_futures_order_books = {}
@@ -25,6 +38,7 @@ gate_futures_symbols = []
 gate_futures_message_queue = asyncio.Queue(maxsize=10000)
 gate_futures_lock = asyncio.Lock()
 gate_futures_reconnect_event = asyncio.Event()
+gate_futures_volume_stats = {}  # ← ДОБАВЛЕНО: symbol -> {price: {min, max, sum, count}}
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
@@ -35,6 +49,7 @@ gate_spot_symbols = []
 gate_spot_message_queue = asyncio.Queue(maxsize=10000)
 gate_spot_lock = asyncio.Lock()
 gate_spot_reconnect_event = asyncio.Event()
+gate_spot_volume_stats = {}  # ← ДОБАВЛЕНО: symbol -> {price: {min, max, sum, count}}
 
 # URLs — У Gate РАЗНЫЕ WS URL для futures и spot
 GATE_FUTURES_WS_URL = "wss://fx-ws.gateio.ws/v4/ws/usdt"
@@ -42,7 +57,7 @@ GATE_SPOT_WS_URL = "wss://api.gateio.ws/ws/v4/"
 GATE_FUTURES_REST_URL = "https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={}_USDT&limit=50"
 GATE_SPOT_REST_URL = "https://api.gateio.ws/api/v4/spot/order_book?currency_pair={}_USDT&limit=50"
 
-# Rate limiting — у Gate интервал 10 сек (не 3!)
+# Rate limiting — у Gate интервал 10 сек
 last_sync_time = {}
 gate_spot_last_sync_time = {}
 
@@ -68,11 +83,8 @@ async def get_http_client():
 # ==========================================
 def _fetch_top_symbols_sync(market='swap', log_func=print):
     try:
-        exchange = GateExchange({
-            'enableRateLimit': True,
-            'timeout': 15000,
-            'options': {'defaultType': market}
-        })
+        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
+        exchange = ccxt_futures_exchange if market == 'swap' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers(params={'type': market})
 
         # Gate swap отдаёт volume в контрактах — пересчитываем в quoteVolume
@@ -103,6 +115,7 @@ async def get_top_symbols_async(market='swap', log_func=print):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market, log_func)
 
+
 # ==========================================
 # БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
 # ==========================================
@@ -116,11 +129,8 @@ stable_spot_symbols = []
 def _fetch_stable_coins_sync(market='swap', limit=10):
     """Синхронная функция — топ монет по абсолютному объёму"""
     try:
-        exchange = GateExchange({
-            'enableRateLimit': True,
-            'timeout': 15000,
-            'options': {'defaultType': market}
-        })
+        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
+        exchange = ccxt_futures_exchange if market == 'swap' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers(params={'type': market})
 
         # Gate swap отдаёт volume в контрактах — пересчитываем в quoteVolume
@@ -138,24 +148,20 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
         coins_with_volume = []
         for symbol, data in tickers.items():
             # Gate ccxt форматы:
-            # - spot: BTC/USDT
-            # - swap: может быть BTC_USDT или BTC/USDT:USDT
             if market == 'swap':
                 if '_USDT' in symbol:
-                    # Формат: BTC_USDT
                     clean_symbol = symbol.replace('_USDT', '')
                 elif ':USDT' in symbol:
-                    # Формат: BTC/USDT:USDT
                     clean_symbol = symbol.split(':')[0].split('/')[0]
                 elif '/USDT' in symbol:
-                    # Формат: BTC/USDT
-                    clean_symbol = symbol.replace('/USDT', '')
+                    clean_symbol = symbol.split('/')[0]
                 else:
                     continue
             else:
-                if '/USDT' not in symbol:
+                if '/USDT' in symbol:
+                    clean_symbol = symbol.split('/')[0]
+                else:
                     continue
-                clean_symbol = symbol.replace('/USDT', '')
 
             volume = data.get('quoteVolume') or 0
             if volume < 100000:  # Минимальный порог
@@ -184,6 +190,7 @@ async def get_stable_coins_async(market='swap', limit=10):
     """Асинхронная обёртка — топ монет по абсолютному объёму"""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
+
 
 # ==========================================
 # ПАРСИНГ УРОВНЕЙ (два формата: dict и list)
@@ -268,7 +275,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS (rate limit 10 сек для Gate!)
+# СИНХРОНИЗАЦИЯ В REDIS (с формулой стабильности и гистерезисом)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -276,12 +283,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             async with gate_futures_lock:
                 book = gate_futures_order_books.get(symbol, {})
                 ts = gate_futures_density_timestamps.get(symbol, {})
+                stats = gate_futures_volume_stats.get(symbol, {})
                 if not book:
                     return 0
         else:
             async with gate_spot_lock:
                 book = gate_spot_order_books.get(symbol, {})
                 ts = gate_spot_density_timestamps.get(symbol, {})
+                stats = gate_spot_volume_stats.get(symbol, {})
                 if not book:
                     return 0
 
@@ -290,21 +299,54 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         densities = []
         is_first_load = len(ts) == 0
+        new_stats = {}
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-                if volume < 10000:
+
+                # 🔧 ГИСТЕРЕЗИС: Защита от мерцания зрелых плотностей
+                is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
+                min_volume = 7000 if is_mature else 10000
+
+                if volume < min_volume:
                     continue
+
+                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
+                prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
+                new_stat = {
+                    'min': min(prev_stat['min'], volume),
+                    'max': max(prev_stat['max'], volume),
+                    'sum': prev_stat['sum'] + volume,
+                    'count': prev_stat['count'] + 1
+                }
+                new_stats[price] = new_stat
+
                 if price in ts:
-                    if now - ts[price] < MIN_AGE_SECONDS:
+                    age = now - ts[price]
+                    if age < MIN_AGE_SECONDS:
                         continue
+
+                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
+                    if new_stat['count'] >= 3:
+                        avg = new_stat['sum'] / new_stat['count']
+                        spread = new_stat['max'] - new_stat['min']
+                        stability_ratio = spread / avg if avg > 0 else 0
+
+                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
+                        if stability_ratio > 0.5:
+                            ts[price] = now  # Плотность должна "созревать" заново
+                            # Сбрасываем статистику
+                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
+                            continue
                 else:
                     if is_first_load:
-                        ts[price] = now - 20
+                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела
+                        ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
+
                 densities.append({
                     'price': price,
                     'volume': volume,
@@ -322,9 +364,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if market == 'futures':
             async with gate_futures_lock:
                 gate_futures_density_timestamps[symbol] = ts
+                gate_futures_volume_stats[symbol] = new_stats
         else:
             async with gate_spot_lock:
                 gate_spot_density_timestamps[symbol] = ts
+                gate_spot_volume_stats[symbol] = new_stats
 
         return len(densities)
 
@@ -481,29 +525,43 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     if market == 'futures':
         async with gate_futures_lock:
             old_ts = gate_futures_density_timestamps.get(symbol, {})
+            old_stats = gate_futures_volume_stats.get(symbol, {})
             new_ts = {}
+            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]
 
             gate_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             gate_futures_density_timestamps[symbol] = new_ts
+            gate_futures_volume_stats[symbol] = new_stats
     else:
         async with gate_spot_lock:
             old_ts = gate_spot_density_timestamps.get(symbol, {})
+            old_stats = gate_spot_volume_stats.get(symbol, {})
             new_ts = {}
+            new_stats = {}
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                if p in old_stats:
+                    new_stats[p] = old_stats[p]
 
             gate_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             gate_spot_density_timestamps[symbol] = new_ts
+            gate_spot_volume_stats[symbol] = new_stats
 
     await sync_to_cache_async(symbol, market, log_func)
 
@@ -623,7 +681,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
     # Rate limit: Gate требует 10 сек!
     key = f"gate:{market}:{symbol}"
     now = time.time()
-    if key not in rate_dict or (now - rate_dict[key]) >= SYNC_INTERVAL:
+    if now - rate_dict.get(key, 0.0) >= SYNC_INTERVAL:
         await sync_to_cache_async(symbol, market, log_func)
         rate_dict[key] = now
 
@@ -681,6 +739,9 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             gate_futures_order_books.pop(sym, None)
                             gate_futures_density_timestamps.pop(sym, None)
+                            # Очистка памяти от устаревших ключей
+                            gate_futures_volume_stats.pop(sym, None)
+                            last_sync_time.pop(f"gate:futures:{sym}", None)
                     log_func(f"🗑️ gate futures удалены: {', '.join(sorted(removed))}")
 
                 if removed or added:
@@ -697,6 +758,9 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             gate_spot_order_books.pop(sym, None)
                             gate_spot_density_timestamps.pop(sym, None)
+                            # Очистка памяти от устаревших ключей
+                            gate_spot_volume_stats.pop(sym, None)
+                            gate_spot_last_sync_time.pop(f"gate:spot:{sym}", None)
                     log_func(f"🗑️ gate spot удалены: {', '.join(sorted(removed))}")
 
                 if removed or added:
