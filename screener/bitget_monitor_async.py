@@ -450,6 +450,7 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
+    """Обработка снапшота — полная замена стакана (с сохранением статистики и времени)"""
     new_bids = {}
     new_asks = {}
 
@@ -480,11 +481,17 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                else:
+                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время, чтобы они начали созревать
+                    new_ts[p] = time.time()
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]  # Сохраняем статистику
+                    new_stats[p] = old_stats[p]  # Сохраняем статистику для формулы стабильности
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                else:
+                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время
+                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]  # Сохраняем статистику
 
@@ -500,11 +507,17 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                else:
+                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время
+                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]  # Сохраняем статистику
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
+                else:
+                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время
+                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]  # Сохраняем статистику
 
