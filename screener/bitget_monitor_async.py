@@ -450,10 +450,9 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
-    """Обработка снапшота — полная замена стакана (с сохранением статистики и времени)"""
+    """Обработка снапшота — полная замена стакана"""
     new_bids = {}
     new_asks = {}
-    now = time.time()  # Получаем текущее время один раз для синхронности
 
     for row in raw_bids:
         try:
@@ -483,19 +482,18 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    # 🔧 ИСПРАВЛЕНИЕ: считаем новые уровни в снапшоте сразу зрелыми,
-                    # чтобы они не отфильтровывались на 3 минуты из-за нулевого возраста.
-                    new_ts[p] = now - MIN_AGE_SECONDS
+                    # 🔧 ИСПРАВЛЕНО: новые уровни начинают созревать с нуля
+                    new_ts[p] = time.time()
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]  # Сохраняем статистику
+                    new_stats[p] = old_stats[p]
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    # 🔧 ИСПРАВЛЕНИЕ: считаем новые уровни в снапшоте сразу зрелыми
-                    new_ts[p] = now - MIN_AGE_SECONDS
+                    # 🔧 ИСПРАВЛЕНО: новые уровни начинают созревать с нуля
+                    new_ts[p] = time.time()
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]  # Сохраняем статистику
+                    new_stats[p] = old_stats[p]
 
             bitget_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bitget_futures_density_timestamps[symbol] = new_ts
@@ -510,14 +508,14 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    new_ts[p] = now - MIN_AGE_SECONDS
+                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    new_ts[p] = now - MIN_AGE_SECONDS
+                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]
 
