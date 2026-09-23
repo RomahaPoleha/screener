@@ -453,6 +453,7 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     """Обработка снапшота — полная замена стакана (с сохранением статистики и времени)"""
     new_bids = {}
     new_asks = {}
+    now = time.time()  # Получаем текущее время один раз для синхронности
 
     for row in raw_bids:
         try:
@@ -482,16 +483,17 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время, чтобы они начали созревать
-                    new_ts[p] = time.time()
+                    # 🔧 ИСПРАВЛЕНИЕ: считаем новые уровни в снапшоте сразу зрелыми,
+                    # чтобы они не отфильтровывались на 3 минуты из-за нулевого возраста.
+                    new_ts[p] = now - MIN_AGE_SECONDS
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]  # Сохраняем статистику для формулы стабильности
+                    new_stats[p] = old_stats[p]  # Сохраняем статистику
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время
-                    new_ts[p] = time.time()
+                    # 🔧 ИСПРАВЛЕНИЕ: считаем новые уровни в снапшоте сразу зрелыми
+                    new_ts[p] = now - MIN_AGE_SECONDS
                 if p in old_stats:
                     new_stats[p] = old_stats[p]  # Сохраняем статистику
 
@@ -508,18 +510,16 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время
-                    new_ts[p] = time.time()
+                    new_ts[p] = now - MIN_AGE_SECONDS
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]  # Сохраняем статистику
+                    new_stats[p] = old_stats[p]
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    # 🔧 ИСПРАВЛЕНИЕ: новым уровням даём текущее время
-                    new_ts[p] = time.time()
+                    new_ts[p] = now - MIN_AGE_SECONDS
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]  # Сохраняем статистику
+                    new_stats[p] = old_stats[p]
 
             bitget_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bitget_spot_density_timestamps[symbol] = new_ts
