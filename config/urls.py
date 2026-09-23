@@ -22,7 +22,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.index, name='index'),
     path('api/data/', views.api_data, name='api_data'),
-    path('api/candles/<str:symbol>/', views.api_candles, name='api_candles'),  # ← ИСПРАВЛЕНО
+    path('api/candles/<str:symbol>/', views.api_candles, name='api_candles'),
     path('api/natr/', views.api_natr, name='api_natr'),
     path('api/scalp/<str:symbol>/', views.api_scalp, name='api_scalp'),
     path('api/sound/<str:filename>/', views.api_sound, name='api_sound'),
