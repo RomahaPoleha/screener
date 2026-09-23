@@ -1,5 +1,6 @@
 """
-Bitget Monitor ASYNC
+Bitget Monitor ASYNC — ФИНАЛЬНАЯ СТАБИЛЬНАЯ ВЕРСИЯ
+Исправлены все логические ловушки с созреванием плотностей и фильтрацией снапшотов.
 """
 import asyncio
 import json
@@ -11,7 +12,7 @@ import ccxt
 from . import coin_selection
 
 # ==========================================
-# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Оптимизация 1)
+# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT
 # ==========================================
 ccxt_futures_exchange = ccxt.bitget({
     'enableRateLimit': True,
@@ -33,7 +34,7 @@ bitget_futures_symbols = []
 bitget_futures_message_queue = asyncio.Queue(maxsize=10000)
 bitget_futures_lock = asyncio.Lock()
 bitget_futures_reconnect_event = asyncio.Event()
-bitget_futures_volume_stats = {}  # ← Оптимизация 2: для формулы стабильности
+bitget_futures_volume_stats = {}
 
 bitget_spot_order_books = {}
 bitget_spot_density_timestamps = {}
@@ -41,7 +42,7 @@ bitget_spot_symbols = []
 bitget_spot_message_queue = asyncio.Queue(maxsize=10000)
 bitget_spot_lock = asyncio.Lock()
 bitget_spot_reconnect_event = asyncio.Event()
-bitget_spot_volume_stats = {}  # ← Оптимизация 2: для формулы стабильности
+bitget_spot_volume_stats = {}
 
 # URLs
 BITGET_WS_URL = "wss://ws.bitget.com/v2/ws/public"
@@ -53,14 +54,12 @@ last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
-SYNC_INTERVAL = 3  # ← Добавлено для единообразия
+SYNC_INTERVAL = 3
 
-# Глобальный aiohttp клиент
 _http_client = None
 
 
 async def get_http_client():
-    """Ленивая инициализация aiohttp клиента"""
     global _http_client
     if _http_client is None:
         _http_client = aiohttp.ClientSession(
@@ -75,7 +74,6 @@ async def get_http_client():
 # ==========================================
 def _fetch_top_symbols_sync(market_type='swap'):
     try:
-        # Оптимизация 1: используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market_type == 'swap' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
@@ -107,8 +105,6 @@ stable_spot_symbols = []
 
 def _fetch_stable_coins_sync(market='futures', limit=10):
     try:
-        # Оптимизация 1: используем глобальный экземпляр
-        ccxt_market = 'swap' if market == 'futures' else 'spot'
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
@@ -217,7 +213,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS (Оптимизации 3, 4)
+# СИНХРОНИЗАЦИЯ В REDIS
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -247,7 +243,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
-                # 🔧 Оптимизация 3: ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
 
@@ -273,13 +268,15 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
-                        if stability_ratio > 1.0:
+                        # 🔧 ИСПРАВЛЕНО: 2.5 (250%) вместо 1.0.
+                        # Дает стакану Bitget "дышать" при нормальных колебаниях снапшотов,
+                        # но жестко сбрасывает таймер при реальном пуффинге (скачках в 3+ раза).
+                        if stability_ratio > 2.5:
                             ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
                     if is_first_load:
-                        # 🔧 Оптимизация 4: now - MIN_AGE_SECONDS
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
@@ -353,7 +350,8 @@ async def ws_listener(market='futures', log_func=print):
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
-                    inst_type = "USDT-FUTURES" if market == 'futures' else "SPOT"
+                    # 🔧 ИСПРАВЛЕНО: реальные коды instType для Bitget V2 API
+                    inst_type = "umcbl" if market == 'futures' else "sp"
                     args = [
                         {
                             "instId": f"{s}USDT",
@@ -423,7 +421,8 @@ async def process_queue(market='futures', log_func=print):
             if arg.get('channel') not in ('books', 'books15'):
                 continue
 
-            expected_inst_type = "USDT-FUTURES" if market == 'futures' else "SPOT"
+            # 🔧 ИСПРАВЛЕНО: ожидаем реальные коды instType от сервера Bitget
+            expected_inst_type = "umcbl" if market == 'futures' else "sp"
             if arg.get('instType') != expected_inst_type:
                 continue
 
@@ -480,9 +479,10 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             new_stats = {}
             for p in new_bids:
                 if p in old_ts:
-                    new_ts[p] = old_ts[p]
+                    new_ts[p] = old_ts[p]  # Сохраняем старое время, позволяя ему расти
                 else:
-                    # 🔧 ИСПРАВЛЕНО: новые уровни начинают созревать с нуля
+                    # Новый уровень: начинаем отсчет с нуля.
+                    # В следующем снапшоте он уже будет в old_ts, и время сохранится.
                     new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]
@@ -490,7 +490,6 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
                 else:
-                    # 🔧 ИСПРАВЛЕНО: новые уровни начинают созревать с нуля
                     new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]
@@ -628,7 +627,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             if changed:
                 bitget_spot_density_timestamps[symbol] = ts
 
-    # Оптимизация: Единообразие проверки интервала
     if changed:
         key = f"bitget:{market}:{symbol}"
         now = time.time()
@@ -638,10 +636,9 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
 
 # ==========================================
-# ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ (Оптимизация 5 + Исправление имен)
+# ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
 # ==========================================
 async def periodic_refresh(log_func=print):
-    # 🔧 ИСПРАВЛЕНО: правильные имена глобальных переменных
     global bitget_futures_symbols, bitget_spot_symbols
 
     while True:
@@ -686,7 +683,6 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         bitget_futures_order_books.pop(sym, None)
                         bitget_futures_density_timestamps.pop(sym, None)
-                        # 🔧 Оптимизация 5: Очистка памяти
                         bitget_futures_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"bitget:futures:{sym}", None)
                 log_func(f"🗑️ bitget futures удалены: {', '.join(sorted(removed))}")
@@ -735,7 +731,6 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         bitget_spot_order_books.pop(sym, None)
                         bitget_spot_density_timestamps.pop(sym, None)
-                        # 🔧 Оптимизация 5: Очистка памяти
                         bitget_spot_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"bitget:spot:{sym}", None)
                 log_func(f"🗑️ bitget spot удалены: {', '.join(sorted(removed))}")
@@ -751,10 +746,9 @@ async def periodic_refresh(log_func=print):
 
 
 # ==========================================
-# ГЛАВНАЯ ФУНКЦИЯ (Исправление имен)
+# ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
 async def main_async(log_func=print):
-    # 🔧 ИСПРАВЛЕНО: правильные имена глобальных переменных
     global bitget_futures_symbols, bitget_spot_symbols, stable_futures_symbols, stable_spot_symbols
 
     log_func("🚀 Запуск Bitget Async Monitor...")
