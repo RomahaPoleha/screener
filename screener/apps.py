@@ -39,8 +39,3 @@ class ScreenerConfig(AppConfig):
                 print(f"✅ {name} async monitor запущен в фоне")
             except Exception as e:
                 print(f"⚠️ {name} monitor не запущен: {e}")
-        try:
-            from .candles_warmer import start_candles_warmer
-            start_candles_warmer()
-        except Exception as e:
-            print(f"⚠️ Candles warmer не запущен: {e}")
