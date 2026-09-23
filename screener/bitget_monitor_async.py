@@ -1,6 +1,6 @@
 """
-Bitget Monitor ASYNC — ФИНАЛЬНАЯ СТАБИЛЬНАЯ ВЕРСИЯ
-Исправлены: исчезновение через 3 сек, неработающий спот, сброс таймеров на снапшотах.
+Bitget Monitor ASYNC — Оптимизированная версия на базе работающего синхронного кода.
+Внедрены проверенные оптимизации из Binance без изменения базовой логики.
 """
 import asyncio
 import json
@@ -12,7 +12,7 @@ import ccxt
 from . import coin_selection
 
 # ==========================================
-# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT
+# ОПТИМИЗАЦИЯ 1: Глобальные экземпляры CCXT
 # ==========================================
 ccxt_futures_exchange = ccxt.bitget({
     'enableRateLimit': True,
@@ -26,23 +26,26 @@ ccxt_spot_exchange = ccxt.bitget({
 })
 
 # ==========================================
-# ГЛОБАЛЬНОЕ СОСТОЯНИЕ
+# ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
 # ==========================================
 bitget_futures_order_books = {}
 bitget_futures_density_timestamps = {}
 bitget_futures_symbols = []
-bitget_futures_message_queue = asyncio.Queue(maxsize=10000)
+bitget_futures_message_queue = asyncio.Queue(maxsize=50000)
 bitget_futures_lock = asyncio.Lock()
 bitget_futures_reconnect_event = asyncio.Event()
-bitget_futures_volume_stats = {}
+bitget_futures_volume_stats = {}  # ← ОПТИМИЗАЦИЯ 2: для формулы стабильности
 
+# ==========================================
+# ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
+# ==========================================
 bitget_spot_order_books = {}
 bitget_spot_density_timestamps = {}
 bitget_spot_symbols = []
-bitget_spot_message_queue = asyncio.Queue(maxsize=10000)
+bitget_spot_message_queue = asyncio.Queue(maxsize=50000)
 bitget_spot_lock = asyncio.Lock()
 bitget_spot_reconnect_event = asyncio.Event()
-bitget_spot_volume_stats = {}
+bitget_spot_volume_stats = {}  # ← ОПТИМИЗАЦИЯ 2: для формулы стабильности
 
 # URLs
 BITGET_WS_URL = "wss://ws.bitget.com/v2/ws/public"
@@ -74,6 +77,7 @@ async def get_http_client():
 # ==========================================
 def _fetch_top_symbols_sync(market_type='swap'):
     try:
+        # ОПТИМИЗАЦИЯ 1: используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market_type == 'swap' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
@@ -105,6 +109,7 @@ stable_spot_symbols = []
 
 def _fetch_stable_coins_sync(market='futures', limit=10):
     try:
+        # ОПТИМИЗАЦИЯ 1: используем глобальный экземпляр
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
@@ -213,7 +218,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS
+# СИНХРОНИЗАЦИЯ В REDIS (С оптимизациями Binance)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -243,12 +248,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
+                # ОПТИМИЗАЦИЯ 3: ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
 
                 if volume < min_volume:
                     continue
 
+                # Считаем статистику для проверки стабильности
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
                 new_stat = {
                     'min': min(prev_stat['min'], volume),
@@ -263,24 +270,21 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     if age < MIN_AGE_SECONDS:
                         continue
 
+                    # Проверка стабильности (порог 1.0 оптимален для шумных снапшотов Bitget)
                     if new_stat['count'] >= 3:
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
-                        # 🔧 ПОРОГ 1.0 (100%): дает стакану Bitget "дышать" при обычных колебаниях снапшотов,
-                        # но сбрасывает таймер при реальном пуффинге (скачках в 2+ раза).
                         if stability_ratio > 1.0:
                             ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
                     if is_first_load:
-                        # 🔧 ИСПРАВЛЕНО: now - MIN_AGE_SECONDS гарантирует, что на следующем цикле
-                        # возраст будет > 180, и плотность НЕ исчезнет из-за проверки age < 180.
+                        # ОПТИМИЗАЦИЯ 4: now - MIN_AGE_SECONDS гарантирует выживание на следующем цикле
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
-                        # Новые уровни начинают честный отсчет с нуля и скрыты на 180 сек.
                         ts[price] = now
                         continue
 
@@ -292,7 +296,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'exchange': 'bitget'
                 })
 
-        # Обновляем кэш только если есть что обновлять
         if densities:
             try:
                 loop = asyncio.get_running_loop()
@@ -317,7 +320,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# HEARTBEAT
+# WEBSOCKET LISTENER
 # ==========================================
 async def ws_heartbeat(ws, market='futures', log_func=print):
     try:
@@ -332,13 +335,12 @@ async def ws_heartbeat(ws, market='futures', log_func=print):
         return
 
 
-# ==========================================
-# WEBSOCKET LISTENER
-# ==========================================
 async def ws_listener(market='futures', log_func=print):
     global bitget_futures_symbols, bitget_spot_symbols
 
     reconnect_event = bitget_futures_reconnect_event if market == 'futures' else bitget_spot_reconnect_event
+    # Оставляем как в твоем работающем синхронном коде
+    inst_type = "USDT-FUTURES" if market == 'futures' else "SPOT"
 
     while True:
         try:
@@ -354,8 +356,6 @@ async def ws_listener(market='futures', log_func=print):
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
-                    # 🔧 ИСПРАВЛЕНО: реальные коды instType для Bitget V2 API
-                    inst_type = "umcbl" if market == 'futures' else "sp"
                     args = [
                         {
                             "instId": f"{s}USDT",
@@ -407,6 +407,7 @@ async def ws_listener(market='futures', log_func=print):
 # ==========================================
 async def process_queue(market='futures', log_func=print):
     queue = bitget_futures_message_queue if market == 'futures' else bitget_spot_message_queue
+    expected_inst_type = "USDT-FUTURES" if market == 'futures' else "SPOT"
 
     while True:
         try:
@@ -424,9 +425,6 @@ async def process_queue(market='futures', log_func=print):
             arg = data.get('arg', {})
             if arg.get('channel') not in ('books', 'books15'):
                 continue
-
-            # 🔧 ИСПРАВЛЕНО: ожидаем реальные коды instType от сервера Bitget
-            expected_inst_type = "umcbl" if market == 'futures' else "sp"
             if arg.get('instType') != expected_inst_type:
                 continue
 
@@ -453,7 +451,6 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
-    """Обработка снапшота — полная замена стакана с сохранением истории"""
     new_bids = {}
     new_asks = {}
 
@@ -478,14 +475,15 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     if market == 'futures':
         async with bitget_futures_lock:
             old_ts = bitget_futures_density_timestamps.get(symbol, {})
-            old_stats = bitget_futures_volume_stats.get(symbol, {})
+            old_stats = bitget_futures_volume_stats.get(symbol, {}) # ← Сохраняем статистику
             new_ts = {}
             new_stats = {}
+
             for p in new_bids:
                 if p in old_ts:
-                    new_ts[p] = old_ts[p]  # Сохраняем время, НЕ сбрасываем его!
+                    new_ts[p] = old_ts[p]
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]  # Сохраняем статистику объема
+                    new_stats[p] = old_stats[p] # ← Переносим статистику, чтобы формула не сбивалась
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
@@ -498,9 +496,10 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     else:
         async with bitget_spot_lock:
             old_ts = bitget_spot_density_timestamps.get(symbol, {})
-            old_stats = bitget_spot_volume_stats.get(symbol, {})
+            old_stats = bitget_spot_volume_stats.get(symbol, {}) # ← Сохраняем статистику
             new_ts = {}
             new_stats = {}
+
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
@@ -624,13 +623,13 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
     if changed:
         key = f"bitget:{market}:{symbol}"
         now = time.time()
-        if now - last_sync_time.get(key, 0.0) >= SYNC_INTERVAL:
+        if key not in last_sync_time or (now - last_sync_time[key]) >= SYNC_INTERVAL:
             await sync_to_cache_async(symbol, market, log_func)
             last_sync_time[key] = now
 
 
 # ==========================================
-# ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
+# ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ (С очисткой памяти)
 # ==========================================
 async def periodic_refresh(log_func=print):
     global bitget_futures_symbols, bitget_spot_symbols
@@ -677,6 +676,7 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         bitget_futures_order_books.pop(sym, None)
                         bitget_futures_density_timestamps.pop(sym, None)
+                        # ОПТИМИЗАЦИЯ 5: Очистка памяти
                         bitget_futures_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"bitget:futures:{sym}", None)
                 log_func(f"🗑️ bitget futures удалены: {', '.join(sorted(removed))}")
@@ -725,6 +725,7 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         bitget_spot_order_books.pop(sym, None)
                         bitget_spot_density_timestamps.pop(sym, None)
+                        # ОПТИМИЗАЦИЯ 5: Очистка памяти
                         bitget_spot_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"bitget:spot:{sym}", None)
                 log_func(f"🗑️ bitget spot удалены: {', '.join(sorted(removed))}")
@@ -771,7 +772,7 @@ async def main_async(log_func=print):
             active_spot.append(symbol)
             log_func(f"✅ bitget spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
-    for symbol in futures_candidates[:20]:
+    for symbol in futures_candidates[:30]:
         if symbol in active_futures:
             continue
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
@@ -779,7 +780,7 @@ async def main_async(log_func=print):
             active_futures.append(symbol)
             log_func(f"✅ bitget futures {symbol}: принят (плотностей: {saved_count})")
 
-    for symbol in spot_candidates[:20]:
+    for symbol in spot_candidates[:30]:
         if symbol in active_spot:
             continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
