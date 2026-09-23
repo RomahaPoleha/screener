@@ -273,7 +273,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
-                        if stability_ratio > 0.5:
+                        if stability_ratio > 1.0:
                             ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
