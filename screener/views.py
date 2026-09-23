@@ -96,23 +96,51 @@ def api_data(request):
 
 @require_http_methods(["GET"])
 def api_candles(request, symbol):
-    """API: история свечей с умным кэшированием по таймфрейму"""
     tf = request.GET.get('tf', '1m')
     cache_key = f"candles_{symbol}_{tf}_future"
     cached = cache.get(cache_key)
 
+    # УМНЫЙ КЭШ: если свежий — отдаём сразу
     if cached:
         try:
             now_ts = int(time.time())
             last_candle_ts = cached[-1]['time']
             age = now_ts - last_candle_ts
             max_age = MAX_CACHE_AGE.get(tf, 120)
-
             if age < max_age:
                 return JsonResponse(cached, safe=False)
         except (KeyError, IndexError, TypeError):
             pass
 
+    # 🔧 НОВОЕ: если кэш есть, но устарел — отдаём его СРАЗУ,
+    # а обновление делаем в фоне (не блокируя пользователя)
+    if cached:
+        # Запускаем обновление в отдельном потоке
+        import threading
+        def refresh():
+            try:
+                import ccxt
+                exchange = ccxt.binance({
+                    'enableRateLimit': True,
+                    'options': {'defaultType': 'future'},
+                    'timeout': 10000
+                })
+                pair = f"{symbol}/USDT:USDT"
+                ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
+                candles = [
+                    {'time': int(ts / 1000), 'open': float(o), 'high': float(h),
+                     'low': float(l), 'close': float(c), 'volume': float(v)}
+                    for ts, o, h, l, c, v in ohlcv
+                ]
+                cache.set(cache_key, candles, 300)
+            except Exception as e:
+                print(f"⚠️ background refresh {symbol}: {e}")
+
+        threading.Thread(target=refresh, daemon=True).start()
+        # Возвращаем старый кэш немедленно
+        return JsonResponse(cached, safe=False)
+
+    # Если кэша совсем нет — единственный раз делаем синхронный запрос
     try:
         import ccxt
         exchange = ccxt.binance({
@@ -122,23 +150,15 @@ def api_candles(request, symbol):
         })
         pair = f"{symbol}/USDT:USDT"
         ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
-
         candles = [
-            {
-                'time': int(ts / 1000),
-                'open': float(o), 'high': float(h),
-                'low': float(l), 'close': float(c), 'volume': float(v)
-            }
+            {'time': int(ts / 1000), 'open': float(o), 'high': float(h),
+             'low': float(l), 'close': float(c), 'volume': float(v)}
             for ts, o, h, l, c, v in ohlcv
         ]
-
         cache.set(cache_key, candles, 300)
         return JsonResponse(candles, safe=False)
-
     except Exception as e:
         print(f"❌ Ошибка api_candles {symbol}: {e}")
-        if cached:
-            return JsonResponse(cached, safe=False)
         return JsonResponse({'error': str(e)}, status=500)
 
 
