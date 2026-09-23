@@ -1,6 +1,6 @@
 """
 Bitget Monitor ASYNC — ФИНАЛЬНАЯ СТАБИЛЬНАЯ ВЕРСИЯ
-Исправлены все логические ловушки с созреванием плотностей и фильтрацией снапшотов.
+Исправлены: исчезновение через 3 сек, неработающий спот, сброс таймеров на снапшотах.
 """
 import asyncio
 import json
@@ -268,17 +268,19 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
-                        # 🔧 ИСПРАВЛЕНО: 2.5 (250%) вместо 1.0.
-                        # Дает стакану Bitget "дышать" при нормальных колебаниях снапшотов,
-                        # но жестко сбрасывает таймер при реальном пуффинге (скачках в 3+ раза).
-                        if stability_ratio > 2.5:
+                        # 🔧 ПОРОГ 1.0 (100%): дает стакану Bitget "дышать" при обычных колебаниях снапшотов,
+                        # но сбрасывает таймер при реальном пуффинге (скачках в 2+ раза).
+                        if stability_ratio > 1.0:
                             ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
                     if is_first_load:
+                        # 🔧 ИСПРАВЛЕНО: now - MIN_AGE_SECONDS гарантирует, что на следующем цикле
+                        # возраст будет > 180, и плотность НЕ исчезнет из-за проверки age < 180.
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
+                        # Новые уровни начинают честный отсчет с нуля и скрыты на 180 сек.
                         ts[price] = now
                         continue
 
@@ -290,11 +292,13 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'exchange': 'bitget'
                 })
 
-        try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
-        except RuntimeError:
-            pass
+        # Обновляем кэш только если есть что обновлять
+        if densities:
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
+            except RuntimeError:
+                pass
 
         if market == 'futures':
             async with bitget_futures_lock:
@@ -449,7 +453,7 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
-    """Обработка снапшота — полная замена стакана"""
+    """Обработка снапшота — полная замена стакана с сохранением истории"""
     new_bids = {}
     new_asks = {}
 
@@ -479,18 +483,12 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             new_stats = {}
             for p in new_bids:
                 if p in old_ts:
-                    new_ts[p] = old_ts[p]  # Сохраняем старое время, позволяя ему расти
-                else:
-                    # Новый уровень: начинаем отсчет с нуля.
-                    # В следующем снапшоте он уже будет в old_ts, и время сохранится.
-                    new_ts[p] = time.time()
+                    new_ts[p] = old_ts[p]  # Сохраняем время, НЕ сбрасываем его!
                 if p in old_stats:
-                    new_stats[p] = old_stats[p]
+                    new_stats[p] = old_stats[p]  # Сохраняем статистику объема
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
-                else:
-                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]
 
@@ -506,15 +504,11 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             for p in new_bids:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
-                else:
-                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]
             for p in new_asks:
                 if p in old_ts:
                     new_ts[p] = old_ts[p]
-                else:
-                    new_ts[p] = time.time()
                 if p in old_stats:
                     new_stats[p] = old_stats[p]
 
