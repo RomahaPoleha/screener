@@ -178,29 +178,26 @@ def api_candles(request, symbol):
 
 @require_http_methods(["GET"])
 def api_natr(request):
-    """API: NATR данные (только Futures)"""
+    """API: NATR данные. 🔧 ОПТИМИЗИРОВАНО через get_many"""
     cache_key = "coins_future"
     coins = cache.get(cache_key)
     if not coins:
-        coins = get_symbols_from_tickers()
-        cache.set(cache_key, coins, 60)
+        coins = get_symbols_from_tickers_fallback()
+        if coins:
+            cache.set(cache_key, coins, 60)
 
-    # ✅ ИСПРАВЛЕНО: batch-чтение через get_many (один запрос к Redis вместо N)
-    natr_cache_keys = [f"natr_{coin['symbol']}_future" for coin in coins]
-    symbol_keys_map = {f"natr_{coin['symbol']}_future": coin['symbol'] for coin in coins}
+    if not coins:
+        return JsonResponse({'natr': {}, 'last_update_times': {}})
 
-    natr_batch = cache.get_many(natr_cache_keys)
+    # 🔧 Собираем все ключи и делаем ОДИН запрос к Redis вместо цикла
+    natr_keys = [f"natr_{coin['symbol']}_future" for coin in coins]
+    natr_results = cache.get_many(natr_keys)
 
     natr_data = {}
-    for cache_key_natr, data in natr_batch.items():
-        symbol = symbol_keys_map.get(cache_key_natr)
-        if symbol and data:
-            # ✅ ИСПРАВЛЕНО: поддержка обоих форматов (dict от cache.set и JSON строка от pipe.setex)
-            if isinstance(data, str):
-                try:
-                    data = json.loads(data)
-                except (json.JSONDecodeError, TypeError):
-                    continue
+    for key, data in natr_results.items():
+        if data:
+            # key выглядит как "natr_BTC_future", извлекаем символ
+            symbol = key.replace('natr_', '').replace('_future', '')
             natr_data[symbol] = data
 
     last_update_times = cache.get("natr_last_update_times_future", {})
