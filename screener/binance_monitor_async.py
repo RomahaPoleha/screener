@@ -1,9 +1,9 @@
 """
-Binance Monitor ASYNC
-
+Binance Monitor ASYNC — ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+Изменения: SYNC_INTERVAL=10, TARGET=15, depth20, cache.set вне lock.
 """
 import asyncio
-import json  # Вернули стандартный json для 100% совместимости с JS
+import json
 import time
 import websockets
 from django.core.cache import cache
@@ -11,7 +11,7 @@ import ccxt
 from . import coin_selection
 
 # ==========================================
-# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
+# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (ОДИН на всё)
 # ==========================================
 ccxt_futures_exchange = ccxt.binance({
     'enableRateLimit': True,
@@ -44,18 +44,16 @@ binance_spot_message_queue = asyncio.Queue(maxsize=10000)
 binance_spot_lock = asyncio.Lock()
 binance_spot_reconnect_event = asyncio.Event()
 
-# URLs
 FUTURES_WS_URL = "wss://fstream.binance.com/ws"
 SPOT_WS_URL = "wss://stream.binance.com:9443/ws"
 
-# Rate limiting
 last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
-SYNC_INTERVAL = 3
+# ✅ ИСПРАВЛЕНО: SYNC_INTERVAL увеличен с 3 до 10
+SYNC_INTERVAL = 10
 
-# Лёгкая статистика объёмов
 binance_futures_volume_stats = {}
 binance_spot_volume_stats = {}
 
@@ -63,14 +61,15 @@ binance_spot_volume_stats = {}
 # ==========================================
 # ТОП МОНЕТ
 # ==========================================
+# ✅ ИСПРАВЛЕНО: TARGET уменьшен с 30 до 15
+TARGET_SYMBOLS = 15
+
 def _fetch_top_symbols_sync(market='futures'):
     try:
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
-
         clean_fn = coin_selection.clean_swap if market == 'futures' else coin_selection.clean_spot
         coin_selection.update_volume_history(tickers, clean_fn)
-
         candidates = coin_selection.select_candidates(
             tickers, clean_fn, limit=60,
             log_func=lambda msg: print(msg)
@@ -98,7 +97,6 @@ def _fetch_stable_coins_sync(market='futures', limit=10):
     try:
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
-
         coins_with_volume = []
         for symbol, data in tickers.items():
             if market == 'futures':
@@ -107,25 +105,19 @@ def _fetch_stable_coins_sync(market='futures', limit=10):
             else:
                 if '/USDT' not in symbol:
                     continue
-
             volume = data.get('quoteVolume') or 0
             if volume < 100000:
                 continue
-
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-
             if '-' in clean_symbol:
                 continue
             if len(clean_symbol) < 2 or len(clean_symbol) > 15:
                 continue
             if not clean_symbol.replace('_', '').isalnum():
                 continue
-
             coins_with_volume.append((clean_symbol, volume))
-
         coins_with_volume.sort(key=lambda x: x[1], reverse=True)
         return [s for s, v in coins_with_volume[:limit]]
-
     except Exception as e:
         print(f"❌ Ошибка _fetch_stable_coins({market}): {e}")
         return []
@@ -142,24 +134,20 @@ async def get_stable_coins_async(market='futures', limit=10):
 def _init_order_book_sync(symbol, market):
     try:
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
-
         if market == 'futures':
             ccxt_symbol = f"{symbol}/USDT:USDT"
         else:
             ccxt_symbol = f"{symbol}/USDT"
-
-        ob = exchange.fetch_order_book(ccxt_symbol, limit=500)
-
+        # ✅ ИСПРАВЛЕНО: limit=100 вместо 500 (экономия RAM)
+        ob = exchange.fetch_order_book(ccxt_symbol, limit=100)
         bids = {}
         for price, qty in ob.get('bids', []):
             if price > 0 and qty > 0:
                 bids[price] = qty
-
         asks = {}
         for price, qty in ob.get('asks', []):
             if price > 0 and qty > 0:
                 asks[price] = qty
-
         return bids, asks
     except Exception as e:
         print(f"❌ _init_order_book_sync({symbol}): {e}")
@@ -170,11 +158,9 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
     try:
         loop = asyncio.get_running_loop()
         bids, asks = await loop.run_in_executor(None, _init_order_book_sync, symbol, market)
-
         if not bids and not asks:
             log_func(f"⚠️ binance {market} {symbol}: пустой стакан")
             return 0
-
         if market == 'futures':
             async with binance_futures_lock:
                 binance_futures_order_books[symbol] = {'bids': bids, 'asks': asks}
@@ -183,11 +169,9 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
             async with binance_spot_lock:
                 binance_spot_order_books[symbol] = {'bids': bids, 'asks': asks}
                 binance_spot_density_timestamps[symbol] = {}
-
         saved_count = await sync_to_cache_async(symbol, market, log_func)
         log_func(f"✅ binance {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
         return saved_count
-
     except Exception as e:
         log_func(f"❌ init_order_book_async(binance {market} {symbol}): {e}")
         return 0
@@ -195,22 +179,24 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS
+# ✅ ИСПРАВЛЕНО: cache.set вынесен за пределы lock
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
+        # ШАГ 1: Быстро собрать данные под lock
         if market == 'futures':
             async with binance_futures_lock:
                 book = binance_futures_order_books.get(symbol, {})
-                ts = binance_futures_density_timestamps.get(symbol, {})
-                stats = binance_futures_volume_stats.get(symbol, {})
+                ts = dict(binance_futures_density_timestamps.get(symbol, {}))
+                stats = dict(binance_futures_volume_stats.get(symbol, {}))
                 if not book:
                     return 0
                 key = f"scalp:futures:binance:{symbol}"
         else:
             async with binance_spot_lock:
                 book = binance_spot_order_books.get(symbol, {})
-                ts = binance_spot_density_timestamps.get(symbol, {})
-                stats = binance_spot_volume_stats.get(symbol, {})
+                ts = dict(binance_spot_density_timestamps.get(symbol, {}))
+                stats = dict(binance_spot_volume_stats.get(symbol, {}))
                 if not book:
                     return 0
                 key = f"scalp:spot:binance:{symbol}"
@@ -223,13 +209,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-
-                # 🔧 ГИСТЕРЕЗИС: Защита от мерцания зрелых плотностей
-                # Если плотность уже прожила MIN_AGE_SECONDS, снижаем порог до 7000,
-                # чтобы она не исчезала при частичном исполнении ордера.
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
-
                 if volume < min_volume:
                     continue
 
@@ -246,19 +227,16 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
-
                     if new_stat['count'] >= 3:
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
-
                         if stability_ratio > 0.5:
                             ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
                     if is_first_load:
-                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
@@ -272,12 +250,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'exchange': 'binance'
                 })
 
+        # ШАГ 2: Lock уже отпущен — записываем в Redis
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
         except RuntimeError:
             pass
 
+        # ШАГ 3: Короткий lock для обновления timestamps
         if market == 'futures':
             async with binance_futures_lock:
                 binance_futures_density_timestamps[symbol] = ts
@@ -288,7 +268,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 binance_spot_volume_stats[symbol] = new_stats
 
         return len(densities)
-
     except Exception as e:
         log_func(f"❌ sync_to_cache_async(binance {market} {symbol}): {e}")
         return 0
@@ -296,57 +275,46 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
 # ==========================================
 # WEBSOCKET LISTENER
+# ✅ ИСПРАВЛЕНО: depth20 вместо полного depth
 # ==========================================
 async def ws_listener(market='futures', log_func=print):
     global futures_symbols, spot_symbols
-
     reconnect_event = binance_futures_reconnect_event if market == 'futures' else binance_spot_reconnect_event
     ws_url = FUTURES_WS_URL if market == 'futures' else SPOT_WS_URL
 
     while True:
         try:
             symbols = futures_symbols if market == 'futures' else spot_symbols
-
             if not symbols:
                 await asyncio.sleep(5)
                 continue
-
             log_func(f"🔌 binance {market} WS подключение: {len(symbols)} символов")
-
             async with websockets.connect(ws_url, ping_interval=20, ping_timeout=20) as ws:
                 try:
-                    streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols]
-                    subscribe_msg = {
-                        "method": "SUBSCRIBE",
-                        "params": streams,
-                        "id": 1
-                    }
+                    # ✅ ИСПРАВЛЕНО: depth20 — только топ-20 уровней, меньше трафика
+                    streams = [f"{s.lower()}usdt@depth20@100ms" for s in symbols]
+                    subscribe_msg = {"method": "SUBSCRIBE", "params": streams, "id": 1}
                     await ws.send(json.dumps(subscribe_msg))
                     log_func(f"✅ binance {market} WS подписан на {len(symbols)} символов")
-
                     while True:
                         if reconnect_event.is_set():
                             reconnect_event.clear()
                             log_func(f"🔄 binance {market}: сигнал переподключения получен")
                             break
-
                         try:
                             message = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         except asyncio.TimeoutError:
                             continue
-
                         queue = binance_futures_message_queue if market == 'futures' else binance_spot_message_queue
                         try:
                             queue.put_nowait(message)
                         except asyncio.QueueFull:
                             pass
-
                 except websockets.exceptions.ConnectionClosed:
                     raise
                 except Exception as e:
                     log_func(f"❌ binance {market} WS внутренняя ошибка: {e}")
                     raise
-
         except websockets.exceptions.ConnectionClosed:
             log_func(f"⚠️ binance {market} WS закрыт, переподключение через 3 сек")
             await asyncio.sleep(3)
@@ -360,12 +328,10 @@ async def ws_listener(market='futures', log_func=print):
 # ==========================================
 async def process_queue(market='futures', log_func=print):
     queue = binance_futures_message_queue if market == 'futures' else binance_spot_message_queue
-
     while True:
         try:
             message = await queue.get()
             data = json.loads(message)
-
             if 'data' in data:
                 stream_data = data['data']
                 symbol = stream_data.get('s', '')
@@ -381,10 +347,8 @@ async def process_queue(market='futures', log_func=print):
                 asks = data.get('a', [])
             else:
                 continue
-
             if bids or asks:
                 await handle_update_async(symbol, bids, asks, market, log_func)
-
         except Exception as e:
             log_func(f"❌ binance {market} process_queue ошибка: {e}")
 
@@ -397,14 +361,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             book = binance_futures_order_books[symbol]
             ts = binance_futures_density_timestamps.get(symbol, {})
             changed = False
-
             for row in bids_delta:
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price = float(row[0])
                     qty = float(row[1])
-
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
@@ -417,14 +379,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                         changed = True
                 except Exception:
                     continue
-
             for row in asks_delta:
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price = float(row[0])
                     qty = float(row[1])
-
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
@@ -437,10 +397,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                         changed = True
                 except Exception:
                     continue
-
             if changed:
                 binance_futures_density_timestamps[symbol] = ts
-
     else:
         async with binance_spot_lock:
             if symbol not in binance_spot_order_books:
@@ -448,14 +406,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             book = binance_spot_order_books[symbol]
             ts = binance_spot_density_timestamps.get(symbol, {})
             changed = False
-
             for row in bids_delta:
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price = float(row[0])
                     qty = float(row[1])
-
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
@@ -468,14 +424,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                         changed = True
                 except Exception:
                     continue
-
             for row in asks_delta:
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price = float(row[0])
                     qty = float(row[1])
-
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
@@ -488,7 +442,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                         changed = True
                 except Exception:
                     continue
-
             if changed:
                 binance_spot_density_timestamps[symbol] = ts
 
@@ -502,19 +455,17 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
 # ==========================================
 # ПЕРИОДИЧЕСКАЯ РОТАЦИЯ
+# ✅ ИСПРАВЛЕНО: TARGET_SYMBOLS вместо 30
 # ==========================================
 async def periodic_refresh(log_func=print):
     global futures_symbols, spot_symbols
-
     while True:
         await asyncio.sleep(300)
-
         try:
             # --- Futures ротация ---
             candidates_f = await get_top_symbols_async('futures')
             old_symbols = set(futures_symbols)
             new_active = []
-
             for symbol in stable_futures_symbols:
                 if symbol in old_symbols:
                     new_active.append(symbol)
@@ -522,10 +473,8 @@ async def periodic_refresh(log_func=print):
                     saved_count = await init_order_book_async(symbol, 'futures', log_func)
                     if saved_count > 0:
                         new_active.append(symbol)
-                        log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
-
             for symbol in candidates_f:
-                if len(new_active) >= 30:
+                if len(new_active) >= TARGET_SYMBOLS:
                     break
                 if symbol in new_active:
                     continue
@@ -535,9 +484,6 @@ async def periodic_refresh(log_func=print):
                 saved_count = await init_order_book_async(symbol, 'futures', log_func)
                 if saved_count > 0:
                     new_active.append(symbol)
-                    log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count})")
-                else:
-                    log_func(f"⚠️ binance futures {symbol}: пропущен")
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -551,18 +497,13 @@ async def periodic_refresh(log_func=print):
                         binance_futures_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:futures:{sym}", None)
                 log_func(f"🗑️ binance futures удалены: {', '.join(sorted(removed))}")
-
             if removed or added:
                 binance_futures_reconnect_event.set()
-                log_func(f"🔄 binance futures: список изменился (+{len(added)} -{len(removed)}), переподключение")
-            else:
-                log_func(f"✅ binance futures: список не изменился ({len(new_active)} монет)")
 
             # --- Spot ротация ---
             candidates_s = await get_top_symbols_async('spot')
             old_symbols = set(spot_symbols)
             new_active = []
-
             for symbol in stable_spot_symbols:
                 if symbol in old_symbols:
                     new_active.append(symbol)
@@ -570,10 +511,8 @@ async def periodic_refresh(log_func=print):
                     saved_count = await init_order_book_async(symbol, 'spot', log_func)
                     if saved_count > 0:
                         new_active.append(symbol)
-                        log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
-
             for symbol in candidates_s:
-                if len(new_active) >= 30:
+                if len(new_active) >= TARGET_SYMBOLS:
                     break
                 if symbol in new_active:
                     continue
@@ -583,9 +522,6 @@ async def periodic_refresh(log_func=print):
                 saved_count = await init_order_book_async(symbol, 'spot', log_func)
                 if saved_count > 0:
                     new_active.append(symbol)
-                    log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count})")
-                else:
-                    log_func(f"⚠️ binance spot {symbol}: пропущен")
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -599,13 +535,10 @@ async def periodic_refresh(log_func=print):
                         binance_spot_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:spot:{sym}", None)
                 log_func(f"🗑️ binance spot удалены: {', '.join(sorted(removed))}")
-
             if removed or added:
                 binance_spot_reconnect_event.set()
-                log_func(f"🔄 binance spot: список изменился (+{len(added)} -{len(removed)}), переподключение")
-            else:
-                log_func(f"✅ binance spot: список не изменился ({len(new_active)} монет)")
 
+            log_func(f"✅ binance ротация: futures={len(futures_symbols)}, spot={len(spot_symbols)}")
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(binance): {e}")
 
@@ -615,7 +548,6 @@ async def periodic_refresh(log_func=print):
 # ==========================================
 async def main_async(log_func=print):
     global futures_symbols, spot_symbols, stable_futures_symbols, stable_spot_symbols
-
     log_func("🚀 Запуск Binance Async Monitor...")
 
     stable_f = await get_stable_coins_async('futures', STABLE_COINS_LIMIT)
@@ -633,35 +565,28 @@ async def main_async(log_func=print):
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
-            log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+    for symbol in futures_candidates[:TARGET_SYMBOLS]:
+        if symbol in active_futures:
+            continue
+        saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        if saved_count > 0:
+            active_futures.append(symbol)
 
     active_spot = []
     for symbol in stable_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
-            log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
-
-    for symbol in futures_candidates[:20]:
-        if symbol in active_futures:
-            continue
-        saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
-            active_futures.append(symbol)
-            log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
-
-    for symbol in spot_candidates[:20]:
+    for symbol in spot_candidates[:TARGET_SYMBOLS]:
         if symbol in active_spot:
             continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
-            log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count})")
 
     futures_symbols = active_futures
     spot_symbols = active_spot
-
-    log_func(f"✅ Binance Async Monitor инициализирован: {len(active_futures)} futures, {len(active_spot)} spot")
+    log_func(f"✅ Binance Monitor: {len(active_futures)} futures, {len(active_spot)} spot")
 
     tasks = [
         ws_listener('futures', log_func),
@@ -670,19 +595,15 @@ async def main_async(log_func=print):
         process_queue('spot', log_func),
         periodic_refresh(log_func),
     ]
-
     await asyncio.gather(*tasks)
 
 
 def start_binance_async_monitor(log_func=print):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-
     try:
         loop.run_until_complete(main_async(log_func))
     except Exception as e:
         log_func(f"❌ Binance Async Monitor упал: {e}")
         import traceback
         log_func(traceback.format_exc())
-    finally:
-        pass
