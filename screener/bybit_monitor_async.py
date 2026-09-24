@@ -1,5 +1,6 @@
 """
-Bybit Monitor ASYNC — ОПТИМИЗИРОВАННАЯ И СТАБИЛЬНАЯ ВЕРСИЯ
+Bybit Monitor ASYNC — WORKER NODE
+Читает список монет из Redis (мастер-список от Binance)
 """
 import asyncio
 import json
@@ -8,10 +9,9 @@ import aiohttp
 import websockets
 from django.core.cache import cache
 import ccxt
-from . import coin_selection
 
 # ==========================================
-# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
+# ГЛОБАЛЬНЫЕ ЭKЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
 # ==========================================
 ccxt_futures_exchange = ccxt.bybit({
     'enableRateLimit': True,
@@ -54,7 +54,6 @@ BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&s
 
 # Rate limiting
 last_sync_time = {}
-
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
 SYNC_INTERVAL = 3
@@ -73,115 +72,25 @@ async def get_http_client():
 
 
 # ==========================================
-# ТОП МОНЕТ (синхронный ccxt, запускаем в потоке)
+# 🔥 НОВОЕ: ЧТЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE
 # ==========================================
-def _fetch_top_symbols_sync(market_type='linear'):
-    """Синхронная функция для ccxt (запускается в отдельном потоке)"""
+def _fetch_master_symbols_sync(market='futures'):
+    """Синхронное чтение мастер-списка из Redis"""
     try:
-        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
-        exchange = ccxt_futures_exchange if market_type == 'linear' else ccxt_spot_exchange
-        tickers = exchange.fetch_tickers()
-
-        clean_fn = coin_selection.clean_swap if market_type == 'linear' else coin_selection.clean_spot
-        coin_selection.update_volume_history(tickers, clean_fn)
-
-        candidates = coin_selection.select_candidates(
-            tickers, clean_fn, limit=60,
-            log_func=lambda msg: print(msg)
-        )
-        return candidates[:30]
+        key = f'scalp:master:{market}'
+        symbols = cache.get(key)
+        if isinstance(symbols, list) and len(symbols) > 0:
+            return symbols
+        return []
     except Exception as e:
-        print(f"❌ Ошибка fetch_top_symbols(bybit {market_type}): {e}")
+        print(f"❌ Ошибка чтения master-списка bybit {market}: {e}")
         return []
 
 
-async def get_top_symbols_async(market_type='linear'):
-    """Асинхронная обёртка — запускает ccxt в отдельном потоке"""
+async def get_master_symbols_async(market='futures'):
+    """Асинхронная обёртка для чтения мастер-списка"""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_top_symbols_sync, market_type)
-
-# ==========================================
-# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
-# ==========================================
-STABLE_COINS_LIMIT = 10  # Размер белого списка
-
-# Глобальные переменные для хранения белого списка
-stable_futures_symbols = []
-stable_spot_symbols = []
-
-
-def _fetch_stable_coins_sync(market_type='linear', limit=10):
-    """Синхронная функция — топ монет по абсолютному объёму"""
-    try:
-        exchange = ccxt_futures_exchange if market_type == 'linear' else ccxt_spot_exchange
-        tickers = exchange.fetch_tickers()
-
-        # 🔧 ИСПРАВЛЕНИЕ 1: Гарантированный пересчет объема, если CCXT его не дал (специфика Bybit)
-        if market_type == 'linear':
-            for symbol, data in tickers.items():
-                if not (data.get('quoteVolume') or 0):
-                    try:
-                        info = data.get('info', {}) or {}
-                        # Bybit V5 предоставляет turnover24h (это и есть объем в валюте котировки, т.е. в USDT)
-                        turnover = float(info.get('turnover24h') or 0)
-                        if turnover > 0:
-                            data['quoteVolume'] = turnover
-                    except Exception:
-                        pass
-
-        coins_with_volume = []
-        for symbol, data in tickers.items():
-            # 🔧 ИСПРАВЛЕНИЕ 2: Надежный парсинг символа (как в OKX), а не хрупкий .replace()
-            if market_type == 'linear':
-                if ':USDT' in symbol:
-                    # Формат CCXT: BTC/USDT:USDT -> берем часть до ':', потом до '/' -> BTC
-                    clean_symbol = symbol.split(':')[0].split('/')[0]
-                elif '/USDT' in symbol:
-                    # Формат: BTC/USDT -> BTC
-                    clean_symbol = symbol.split('/')[0]
-                elif '-USDT' in symbol:
-                    # Формат (редкий, но бывает): BTC-USDT -> BTC
-                    clean_symbol = symbol.replace('-USDT', '')
-                else:
-                    continue
-            else:
-                if '/USDT' in symbol:
-                    clean_symbol = symbol.split('/')[0]
-                else:
-                    continue
-
-            volume = data.get('quoteVolume') or 0
-            if volume < 100000:
-                continue
-
-            # Валидация
-            if not clean_symbol:
-                continue
-            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
-                continue
-            if not clean_symbol.replace('_', '').isalnum():
-                continue
-
-            coins_with_volume.append((clean_symbol, volume))
-
-        # Сортируем по убыванию объёма и берём топ-N
-        coins_with_volume.sort(key=lambda x: x[1], reverse=True)
-        result = [s for s, v in coins_with_volume[:limit]]
-
-        # Для отладки (можно убрать потом)
-        print(f"✅ Bybit {market_type} — топ-{limit} стабильных: {result}")
-        return result
-
-    except Exception as e:
-        print(f"❌ Ошибка _fetch_stable_coins(bybit {market_type}): {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-
-async def get_stable_coins_async(market_type='linear', limit=10):
-    """Асинхронная обёртка — топ монет по абсолютному объёму"""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_stable_coins_sync, market_type, limit)
+    return await loop.run_in_executor(None, _fetch_master_symbols_sync, market)
 
 
 # ==========================================
@@ -284,15 +193,13 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 volume = price * qty
 
                 # 🔧 ГИСТЕРЕЗИС: Защита от мерцания зрелых плотностей
-                # Если плотность уже прожила MIN_AGE_SECONDS, снижаем порог до 7000,
-                # чтобы она не исчезала при частичном исполнении ордера.
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
 
                 if volume < min_volume:
                     continue
 
-                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
+                # Обновляем статистику объёма
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
                 new_stat = {
                     'min': min(prev_stat['min'], volume),
@@ -307,21 +214,18 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     if age < MIN_AGE_SECONDS:
                         continue
 
-                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
+                    # ПРОВЕРКА СТАБИЛЬНОСТИ
                     if new_stat['count'] >= 3:
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
-                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
                         if stability_ratio > 0.5:
-                            ts[price] = now  # Плотность должна "созревать" заново
-                            # Сбрасываем статистику
+                            ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
                     if is_first_load:
-                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
@@ -398,7 +302,6 @@ async def ws_listener(market='futures', log_func=print):
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
-                    # Подписка Bybit: {"op": "subscribe", "args": ["orderbook.200.BTCUSDT", ...]}
                     args = [f"orderbook.200.{s}USDT" for s in symbols]
                     await ws.send(json.dumps({"op": "subscribe", "args": args}))
                     log_func(f"✅ bybit {market} WS подписан на {len(symbols)} символов")
@@ -445,11 +348,8 @@ async def process_queue(market='futures', log_func=print):
     while True:
         try:
             message = await queue.get()
-
             data = json.loads(message)
 
-            # Bybit присылает подтверждение подписки с "op": "subscribe" и "success": true
-            # Пропускаем их
             if data.get('op') == 'subscribe' or data.get('op') == 'pong':
                 continue
 
@@ -505,43 +405,35 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     if market == 'futures':
         async with bybit_futures_lock:
             old_ts = bybit_futures_density_timestamps.get(symbol, {})
-            old_stats = bybit_futures_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
+            old_stats = bybit_futures_volume_stats.get(symbol, {})
             new_ts = {}
             new_stats = {}
             for p in new_bids:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
+                if p in old_ts: new_ts[p] = old_ts[p]
+                if p in old_stats: new_stats[p] = old_stats[p]
             for p in new_asks:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
+                if p in old_ts: new_ts[p] = old_ts[p]
+                if p in old_stats: new_stats[p] = old_stats[p]
 
             bybit_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bybit_futures_density_timestamps[symbol] = new_ts
-            bybit_futures_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ И ОЧИЩАЕМ ОТ МУСОРА
+            bybit_futures_volume_stats[symbol] = new_stats
     else:
         async with bybit_spot_lock:
             old_ts = bybit_spot_density_timestamps.get(symbol, {})
-            old_stats = bybit_spot_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
+            old_stats = bybit_spot_volume_stats.get(symbol, {})
             new_ts = {}
             new_stats = {}
             for p in new_bids:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
+                if p in old_ts: new_ts[p] = old_ts[p]
+                if p in old_stats: new_stats[p] = old_stats[p]
             for p in new_asks:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
+                if p in old_ts: new_ts[p] = old_ts[p]
+                if p in old_stats: new_stats[p] = old_stats[p]
 
             bybit_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bybit_spot_density_timestamps[symbol] = new_ts
-            bybit_spot_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ И ОЧИЩАЕМ ОТ МУСОРА
+            bybit_spot_volume_stats[symbol] = new_stats
 
     await sync_to_cache_async(symbol, market, log_func)
 
@@ -649,7 +541,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             if changed:
                 bybit_spot_density_timestamps[symbol] = ts
 
-    # Rate limit: sync раз в 3 секунды, НО ТОЛЬКО если были реальные изменения в стакане!
     if changed:
         key = f"bybit:{market}:{symbol}"
         now = time.time()
@@ -659,137 +550,107 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
 
 # ==========================================
-# ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
+# 🔥 ИЗМЕНЕНО: ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
 # ==========================================
 async def periodic_refresh(market='futures', log_func=print):
-    """Периодическое обновление списка монет каждые 5 минут"""
+    """Периодическая синхронизация с мастер-списком Binance"""
     global bybit_futures_symbols, bybit_spot_symbols
 
     while True:
-        await asyncio.sleep(300)  # 5 минут
+        await asyncio.sleep(300)  # Проверка каждые 5 минут
 
         try:
-            market_type = 'linear' if market == 'futures' else 'spot'
-            candidates = await get_top_symbols_async(market_type)
+            # 1. Читаем актуальный мастер-список от Binance
+            master_symbols = await get_master_symbols_async(market)
+
+            if not master_symbols:
+                log_func(f"⚠️ bybit {market}: мастер-список пуст, пропускаем ротацию (ждём Binance)")
+                continue
 
             old_symbols = set(bybit_futures_symbols if market == 'futures' else bybit_spot_symbols)
-            stable_symbols = stable_futures_symbols if market == 'futures' else stable_spot_symbols
-
             new_active = []
-            TARGET = 30
+            added = []
+            removed = old_symbols - set(master_symbols)
 
-            # ШАГ 1: Сохраняем монеты из белого списка (без обновления)
-            for symbol in stable_symbols:
-                if len(new_active) >= TARGET:
-                    break
-                if symbol in old_symbols:
-                    new_active.append(symbol)
-                else:
+            # 2. Формируем новый список и добавляем новые монеты
+            for symbol in master_symbols:
+                new_active.append(symbol)
+                if symbol not in old_symbols:
                     saved_count = await init_order_book_async(symbol, market, log_func)
+                    added.append(symbol)
                     if saved_count > 0:
-                        new_active.append(symbol)
-                        log_func(f"✅ bybit {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+                        log_func(f"✅ bybit {market} {symbol}: добавлен (плотностей: {saved_count})")
+                    else:
+                        log_func(f"⚠️ bybit {market} {symbol}: добавлен без плотностей")
 
-            # ШАГ 2: Добавляем топ по формуле
-            for symbol in candidates:
-                if len(new_active) >= TARGET:
-                    break
-                if symbol in new_active:
-                    continue
-
-                saved_count = await init_order_book_async(symbol, market, log_func)
-                if saved_count > 0:
-                    new_active.append(symbol)
-                    log_func(f"✅ bybit {market} {symbol}: добавлен (плотностей: {saved_count})")
-                else:
-                    log_func(f"⚠️ bybit {market} {symbol}: пропущен (нет плотностей)")
-
+            # 3. Обновляем глобальные переменные и чистим память от удалённых
             if market == 'futures':
-                removed = old_symbols - set(new_active)
                 bybit_futures_symbols = new_active
                 if removed:
                     async with bybit_futures_lock:
                         for sym in removed:
                             bybit_futures_order_books.pop(sym, None)
                             bybit_futures_density_timestamps.pop(sym, None)
-                            # Очистка памяти от устаревших ключей
                             bybit_futures_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"bybit:futures:{sym}", None)
                     log_func(f"🗑️ bybit futures удалены: {', '.join(sorted(removed))}")
 
-                bybit_futures_reconnect_event.set()
+                if added or removed:
+                    bybit_futures_reconnect_event.set()
+                    log_func(f"🔄 bybit futures: список синхронизирован (+{len(added)} -{len(removed)})")
             else:
-                removed = old_symbols - set(new_active)
                 bybit_spot_symbols = new_active
                 if removed:
                     async with bybit_spot_lock:
                         for sym in removed:
                             bybit_spot_order_books.pop(sym, None)
                             bybit_spot_density_timestamps.pop(sym, None)
-                            # Очистка памяти от устаревших ключей
                             bybit_spot_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"bybit:spot:{sym}", None)
                     log_func(f"🗑️ bybit spot удалены: {', '.join(sorted(removed))}")
 
-                bybit_spot_reconnect_event.set()
-
-            log_func(f"🔄 bybit {market}: ротация завершена, активных {len(new_active)}")
+                if added or removed:
+                    bybit_spot_reconnect_event.set()
+                    log_func(f"🔄 bybit spot: список синхронизирован (+{len(added)} -{len(removed)})")
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(bybit {market}): {e}")
 
+
 # ==========================================
-# ГЛАВНАЯ ФУНКЦИЯ
+# 🔥 ИЗМЕНЕНО: ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
 async def main_async(log_func=print):
     """Главная асинхронная функция — запускает все задачи"""
-    global bybit_futures_symbols, bybit_spot_symbols, stable_futures_symbols, stable_spot_symbols
+    global bybit_futures_symbols, bybit_spot_symbols
 
-    log_func("🚀 Запуск Bybit Async Monitor...")
+    log_func("🚀 Запуск Bybit Async Monitor (WORKER NODE)...")
 
-    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
-    stable_f = await get_stable_coins_async('linear', STABLE_COINS_LIMIT)
-    stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
-    stable_futures_symbols = stable_f
-    stable_spot_symbols = stable_s
-    log_func(f"🔒 Белый список futures: {stable_f}")
-    log_func(f"🔒 Белый список spot: {stable_s}")
+    # --- Шаг 1: Читаем мастер-список от Binance ---
+    master_f = await get_master_symbols_async('futures')
+    master_s = await get_master_symbols_async('spot')
 
-    # --- Шаг 2: Получаем кандидатов по формуле ---
-    futures_candidates = await get_top_symbols_async('linear')
-    spot_candidates = await get_top_symbols_async('spot')
+    if not master_f and not master_s:
+        log_func("⚠️ Мастер-списки пусты. Bybit будет ждать обновления от Binance...")
 
-    # --- Шаг 3: Инициализируем белый список ---
+    # --- Шаг 2: Инициализируем стаканы для всех монет из мастер-списка ---
     active_futures = []
-    for symbol in stable_f:
+    for symbol in master_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        active_futures.append(symbol)  # Добавляем в любом случае, чтобы не терять мониторинг
         if saved_count > 0:
-            active_futures.append(symbol)
-            log_func(f"✅ bybit futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+            log_func(f"✅ bybit futures {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ bybit futures {symbol}: принят без плотностей (стакан пуст или Redis недоступен)")
 
     active_spot = []
-    for symbol in stable_s:
+    for symbol in master_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
+        active_spot.append(symbol)
         if saved_count > 0:
-            active_spot.append(symbol)
-            log_func(f"✅ bybit spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
-
-    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
-    for symbol in futures_candidates[:30]:
-        if symbol in active_futures:
-            continue  # Уже в белом списке
-        saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
-            active_futures.append(symbol)
-            log_func(f"✅ bybit futures {symbol}: принят (плотностей: {saved_count})")
-
-    for symbol in spot_candidates[:30]:
-        if symbol in active_spot:
-            continue  # Уже в белом списке
-        saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if saved_count > 0:
-            active_spot.append(symbol)
             log_func(f"✅ bybit spot {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ bybit spot {symbol}: принят без плотностей (стакан пуст или Redis недоступен)")
 
     bybit_futures_symbols = active_futures
     bybit_spot_symbols = active_spot
