@@ -292,7 +292,11 @@ async def ws_listener(market='futures', log_func=print):
             async with websockets.connect(ws_url, ping_interval=20, ping_timeout=20) as ws:
                 try:
                     # ✅ ИСПРАВЛЕНО: depth20 — только топ-20 уровней, меньше трафика
-                    streams = [f"{s.lower()}usdt@depth20@100ms" for s in symbols]
+                    if market == 'futures':
+                        streams = [f"{s.lower()}usdt@depth20@100ms" for s in symbols]
+                    else:
+                        # SPOT: только @depth@100ms (diff stream)
+                        streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols]
                     subscribe_msg = {"method": "SUBSCRIBE", "params": streams, "id": 1}
                     await ws.send(json.dumps(subscribe_msg))
                     log_func(f"✅ binance {market} WS подписан на {len(symbols)} символов")
