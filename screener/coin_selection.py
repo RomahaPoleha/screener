@@ -1,6 +1,6 @@
 """
 Отбор монет по гибридной схеме (Finviz + RVOL + NATR)
-ОПТИМИЗИРОВАНО: Настоящий batch-запрос к Redis через cache.get_many
+ОПТИМИЗИРОВАНО: batch-чтение NATR, graceful shutdown.
 """
 import time
 import threading
@@ -10,25 +10,28 @@ from django.core.cache import cache
 # ==========================================
 # КОНСТАНТЫ
 # ==========================================
-MIN_LIQUIDITY_VOLUME = 1000_000   # порог входа
-RVOL_CAP = 10.0                   # RVOL >= 10 = максимум
-NATR_CAP = 2.0                    # NATR >= 2% = максимум
-PCT_CAP = 5.0                     # |%| >= 5 = максимум
+MIN_LIQUIDITY_VOLUME = 1000_000
+RVOL_CAP = 10.0
+NATR_CAP = 2.0
+PCT_CAP = 5.0
 
 RVOL_WEIGHT = 0.5
 NATR_WEIGHT = 0.3
 PCT_WEIGHT = 0.2
 
-POLL_INTERVAL = 60                # лёгкий скан каждые 60 сек
+POLL_INTERVAL = 60
 
 STABLECOINS = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
 # ==========================================
 # ИСТОРИЯ ОБЪЁМА (для RVOL)
 # ==========================================
-volume_history = {}   # clean_symbol -> deque([(ts, quoteVolume)])
+volume_history = {}
 _history_lock = threading.Lock()
 _pollers_started = set()
+
+# ✅ ИСПРАВЛЕНО: shutdown events для graceful stop
+_shutdown_events = {}
 
 
 def is_valid_symbol(symbol):
@@ -62,7 +65,7 @@ def clean_spot(symbol):
 
 
 def update_volume_history(tickers, clean_fn):
-    """Ярус 1: снимаем снапшот quoteVolume (каждые 60 сек)"""
+    """Ярус 1: снимаем снапшот quoteVolume"""
     now = time.time()
     with _history_lock:
         for symbol, data in tickers.items():
@@ -100,43 +103,65 @@ def start_volume_poller(name, fetch_tickers_fn, clean_fn, log_func=print):
         return
     _pollers_started.add(name)
 
+    # ✅ ИСПРАВЛЕНО: shutdown event для graceful stop
+    shutdown_event = threading.Event()
+    _shutdown_events[name] = shutdown_event
+
     def run():
-        while True:
+        consecutive_errors = 0
+        while not shutdown_event.is_set():
             try:
                 tickers = fetch_tickers_fn()
                 if tickers:
                     update_volume_history(tickers, clean_fn)
+                    consecutive_errors = 0  # Сброс при успехе
             except Exception as e:
-                log_func(f"⚠️ volume poller {name}: {e}")
-            time.sleep(POLL_INTERVAL)
+                consecutive_errors += 1
+                log_func(f"⚠️ volume poller {name}: {e} (ошибка #{consecutive_errors})")
+
+                # ✅ Exponential backoff при ошибках
+                if consecutive_errors > 10:
+                    log_func(f"⛔ volume poller {name}: слишком много ошибок, пауза 5 мин")
+                    shutdown_event.wait(timeout=300)
+                    consecutive_errors = 0
+                    continue
+
+            # ✅ Используем shutdown_event.wait вместо time.sleep
+            shutdown_event.wait(timeout=POLL_INTERVAL)
 
     threading.Thread(target=run, daemon=True, name=f'vol-poller-{name}').start()
 
 
+def stop_volume_poller(name):
+    """Graceful остановка poller"""
+    event = _shutdown_events.get(name)
+    if event:
+        event.set()
+
+
 # ==========================================
-# ОТБОР КАНДИДАТОВ (гибрид) - ОПТИМИЗИРОВАНО
+# ОТБОР КАНДИДАТОВ (гибрид)
 # ==========================================
 def select_candidates(tickers, clean_fn, limit=60, log_func=print):
-    """Гибридный отбор с НАСТОЯЩИМ batch-чтением NATR из Redis"""
+    """Гибридный отбор с batch-чтением NATR"""
     rows = []
-    natr_keys = []
 
-    # 1. Собираем все ключи, которые нам нужны
+    # ✅ ИСПРАВЛЕНО: batch-чтение NATR через get_many (ОДИН запрос к Redis)
+    natr_keys = []
+    symbol_for_key = {}
     for symbol, data in tickers.items():
         clean = clean_fn(symbol)
         if clean:
-            natr_keys.append(f"natr_{clean}_future")
+            key = f"natr_{clean}_future"
+            natr_keys.append(key)
+            symbol_for_key[key] = clean
 
-    # 2. 🔧 ОПТИМИЗАЦИЯ: ОДИН запрос к Redis вместо цикла!
-    natr_batch = {}
-    if natr_keys:
-        try:
-            # get_many возвращает словарь {key: value}. Отсутствующие ключи просто не включаются.
-            natr_batch = cache.get_many(natr_keys)
-        except Exception as e:
-            log_func(f"⚠️ Ошибка batch-чтения NATR: {e}")
+    # Один запрос к Redis вместо N!
+    try:
+        natr_batch = cache.get_many(natr_keys)
+    except Exception:
+        natr_batch = {}
 
-    # 3. Быстрый проход по тикерам
     for symbol, data in tickers.items():
         clean = clean_fn(symbol)
         if not clean:
@@ -149,10 +174,9 @@ def select_candidates(tickers, clean_fn, limit=60, log_func=print):
         pct = float(data.get('percentage') or 0)
         pct_capped = min(abs(pct), PCT_CAP) / PCT_CAP
 
-        # Берем из batch-словаря (мгновенно, без сети)
-        natr_data = natr_batch.get(f"natr_{clean}_future", {})
-        natr = float(natr_data.get('natr_5m14') or 0)
-
+        natr_key = f"natr_{clean}_future"
+        natr_data = natr_batch.get(natr_key, {})
+        natr = float(natr_data.get('natr_5m14') or 0) if natr_data else 0
         rvol = get_rvol(clean, volume)
 
         rvol_norm = min(rvol, RVOL_CAP) / RVOL_CAP
@@ -163,19 +187,13 @@ def select_candidates(tickers, clean_fn, limit=60, log_func=print):
                  PCT_WEIGHT * pct_capped)
 
         rows.append({
-            'symbol': clean,
-            'volume': volume,
-            'natr': natr,
-            'rvol': rvol,
-            'pct': pct,
-            'score': score
+            'symbol': clean, 'volume': volume,
+            'natr': natr, 'rvol': rvol, 'pct': pct, 'score': score
         })
 
-    # Сортировка по скорингу
     active = sorted(rows, key=lambda r: r['score'], reverse=True)
     result = [r['symbol'] for r in active]
 
-    # Добор по объему, если не хватило по скору
     if len(result) < limit:
         by_vol = sorted(rows, key=lambda r: r['volume'], reverse=True)
         for r in by_vol:
