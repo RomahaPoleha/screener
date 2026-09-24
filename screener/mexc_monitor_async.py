@@ -356,6 +356,12 @@ async def ws_listener(market='futures', log_func=print):
         try:
             symbols = mexc_futures_symbols if market == 'futures' else mexc_spot_symbols
 
+            # ЖЕСТКОЕ ОГРАНИЧЕНИЕ для MEXC Spot
+            if market == 'spot' and len(symbols) > 30:
+                log_func(f"⚠️ mexc spot: обрезка списка с {len(symbols)} до 30 символов (лимит MEXC)")
+                symbols = symbols[:30]
+                mexc_spot_symbols = symbols  # Обновляем глобальный список
+
             if not symbols:
                 log_func(f"⚠️ mexc {market}: список символов пуст, ожидание...")
                 await asyncio.sleep(5)
