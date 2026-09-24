@@ -1,10 +1,9 @@
 """
-MEXC Monitor ASYNC — асинхронная версия (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ)
-Ключевые исправления:
-  1. Добавлен суффикс ".pb" в канал подписки Spot (требование официальной документации MEXC).
-  2. Добавлена защита от бинарных данных (Protobuf) в process_queue, чтобы json.loads не падал.
-  3. Жесткое ограничение на 30 символов для Spot WebSocket.
-  4. Корректный PING (верхний регистр) для Spot и ping (нижний) для Futures.
+MEXC Monitor ASYNC — асинхронная версия (АБСОЛЮТНО ФИНАЛЬНАЯ)
+Критические исправления для MEXC Spot:
+  1. ИСПРАВЛЕНО имя канала подписки на официальное: spot@public.aggre.depth.v3.api.pb@100ms@SYMBOL
+  2. ИСПРАВЛЕН парсинг ответа: данные теперь берутся из ключа 'publicAggreDepths' (а не 'd' или 'data')
+  3. Сохранены все предыдущие исправления (лимит 30 символов, PING верхним регистром, защита от bytes).
 """
 import asyncio
 import json
@@ -37,7 +36,7 @@ mexc_spot_reconnect_event = asyncio.Event()
 
 # URLs
 MEXC_FUTURES_WS_URL = "wss://contract.mexc.com/edge"
-MEXC_SPOT_WS_URL = "wss://wbs-api.mexc.com/ws"  # Правильный URL с "-api"
+MEXC_SPOT_WS_URL = "wss://wbs-api.mexc.com/ws"
 MEXC_FUTURES_REST_URL = "https://contract.mexc.com/api/v1/contract/depth/{}_USDT?limit=100"
 MEXC_SPOT_REST_URL = "https://api.mexc.com/api/v3/depth?symbol={}USDT&limit=100"
 
@@ -234,7 +233,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         if not bids and not asks:
             log_func(f"⚠️ mexc {market} {symbol}: REST вернул пустой стакан")
-            return True, 0  # Успешно, но пусто (все равно подписываемся на WS)
+            return True, 0
 
         if market == 'futures':
             async with mexc_futures_lock:
@@ -327,7 +326,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 # HEARTBEAT
 # ==========================================
 async def ws_heartbeat(ws, market='futures', log_func=print):
-    """MEXC: Spot требует "PING" (верхний регистр), Futures требует "ping" (нижний)"""
     try:
         while True:
             await asyncio.sleep(15)
@@ -354,11 +352,10 @@ async def ws_listener(market='futures', log_func=print):
         try:
             symbols = mexc_futures_symbols if market == 'futures' else mexc_spot_symbols
 
-            # ЖЕСТКОЕ ОГРАНИЧЕНИЕ для MEXC Spot (максимум 30 подписок на соединение)
             if market == 'spot' and len(symbols) > 30:
                 log_func(f"⚠️ mexc spot: обрезка списка с {len(symbols)} до 30 символов (лимит MEXC)")
                 symbols = symbols[:30]
-                mexc_spot_symbols = symbols  # Обновляем глобальный список
+                mexc_spot_symbols = symbols
 
             if not symbols:
                 log_func(f"⚠️ mexc {market}: список символов пуст, ожидание...")
@@ -379,11 +376,11 @@ async def ws_listener(market='futures', log_func=print):
                             }
                             await ws.send(json.dumps(msg))
                     else:
-                        # ИСПРАВЛЕНИЕ: Добавлен суффикс ".pb" согласно официальной документации MEXC
-                        params = [f"spot@public.depth.v3.api.pb@{s.upper()}USDT" for s in symbols]
+                        # ИСПРАВЛЕНИЕ: Официальный формат канала MEXC Spot v3 с 100ms обновлением
+                        params = [f"spot@public.aggre.depth.v3.api.pb@100ms@{s.upper()}USDT" for s in symbols]
                         msg = {"method": "SUBSCRIPTION", "params": params}
                         await ws.send(json.dumps(msg))
-                        log_func(f"📤 mexc spot отправлена подписка (.pb): {params[:3]}...")
+                        log_func(f"📤 mexc spot отправлена подписка: {params[:2]}...")
 
                     log_func(f"✅ mexc {market} WS подписан на {len(symbols)} символов")
 
@@ -423,7 +420,6 @@ async def ws_listener(market='futures', log_func=print):
 # ВСПОМОГАТЕЛЬНЫЙ ПАРСЕР
 # ==========================================
 def parse_depth_levels(levels):
-    """Универсальный парсер для bids/asks (поддерживает и dict, и list/tuple)"""
     result = {}
     for row in levels:
         try:
@@ -447,18 +443,15 @@ def parse_depth_levels(levels):
 # ОБРАБОТКА ОЧЕРЕДИ
 # ==========================================
 async def process_queue(market='futures', log_func=print):
-    """Обработка очереди. И Futures, и Spot используют дельта-обновления."""
     queue = mexc_futures_message_queue if market == 'futures' else mexc_spot_message_queue
 
     while True:
         try:
             message = await queue.get()
 
-            # ИСПРАВЛЕНИЕ: Игнорируем бинарные данные (Protobuf), чтобы json.loads не упал
             if isinstance(message, bytes):
                 continue
 
-            # ИСПРАВЛЕНИЕ: Безопасный парсинг JSON
             try:
                 data = json.loads(message)
             except json.JSONDecodeError:
@@ -482,18 +475,16 @@ async def process_queue(market='futures', log_func=print):
                 await handle_update_async(symbol, raw_bids, raw_asks, market, log_func)
 
             else:
-                # Spot: обрабатываем сообщения о глубине рынка
-                channel = data.get('c', '')
-                if 'depth' not in channel.lower():
+                # Spot: ИСПРАВЛЕНИЕ парсинга ответа MEXC Protobuf
+                channel = data.get('c') or data.get('channel', '')
+                if 'depth' not in channel.lower() or '.pb' not in channel.lower():
                     continue
 
-                sym = data.get('s', '').upper()
-                if sym.endswith('USDT'):
-                    symbol = sym[:-4]
-                else:
-                    symbol = sym
+                sym = (data.get('s') or data.get('symbol', '')).upper()
+                symbol = sym[:-4] if sym.endswith('USDT') else sym
 
-                inner = data.get('d') or data.get('data') or {}
+                # ИСПРАВЛЕНИЕ: данные в MEXC Spot v3 лежат в publicAggreDepths или publicLimitDepths
+                inner = data.get('publicAggreDepths') or data.get('publicLimitDepths') or data.get('d') or data.get('data') or {}
                 raw_bids = inner.get('bids') or []
                 raw_asks = inner.get('asks') or []
 
@@ -507,8 +498,6 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
-    """Обработка дельты — обновление стакана (работает и для Futures, и для Spot)"""
-
     new_bids = parse_depth_levels(bids_delta)
     new_asks = parse_depth_levels(asks_delta)
 
@@ -584,7 +573,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             if changed:
                 mexc_spot_density_timestamps[symbol] = ts
 
-    # Rate limit: 3 сек
     key = f"mexc:{market}:{symbol}"
     now = time.time()
     if key not in last_sync_time or (now - last_sync_time[key]) >= SYNC_INTERVAL:
