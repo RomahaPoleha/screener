@@ -5,7 +5,25 @@ from django.views.decorators.http import require_http_methods
 from django.shortcuts import render
 from django.core.cache import cache
 from . import coin_selection
+import ccxt
 
+# ==========================================
+# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (Ленивая инициализация)
+# ==========================================
+_binance_exchange_future = None
+_volume_poller_started = False
+
+
+def get_binance_exchange():
+    """Ленивая инициализация exchange (экономит 50-100мс на каждый запрос)"""
+    global _binance_exchange_future
+    if _binance_exchange_future is None:
+        _binance_exchange_future = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'},
+            'timeout': 10000
+        })
+    return _binance_exchange_future
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,30 +38,28 @@ MAX_CACHE_AGE = {
 }
 
 
-def get_symbols_from_tickers_fallback():
-    """
-    ⚠️ ТОЛЬКО ДЛЯ АВАРИЙНЫХ СЛУЧАЕВ.
-    В идеале эти данные должны приходить из фонового поллера, а не вычисляться во вьюхе.
-    """
+def get_symbols_from_tickers():
+    """Получает список монет с Binance Futures + RVOL и цена для алертов"""
     try:
-        import ccxt
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': 'future'}
-        })
+        exchange = get_binance_exchange()  # ← Используем глобальный экземпляр
         tickers = exchange.fetch_tickers()
-        symbols_with_volume = []
 
+        symbols_with_volume = []
         for symbol, data in tickers.items():
             if ':USDT' not in symbol:
                 continue
+
             volume = data.get('quoteVolume') or 0
             if volume < MIN_VOLUME:
                 continue
 
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-            if '-' in clean_symbol or not (1 <= len(clean_symbol) <= 15) or not clean_symbol.replace('_', '').isalnum():
+
+            if '-' in clean_symbol:
+                continue
+            if len(clean_symbol) < 1 or len(clean_symbol) > 15:
+                continue
+            if not clean_symbol.replace('_', '').isalnum():
                 continue
 
             try:
@@ -61,22 +77,32 @@ def get_symbols_from_tickers_fallback():
 
         symbols_with_volume.sort(key=lambda x: x['volume'], reverse=True)
         return symbols_with_volume
+
     except Exception as e:
-        print(f"❌ Ошибка get_symbols_from_tickers_fallback: {e}")
+        print(f"❌ Ошибка get_symbols_from_tickers: {e}")
         return []
 
 
 @require_http_methods(["GET"])
 def api_data(request):
-    """API: список монет. Строго читает из кэша, не блокирует воркер."""
+    """API: список монет + ленивый старт RVOL поллера"""
+    global _volume_poller_started
+
+    if not _volume_poller_started:
+        _volume_poller_started = True
+
+        def fetch_fn():
+            exchange = get_binance_exchange()
+            return exchange.fetch_tickers()
+
+        coin_selection.start_volume_poller('binance_future', fetch_fn, coin_selection.clean_swap)
+
     cache_key = "coins_future"
     cached = cache.get(cache_key)
-
     if cached:
         return JsonResponse(cached, safe=False)
 
-    # 🔧 Если кэша нет, делаем аварийный запрос (но лучше, чтобы его заполнял поллер из apps.py)
-    coins = get_symbols_from_tickers_fallback()
+    coins = get_symbols_from_tickers()
     if coins:
         cache.set(cache_key, coins, 60)
 
@@ -85,6 +111,7 @@ def api_data(request):
 
 @require_http_methods(["GET"])
 def api_candles(request, symbol):
+    """API: история свечей с умным кэшированием"""
     tf = request.GET.get('tf', '1m')
     cache_key = f"candles_{symbol}_{tf}_future"
     cached = cache.get(cache_key)
@@ -95,28 +122,35 @@ def api_candles(request, symbol):
             last_candle_ts = cached[-1]['time']
             age = now_ts - last_candle_ts
             max_age = MAX_CACHE_AGE.get(tf, 120)
+
             if age < max_age:
                 return JsonResponse(cached, safe=False)
         except (KeyError, IndexError, TypeError):
             pass
 
-    # Синхронный запрос (как было изначально)
     try:
-        import ccxt
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'options': {'defaultType': 'future'},
-            'timeout': 10000
-        })
+        exchange = get_binance_exchange()  # ← Используем глобальный экземпляр
         pair = f"{symbol}/USDT:USDT"
         ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
+
         candles = [
-            {'time': int(ts / 1000), 'open': float(o), 'high': float(h),
-             'low': float(l), 'close': float(c), 'volume': float(v)}
+            {
+                'time': int(ts / 1000),
+                'open': float(o),
+                'high': float(h),
+                'low': float(l),
+                'close': float(c),
+                'volume': float(v)
+            }
             for ts, o, h, l, c, v in ohlcv
         ]
+
         cache.set(cache_key, candles, 300)
         return JsonResponse(candles, safe=False)
+
+    except ccxt.BadSymbol as e:
+        print(f"⚠️ {symbol} не найден: {e}")
+        return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
     except Exception as e:
         print(f"❌ Ошибка api_candles {symbol}: {e}")
         if cached:
@@ -126,25 +160,24 @@ def api_candles(request, symbol):
 
 @require_http_methods(["GET"])
 def api_natr(request):
-    """API: NATR данные. 🔧 ОПТИМИЗИРОВАНО через get_many"""
+    """API: NATR данные. 🔧 ОПТИМИЗИРОВАНО: 1 запрос вместо N"""
     cache_key = "coins_future"
     coins = cache.get(cache_key)
     if not coins:
-        coins = get_symbols_from_tickers_fallback()
+        coins = get_symbols_from_tickers()
         if coins:
             cache.set(cache_key, coins, 60)
 
     if not coins:
         return JsonResponse({'natr': {}, 'last_update_times': {}})
 
-    # 🔧 Собираем все ключи и делаем ОДИН запрос к Redis вместо цикла
+    # 🔧 Batch-чтение из Redis
     natr_keys = [f"natr_{coin['symbol']}_future" for coin in coins]
     natr_results = cache.get_many(natr_keys)
 
     natr_data = {}
     for key, data in natr_results.items():
         if data:
-            # key выглядит как "natr_BTC_future", извлекаем символ
             symbol = key.replace('natr_', '').replace('_future', '')
             natr_data[symbol] = data
 
@@ -158,7 +191,7 @@ def api_natr(request):
 
 @require_http_methods(["GET"])
 def api_scalp(request, symbol):
-    """API: плотности из Redis. 🔧 ОПТИМИЗИРОВАНО через get_many"""
+    """API: плотности из Redis. 🔧 ОПТИМИЗИРОВАНО: 1 запрос вместо N"""
     try:
         min_volume = int(request.GET.get('min_volume', 10000))
     except ValueError:
@@ -176,7 +209,7 @@ def api_scalp(request, symbol):
     symbol_upper = symbol.upper()
     exchanges = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget']
 
-    # 🔧 Формируем список всех ключей и делаем ОДИН запрос к Redis
+    # 🔧 Batch-чтение из Redis
     keys_to_fetch = [f"scalp:{market}:{ex}:{symbol_upper}" for ex in exchanges]
     cached_data = cache.get_many(keys_to_fetch)
 
@@ -210,7 +243,6 @@ def api_scalp(request, symbol):
         exchange_densities.sort(key=lambda x: x['volume'], reverse=True)
         result_by_exchange[ex] = exchange_densities[:limit_per_exchange]
 
-    # Собираем общий список
     densities = []
     for ex in exchanges:
         densities.extend(result_by_exchange[ex])
@@ -229,19 +261,19 @@ def api_scalp(request, symbol):
 
 @require_http_methods(["GET"])
 def api_scalp_active(request):
-    """Возвращает монеты, у которых сейчас есть плотности"""
-    # Вместо импорта мониторов, читаем список активных монет из кэша
+    """Возвращает монеты, у которых сейчас есть плотности. 🔧 БЕЗ импортов мониторов"""
+    # Пытаемся получить заранее подготовленный список активных монет из кэша
     active_coins = cache.get('active_scalp_coins', [])
 
     if not active_coins:
-        # Фоллбэк: берём топ-монеты из coins_future
+        # Фоллбэк: берем топ-50 монет из общего списка
         coins = cache.get('coins_future', [])
         active_coins = [c['symbol'] for c in coins[:50]] if coins else []
 
     if not active_coins:
         return JsonResponse({'active': {}})
 
-    # Формируем ключи и делаем один запрос
+    # 🔧 Batch-чтение из Redis (вместо сотен отдельных запросов)
     keys_to_check = []
     for sym in active_coins:
         for market in ['futures', 'spot']:
@@ -301,7 +333,8 @@ def api_mexc_depth(request):
            if market == 'futures' else f"https://api.mexc.com/api/v3/depth?symbol={symbol}USDT&limit=100")
 
     try:
-        res = req.get(url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+        # 🔧 Таймаут 3 сек: лучше быстро вернуть пустоту, чем морозить интерфейс на 8 сек
+        res = req.get(url, timeout=3, headers={'User-Agent': 'Mozilla/5.0'})
         if not res.ok:
             return JsonResponse({'bids': [], 'asks': []})
         data = res.json()
@@ -347,7 +380,8 @@ def api_gate_depth(request):
            if market == 'futures' else f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}_USDT&limit=100")
 
     try:
-        res = req.get(url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+        # 🔧 Таймаут 3 сек для быстрого fail-fast
+        res = req.get(url, timeout=3, headers={'User-Agent': 'Mozilla/5.0'})
         if not res.ok:
             return JsonResponse({'bids': [], 'asks': []})
         data = res.json()
