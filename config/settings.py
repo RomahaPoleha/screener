@@ -20,19 +20,12 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # ✅ ИСПРАВЛЕНО: убраны ненужные apps (admin, auth, sessions, messages, contenttypes)
-# Если нужен admin — раскомментируйте
 INSTALLED_APPS = [
-    # 'django.contrib.admin',
-    # 'django.contrib.auth',
-    # 'django.contrib.contenttypes',
-    # 'django.contrib.sessions',
-    # 'django.contrib.messages',
     'django.contrib.staticfiles',
     'screener.apps.ScreenerConfig',
 ]
 
 # ✅ ИСПРАВЛЕНО: убраны Session, CSRF, Auth, Messages middleware
-# Они не нужны для API-сервиса и экономят ~1-2мс на каждый запрос
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -56,7 +49,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# ✅ УБРАНО: SQLite не используется (все данные в Redis)
 DATABASES = {}
 
 LANGUAGE_CODE = 'en-us'
@@ -67,45 +59,29 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 # ==========================================
-# КЭШ (Redis / LocMem fallback)
+# КЭШ (Redis)
 # ==========================================
-# ✅ ИСПРАВЛЕНО: убрано дублирование REDIS_URL
 REDIS_URL = os.getenv('REDIS_URL')
 
-if REDIS_URL:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django_redis.cache.RedisCache',
-            'LOCATION': REDIS_URL,
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-                # ✅ Оптимизация: пул соединений
-                'CONNECTION_POOL_KWARGS': {
-                    'max_connections': 50,
-                    'retry_on_timeout': True,
-                },
-            },
-            # ✅ Ограничение размера кэша
-            'TIMEOUT': 600,
-        }
-    }
-    print(f"✅ Redis настроен: {REDIS_URL}")
-else:
-    # ✅ ИСПРАВЛЕНО: LocMemCache вместо FileBasedCache
-    # LocMemCache в 100-1000 раз быстрее файлового кэша
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'screener-cache',
-            'OPTIONS': {
-                'MAX_ENTRIES': 10000,  # Ограничение памяти
-                'CULL_FREQUENCY': 3,   # Удалять 1/3 при переполнении
-            },
-        }
-    }
-    print("⚠️ Redis не найден, используем LocMemCache (данные теряются при перезапуске)")
+if not REDIS_URL:
+    raise RuntimeError("❌ REDIS_URL не задан! Укажите переменную окружения REDIS_URL")
 
-# Django Channels
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': REDIS_URL,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 50,
+                'retry_on_timeout': True,
+            },
+        },
+        'TIMEOUT': 600,
+    }
+}
+print(f"✅ Redis настроен: {REDIS_URL}")
+
 ASGI_APPLICATION = 'config.asgi.application'
 
 CHANNEL_LAYERS = {
@@ -114,7 +90,6 @@ CHANNEL_LAYERS = {
     },
 }
 
-# ✅ Безопасность
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
