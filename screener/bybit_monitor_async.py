@@ -44,8 +44,8 @@ BYBIT_SPOT_REST_URL = "https://api.bybit.com/v5/market/orderbook?category=spot&s
 last_sync_time = {}
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
-SYNC_INTERVAL = 10  # ✅ Увеличен с 3 до 10
-TARGET_SYMBOLS = 15  # ✅ Уменьшен с 30 до 15
+SYNC_INTERVAL = 10
+TARGET_SYMBOLS = 15
 STABLE_COINS_LIMIT = 10
 stable_futures_symbols = []
 stable_spot_symbols = []
@@ -171,7 +171,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         return 0
 
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
-    """✅ ИСПРАВЛЕНО: cache.set вынесен за пределы lock"""
     try:
         if market == 'futures':
             async with bybit_futures_lock:
@@ -229,13 +228,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'price': price, 'volume': volume, 'side': side_name,
                     'timestamp': ts[price], 'exchange': 'bybit'
                 })
-        # Lock отпущен — пишем в Redis
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
         except RuntimeError:
             pass
-        # Короткий lock для обновления
         if market == 'futures':
             async with bybit_futures_lock:
                 bybit_futures_density_timestamps[symbol] = ts
@@ -274,7 +271,7 @@ async def ws_listener(market='futures', log_func=print):
             async with websockets.connect(ws_url, ping_interval=None, ping_timeout=None) as ws:
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
                 try:
-                    topics = [f"orderbook.200.{s}USDT" for s in symbols]
+                    topics = [f"orderbook.50.{s}USDT" for s in symbols]
                     await ws.send(json.dumps({"op": "subscribe", "args": topics}))
                     log_func(f"✅ bybit {market} WS подписан на {len(symbols)} символов")
                     while True:

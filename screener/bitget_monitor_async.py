@@ -1,6 +1,6 @@
 """
 Bitget Monitor ASYNC — ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
-Изменения: SYNC_INTERVAL=10, TARGET=15, stability_ratio=0.5, cache.set вне lock.
+Изменения: SYNC_INTERVAL=10, TARGET=15, cache.set вне lock.
 """
 import asyncio
 import json
@@ -43,8 +43,8 @@ BITGET_SPOT_REST_URL = "https://api.bitget.com/api/v2/spot/market/merge-depth?sy
 last_sync_time = {}
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
-SYNC_INTERVAL = 10  # ✅ Увеличен с 3 до 10
-TARGET_SYMBOLS = 15  # ✅ Уменьшен с 30 до 15
+SYNC_INTERVAL = 10
+TARGET_SYMBOLS = 15
 STABLE_COINS_LIMIT = 10
 stable_futures_symbols = []
 stable_spot_symbols = []
@@ -155,7 +155,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         return 0
 
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
-    """✅ ИСПРАВЛЕНО: cache.set вынесен за пределы lock, stability_ratio=0.5"""
     try:
         if market == 'futures':
             async with bitget_futures_lock:
@@ -199,8 +198,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
-                        # ✅ ИСПРАВЛЕНО: 0.5 вместо 1.0 (единый стандарт с Binance/Bybit)
-                        if stability_ratio > 0.5:
+                        if stability_ratio > 1.0:
                             ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
@@ -214,13 +212,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'price': price, 'volume': volume, 'side': side_name,
                     'timestamp': ts[price], 'exchange': 'bitget'
                 })
-        # Lock отпущен — пишем в Redis
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
         except RuntimeError:
             pass
-        # Короткий lock для обновления
         if market == 'futures':
             async with bitget_futures_lock:
                 bitget_futures_density_timestamps[symbol] = ts

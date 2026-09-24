@@ -195,6 +195,12 @@ def api_natr(request):
     for cache_key_natr, data in natr_batch.items():
         symbol = symbol_keys_map.get(cache_key_natr)
         if symbol and data:
+            # ✅ ИСПРАВЛЕНО: поддержка обоих форматов (dict от cache.set и JSON строка от pipe.setex)
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except (json.JSONDecodeError, TypeError):
+                    continue
             natr_data[symbol] = data
 
     last_update_times = cache.get("natr_last_update_times_future", {})
