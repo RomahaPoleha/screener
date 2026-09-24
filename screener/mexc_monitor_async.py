@@ -38,7 +38,7 @@ mexc_spot_reconnect_event = asyncio.Event()
 
 # URLs
 MEXC_FUTURES_WS_URL = "wss://contract.mexc.com/edge"
-MEXC_SPOT_WS_URL = "wss://wbs.mexc.com/ws"
+MEXC_SPOT_WS_URL = "wss://wbs-api.mexc.com/ws"
 MEXC_FUTURES_REST_URL = "https://contract.mexc.com/api/v1/contract/depth/{}_USDT?limit=100"
 MEXC_SPOT_REST_URL = "https://api.mexc.com/api/v3/depth?symbol={}USDT&limit=100"
 
