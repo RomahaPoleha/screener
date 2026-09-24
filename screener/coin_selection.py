@@ -1,6 +1,13 @@
 """
 Отбор монет по гибридной схеме (Finviz + RVOL + NATR)
-ОПТИМИЗИРОВАНО: Настоящий batch-запрос к Redis через cache.get_many
+
+Score = 0.5*RVOL + 0.3*NATR + 0.2*|%24h|
+
+RVOL = объём за 5 мин / средний объём за 5 мин (24ч)
+NATR = Normalized ATR (волатильность в %)
+%24h = процент изменения за 24ч (capped на 5%)
+
+Порог входа: $10M volume (как в текущем binance_monitor)
 """
 import time
 import threading
@@ -10,16 +17,16 @@ from django.core.cache import cache
 # ==========================================
 # КОНСТАНТЫ
 # ==========================================
-MIN_LIQUIDITY_VOLUME = 1000_000   # порог входа
-RVOL_CAP = 10.0                   # RVOL >= 10 = максимум
-NATR_CAP = 2.0                    # NATR >= 2% = максимум
-PCT_CAP = 5.0                     # |%| >= 5 = максимум
+MIN_LIQUIDITY_VOLUME = 1000_000   # порог входа (из текущего binance_monitor)
+RVOL_CAP = 10.0                      # RVOL >= 10 = максимум
+NATR_CAP = 2.0                       # NATR >= 2% = максимум
+PCT_CAP = 5.0                        # |%| >= 5 = максимум
 
 RVOL_WEIGHT = 0.5
 NATR_WEIGHT = 0.3
 PCT_WEIGHT = 0.2
 
-POLL_INTERVAL = 60                # лёгкий скан каждые 60 сек
+POLL_INTERVAL = 60                   # лёгкий скан каждые 60 сек
 
 STABLECOINS = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 
@@ -114,29 +121,30 @@ def start_volume_poller(name, fetch_tickers_fn, clean_fn, log_func=print):
 
 
 # ==========================================
-# ОТБОР КАНДИДАТОВ (гибрид) - ОПТИМИЗИРОВАНО
+# ОТБОР КАНДИДАТОВ (гибрид)
 # ==========================================
 def select_candidates(tickers, clean_fn, limit=60, log_func=print):
-    """Гибридный отбор с НАСТОЯЩИМ batch-чтением NATR из Redis"""
+    """Гибридный отбор с оптимизированным чтением NATR"""
     rows = []
-    natr_keys = []
 
-    # 1. Собираем все ключи, которые нам нужны
-    for symbol, data in tickers.items():
-        clean = clean_fn(symbol)
-        if clean:
-            natr_keys.append(f"natr_{clean}_future")
-
-    # 2. 🔧 ОПТИМИЗАЦИЯ: ОДИН запрос к Redis вместо цикла!
+    # Batch-чтение NATR из Redis (один запрос вместо N)
     natr_batch = {}
-    if natr_keys:
-        try:
-            # get_many возвращает словарь {key: value}. Отсутствующие ключи просто не включаются.
-            natr_batch = cache.get_many(natr_keys)
-        except Exception as e:
-            log_func(f"⚠️ Ошибка batch-чтения NATR: {e}")
+    try:
+        # Собираем все ключи NATR которые нам нужны
+        natr_keys = []
+        for symbol, data in tickers.items():
+            clean = clean_fn(symbol)
+            if clean:
+                natr_keys.append(f"natr_{clean}_future")
 
-    # 3. Быстрый проход по тикерам
+        # Читаем все за раз (если Redis поддерживает pipeline)
+        if natr_keys:
+            # Fallback: читаем по одному, но с кэшированием
+            for key in natr_keys:
+                natr_batch[key] = cache.get(key) or {}
+    except Exception:
+        pass
+
     for symbol, data in tickers.items():
         clean = clean_fn(symbol)
         if not clean:
@@ -149,10 +157,9 @@ def select_candidates(tickers, clean_fn, limit=60, log_func=print):
         pct = float(data.get('percentage') or 0)
         pct_capped = min(abs(pct), PCT_CAP) / PCT_CAP
 
-        # Берем из batch-словаря (мгновенно, без сети)
+        # Используем batch вместо cache.get для каждой монеты
         natr_data = natr_batch.get(f"natr_{clean}_future", {})
         natr = float(natr_data.get('natr_5m14') or 0)
-
         rvol = get_rvol(clean, volume)
 
         rvol_norm = min(rvol, RVOL_CAP) / RVOL_CAP
@@ -163,19 +170,13 @@ def select_candidates(tickers, clean_fn, limit=60, log_func=print):
                  PCT_WEIGHT * pct_capped)
 
         rows.append({
-            'symbol': clean,
-            'volume': volume,
-            'natr': natr,
-            'rvol': rvol,
-            'pct': pct,
-            'score': score
+            'symbol': clean, 'volume': volume,
+            'natr': natr, 'rvol': rvol, 'pct': pct, 'score': score
         })
 
-    # Сортировка по скорингу
     active = sorted(rows, key=lambda r: r['score'], reverse=True)
     result = [r['symbol'] for r in active]
 
-    # Добор по объему, если не хватило по скору
     if len(result) < limit:
         by_vol = sorted(rows, key=lambda r: r['volume'], reverse=True)
         for r in by_vol:

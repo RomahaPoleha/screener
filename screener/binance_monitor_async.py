@@ -53,7 +53,7 @@ last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
-SYNC_INTERVAL = 5
+SYNC_INTERVAL = 3
 
 # Лёгкая статистика объёмов
 binance_futures_volume_stats = {}

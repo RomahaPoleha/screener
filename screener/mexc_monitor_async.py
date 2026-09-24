@@ -1,6 +1,9 @@
 """
 MEXC Monitor ASYNC — асинхронная версия
-
+MEXC специфика:
+  - Futures: push.depth (дельта), sub.depth, символы с _USDT
+  - Spot: spot@public.depth.v3.api (полная замена каждый раз), символы USDT
+  - Heartbeat JSON: {"method": "ping"} каждые 15 сек
 """
 import asyncio
 import json
@@ -42,7 +45,7 @@ last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
-SYNC_INTERVAL = 5
+SYNC_INTERVAL = 3
 
 _http_client = None
 
