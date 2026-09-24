@@ -46,12 +46,3 @@ class ScreenerConfig(AppConfig):
             except Exception as e:
                 print(f"⚠️ {name} monitor не запущен: {e}")
 
-        # 4. Запуск Candles Warmer (🔧 ИСПРАВЛЕНО: теперь тоже в отдельном потоке!)
-        try:
-            from .candles_warmer import start_candles_warmer
-            threading.Thread(target=start_candles_warmer, daemon=True, name='Candles-Warmer').start()
-            print("✅ Candles warmer запущен в фоне")
-        except Exception as e:
-            print(f"⚠️ Candles warmer не запущен: {e}")
-
-        print("🎉 Все фоновые задачи успешно инициализированы!")
