@@ -1,10 +1,11 @@
 """
-MEXC Monitor ASYNC — асинхронная версия (ИСПРАВЛЕННАЯ)
-Исправления:
-  - Spot WebSocket теперь корректно обрабатывает дельты (а не перезаписывает стакан).
-  - Добавлен универсальный парсер уровней стакана (поддерживает dict и list).
-  - Heartbeat разделен: Spot требует "PING", Futures требует "ping".
-  - Символы в подписке Spot принудительно приводятся к верхнему регистру.
+MEXC Monitor ASYNC — асинхронная версия (ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ)
+Ключевые исправления:
+  1. Устранена критическая ошибка: символы теперь добавляются в подписку даже если
+     начальных плотностей > 10000 USDT не найдено (они могут появиться позже).
+  2. Улучшен парсинг Spot WebSocket: поддержка ключей 'd' и 'data', а также форматов dict/list.
+  3. Добавлено детальное логирование для точной диагностики проблем.
+  4. Надежное извлечение базового символа из ответов WebSocket.
 """
 import asyncio
 import json
@@ -180,6 +181,7 @@ async def get_stable_coins_async(market='swap', limit=10):
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
+# Возвращает кортеж: (success: bool, saved_count: int)
 # ==========================================
 async def init_order_book_async(symbol, market='futures', log_func=print):
     try:
@@ -188,23 +190,24 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         client = await get_http_client()
         async with client.get(url) as resp:
             if resp.status != 200:
-                log_func(f"⚠️ mexc {market} {symbol}: HTTP {resp.status}")
-                return 0
+                log_func(f"⚠️ mexc {market} {symbol}: HTTP ошибка {resp.status}")
+                return False, 0
             data = await resp.json()
 
         if market == 'futures':
             if not isinstance(data, dict) or data.get('success') is False:
                 log_func(f"⚠️ mexc futures {symbol}: API ошибка: {str(data)[:200]}")
-                return 0
+                return False, 0
             inner = data.get('data') or {}
             raw_bids = inner.get('bids') or []
             raw_asks = inner.get('asks') or []
         else:
             if isinstance(data, list) or not isinstance(data, dict):
-                return 0
+                log_func(f"⚠️ mexc spot {symbol}: Неожиданный формат ответа REST")
+                return False, 0
             if 'code' in data and data.get('code') != 0:
                 log_func(f"⚠️ mexc spot {symbol}: code={data.get('code')}")
-                return 0
+                return False, 0
             raw_bids = data.get('bids') or []
             raw_asks = data.get('asks') or []
 
@@ -232,8 +235,8 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 continue
 
         if not bids and not asks:
-            log_func(f"⚠️ mexc {market} {symbol}: пустой стакан")
-            return 0
+            log_func(f"⚠️ mexc {market} {symbol}: REST вернул пустой стакан")
+            return True, 0  # Успешно, но пусто (все равно подписываемся на WS)
 
         if market == 'futures':
             async with mexc_futures_lock:
@@ -246,11 +249,11 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         saved_count = await sync_to_cache_async(symbol, market, log_func)
         log_func(f"✅ mexc {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
-        return saved_count
+        return True, saved_count
 
     except Exception as e:
         log_func(f"❌ init_order_book_async(mexc {market} {symbol}): {e}")
-        return 0
+        return False, 0
 
 
 # ==========================================
@@ -354,6 +357,7 @@ async def ws_listener(market='futures', log_func=print):
             symbols = mexc_futures_symbols if market == 'futures' else mexc_spot_symbols
 
             if not symbols:
+                log_func(f"⚠️ mexc {market}: список символов пуст, ожидание...")
                 await asyncio.sleep(5)
                 continue
 
@@ -375,6 +379,7 @@ async def ws_listener(market='futures', log_func=print):
                         params = [f"spot@public.depth.v3.api@{s.upper()}USDT" for s in symbols]
                         msg = {"method": "SUBSCRIPTION", "params": params}
                         await ws.send(json.dumps(msg))
+                        log_func(f"📤 mexc spot отправлена подписка: {params[:3]}...") # Лог первых 3 для проверки
 
                     log_func(f"✅ mexc {market} WS подписан на {len(symbols)} символов")
 
@@ -440,7 +445,7 @@ def parse_depth_levels(levels):
 # ОБРАБОТКА ОЧЕРЕДИ
 # ==========================================
 async def process_queue(market='futures', log_func=print):
-    """Обработка очереди. И Futures, и Spot теперь используют дельта-обновления."""
+    """Обработка очереди. И Futures, и Spot используют дельта-обновления."""
     queue = mexc_futures_message_queue if market == 'futures' else mexc_spot_message_queue
 
     while True:
@@ -466,22 +471,26 @@ async def process_queue(market='futures', log_func=print):
                 await handle_update_async(symbol, raw_bids, raw_asks, market, log_func)
 
             else:
-                # Spot: spot@public.depth.v3.api — это ИНКРЕМЕНТАЛЬНЫЕ обновления (дельта)!
+                # Spot: обрабатываем сообщения о глубине рынка
                 channel = data.get('c', '')
-                if not channel.startswith('spot@public.depth'):
+                if 'depth' not in channel.lower():
                     continue
 
-                sym = data.get('s', '')
-                symbol = sym[:-4] if sym.upper().endswith('USDT') else sym
+                sym = data.get('s', '').upper()
+                # Надежное извлечение базового символа (например, "BTC" из "BTCUSDT")
+                if sym.endswith('USDT'):
+                    symbol = sym[:-4]
+                else:
+                    symbol = sym
 
-                inner = data.get('d') or {}
+                # MEXC иногда использует 'd', иногда 'data'
+                inner = data.get('d') or data.get('data') or {}
                 raw_bids = inner.get('bids') or []
                 raw_asks = inner.get('asks') or []
 
                 if not (raw_bids or raw_asks):
                     continue
 
-                # ИСПРАВЛЕНО: используем handle_update_async вместо handle_snapshot_async
                 await handle_update_async(symbol, raw_bids, raw_asks, market, log_func)
 
         except Exception as e:
@@ -491,7 +500,6 @@ async def process_queue(market='futures', log_func=print):
 async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
     """Обработка дельты — обновление стакана (работает и для Futures, и для Spot)"""
 
-    # Универсальный парсинг дельты
     new_bids = parse_depth_levels(bids_delta)
     new_asks = parse_depth_levels(asks_delta)
 
@@ -535,7 +543,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
     else:
         async with mexc_spot_lock:
             if symbol not in mexc_spot_order_books:
-                return  # Игнорируем дельту, если REST-снапшот еще не загружен
+                # Если снапшот еще не загружен, игнорируем дельту (это нормально при старте)
+                return
             book = mexc_spot_order_books[symbol]
             ts = mexc_spot_density_timestamps.get(symbol, {})
             changed = False
@@ -600,22 +609,26 @@ async def periodic_refresh(market='futures', log_func=print):
                 if symbol in old_symbols:
                     new_active.append(symbol)
                 else:
-                    saved_count = await init_order_book_async(symbol, market, log_func)
-                    if saved_count > 0:
-                        new_active.append(symbol)
-                        log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+                    success, saved_count = await init_order_book_async(symbol, market, log_func)
+                    if success:
+                        new_active.append(symbol) # ДОБАВЛЯЕМ ВСЕГДА, если REST успешен
+                        if saved_count > 0:
+                            log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+                        else:
+                            log_func(f"⚠️ mexc {market} {symbol}: добавлен, но начальных плотностей не найдено")
 
             for symbol in candidates:
                 if len(new_active) >= TARGET:
                     break
                 if symbol in new_active:
                     continue
-                saved_count = await init_order_book_async(symbol, market, log_func)
-                if saved_count > 0:
-                    new_active.append(symbol)
-                    log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count})")
-                else:
-                    log_func(f"⚠️ mexc {market} {symbol}: пропущен")
+                success, saved_count = await init_order_book_async(symbol, market, log_func)
+                if success:
+                    new_active.append(symbol) # ДОБАВЛЯЕМ ВСЕГДА, если REST успешен
+                    if saved_count > 0:
+                        log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count})")
+                    else:
+                        log_func(f"⚠️ mexc {market} {symbol}: добавлен, но начальных плотностей не найдено")
 
             if market == 'futures':
                 removed = old_symbols - set(new_active)
@@ -674,33 +687,37 @@ async def main_async(log_func=print):
 
     active_futures = []
     for symbol in stable_f:
-        saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
+        success, saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        if success:
             active_futures.append(symbol)
-            log_func(f"✅ mexc futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+            log_func(f"✅ mexc futures {symbol}: инициализирован (плотностей: {saved_count}) [стабильная]")
 
     active_spot = []
     for symbol in stable_s:
-        saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if saved_count > 0:
-            active_spot.append(symbol)
-            log_func(f"✅ mexc spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+        success, saved_count = await init_order_book_async(symbol, 'spot', log_func)
+        if success:
+            active_spot.append(symbol) # ИСПРАВЛЕНО: добавляем всегда при успехе
+            log_func(f"✅ mexc spot {symbol}: инициализирован (плотностей: {saved_count}) [стабильная]")
+        else:
+            log_func(f"❌ mexc spot {symbol}: не удалось инициализировать через REST")
 
     for symbol in futures_candidates[:30]:
         if symbol in active_futures:
             continue
-        saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
+        success, saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        if success:
             active_futures.append(symbol)
-            log_func(f"✅ mexc futures {symbol}: принят (плотностей: {saved_count})")
+            log_func(f"✅ mexc futures {symbol}: инициализирован (плотностей: {saved_count})")
 
     for symbol in spot_candidates[:30]:
         if symbol in active_spot:
             continue
-        saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if saved_count > 0:
-            active_spot.append(symbol)
-            log_func(f"✅ mexc spot {symbol}: принят (плотностей: {saved_count})")
+        success, saved_count = await init_order_book_async(symbol, 'spot', log_func)
+        if success:
+            active_spot.append(symbol) # ИСПРАВЛЕНО: добавляем всегда при успехе
+            log_func(f"✅ mexc spot {symbol}: инициализирован (плотностей: {saved_count})")
+        else:
+            log_func(f"❌ mexc spot {symbol}: не удалось инициализировать через REST")
 
     mexc_futures_symbols = active_futures
     mexc_spot_symbols = active_spot
