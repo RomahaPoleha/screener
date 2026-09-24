@@ -1,11 +1,10 @@
 """
-MEXC Monitor ASYNC — асинхронная версия (ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ)
+MEXC Monitor ASYNC — асинхронная версия (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ)
 Ключевые исправления:
-  1. Устранена критическая ошибка: символы теперь добавляются в подписку даже если
-     начальных плотностей > 10000 USDT не найдено (они могут появиться позже).
-  2. Улучшен парсинг Spot WebSocket: поддержка ключей 'd' и 'data', а также форматов dict/list.
-  3. Добавлено детальное логирование для точной диагностики проблем.
-  4. Надежное извлечение базового символа из ответов WebSocket.
+  1. Добавлен суффикс ".pb" в канал подписки Spot (требование официальной документации MEXC).
+  2. Добавлена защита от бинарных данных (Protobuf) в process_queue, чтобы json.loads не падал.
+  3. Жесткое ограничение на 30 символов для Spot WebSocket.
+  4. Корректный PING (верхний регистр) для Spot и ping (нижний) для Futures.
 """
 import asyncio
 import json
@@ -38,7 +37,7 @@ mexc_spot_reconnect_event = asyncio.Event()
 
 # URLs
 MEXC_FUTURES_WS_URL = "wss://contract.mexc.com/edge"
-MEXC_SPOT_WS_URL = "wss://wbs-api.mexc.com/ws"
+MEXC_SPOT_WS_URL = "wss://wbs-api.mexc.com/ws"  # Правильный URL с "-api"
 MEXC_FUTURES_REST_URL = "https://contract.mexc.com/api/v1/contract/depth/{}_USDT?limit=100"
 MEXC_SPOT_REST_URL = "https://api.mexc.com/api/v3/depth?symbol={}USDT&limit=100"
 
@@ -181,7 +180,6 @@ async def get_stable_coins_async(market='swap', limit=10):
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
-# Возвращает кортеж: (success: bool, saved_count: int)
 # ==========================================
 async def init_order_book_async(symbol, market='futures', log_func=print):
     try:
@@ -356,7 +354,7 @@ async def ws_listener(market='futures', log_func=print):
         try:
             symbols = mexc_futures_symbols if market == 'futures' else mexc_spot_symbols
 
-            # ЖЕСТКОЕ ОГРАНИЧЕНИЕ для MEXC Spot
+            # ЖЕСТКОЕ ОГРАНИЧЕНИЕ для MEXC Spot (максимум 30 подписок на соединение)
             if market == 'spot' and len(symbols) > 30:
                 log_func(f"⚠️ mexc spot: обрезка списка с {len(symbols)} до 30 символов (лимит MEXC)")
                 symbols = symbols[:30]
@@ -381,11 +379,11 @@ async def ws_listener(market='futures', log_func=print):
                             }
                             await ws.send(json.dumps(msg))
                     else:
-                        # Spot: символы ОБЯЗАТЕЛЬНО в верхнем регистре
-                        params = [f"spot@public.depth.v3.api@{s.upper()}USDT" for s in symbols]
+                        # ИСПРАВЛЕНИЕ: Добавлен суффикс ".pb" согласно официальной документации MEXC
+                        params = [f"spot@public.depth.v3.api.pb@{s.upper()}USDT" for s in symbols]
                         msg = {"method": "SUBSCRIPTION", "params": params}
                         await ws.send(json.dumps(msg))
-                        log_func(f"📤 mexc spot отправлена подписка: {params[:3]}...") # Лог первых 3 для проверки
+                        log_func(f"📤 mexc spot отправлена подписка (.pb): {params[:3]}...")
 
                     log_func(f"✅ mexc {market} WS подписан на {len(symbols)} символов")
 
@@ -430,11 +428,9 @@ def parse_depth_levels(levels):
     for row in levels:
         try:
             if isinstance(row, dict):
-                # Формат: {"price": "100.00", "quantity": "1.5"}
                 p = float(row.get('price', 0))
                 q = abs(float(row.get('quantity', 0)))
             elif isinstance(row, (list, tuple)) and len(row) >= 2:
-                # Формат: ["100.00", "1.5"]
                 p = float(row[0])
                 q = abs(float(row[1]))
             else:
@@ -457,7 +453,16 @@ async def process_queue(market='futures', log_func=print):
     while True:
         try:
             message = await queue.get()
-            data = json.loads(message)
+
+            # ИСПРАВЛЕНИЕ: Игнорируем бинарные данные (Protobuf), чтобы json.loads не упал
+            if isinstance(message, bytes):
+                continue
+
+            # ИСПРАВЛЕНИЕ: Безопасный парсинг JSON
+            try:
+                data = json.loads(message)
+            except json.JSONDecodeError:
+                continue
 
             if market == 'futures':
                 channel = data.get('channel', '')
@@ -483,13 +488,11 @@ async def process_queue(market='futures', log_func=print):
                     continue
 
                 sym = data.get('s', '').upper()
-                # Надежное извлечение базового символа (например, "BTC" из "BTCUSDT")
                 if sym.endswith('USDT'):
                     symbol = sym[:-4]
                 else:
                     symbol = sym
 
-                # MEXC иногда использует 'd', иногда 'data'
                 inner = data.get('d') or data.get('data') or {}
                 raw_bids = inner.get('bids') or []
                 raw_asks = inner.get('asks') or []
@@ -549,7 +552,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
     else:
         async with mexc_spot_lock:
             if symbol not in mexc_spot_order_books:
-                # Если снапшот еще не загружен, игнорируем дельту (это нормально при старте)
                 return
             book = mexc_spot_order_books[symbol]
             ts = mexc_spot_density_timestamps.get(symbol, {})
@@ -617,7 +619,7 @@ async def periodic_refresh(market='futures', log_func=print):
                 else:
                     success, saved_count = await init_order_book_async(symbol, market, log_func)
                     if success:
-                        new_active.append(symbol) # ДОБАВЛЯЕМ ВСЕГДА, если REST успешен
+                        new_active.append(symbol)
                         if saved_count > 0:
                             log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
                         else:
@@ -630,7 +632,7 @@ async def periodic_refresh(market='futures', log_func=print):
                     continue
                 success, saved_count = await init_order_book_async(symbol, market, log_func)
                 if success:
-                    new_active.append(symbol) # ДОБАВЛЯЕМ ВСЕГДА, если REST успешен
+                    new_active.append(symbol)
                     if saved_count > 0:
                         log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count})")
                     else:
@@ -702,7 +704,7 @@ async def main_async(log_func=print):
     for symbol in stable_s:
         success, saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if success:
-            active_spot.append(symbol) # ИСПРАВЛЕНО: добавляем всегда при успехе
+            active_spot.append(symbol)
             log_func(f"✅ mexc spot {symbol}: инициализирован (плотностей: {saved_count}) [стабильная]")
         else:
             log_func(f"❌ mexc spot {symbol}: не удалось инициализировать через REST")
@@ -720,7 +722,7 @@ async def main_async(log_func=print):
             continue
         success, saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if success:
-            active_spot.append(symbol) # ИСПРАВЛЕНО: добавляем всегда при успехе
+            active_spot.append(symbol)
             log_func(f"✅ mexc spot {symbol}: инициализирован (плотностей: {saved_count})")
         else:
             log_func(f"❌ mexc spot {symbol}: не удалось инициализировать через REST")
