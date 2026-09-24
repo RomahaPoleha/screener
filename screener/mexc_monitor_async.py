@@ -1,9 +1,10 @@
 """
-MEXC Monitor ASYNC — асинхронная версия
-MEXC специфика:
-  - Futures: push.depth (дельта), sub.depth, символы с _USDT
-  - Spot: spot@public.depth.v3.api (полная замена каждый раз), символы USDT
-  - Heartbeat JSON: {"method": "ping"} каждые 15 сек
+MEXC Monitor ASYNC — асинхронная версия (ИСПРАВЛЕННАЯ)
+Исправления:
+  - Spot WebSocket теперь корректно обрабатывает дельты (а не перезаписывает стакан).
+  - Добавлен универсальный парсер уровней стакана (поддерживает dict и list).
+  - Heartbeat разделен: Spot требует "PING", Futures требует "ping".
+  - Символы в подписке Spot принудительно приводятся к верхнему регистру.
 """
 import asyncio
 import json
@@ -34,7 +35,7 @@ mexc_spot_message_queue = asyncio.Queue(maxsize=10000)
 mexc_spot_lock = asyncio.Lock()
 mexc_spot_reconnect_event = asyncio.Event()
 
-# URLs — У MEXC РАЗНЫЕ WS/REST для futures и spot
+# URLs
 MEXC_FUTURES_WS_URL = "wss://contract.mexc.com/edge"
 MEXC_SPOT_WS_URL = "wss://wbs.mexc.com/ws"
 MEXC_FUTURES_REST_URL = "https://contract.mexc.com/api/v1/contract/depth/{}_USDT?limit=100"
@@ -72,7 +73,6 @@ def _fetch_top_symbols_sync(market='swap', log_func=print):
         })
         tickers = exchange.fetch_tickers()
 
-        # MEXC futures специфика: пересчёт volume → quoteVolume
         if market == 'swap':
             for symbol, data in tickers.items():
                 if not (data.get('quoteVolume') or 0):
@@ -105,18 +105,16 @@ async def get_top_symbols_async(market='swap', log_func=print):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_top_symbols_sync, market, log_func)
 
-# ==========================================
-# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
-# ==========================================
-STABLE_COINS_LIMIT = 10  # Размер белого списка
 
-# Глобальные переменные для хранения белого списка
+# ==========================================
+# БЕЛЫЙ СПИСОК
+# ==========================================
+STABLE_COINS_LIMIT = 10
 stable_futures_symbols = []
 stable_spot_symbols = []
 
 
 def _fetch_stable_coins_sync(market='swap', limit=10):
-    """Синхронная функция — топ монет по абсолютному объёму"""
     try:
         exchange = ccxt.mexc({
             'enableRateLimit': True,
@@ -125,7 +123,6 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
         })
         tickers = exchange.fetch_tickers()
 
-        # MEXC futures специфика: пересчёт volume → quoteVolume
         if market == 'swap':
             for symbol, data in tickers.items():
                 if not (data.get('quoteVolume') or 0):
@@ -141,21 +138,14 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
                     except Exception:
                         pass
 
-        # Собираем монеты с объёмами
         coins_with_volume = []
         for symbol, data in tickers.items():
-            # MEXC ccxt форматы:
-            # - spot: BTC/USDT
-            # - swap: может быть BTC_USDT, BTC/USDT:USDT, или BTC/USDT
             if market == 'swap':
                 if '_USDT' in symbol:
-                    # Формат: BTC_USDT
                     clean_symbol = symbol.replace('_USDT', '')
                 elif ':USDT' in symbol:
-                    # Формат: BTC/USDT:USDT
                     clean_symbol = symbol.split(':')[0].split('/')[0]
                 elif '/USDT' in symbol:
-                    # Формат: BTC/USDT
                     clean_symbol = symbol.replace('/USDT', '')
                 else:
                     continue
@@ -165,20 +155,16 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
                 clean_symbol = symbol.replace('/USDT', '')
 
             volume = data.get('quoteVolume') or 0
-            if volume < 100000:  # Минимальный порог
+            if volume < 100000:
                 continue
 
-            # Валидация
-            if not clean_symbol:
-                continue
-            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+            if not clean_symbol or len(clean_symbol) < 2 or len(clean_symbol) > 15:
                 continue
             if not clean_symbol.replace('_', '').isalnum():
                 continue
 
             coins_with_volume.append((clean_symbol, volume))
 
-        # Сортируем по убыванию объёма и берём топ-N
         coins_with_volume.sort(key=lambda x: x[1], reverse=True)
         return [s for s, v in coins_with_volume[:limit]]
 
@@ -188,9 +174,9 @@ def _fetch_stable_coins_sync(market='swap', limit=10):
 
 
 async def get_stable_coins_async(market='swap', limit=10):
-    """Асинхронная обёртка — топ монет по абсолютному объёму"""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
+
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
@@ -207,7 +193,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
             data = await resp.json()
 
         if market == 'futures':
-            # Futures формат: {success: true, data: {bids, asks}}
             if not isinstance(data, dict) or data.get('success') is False:
                 log_func(f"⚠️ mexc futures {symbol}: API ошибка: {str(data)[:200]}")
                 return 0
@@ -215,10 +200,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
             raw_bids = inner.get('bids') or []
             raw_asks = inner.get('asks') or []
         else:
-            # Spot формат: {bids, asks} или {code: 0, data: ...}
-            if isinstance(data, list):
-                return 0
-            if not isinstance(data, dict):
+            if isinstance(data, list) or not isinstance(data, dict):
                 return 0
             if 'code' in data and data.get('code') != 0:
                 log_func(f"⚠️ mexc spot {symbol}: code={data.get('code')}")
@@ -229,7 +211,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         bids = {}
         asks = {}
 
-        # Формат: [price, qty, orderCount?] — берём первые два элемента
         for row in raw_bids:
             try:
                 if isinstance(row, (list, tuple)) and len(row) >= 2:
@@ -342,15 +323,16 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# HEARTBEAT — JSON {"method":"ping"} для MEXC
+# HEARTBEAT
 # ==========================================
 async def ws_heartbeat(ws, market='futures', log_func=print):
-    """MEXC: JSON {"method": "ping"} для ОБЕИХ рынков (как в оригинале)"""
+    """MEXC: Spot требует "PING" (верхний регистр), Futures требует "ping" (нижний)"""
     try:
         while True:
             await asyncio.sleep(15)
             try:
-                await ws.send(json.dumps({"method": "ping"}))  # ← ОДИН ФОРМАТ для обоих!
+                ping_msg = {"method": "PING"} if market == 'spot' else {"method": "ping"}
+                await ws.send(json.dumps(ping_msg))
             except (websockets.exceptions.ConnectionClosed, Exception) as e:
                 log_func(f"⚠️ mexc {market} heartbeat завершён: {e}")
                 return
@@ -359,7 +341,7 @@ async def ws_heartbeat(ws, market='futures', log_func=print):
 
 
 # ==========================================
-# WEBSOCKET LISTENER (разные URL для futures/spot)
+# WEBSOCKET LISTENER
 # ==========================================
 async def ws_listener(market='futures', log_func=print):
     global mexc_futures_symbols, mexc_spot_symbols
@@ -381,9 +363,7 @@ async def ws_listener(market='futures', log_func=print):
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
-                    # Разная подписка для futures и spot
                     if market == 'futures':
-                        # Futures: каждая монета отдельным сообщением
                         for symbol in symbols:
                             msg = {
                                 "method": "sub.depth",
@@ -391,8 +371,8 @@ async def ws_listener(market='futures', log_func=print):
                             }
                             await ws.send(json.dumps(msg))
                     else:
-                        # Spot: один SUBSCRIPTION со списком параметров
-                        params = [f"spot@public.depth.v3.api@{s}USDT" for s in symbols]
+                        # Spot: символы ОБЯЗАТЕЛЬНО в верхнем регистре
+                        params = [f"spot@public.depth.v3.api@{s.upper()}USDT" for s in symbols]
                         msg = {"method": "SUBSCRIPTION", "params": params}
                         await ws.send(json.dumps(msg))
 
@@ -431,10 +411,36 @@ async def ws_listener(market='futures', log_func=print):
 
 
 # ==========================================
+# ВСПОМОГАТЕЛЬНЫЙ ПАРСЕР
+# ==========================================
+def parse_depth_levels(levels):
+    """Универсальный парсер для bids/asks (поддерживает и dict, и list/tuple)"""
+    result = {}
+    for row in levels:
+        try:
+            if isinstance(row, dict):
+                # Формат: {"price": "100.00", "quantity": "1.5"}
+                p = float(row.get('price', 0))
+                q = abs(float(row.get('quantity', 0)))
+            elif isinstance(row, (list, tuple)) and len(row) >= 2:
+                # Формат: ["100.00", "1.5"]
+                p = float(row[0])
+                q = abs(float(row[1]))
+            else:
+                continue
+
+            if p > 0 and q > 0:
+                result[p] = q
+        except Exception:
+            continue
+    return result
+
+
+# ==========================================
 # ОБРАБОТКА ОЧЕРЕДИ
 # ==========================================
 async def process_queue(market='futures', log_func=print):
-    """Обработка очереди. MEXC имеет РАЗНЫЕ форматы для futures и spot!"""
+    """Обработка очереди. И Futures, и Spot теперь используют дельта-обновления."""
     queue = mexc_futures_message_queue if market == 'futures' else mexc_spot_message_queue
 
     while True:
@@ -443,7 +449,6 @@ async def process_queue(market='futures', log_func=print):
             data = json.loads(message)
 
             if market == 'futures':
-                # Futures: push.depth с дельтой
                 channel = data.get('channel', '')
                 if channel != 'push.depth':
                     continue
@@ -461,13 +466,13 @@ async def process_queue(market='futures', log_func=print):
                 await handle_update_async(symbol, raw_bids, raw_asks, market, log_func)
 
             else:
-                # Spot: spot@public.depth — полная замена каждый раз
+                # Spot: spot@public.depth.v3.api — это ИНКРЕМЕНТАЛЬНЫЕ обновления (дельта)!
                 channel = data.get('c', '')
                 if not channel.startswith('spot@public.depth'):
                     continue
 
                 sym = data.get('s', '')
-                symbol = sym[:-4] if sym.endswith('USDT') else sym
+                symbol = sym[:-4] if sym.upper().endswith('USDT') else sym
 
                 inner = data.get('d') or {}
                 raw_bids = inner.get('bids') or []
@@ -476,76 +481,23 @@ async def process_queue(market='futures', log_func=print):
                 if not (raw_bids or raw_asks):
                     continue
 
-                # Spot ВСЕГДА снапшот — полная замена
-                await handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func)
+                # ИСПРАВЛЕНО: используем handle_update_async вместо handle_snapshot_async
+                await handle_update_async(symbol, raw_bids, raw_asks, market, log_func)
 
         except Exception as e:
             log_func(f"❌ mexc {market} process_queue ошибка: {e}")
 
 
-async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
-    """Обработка снапшота — полная замена стакана"""
-    new_bids = {}
-    new_asks = {}
-
-    for row in raw_bids:
-        try:
-            if isinstance(row, (list, tuple)) and len(row) >= 2:
-                p, q = float(row[0]), abs(float(row[1]))
-                if p > 0 and q > 0:
-                    new_bids[p] = q
-        except Exception:
-            continue
-
-    for row in raw_asks:
-        try:
-            if isinstance(row, (list, tuple)) and len(row) >= 2:
-                p, q = float(row[0]), abs(float(row[1]))
-                if p > 0 and q > 0:
-                    new_asks[p] = q
-        except Exception:
-            continue
-
-    if market == 'futures':
-        async with mexc_futures_lock:
-            old_ts = mexc_futures_density_timestamps.get(symbol, {})
-            new_ts = {}
-            for p in new_bids:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                else:
-                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
-            for p in new_asks:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                else:
-                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
-
-            mexc_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
-            mexc_futures_density_timestamps[symbol] = new_ts
-    else:
-        async with mexc_spot_lock:
-            old_ts = mexc_spot_density_timestamps.get(symbol, {})
-            new_ts = {}
-            for p in new_bids:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                else:
-                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
-            for p in new_asks:
-                if p in old_ts:
-                        new_ts[p] = old_ts[p]
-                else:
-                    new_ts[p] = time.time()  # ← ДОБАВЛЕНО
-
-            mexc_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
-            mexc_spot_density_timestamps[symbol] = new_ts
-
-    await sync_to_cache_async(symbol, market, log_func)
-
-
 async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
-    """Обработка дельты — обновление стакана"""
+    """Обработка дельты — обновление стакана (работает и для Futures, и для Spot)"""
+
+    # Универсальный парсинг дельты
+    new_bids = parse_depth_levels(bids_delta)
+    new_asks = parse_depth_levels(asks_delta)
+
+    if not new_bids and not new_asks:
+        return
+
     if market == 'futures':
         async with mexc_futures_lock:
             if symbol not in mexc_futures_order_books:
@@ -554,95 +506,63 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             ts = mexc_futures_density_timestamps.get(symbol, {})
             changed = False
 
-            for row in bids_delta:
-                try:
-                    if not isinstance(row, (list, tuple)) or len(row) < 2:
-                        continue
-                    price = float(row[0])
-                    qty = abs(float(row[1]))
-
-                    if qty == 0:
-                        if price in book['bids']:
-                            del book['bids'][price]
-                            ts.pop(price, None)
-                            changed = True
-                    else:
-                        book['bids'][price] = qty
-                        if price not in ts:
-                            ts[price] = time.time()
+            for price, qty in new_bids.items():
+                if qty == 0:
+                    if price in book['bids']:
+                        del book['bids'][price]
+                        ts.pop(price, None)
                         changed = True
-                except Exception:
-                    continue
+                else:
+                    book['bids'][price] = qty
+                    if price not in ts:
+                        ts[price] = time.time()
+                    changed = True
 
-            for row in asks_delta:
-                try:
-                    if not isinstance(row, (list, tuple)) or len(row) < 2:
-                        continue
-                    price = float(row[0])
-                    qty = abs(float(row[1]))
-
-                    if qty == 0:
-                        if price in book['asks']:
-                            del book['asks'][price]
-                            ts.pop(price, None)
-                            changed = True
-                    else:
-                        book['asks'][price] = qty
-                        if price not in ts:
-                            ts[price] = time.time()
+            for price, qty in new_asks.items():
+                if qty == 0:
+                    if price in book['asks']:
+                        del book['asks'][price]
+                        ts.pop(price, None)
                         changed = True
-                except Exception:
-                    continue
+                else:
+                    book['asks'][price] = qty
+                    if price not in ts:
+                        ts[price] = time.time()
+                    changed = True
 
             if changed:
                 mexc_futures_density_timestamps[symbol] = ts
     else:
         async with mexc_spot_lock:
             if symbol not in mexc_spot_order_books:
-                return
+                return  # Игнорируем дельту, если REST-снапшот еще не загружен
             book = mexc_spot_order_books[symbol]
             ts = mexc_spot_density_timestamps.get(symbol, {})
             changed = False
 
-            for row in bids_delta:
-                try:
-                    if not isinstance(row, (list, tuple)) or len(row) < 2:
-                        continue
-                    price = float(row[0])
-                    qty = abs(float(row[1]))
-
-                    if qty == 0:
-                        if price in book['bids']:
-                            del book['bids'][price]
-                            ts.pop(price, None)
-                            changed = True
-                    else:
-                        book['bids'][price] = qty
-                        if price not in ts:
-                            ts[price] = time.time()
+            for price, qty in new_bids.items():
+                if qty == 0:
+                    if price in book['bids']:
+                        del book['bids'][price]
+                        ts.pop(price, None)
                         changed = True
-                except Exception:
-                    continue
+                else:
+                    book['bids'][price] = qty
+                    if price not in ts:
+                        ts[price] = time.time()
+                    changed = True
 
-            for row in asks_delta:
-                try:
-                    if not isinstance(row, (list, tuple)) or len(row) < 2:
-                        continue
-                    price = float(row[0])
-                    qty = abs(float(row[1]))
-
-                    if qty == 0:
-                        if price in book['asks']:
-                            del book['asks'][price]
-                            ts.pop(price, None)
-                            changed = True
-                    else:
-                        book['asks'][price] = qty
-                        if price not in ts:
-                            ts[price] = time.time()
+            for price, qty in new_asks.items():
+                if qty == 0:
+                    if price in book['asks']:
+                        del book['asks'][price]
+                        ts.pop(price, None)
                         changed = True
-                except Exception:
-                    continue
+                else:
+                    book['asks'][price] = qty
+                    if price not in ts:
+                        ts[price] = time.time()
+                    changed = True
 
             if changed:
                 mexc_spot_density_timestamps[symbol] = ts
@@ -674,7 +594,6 @@ async def periodic_refresh(market='futures', log_func=print):
             new_active = []
             TARGET = 30
 
-            # ШАГ 1: Сохраняем монеты из белого списка (без обновления)
             for symbol in stable_symbols:
                 if len(new_active) >= TARGET:
                     break
@@ -686,7 +605,6 @@ async def periodic_refresh(market='futures', log_func=print):
                         new_active.append(symbol)
                         log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
-            # ШАГ 2: Добавляем топ по формуле
             for symbol in candidates:
                 if len(new_active) >= TARGET:
                     break
@@ -735,6 +653,7 @@ async def periodic_refresh(market='futures', log_func=print):
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(mexc {market}): {e}")
 
+
 # ==========================================
 # ГЛАВНАЯ ФУНКЦИЯ
 # ==========================================
@@ -743,7 +662,6 @@ async def main_async(log_func=print):
 
     log_func("🚀 Запуск MEXC Async Monitor...")
 
-    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
     stable_f = await get_stable_coins_async('swap', STABLE_COINS_LIMIT)
     stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
     stable_futures_symbols = stable_f
@@ -751,11 +669,9 @@ async def main_async(log_func=print):
     log_func(f"🔒 Белый список futures: {stable_f}")
     log_func(f"🔒 Белый список spot: {stable_s}")
 
-    # --- Шаг 2: Получаем кандидатов по формуле ---
     futures_candidates = await get_top_symbols_async('swap', log_func)
     spot_candidates = await get_top_symbols_async('spot', log_func)
 
-    # --- Шаг 3: Инициализируем белый список ---
     active_futures = []
     for symbol in stable_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
@@ -770,10 +686,9 @@ async def main_async(log_func=print):
             active_spot.append(symbol)
             log_func(f"✅ mexc spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
-    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
     for symbol in futures_candidates[:30]:
         if symbol in active_futures:
-            continue  # Уже в белом списке
+            continue
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
@@ -781,7 +696,7 @@ async def main_async(log_func=print):
 
     for symbol in spot_candidates[:30]:
         if symbol in active_spot:
-            continue  # Уже в белом списке
+            continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
@@ -802,6 +717,7 @@ async def main_async(log_func=print):
     ]
 
     await asyncio.gather(*tasks)
+
 
 def start_mexc_async_monitor(log_func=print):
     loop = asyncio.new_event_loop()
