@@ -550,7 +550,7 @@ async def periodic_refresh(log_func=print):
     global futures_symbols, spot_symbols
 
     while True:
-        await asyncio.sleep(300)
+        await asyncio.sleep(3600)
         try:
             # --- Futures ротация ---
             candidates_f = await get_top_symbols_async('futures')
