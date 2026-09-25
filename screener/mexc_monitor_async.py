@@ -1,9 +1,7 @@
 """
-MEXC Monitor ASYNC — асинхронная версия (АБСОЛЮТНО ФИНАЛЬНАЯ)
-Критические исправления для MEXC Spot:
-  1. ИСПРАВЛЕНО имя канала подписки на официальное: spot@public.aggre.depth.v3.api.pb@100ms@SYMBOL
-  2. ИСПРАВЛЕН парсинг ответа: данные теперь берутся из ключа 'publicAggreDepths' (а не 'd' или 'data')
-  3. Сохранены все предыдущие исправления (лимит 30 символов, PING верхним регистром, защита от bytes).
+MEXC Monitor ASYNC — WORKER NODE
+Читает список монет из Redis (мастер-список от Binance)
+Сохранены все критические исправления MEXC (v3 Protobuf, publicAggreDepths, PING).
 """
 import asyncio
 import json
@@ -11,8 +9,6 @@ import time
 import aiohttp
 import websockets
 from django.core.cache import cache
-import ccxt
-from . import coin_selection
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
@@ -51,6 +47,7 @@ _http_client = None
 
 
 async def get_http_client():
+    """Ленивая инициализация aiohttp клиента"""
     global _http_client
     if _http_client is None:
         _http_client = aiohttp.ClientSession(
@@ -61,126 +58,32 @@ async def get_http_client():
 
 
 # ==========================================
-# ТОП МОНЕТ
+# 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE
 # ==========================================
-def _fetch_top_symbols_sync(market='swap', log_func=print):
+def _fetch_master_symbols_sync(market='futures'):
+    """Синхронное чтение мастер-списка из Redis."""
     try:
-        exchange = ccxt.mexc({
-            'enableRateLimit': True,
-            'timeout': 15000,
-            'options': {'defaultType': market}
-        })
-        tickers = exchange.fetch_tickers()
-
-        if market == 'swap':
-            for symbol, data in tickers.items():
-                if not (data.get('quoteVolume') or 0):
-                    try:
-                        info = data.get('info', {})
-                        amount24 = float(info.get('amount24') or 0)
-                        if amount24 > 0:
-                            data['quoteVolume'] = amount24
-                        else:
-                            vol_contracts = float(info.get('volume24') or info.get('volume_24h') or 0)
-                            last_price = float(data.get('last') or info.get('lastPrice') or 0)
-                            data['quoteVolume'] = vol_contracts * last_price
-                    except Exception:
-                        pass
-
-        clean_fn = coin_selection.clean_swap if market == 'swap' else coin_selection.clean_spot
-        coin_selection.update_volume_history(tickers, clean_fn)
-
-        candidates = coin_selection.select_candidates(
-            tickers, clean_fn, limit=60,
-            log_func=log_func
-        )
-        return candidates[:30]
+        key = f'scalp:master:{market}'
+        symbols = cache.get(key)
+        if isinstance(symbols, list) and len(symbols) > 0:
+            return symbols
+        return []
     except Exception as e:
-        log_func(f"❌ Ошибка fetch_top_symbols(mexc {market}): {e}")
+        print(f"❌ Ошибка чтения master-списка mexc {market}: {e}")
         return []
 
 
-async def get_top_symbols_async(market='swap', log_func=print):
+async def get_master_symbols_async(market='futures'):
+    """Асинхронная обёртка для чтения мастер-списка"""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_top_symbols_sync, market, log_func)
-
-
-# ==========================================
-# БЕЛЫЙ СПИСОК
-# ==========================================
-STABLE_COINS_LIMIT = 10
-stable_futures_symbols = []
-stable_spot_symbols = []
-
-
-def _fetch_stable_coins_sync(market='swap', limit=10):
-    try:
-        exchange = ccxt.mexc({
-            'enableRateLimit': True,
-            'timeout': 15000,
-            'options': {'defaultType': market}
-        })
-        tickers = exchange.fetch_tickers()
-
-        if market == 'swap':
-            for symbol, data in tickers.items():
-                if not (data.get('quoteVolume') or 0):
-                    try:
-                        info = data.get('info', {})
-                        amount24 = float(info.get('amount24') or 0)
-                        if amount24 > 0:
-                            data['quoteVolume'] = amount24
-                        else:
-                            vol_contracts = float(info.get('volume24') or info.get('volume_24h') or 0)
-                            last_price = float(data.get('last') or info.get('lastPrice') or 0)
-                            data['quoteVolume'] = vol_contracts * last_price
-                    except Exception:
-                        pass
-
-        coins_with_volume = []
-        for symbol, data in tickers.items():
-            if market == 'swap':
-                if '_USDT' in symbol:
-                    clean_symbol = symbol.replace('_USDT', '')
-                elif ':USDT' in symbol:
-                    clean_symbol = symbol.split(':')[0].split('/')[0]
-                elif '/USDT' in symbol:
-                    clean_symbol = symbol.replace('/USDT', '')
-                else:
-                    continue
-            else:
-                if '/USDT' not in symbol:
-                    continue
-                clean_symbol = symbol.replace('/USDT', '')
-
-            volume = data.get('quoteVolume') or 0
-            if volume < 100000:
-                continue
-
-            if not clean_symbol or len(clean_symbol) < 2 or len(clean_symbol) > 15:
-                continue
-            if not clean_symbol.replace('_', '').isalnum():
-                continue
-
-            coins_with_volume.append((clean_symbol, volume))
-
-        coins_with_volume.sort(key=lambda x: x[1], reverse=True)
-        return [s for s, v in coins_with_volume[:limit]]
-
-    except Exception as e:
-        print(f"❌ Ошибка _fetch_stable_coins(mexc {market}): {e}")
-        return []
-
-
-async def get_stable_coins_async(market='swap', limit=10):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
+    return await loop.run_in_executor(None, _fetch_master_symbols_sync, market)
 
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
 # ==========================================
 async def init_order_book_async(symbol, market='futures', log_func=print):
+    """Инициализация стакана через async HTTP. Возвращает количество плотностей (0 при ошибке)."""
     try:
         url = (MEXC_FUTURES_REST_URL if market == 'futures' else MEXC_SPOT_REST_URL).format(symbol)
 
@@ -188,23 +91,23 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         async with client.get(url) as resp:
             if resp.status != 200:
                 log_func(f"⚠️ mexc {market} {symbol}: HTTP ошибка {resp.status}")
-                return False, 0
+                return 0
             data = await resp.json()
 
         if market == 'futures':
             if not isinstance(data, dict) or data.get('success') is False:
                 log_func(f"⚠️ mexc futures {symbol}: API ошибка: {str(data)[:200]}")
-                return False, 0
+                return 0
             inner = data.get('data') or {}
             raw_bids = inner.get('bids') or []
             raw_asks = inner.get('asks') or []
         else:
             if isinstance(data, list) or not isinstance(data, dict):
                 log_func(f"⚠️ mexc spot {symbol}: Неожиданный формат ответа REST")
-                return False, 0
+                return 0
             if 'code' in data and data.get('code') != 0:
                 log_func(f"⚠️ mexc spot {symbol}: code={data.get('code')}")
-                return False, 0
+                return 0
             raw_bids = data.get('bids') or []
             raw_asks = data.get('asks') or []
 
@@ -233,7 +136,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         if not bids and not asks:
             log_func(f"⚠️ mexc {market} {symbol}: REST вернул пустой стакан")
-            return True, 0
+            return 0
 
         if market == 'futures':
             async with mexc_futures_lock:
@@ -246,11 +149,11 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         saved_count = await sync_to_cache_async(symbol, market, log_func)
         log_func(f"✅ mexc {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
-        return True, saved_count
+        return saved_count
 
     except Exception as e:
         log_func(f"❌ init_order_book_async(mexc {market} {symbol}): {e}")
-        return False, 0
+        return 0
 
 
 # ==========================================
@@ -581,54 +484,39 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
 
 # ==========================================
-# ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
+# 🔥 ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ (Синхронизация с Binance)
 # ==========================================
 async def periodic_refresh(market='futures', log_func=print):
     global mexc_futures_symbols, mexc_spot_symbols
 
     while True:
-        await asyncio.sleep(300)
+        await asyncio.sleep(300)  # Проверка каждые 5 минут
 
         try:
-            market_type = 'swap' if market == 'futures' else 'spot'
-            candidates = await get_top_symbols_async(market_type, log_func)
+            master_symbols = await get_master_symbols_async(market)
+
+            if not master_symbols:
+                log_func(f"⚠️ mexc {market}: мастер-список пуст, пропускаем ротацию (ждём Binance)")
+                continue
 
             old_symbols = set(mexc_futures_symbols if market == 'futures' else mexc_spot_symbols)
-            stable_symbols = stable_futures_symbols if market == 'futures' else stable_spot_symbols
-
             new_active = []
-            TARGET = 30
+            added = []
+            removed = old_symbols - set(master_symbols)
 
-            for symbol in stable_symbols:
-                if len(new_active) >= TARGET:
-                    break
-                if symbol in old_symbols:
-                    new_active.append(symbol)
-                else:
-                    success, saved_count = await init_order_book_async(symbol, market, log_func)
-                    if success:
-                        new_active.append(symbol)
-                        if saved_count > 0:
-                            log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
-                        else:
-                            log_func(f"⚠️ mexc {market} {symbol}: добавлен, но начальных плотностей не найдено")
-
-            for symbol in candidates:
-                if len(new_active) >= TARGET:
-                    break
-                if symbol in new_active:
-                    continue
-                success, saved_count = await init_order_book_async(symbol, market, log_func)
-                if success:
-                    new_active.append(symbol)
+            for symbol in master_symbols:
+                if symbol not in old_symbols:
+                    saved_count = await init_order_book_async(symbol, market, log_func)
                     if saved_count > 0:
+                        new_active.append(symbol)
+                        added.append(symbol)
                         log_func(f"✅ mexc {market} {symbol}: добавлен (плотностей: {saved_count})")
                     else:
-                        log_func(f"⚠️ mexc {market} {symbol}: добавлен, но начальных плотностей не найдено")
+                        log_func(f"⚠️ mexc {market} {symbol}: пропущен (не поддерживается или пустой стакан)")
+                else:
+                    new_active.append(symbol)
 
             if market == 'futures':
-                removed = old_symbols - set(new_active)
-                added = set(new_active) - old_symbols
                 mexc_futures_symbols = new_active
                 if removed:
                     async with mexc_futures_lock:
@@ -637,14 +525,10 @@ async def periodic_refresh(market='futures', log_func=print):
                             mexc_futures_density_timestamps.pop(sym, None)
                     log_func(f"🗑️ mexc futures удалены: {', '.join(sorted(removed))}")
 
-                if removed or added:
+                if added or removed:
                     mexc_futures_reconnect_event.set()
-                    log_func(f"🔄 mexc futures: список изменился (+{len(added)} -{len(removed)}), переподключение")
-                else:
-                    log_func(f"✅ mexc futures: список не изменился ({len(new_active)} монет)")
+                    log_func(f"🔄 mexc futures: список синхронизирован (+{len(added)} -{len(removed)})")
             else:
-                removed = old_symbols - set(new_active)
-                added = set(new_active) - old_symbols
                 mexc_spot_symbols = new_active
                 if removed:
                     async with mexc_spot_lock:
@@ -653,67 +537,78 @@ async def periodic_refresh(market='futures', log_func=print):
                             mexc_spot_density_timestamps.pop(sym, None)
                     log_func(f"🗑️ mexc spot удалены: {', '.join(sorted(removed))}")
 
-                if removed or added:
+                if added or removed:
                     mexc_spot_reconnect_event.set()
-                    log_func(f"🔄 mexc spot: список изменился (+{len(added)} -{len(removed)}), переподключение")
-                else:
-                    log_func(f"✅ mexc spot: список не изменился ({len(new_active)} монет)")
+                    log_func(f"🔄 mexc spot: список синхронизирован (+{len(added)} -{len(removed)})")
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(mexc {market}): {e}")
 
 
 # ==========================================
-# ГЛАВНАЯ ФУНКЦИЯ
+# 🔥 ПРИНУДИТЕЛЬНЫЙ SYNC (каждые 30 сек)
+# ==========================================
+async def periodic_force_sync(log_func=print):
+    """Принудительная синхронизация всех монет в Redis каждые 30 секунд."""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            for symbol in list(mexc_futures_symbols):
+                try:
+                    await sync_to_cache_async(symbol, 'futures', log_func)
+                except Exception as e:
+                    log_func(f"⚠️ mexc futures force sync {symbol}: {e}")
+
+            for symbol in list(mexc_spot_symbols):
+                try:
+                    await sync_to_cache_async(symbol, 'spot', log_func)
+                except Exception as e:
+                    log_func(f"⚠️ mexc spot force sync {symbol}: {e}")
+        except Exception as e:
+            log_func(f"❌ Ошибка periodic_force_sync: {e}")
+
+
+# ==========================================
+# 🔥 ГЛАВНАЯ ФУНКЦИЯ (С ожиданием мастер-списка)
 # ==========================================
 async def main_async(log_func=print):
-    global mexc_futures_symbols, mexc_spot_symbols, stable_futures_symbols, stable_spot_symbols
+    global mexc_futures_symbols, mexc_spot_symbols
 
-    log_func("🚀 Запуск MEXC Async Monitor...")
+    log_func("🚀 Запуск MEXC Async Monitor (WORKER NODE)...")
 
-    stable_f = await get_stable_coins_async('swap', STABLE_COINS_LIMIT)
-    stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
-    stable_futures_symbols = stable_f
-    stable_spot_symbols = stable_s
-    log_func(f"🔒 Белый список futures: {stable_f}")
-    log_func(f"🔒 Белый список spot: {stable_s}")
+    # 🔥 Ждём, пока Binance опубликует мастер-список (максимум 60 секунд)
+    master_f = await get_master_symbols_async('futures')
+    master_s = await get_master_symbols_async('spot')
 
-    futures_candidates = await get_top_symbols_async('swap', log_func)
-    spot_candidates = await get_top_symbols_async('spot', log_func)
+    attempts = 0
+    while (not master_f and not master_s) and attempts < 12:
+        log_func("⏳ MEXC ожидает мастер-список от Binance...")
+        await asyncio.sleep(5)
+        attempts += 1
+        master_f = await get_master_symbols_async('futures')
+        master_s = await get_master_symbols_async('spot')
 
+    if not master_f and not master_s:
+        log_func("⚠️ Мастер-списки пусты после ожидания. MEXC будет ждать обновления.")
+
+    # Инициализируем стаканы. Добавляем в активный список ТОЛЬКО если стакан загрузился успешно.
     active_futures = []
-    for symbol in stable_f:
-        success, saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if success:
+    for symbol in master_f:
+        saved_count = await init_order_book_async(symbol, 'futures', log_func)
+        if saved_count > 0:
             active_futures.append(symbol)
-            log_func(f"✅ mexc futures {symbol}: инициализирован (плотностей: {saved_count}) [стабильная]")
+            log_func(f"✅ mexc futures {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ mexc futures {symbol}: пропущен (не поддерживается или пустой стакан)")
 
     active_spot = []
-    for symbol in stable_s:
-        success, saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if success:
+    for symbol in master_s:
+        saved_count = await init_order_book_async(symbol, 'spot', log_func)
+        if saved_count > 0:
             active_spot.append(symbol)
-            log_func(f"✅ mexc spot {symbol}: инициализирован (плотностей: {saved_count}) [стабильная]")
+            log_func(f"✅ mexc spot {symbol}: принят (плотностей: {saved_count})")
         else:
-            log_func(f"❌ mexc spot {symbol}: не удалось инициализировать через REST")
-
-    for symbol in futures_candidates[:30]:
-        if symbol in active_futures:
-            continue
-        success, saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if success:
-            active_futures.append(symbol)
-            log_func(f"✅ mexc futures {symbol}: инициализирован (плотностей: {saved_count})")
-
-    for symbol in spot_candidates[:30]:
-        if symbol in active_spot:
-            continue
-        success, saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if success:
-            active_spot.append(symbol)
-            log_func(f"✅ mexc spot {symbol}: инициализирован (плотностей: {saved_count})")
-        else:
-            log_func(f"❌ mexc spot {symbol}: не удалось инициализировать через REST")
+            log_func(f"⚠️ mexc spot {symbol}: пропущен (не поддерживается или пустой стакан)")
 
     mexc_futures_symbols = active_futures
     mexc_spot_symbols = active_spot
@@ -727,12 +622,14 @@ async def main_async(log_func=print):
         process_queue('spot', log_func),
         periodic_refresh('futures', log_func),
         periodic_refresh('spot', log_func),
+        periodic_force_sync(log_func),  # 🔥 НОВАЯ ЗАДАЧА
     ]
 
     await asyncio.gather(*tasks)
 
 
 def start_mexc_async_monitor(log_func=print):
+    """Синхронная обёртка для запуска из Django"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
