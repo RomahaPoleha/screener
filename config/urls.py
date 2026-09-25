@@ -32,4 +32,5 @@ urlpatterns = [
     path('api/logo/', views.api_logo),
     path('api/impulses/', views.api_impulses, name='api_impulses'),
     path('api/impulses/stream/', views.api_impulses_stream, name='api_impulses_stream'),
+    path('api/impulses/debug/', views.api_impulses_debug, name='api_impulses_debug'),
 ]
