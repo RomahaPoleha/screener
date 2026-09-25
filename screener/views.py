@@ -1,4 +1,6 @@
 import ccxt
+import asyncio      # ← ДОБАВЛЕНО
+import json         # ← ДОБАВЛЕНО
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
@@ -7,9 +9,7 @@ from django.http import FileResponse, Http404
 from pathlib import Path
 import time
 from . import coin_selection
-import json
 from django.http import StreamingHttpResponse
-from django.views.decorators.http import require_http_methods
 import queue as _queue
 
 # Глобальный exchange объект — создаётся один раз
