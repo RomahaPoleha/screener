@@ -582,3 +582,21 @@ async def api_impulses_stream(request):
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'  # Для nginx на Амвере
     return response
+
+@require_http_methods(["GET"])
+def api_impulses_debug(request):
+    """Диагностика: состояние импульс-монитора"""
+    try:
+        from .impulse_monitor import impulse_monitor
+        return JsonResponse({
+            'running': impulse_monitor.running,
+            'symbols_in_history': len(impulse_monitor.price_history),
+            'total_prices_stored': sum(len(h) for h in impulse_monitor.price_history.values()),
+            'alerts_count': len(impulse_monitor.alerts),
+            'subscribers': len(impulse_monitor.subscribers),
+            'threshold': impulse_monitor.threshold,
+            'window': impulse_monitor.window,
+            'sample_symbols': list(impulse_monitor.price_history.keys())[:10],
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)})
