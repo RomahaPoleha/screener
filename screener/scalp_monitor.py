@@ -41,7 +41,7 @@ def start_scalp_monitor():
         # from .gate_monitor_async import start_gate_async_monitor
         # from .bitget_monitor_async import start_bitget_async_monitor
         from .bybit_monitor_async import start_bybit_async_monitor
-        # from .okx_monitor_async import start_okx_async_monitor
+        from .okx_monitor_async import start_okx_async_monitor
         # from .mexc_monitor_async import start_mexc_async_monitor
 
         # from .binance_monitor import start_binance_monitor
@@ -165,13 +165,13 @@ def start_scalp_monitor():
         # log("✅ Bitget Async Monitor поток запущен")
         #
         #
-        # okx_async_thread = threading.Thread(
-        #     target=lambda: start_okx_async_monitor(log),
-        #     name='OKX-Async-Monitor',
-        #     daemon=True
-        # )
-        # okx_async_thread.start()
-        # log("✅ OKX Async Monitor поток запущен")
+        okx_async_thread = threading.Thread(
+            target=lambda: start_okx_async_monitor(log),
+            name='OKX-Async-Monitor',
+            daemon=True
+        )
+        okx_async_thread.start()
+        log("✅ OKX Async Monitor поток запущен")
         #
         # gate_async_thread = threading.Thread(
         #     target=lambda: start_gate_async_monitor(log),
