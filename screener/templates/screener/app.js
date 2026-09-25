@@ -330,48 +330,49 @@ function openChartFromHistory(symbol) {
 // ==========================================
 // POLLING СЕРВЕРНЫХ ИМПУЛЬСОВ
 // ==========================================
-async function loadImpulses() {
-    if (!volumeAlertEnabled) return;
-    try {
-        const url = `/api/impulses/?threshold=${priceImpulseThreshold}&window=${priceImpulseWindow}&since=${lastImpulseTimestamp}&limit=20`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
-        const alerts = data.alerts || [];
-        for (const alert of alerts) {
-            // Показываем toast
+
+// ==========================================
+// SSE ДЛЯ СЕРВЕРНЫХ ИМПУЛЬСОВ (real-time)
+// ==========================================
+function startImpulseSSE() {
+    if (impulseSSE) return;
+    const url = `/api/impulses/stream/?threshold=${priceImpulseThreshold}&window=${priceImpulseWindow}`;
+    impulseSSE = new EventSource(url);
+
+    impulseSSE.onmessage = (e) => {
+        try {
+            const alert = JSON.parse(e.data);
+            if (!alert.symbol) return;  // пропускаем heartbeat
             showVolumeAlertToast(
                 alert.symbol,
-                0,  // volume не передаём с сервера
+                0,
                 alert.direction,
                 alert.change
             );
-            // Обновляем timestamp последнего алерта
-            if (alert.time > lastImpulseTimestamp) {
-                lastImpulseTimestamp = alert.time;
-            }
+        } catch (err) {
+            console.warn('Impulse SSE parse error:', err);
         }
-    } catch (err) {
-        console.warn('Impulse polling error:', err);
+    };
+
+    impulseSSE.onerror = () => {
+        console.warn('Impulse SSE error, EventSource reconnects automatically...');
+    };
+
+    impulseSSE.onopen = () => {
+        console.log('✅ Impulse SSE подключен к серверу (real-time)');
+    };
+}
+
+function stopImpulseSSE() {
+    if (impulseSSE) {
+        impulseSSE.close();
+        impulseSSE = null;
+        console.log('🛑 Impulse SSE отключен');
     }
 }
 
-function startImpulsePolling() {
-    if (impulsePollingTimer) return;
-    // Первая загрузка сразу
-    loadImpulses();
-    // Затем каждые 5 секунд
-    impulsePollingTimer = setInterval(loadImpulses, 5000);
-    console.log('✅ Impulse polling запущен (каждые 5 сек)');
-}
 
-function stopImpulsePolling() {
-    if (impulsePollingTimer) {
-        clearInterval(impulsePollingTimer);
-        impulsePollingTimer = null;
-        console.log('🛑 Impulse polling остановлен');
-    }
-}
+
 
 async function loadAllData() {
     try {
@@ -1296,9 +1297,11 @@ if (priceImpulseWin) {
 // Управление импульсом: WS + таймер проверки каждую секунду
 // Управление импульсом: polling к серверу
 if (volumeAlertEnabled) {
-    startImpulsePolling();
+    // Если SSE уже открыт с другими настройками — переподключаемся
+    stopImpulseSSE();
+    startImpulseSSE();
 } else {
-    stopImpulsePolling();
+    stopImpulseSSE();
 }
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
@@ -2746,7 +2749,7 @@ els.change.addEventListener('input', (e) => {
 // Если импульс включён — запускаем WS и таймер
 // Если импульс включён — запускаем polling
 if (volumeAlertEnabled) {
-    startImpulsePolling();
+    startImpulseSSE();
 }
 });
 

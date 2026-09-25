@@ -7,6 +7,8 @@ from django.http import FileResponse, Http404
 from pathlib import Path
 import time
 from . import coin_selection
+from django.http import StreamingHttpResponse
+import queue as _queue
 
 # Глобальный exchange объект — создаётся один раз
 _binance_exchange_future = None
@@ -530,3 +532,49 @@ def api_impulses(request):
         'count': len(alerts),
         'server_time': time.time(),
     })
+
+
+
+
+@require_http_methods(["GET"])
+def api_impulses_stream(request):
+    """API: SSE поток алертов (real-time)"""
+    from .impulse_monitor import impulse_monitor
+
+    # Читаем настройки из query params
+    try:
+        threshold = float(request.GET.get('threshold', 1.0))
+        window = int(request.GET.get('window', 60))
+        impulse_monitor.set_params(threshold, window)
+    except ValueError:
+        pass
+
+    # Создаём очередь для этого клиента
+    q = _queue.Queue(maxsize=100)
+    impulse_monitor.subscribe(q)
+
+    def event_stream():
+        try:
+            # Отправляем последние 10 алертов при подключении
+            for alert in impulse_monitor.get_recent_alerts(10):
+                yield f"data: {json.dumps(alert)}\n\n"
+
+            while True:
+                try:
+                    alert = q.get(timeout=30)
+                    yield f"data: {json.dumps(alert)}\n\n"
+                except _queue.Empty:
+                    # Heartbeat — SSE комментарий, держит соединение живым
+                    yield ": heartbeat\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            impulse_monitor.unsubscribe(q)
+
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type='text/event-stream'
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # Для nginx
+    return response

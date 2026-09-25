@@ -62,8 +62,7 @@ let priceImpulseThreshold = parseFloat(localStorage.getItem('priceImpulseThresho
 let priceImpulseWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
 
 // Серверные импульсы (polling)
-let impulsePollingTimer = null;
-let lastImpulseTimestamp = 0;  // timestamp последнего полученного алерта
+let impulseSSE = null;
 
 // ==========================================
 // SCALP — настройки по биржам

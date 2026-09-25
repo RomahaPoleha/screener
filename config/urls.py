@@ -31,4 +31,5 @@ urlpatterns = [
     path('api/gate-depth/', views.api_gate_depth, name='api_gate_depth'),
     path('api/logo/', views.api_logo),
     path('api/impulses/', views.api_impulses, name='api_impulses'),
+    path('api/impulses/stream/', views.api_impulses_stream, name='api_impulses_stream'),
 ]

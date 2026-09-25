@@ -30,6 +30,8 @@ class ImpulseMonitor:
     _instance = None
 
     def __init__(self):
+        import queue as _queue
+        self._queue_module = _queue
         self.price_history = {}     # symbol -> deque([(ts, price)])
         self.alerts = []            # последние N алертов (в памяти)
         self.alerts_lock = threading.Lock()
@@ -38,6 +40,9 @@ class ImpulseMonitor:
         self.window = DEFAULT_WINDOW
         self.running = False
         self.log_func = print
+        # 🔥 НОВОЕ: подписчики SSE
+        self.subscribers = []       # список queue.Queue для SSE-клиентов
+        self.subscribers_lock = threading.Lock()
 
     @classmethod
     def get_instance(cls):
@@ -52,12 +57,23 @@ class ImpulseMonitor:
         self.threshold = threshold
         self.window = window
 
+    # 🔥 НОВОЕ: управление подписками
+    def subscribe(self, q):
+        with self.subscribers_lock:
+            self.subscribers.append(q)
+            self.log_func(f"📡 Impulse: новый SSE подписчик (всего: {len(self.subscribers)})")
+
+    def unsubscribe(self, q):
+        with self.subscribers_lock:
+            if q in self.subscribers:
+                self.subscribers.remove(q)
+                self.log_func(f"📡 Impulse: SSE подписчик отключился (осталось: {len(self.subscribers)})")
+
     def _add_price(self, symbol, price):
         now = time.time()
         if symbol not in self.price_history:
             self.price_history[symbol] = deque(maxlen=2000)
         self.price_history[symbol].append((now, price))
-        # Обрезаем старую историю
         history = self.price_history[symbol]
         while history and (now - history[0][0]) > HISTORY_SECONDS:
             history.popleft()
@@ -68,7 +84,6 @@ class ImpulseMonitor:
             if len(history) < 2:
                 continue
             target_time = now - self.window
-            # Ищем цену window секунд назад
             reference_price = None
             for ts, price in reversed(history):
                 if ts <= target_time:
@@ -81,7 +96,6 @@ class ImpulseMonitor:
             abs_change = abs(price_change)
             if abs_change < self.threshold:
                 continue
-            # Кулдаун
             last_alert = self.cooldowns.get(symbol, 0)
             if now - last_alert < COOLDOWN_SECONDS:
                 continue
@@ -95,9 +109,10 @@ class ImpulseMonitor:
                 'time': now,
                 'window': self.window,
             }
-            self._save_alert(alert)
+            self._publish_alert(alert)
 
-    def _save_alert(self, alert):
+    # 🔥 ИЗМЕНЕНО: теперь пушит алерт подписчикам
+    def _publish_alert(self, alert):
         # Сохраняем в память
         with self.alerts_lock:
             self.alerts.insert(0, alert)
@@ -108,19 +123,27 @@ class ImpulseMonitor:
             cache.set('impulse:alerts', self.alerts, ALERTS_TTL)
         except Exception as e:
             self.log_func(f"⚠️ Impulse: не удалось сохранить в Redis: {e}")
+        # 🔥 НОВОЕ: пушим всем SSE подписчикам
+        with self.subscribers_lock:
+            dead = []
+            for q in self.subscribers:
+                try:
+                    q.put_nowait(alert)
+                except self._queue_module.Full:
+                    dead.append(q)
+                except Exception:
+                    dead.append(q)
+            for q in dead:
+                if q in self.subscribers:
+                    self.subscribers.remove(q)
 
     def get_recent_alerts(self, limit=50, since=None):
-        """Возвращает алерты. Если since указан — только новые."""
         with self.alerts_lock:
             if since is None:
                 return list(self.alerts[:limit])
             return [a for a in self.alerts if a['time'] > since][:limit]
 
-    # ==========================================
-    # WEBSOCKET К BINANCE
-    # ==========================================
     async def _listen_binance(self):
-        """Binance: !miniTicker@arr — все тикеры сразу одним стримом"""
         while self.running:
             try:
                 async with websockets.connect(BINANCE_WS_URL, ping_interval=20, ping_timeout=20) as ws:
@@ -152,7 +175,6 @@ class ImpulseMonitor:
                 await asyncio.sleep(3)
 
     async def _checker_loop(self):
-        """Проверка импульсов каждую секунду"""
         while self.running:
             try:
                 self._check_impulses()
@@ -161,8 +183,6 @@ class ImpulseMonitor:
             await asyncio.sleep(CHECK_INTERVAL)
 
     async def _main_async(self):
-        """Главная async функция"""
-        # Загружаем последние алерты из Redis (чтобы не терять при рестарте)
         try:
             saved = cache.get('impulse:alerts')
             if isinstance(saved, list):
