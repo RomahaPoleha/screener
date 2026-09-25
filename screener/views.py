@@ -7,7 +7,9 @@ from django.http import FileResponse, Http404
 from pathlib import Path
 import time
 from . import coin_selection
+import json
 from django.http import StreamingHttpResponse
+from django.views.decorators.http import require_http_methods
 import queue as _queue
 
 # Глобальный exchange объект — создаётся один раз
@@ -537,11 +539,10 @@ def api_impulses(request):
 
 
 @require_http_methods(["GET"])
-def api_impulses_stream(request):
-    """API: SSE поток алертов (real-time)"""
+async def api_impulses_stream(request):
+    """API: SSE поток алертов (real-time) — АСИНХРОННАЯ версия для ASGI"""
     from .impulse_monitor import impulse_monitor
 
-    # Читаем настройки из query params
     try:
         threshold = float(request.GET.get('threshold', 1.0))
         window = int(request.GET.get('window', 60))
@@ -549,11 +550,11 @@ def api_impulses_stream(request):
     except ValueError:
         pass
 
-    # Создаём очередь для этого клиента
     q = _queue.Queue(maxsize=100)
     impulse_monitor.subscribe(q)
 
-    def event_stream():
+    async def event_stream():
+        loop = asyncio.get_running_loop()
         try:
             # Отправляем последние 10 алертов при подключении
             for alert in impulse_monitor.get_recent_alerts(10):
@@ -561,12 +562,15 @@ def api_impulses_stream(request):
 
             while True:
                 try:
-                    alert = q.get(timeout=30)
+                    # 🔥 КРИТИЧЕСКИ ВАЖНО: run_in_executor предотвращает блокировку ASGI event loop
+                    # при ожидании данных из синхронной очереди
+                    alert = await loop.run_in_executor(None, q.get, True, 30)
                     yield f"data: {json.dumps(alert)}\n\n"
                 except _queue.Empty:
-                    # Heartbeat — SSE комментарий, держит соединение живым
                     yield ": heartbeat\n\n"
-        except GeneratorExit:
+        except asyncio.CancelledError:
+            # 🔥 КРИТИЧЕСКИ ВАЖНО: Перехватываем отмену задачи при shutdown сервера
+            # Это позволяет мгновенно выполнить finally и освободить ресурсы
             pass
         finally:
             impulse_monitor.unsubscribe(q)
@@ -576,5 +580,5 @@ def api_impulses_stream(request):
         content_type='text/event-stream'
     )
     response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'  # Для nginx
+    response['X-Accel-Buffering'] = 'no'  # Для nginx на Амвере
     return response
