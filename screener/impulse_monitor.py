@@ -43,6 +43,12 @@ class ImpulseMonitor:
         # 🔥 НОВОЕ: подписчики SSE
         self.subscribers = []       # список queue.Queue для SSE-клиентов
         self.subscribers_lock = threading.Lock()
+        self.symbols = []
+
+    def set_symbols(self, symbols):
+        """Устанавливает список монет для мониторинга"""
+        self.symbols = list(symbols)
+        self.log_func(f"📊 Impulse: установлено {len(symbols)} монет для мониторинга")
 
     @classmethod
     def get_instance(cls):
@@ -144,28 +150,44 @@ class ImpulseMonitor:
             return [a for a in self.alerts if a['time'] > since][:limit]
 
     async def _listen_binance(self):
+        """Слушаем Binance WS — подписываемся на конкретные монеты через @ticker"""
         while self.running:
             try:
+                # 🔥 ИСПРАВЛЕНО: используем тот же URL, что в binance_monitor
                 async with websockets.connect(BINANCE_WS_URL, ping_interval=20, ping_timeout=20) as ws:
+                    # 🔥 ИСПРАВЛЕНО: подписываемся на @ticker для каждой монеты (как в binance_monitor)
+                    # @ticker включает поле 'c' (текущая цена), что нам и нужно
+                    args = [f"{s.lower()}usdt@ticker" for s in self.symbols]
+
+                    if not args:
+                        self.log_func("⚠️ Impulse: список монет пуст, ждём...")
+                        await asyncio.sleep(5)
+                        continue
+
                     await ws.send(json.dumps({
                         "method": "SUBSCRIBE",
-                        "params": ["!miniTicker@arr"],
+                        "params": args,
                         "id": 1
                     }))
-                    self.log_func("🔌 Impulse: Binance WS подключен (все монеты)")
+                    self.log_func(f"🔌 Impulse: Binance WS подключен ({len(args)} монет)")
+
                     while self.running:
                         try:
                             msg = await asyncio.wait_for(ws.recv(), timeout=30)
                         except asyncio.TimeoutError:
                             continue
+
                         try:
                             data = json.loads(msg)
-                            for ticker in data:
-                                symbol = ticker.get('s', '')
+
+                            # @ticker возвращает объект, не массив
+                            if isinstance(data, dict) and 's' in data:
+                                symbol = data.get('s', '')
                                 if not symbol.endswith('USDT'):
                                     continue
                                 clean = symbol[:-4]
-                                price = float(ticker.get('c', 0))
+                                # Поле 'c' — текущая цена (close)
+                                price = float(data.get('c', 0))
                                 if price > 0:
                                     self._add_price(clean, price)
                         except Exception as e:
@@ -183,6 +205,20 @@ class ImpulseMonitor:
             await asyncio.sleep(CHECK_INTERVAL)
 
     async def _main_async(self):
+        # 🔥 НОВОЕ: загружаем список монет из мастер-списка Binance
+        while not self.symbols:
+            try:
+                symbols = cache.get('scalp:master:futures')
+                if isinstance(symbols, list) and len(symbols) > 0:
+                    self.symbols = symbols
+                    self.log_func(f"📊 Impulse: загружено {len(symbols)} монет из мастер-списка")
+                    break
+            except Exception:
+                pass
+            self.log_func("⏳ Impulse: ожидание мастер-списка...")
+            await asyncio.sleep(5)
+
+        # Загружаем последние алерты из Redis
         try:
             saved = cache.get('impulse:alerts')
             if isinstance(saved, list):
