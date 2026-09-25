@@ -62,33 +62,32 @@ binance_spot_volume_stats = {}
 # ==========================================
 # НОВАЯ ФУНКЦИЯ: DYNAMIC ПО NATR
 # ==========================================
+# ==========================================
+# ТОП МОНЕТ (Теперь по NATR, а не по RVOL+Score)
+# ==========================================
+# ==========================================
+# ТОП МОНЕТ (Теперь по NATR, а не по RVOL+Score)
+# ==========================================
 def _fetch_dynamic_by_natr_sync(market='futures', limit=20):
-    """
-    Отбирает топ-N монет по 1-минутному NATR из Redis
-    Возвращает список самых волатильных монет
-    """
+    """Отбирает топ-N монет по 1-минутному NATR из Redis"""
     try:
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
         tickers = exchange.fetch_tickers()
 
-        # Шаг 1: Фильтруем по объёму (как stable)
+        # Шаг 1: Фильтруем по базовому объёму
         coins_with_volume = []
         for symbol, data in tickers.items():
-            if market == 'futures':
-                if ':USDT' not in symbol:
-                    continue
-            else:
-                if '/USDT' not in symbol:
-                    continue
+            if market == 'futures' and ':USDT' not in symbol:
+                continue
+            if market == 'spot' and '/USDT' not in symbol:
+                continue
 
             volume = data.get('quoteVolume') or 0
             if volume < 100000:
                 continue
 
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-            if '-' in clean_symbol:
-                continue
-            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+            if '-' in clean_symbol or len(clean_symbol) < 2 or len(clean_symbol) > 15:
                 continue
             if not clean_symbol.replace('_', '').isalnum():
                 continue
@@ -96,51 +95,40 @@ def _fetch_dynamic_by_natr_sync(market='futures', limit=20):
             coins_with_volume.append((clean_symbol, volume))
 
         if not coins_with_volume:
-            print(f"⚠️ binance {market}: нет монет с объёмом > 100k")
             return []
 
-        # Шаг 2: Batch-читаем NATR из Redis
+        # Шаг 2: Batch-чтение NATR из Redis
         natr_batch = {}
-        natr_keys = [f"natr_{symbol}_future" for symbol, _ in coins_with_volume]
-
+        natr_keys = [f"natr_{s}_future" for s, _ in coins_with_volume]
         for key in natr_keys:
-            natr_data = cache.get(key) or {}
-            natr_batch[key] = natr_data
+            natr_batch[key] = cache.get(key) or {}
 
         # Шаг 3: Извлекаем 1m NATR и сортируем
         coins_with_natr = []
         for symbol, volume in coins_with_volume:
-            natr_key = f"natr_{symbol}_future"
-            natr_data = natr_batch.get(natr_key, {})
+            natr_data = natr_batch.get(f"natr_{symbol}_future", {})
             natr_1m = natr_data.get('natr_1m30')
 
-            # Пропускаем монеты без NATR (вариант A)
-            if natr_1m is None:
-                continue
-
-            coins_with_natr.append((symbol, float(natr_1m), volume))
+            if natr_1m is not None:  # Пропускаем монеты без NATR
+                coins_with_natr.append((symbol, float(natr_1m), volume))
 
         if not coins_with_natr:
-            print(f"⚠️ binance {market}: нет монет с NATR в Redis")
             return []
 
-        # Шаг 4: Сортируем по NATR ↓ (самые волатильные вверху)
+        # Сортируем по NATR по убыванию (самые волатильные вверху)
         coins_with_natr.sort(key=lambda x: x[1], reverse=True)
 
-        # Шаг 5: Берём топ-N
-        result = [symbol for symbol, natr, vol in coins_with_natr[:limit]]
-
+        result = [s for s, natr, vol in coins_with_natr[:limit]]
         print(f"✅ binance {market} dynamic (по NATR): {len(result)} монет, топ-5: {result[:5]}")
         return result
 
     except Exception as e:
         print(f"❌ Ошибка _fetch_dynamic_by_natr({market}): {e}")
-        import traceback
-        traceback.print_exc()
         return []
 
+
 async def get_top_symbols_async(market='futures'):
-    """Асинхронная обёртка — запускает отбор по NATR в отдельном потоке"""
+    """Асинхронная обёртка для отбора по NATR"""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_dynamic_by_natr_sync, market, 20)
 
@@ -550,7 +538,7 @@ async def periodic_refresh(log_func=print):
     global futures_symbols, spot_symbols
 
     while True:
-        await asyncio.sleep(3600)
+        await asyncio.sleep(300)
         try:
             # --- Futures ротация ---
             candidates_f = await get_top_symbols_async('futures')
@@ -605,7 +593,7 @@ async def periodic_refresh(log_func=print):
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, cache.set, 'scalp:master:futures', new_active, 600)
+                await loop.run_in_executor(None, cache.set, 'scalp:master:futures', new_active, 3600)
                 log_func(f"📢 binance futures: master-список опубликован ({len(new_active)} монет)")
             except Exception as e:
                 log_func(f"⚠️ binance futures: не удалось опубликовать master-список: {e}")
@@ -661,7 +649,7 @@ async def periodic_refresh(log_func=print):
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, cache.set, 'scalp:master:spot', new_active, 600)
+                await loop.run_in_executor(None, cache.set, 'scalp:master:spot', new_active, 3600)
                 log_func(f"📢 binance spot: master-список опубликован ({len(new_active)} монет)")
             except Exception as e:
                 log_func(f"⚠️ binance spot: не удалось опубликовать master-список: {e}")
