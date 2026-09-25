@@ -42,9 +42,6 @@ let alertBeepVolume = parseFloat(localStorage.getItem('alertBeepVolume') || '0.3
 let hourSoundVolume = parseFloat(localStorage.getItem('hourSoundVolume') || '1');
 
 
-// WebSocket для real-time цен (импульс с малым окном)
-let impulseWs = null;
-let impulseWsEnabled = false;
 
 // История алертов по объёму
 let volumeAlertHistory = [];
@@ -63,7 +60,10 @@ let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 // Параметры импульса цены (комбинированный сигнал с RVOL)
 let priceImpulseThreshold = parseFloat(localStorage.getItem('priceImpulseThreshold') || '1');
 let priceImpulseWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
-let priceHistory = {};  // symbol -> [{time, price}]
+
+// Серверные импульсы (polling)
+let impulsePollingTimer = null;
+let lastImpulseTimestamp = 0;  // timestamp последнего полученного алерта
 
 // ==========================================
 // SCALP — настройки по биржам

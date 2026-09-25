@@ -30,4 +30,5 @@ urlpatterns = [
     path('api/mexc-depth/', views.api_mexc_depth, name='api_mexc_depth'),
     path('api/gate-depth/', views.api_gate_depth, name='api_gate_depth'),
     path('api/logo/', views.api_logo),
+    path('api/impulses/', views.api_impulses, name='api_impulses'),
 ]

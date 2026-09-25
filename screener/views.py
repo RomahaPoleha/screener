@@ -494,3 +494,39 @@ def api_gate_depth(request):
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
     cache.set(cache_key, result, 2)
     return JsonResponse(result)
+
+@require_http_methods(["GET"])
+def api_impulses(request):
+    """API: последние алерты по импульсам"""
+    from .impulse_monitor import impulse_monitor
+
+    try:
+        limit = int(request.GET.get('limit', 50))
+    except ValueError:
+        limit = 50
+    limit = max(1, min(limit, 100))
+
+    try:
+        threshold = float(request.GET.get('threshold', 1.0))
+        window = int(request.GET.get('window', 60))
+        # Обновляем настройки монитора из браузера
+        impulse_monitor.set_params(threshold, window)
+    except ValueError:
+        pass
+
+    # Параметр since — возвращаем только алерты новее этого timestamp
+    since = request.GET.get('since')
+    since_ts = None
+    if since:
+        try:
+            since_ts = float(since)
+        except ValueError:
+            since_ts = None
+
+    alerts = impulse_monitor.get_recent_alerts(limit, since=since_ts)
+
+    return JsonResponse({
+        'alerts': alerts,
+        'count': len(alerts),
+        'server_time': time.time(),
+    })
