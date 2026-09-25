@@ -1,5 +1,6 @@
 """
-OKX Monitor ASYNC
+OKX Monitor ASYNC — WORKER NODE
+Читает список монет из Redis (мастер-اسпписок от Binance)
 """
 import asyncio
 import json
@@ -8,7 +9,6 @@ import aiohttp
 import websockets
 from django.core.cache import cache
 import ccxt
-from . import coin_selection
 
 # ==========================================
 # ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
@@ -53,11 +53,9 @@ OKX_SPOT_REST_URL = "https://www.okx.com/api/v5/market/books?instId={}-USDT&sz=2
 
 # Rate limiting
 last_sync_time = {}
-
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
 SYNC_INTERVAL = 3
-
 _http_client = None
 
 
@@ -73,128 +71,25 @@ async def get_http_client():
 
 
 # ==========================================
-# ТОП МОНЕТ (синхронный ccxt, запускаем в потоке)
+# 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE
 # ==========================================
-def _fetch_top_symbols_sync(market_type='swap'):
-    """Синхронная функция для ccxt"""
+def _fetch_master_symbols_sync(market='futures'):
+    """Синхронное чтение мастер-списка из Redis."""
     try:
-        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
-        exchange = ccxt_futures_exchange if market_type == 'swap' else ccxt_spot_exchange
-        tickers = exchange.fetch_tickers()
-
-        # OKX специфика: для swap volCcy24h в базовой валюте, пересчитываем в USDT
-        if market_type == 'swap':
-            for symbol, data in tickers.items():
-                if not (data.get('quoteVolume') or 0):
-                    try:
-                        info = data.get('info', {}) or {}
-                        last = float(data.get('last') or 0)
-                        vol_ccy = float(info.get('volCcy24h') or 0)
-                        data['quoteVolume'] = vol_ccy * last
-                    except Exception:
-                        pass
-
-        clean_fn = coin_selection.clean_swap if market_type == 'swap' else coin_selection.clean_spot
-        coin_selection.update_volume_history(tickers, clean_fn)
-
-        candidates = coin_selection.select_candidates(
-            tickers, clean_fn, limit=60,
-            log_func=lambda msg: print(msg)
-        )
-        return candidates[:30]
+        key = f'scalp:master:{market}'
+        symbols = cache.get(key)
+        if isinstance(symbols, list) and len(symbols) > 0:
+            return symbols
+        return []
     except Exception as e:
-        print(f"❌ Ошибка fetch_top_symbols(okx {market_type}): {e}")
+        print(f"❌ Ошибка чтения master-списка okx {market}: {e}")
         return []
 
 
-async def get_top_symbols_async(market_type='swap'):
+async def get_master_symbols_async(market='futures'):
+    """Асинхронная обёртка для чтения мастер-списка"""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_top_symbols_sync, market_type)
-
-
-# ==========================================
-# БЕЛЫЙ СПИСОК — топ монеты по абсолютному объёму
-# ==========================================
-STABLE_COINS_LIMIT = 10  # Размер белого списка
-
-# Глобальные переменные для хранения белого списка
-stable_futures_symbols = []
-stable_spot_symbols = []
-
-
-def _fetch_stable_coins_sync(market_type='swap', limit=10):
-    """Синхронная функция — топ монет по абсолютному объёму"""
-    try:
-        # ОПТИМИЗАЦИЯ: используем глобальный экземпляр
-        exchange = ccxt_futures_exchange if market_type == 'swap' else ccxt_spot_exchange
-        tickers = exchange.fetch_tickers()
-
-        # ОТЛАДКА: показать первые 10 символов чтобы понять формат
-        sample_symbols = list(tickers.keys())[:10]
-        print(f"🔍 OKX {market_type} — первые 10 символов: {sample_symbols}")
-
-        # ВАЖНО: для swap пересчитываем объём в USDT
-        if market_type == 'swap':
-            for symbol, data in tickers.items():
-                if not (data.get('quoteVolume') or 0):
-                    try:
-                        info = data.get('info', {}) or {}
-                        last = float(data.get('last') or 0)
-                        vol_ccy = float(info.get('volCcy24h') or 0)
-                        data['quoteVolume'] = vol_ccy * last
-                    except Exception:
-                        pass
-
-        # Собираем монеты с объёмами
-        coins_with_volume = []
-        for symbol, data in tickers.items():
-            # Проверяем оба возможных формата
-            if market_type == 'swap':
-                if ':USDT' in symbol:
-                    # Формат: BTC/USDT:USDT
-                    clean_symbol = symbol.split(':')[0].split('/')[0]
-                elif '-SWAP' in symbol:
-                    # Формат: BTC-USDT-SWAP
-                    clean_symbol = symbol.replace('-USDT-SWAP', '')
-                else:
-                    continue
-            else:
-                if '/USDT' not in symbol:
-                    continue
-                clean_symbol = symbol.replace('/USDT', '')
-
-            volume = data.get('quoteVolume') or 0
-            if volume < 100000:
-                continue
-
-            # Валидация
-            if not clean_symbol:
-                continue
-            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
-                continue
-            if not clean_symbol.replace('_', '').isalnum():
-                continue
-
-            coins_with_volume.append((clean_symbol, volume))
-
-        # Сортируем по убыванию объёма и берём топ-N
-        coins_with_volume.sort(key=lambda x: x[1], reverse=True)
-        result = [s for s, v in coins_with_volume[:limit]]
-
-        print(f"✅ OKX {market_type} — найдено {len(coins_with_volume)} монет, топ-{limit}: {result}")
-        return result
-
-    except Exception as e:
-        print(f"❌ Ошибка _fetch_stable_coins(okx {market_type}): {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-
-
-async def get_stable_coins_async(market_type='swap', limit=10):
-    """Асинхронная обёртка — топ монет по абсолютному объёму"""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_stable_coins_sync, market_type, limit)
+    return await loop.run_in_executor(None, _fetch_master_symbols_sync, market)
 
 
 # ==========================================
@@ -212,6 +107,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 return 0
             data = await resp.json()
 
+        # OKX возвращает code "0" при успехе. Если монета не поддерживается, code будет другим.
         if data.get('code') != '0':
             log_func(f"⚠️ okx {market} {symbol}: code={data.get('code')} msg={data.get('msg')}")
             return 0
@@ -302,16 +198,13 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
-                # 🔧 ГИСТЕРЕЗИС: Защита от мерцания зрелых плотностей
-                # Если плотность уже прожила MIN_AGE_SECONDS, снижаем порог до 7000,
-                # чтобы она не исчезала при частичном исполнении ордера.
+                # ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
 
                 if volume < min_volume:
                     continue
 
-                # Обновляем статистику объёма (лёгкая версия — только 4 числа)
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
                 new_stat = {
                     'min': min(prev_stat['min'], volume),
@@ -326,21 +219,17 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     if age < MIN_AGE_SECONDS:
                         continue
 
-                    # ПРОВЕРКА СТАБИЛЬНОСТИ (только если достаточно данных)
                     if new_stat['count'] >= 3:
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
-                        # Если объём скакал больше чем на 50% — сбрасываем timestamp
                         if stability_ratio > 0.5:
-                            ts[price] = now  # Плотность должна "созревать" заново
-                            # Сбрасываем статистику
+                            ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
                     if is_first_load:
-                        # 🔧 ИСПРАВЛЕНО: делаем вид, что плотность уже созрела
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
@@ -394,7 +283,7 @@ async def ws_heartbeat(ws, market='futures', log_func=print):
 
 
 # ==========================================
-# WEBSOCKET LISTENER (async) — один URL для futures и spot
+# WEBSOCKET LISTENER (async)
 # ==========================================
 async def ws_listener(market='futures', log_func=print):
     """OKX использует один WS URL для обоих рынков, различие в instId"""
@@ -417,7 +306,6 @@ async def ws_listener(market='futures', log_func=print):
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
 
                 try:
-                    # Подписка OKX: {"op":"subscribe","args":[{"channel":"books","instId":"BTC-USDT-SWAP"}]}
                     args = [{"channel": "books", "instId": f"{s}{inst_id_suffix}"} for s in symbols]
                     await ws.send(json.dumps({"op": "subscribe", "args": args}))
                     log_func(f"✅ okx {market} WS подписан на {len(symbols)} символов")
@@ -458,14 +346,12 @@ async def ws_listener(market='futures', log_func=print):
 # ОБРАБОТКА ОЧЕРЕДИ (async)
 # ==========================================
 async def process_queue(market='futures', log_func=print):
-    """Обработка очереди. OKX: futures имеют instId с '-USDT-SWAP', spot только '-USDT'"""
     queue = okx_futures_message_queue if market == 'futures' else okx_spot_message_queue
 
     while True:
         try:
             message = await queue.get()
 
-            # OKX шлёт "pong" строкой, не JSON
             if message == 'pong':
                 continue
 
@@ -480,7 +366,6 @@ async def process_queue(market='futures', log_func=print):
 
             inst_id = arg.get('instId', '')
 
-            # Различаем futures и spot по instId
             if market == 'futures':
                 if not inst_id.endswith('-USDT-SWAP'):
                     continue
@@ -508,7 +393,6 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
-    """Обработка снапшота — полная замена стакана"""
     new_bids = {}
     new_asks = {}
 
@@ -533,49 +417,32 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
     if market == 'futures':
         async with okx_futures_lock:
             old_ts = okx_futures_density_timestamps.get(symbol, {})
-            old_stats = okx_futures_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
-            new_ts = {}
-            new_stats = {}
-            for p in new_bids:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
-            for p in new_asks:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
+            old_stats = okx_futures_volume_stats.get(symbol, {})
+            new_ts = {p: old_ts[p] for p in new_bids if p in old_ts}
+            new_ts.update({p: old_ts[p] for p in new_asks if p in old_ts})
+            new_stats = {p: old_stats[p] for p in new_bids if p in old_stats}
+            new_stats.update({p: old_stats[p] for p in new_asks if p in old_stats})
 
             okx_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             okx_futures_density_timestamps[symbol] = new_ts
-            okx_futures_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ
+            okx_futures_volume_stats[symbol] = new_stats
     else:
         async with okx_spot_lock:
             old_ts = okx_spot_density_timestamps.get(symbol, {})
-            old_stats = okx_spot_volume_stats.get(symbol, {})  # ← ПОЛУЧАЕМ СТАРУЮ СТАТИСТИКУ
-            new_ts = {}
-            new_stats = {}
-            for p in new_bids:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
-            for p in new_asks:
-                if p in old_ts:
-                    new_ts[p] = old_ts[p]
-                if p in old_stats:
-                    new_stats[p] = old_stats[p]  # ← ПЕРЕНОСИМ СТАТИСТИКУ
+            old_stats = okx_spot_volume_stats.get(symbol, {})
+            new_ts = {p: old_ts[p] for p in new_bids if p in old_ts}
+            new_ts.update({p: old_ts[p] for p in new_asks if p in old_ts})
+            new_stats = {p: old_stats[p] for p in new_bids if p in old_stats}
+            new_stats.update({p: old_stats[p] for p in new_asks if p in old_stats})
 
             okx_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             okx_spot_density_timestamps[symbol] = new_ts
-            okx_spot_volume_stats[symbol] = new_stats  # ← СОХРАНЯЕМ
+            okx_spot_volume_stats[symbol] = new_stats
 
     await sync_to_cache_async(symbol, market, log_func)
 
 
 async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
-    """Обработка дельты — обновление стакана"""
     if market == 'futures':
         async with okx_futures_lock:
             if symbol not in okx_futures_order_books:
@@ -588,9 +455,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
-                    price = float(row[0])
-                    qty = float(row[1])
-
+                    price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
@@ -608,9 +473,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
-                    price = float(row[0])
-                    qty = float(row[1])
-
+                    price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
@@ -638,9 +501,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
-                    price = float(row[0])
-                    qty = float(row[1])
-
+                    price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
@@ -658,9 +519,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                 try:
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
-                    price = float(row[0])
-                    qty = float(row[1])
-
+                    price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
@@ -677,7 +536,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             if changed:
                 okx_spot_density_timestamps[symbol] = ts
 
-    # Rate limit: sync раз в 3 секунды, НО ТОЛЬКО если были реальные изменения в стакане!
     if changed:
         key = f"okx:{market}:{symbol}"
         now = time.time()
@@ -687,136 +545,135 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
 
 # ==========================================
-# ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ СПИСКОВ
+# 🔥 ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ (Синхронизация с Binance)
 # ==========================================
 async def periodic_refresh(market='futures', log_func=print):
     global okx_futures_symbols, okx_spot_symbols
 
     while True:
-        await asyncio.sleep(300)  # 5 минут
+        await asyncio.sleep(300)  # Проверка каждые 5 минут
 
         try:
-            market_type = 'swap' if market == 'futures' else 'spot'
-            candidates = await get_top_symbols_async(market_type)
+            master_symbols = await get_master_symbols_async(market)
+
+            if not master_symbols:
+                log_func(f"⚠️ okx {market}: мастер-список пуст, пропускаем ротацию (ждём Binance)")
+                continue
 
             old_symbols = set(okx_futures_symbols if market == 'futures' else okx_spot_symbols)
-            stable_symbols = stable_futures_symbols if market == 'futures' else stable_spot_symbols
-
             new_active = []
-            TARGET = 30
+            added = []
+            removed = old_symbols - set(master_symbols)
 
-            # ШАГ 1: Сохраняем монеты из белого списка (без обновления)
-            for symbol in stable_symbols:
-                if len(new_active) >= TARGET:
-                    break
-                if symbol in old_symbols:
-                    new_active.append(symbol)
-                else:
+            for symbol in master_symbols:
+                if symbol not in old_symbols:
                     saved_count = await init_order_book_async(symbol, market, log_func)
                     if saved_count > 0:
                         new_active.append(symbol)
-                        log_func(f"✅ okx {market} {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
-
-            # ШАГ 2: Добавляем топ по формуле
-            for symbol in candidates:
-                if len(new_active) >= TARGET:
-                    break
-                if symbol in new_active:
-                    continue
-
-                saved_count = await init_order_book_async(symbol, market, log_func)
-                if saved_count > 0:
-                    new_active.append(symbol)
-                    log_func(f"✅ okx {market} {symbol}: добавлен (плотностей: {saved_count})")
+                        added.append(symbol)
+                        log_func(f"✅ okx {market} {symbol}: добавлен (плотностей: {saved_count})")
+                    else:
+                        log_func(f"⚠️ okx {market} {symbol}: пропущен (не поддерживается или пустой стакан)")
                 else:
-                    log_func(f"⚠️ okx {market} {symbol}: пропущен (нет плотностей)")
+                    new_active.append(symbol)
 
             if market == 'futures':
-                removed = old_symbols - set(new_active)
                 okx_futures_symbols = new_active
                 if removed:
                     async with okx_futures_lock:
                         for sym in removed:
                             okx_futures_order_books.pop(sym, None)
                             okx_futures_density_timestamps.pop(sym, None)
-                            # Очистка памяти от устаревших ключей
                             okx_futures_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"okx:futures:{sym}", None)
                     log_func(f"🗑️ okx futures удалены: {', '.join(sorted(removed))}")
 
-                okx_futures_reconnect_event.set()
+                if added or removed:
+                    okx_futures_reconnect_event.set()
+                    log_func(f"🔄 okx futures: список синхронизирован (+{len(added)} -{len(removed)})")
             else:
-                removed = old_symbols - set(new_active)
                 okx_spot_symbols = new_active
                 if removed:
                     async with okx_spot_lock:
                         for sym in removed:
                             okx_spot_order_books.pop(sym, None)
                             okx_spot_density_timestamps.pop(sym, None)
-                            # Очистка памяти от устаревших ключей
                             okx_spot_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"okx:spot:{sym}", None)
                     log_func(f"🗑️ okx spot удалены: {', '.join(sorted(removed))}")
 
-                okx_spot_reconnect_event.set()
-
-            log_func(f"🔄 okx {market}: ротация завершена, активных {len(new_active)}")
+                if added or removed:
+                    okx_spot_reconnect_event.set()
+                    log_func(f"🔄 okx spot: список синхронизирован (+{len(added)} -{len(removed)})")
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(okx {market}): {e}")
 
 
 # ==========================================
-# ГЛАВНАЯ ФУНКЦИЯ
+# 🔥 ПРИНУДИТЕЛЬНЫЙ SYNC (каждые 30 сек)
+# ==========================================
+async def periodic_force_sync(log_func=print):
+    """Принудительная синхронизация всех монет в Redis каждые 30 секунд."""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            for symbol in list(okx_futures_symbols):
+                try:
+                    await sync_to_cache_async(symbol, 'futures', log_func)
+                except Exception as e:
+                    log_func(f"⚠️ okx futures force sync {symbol}: {e}")
+
+            for symbol in list(okx_spot_symbols):
+                try:
+                    await sync_to_cache_async(symbol, 'spot', log_func)
+                except Exception as e:
+                    log_func(f"⚠️ okx spot force sync {symbol}: {e}")
+        except Exception as e:
+            log_func(f"❌ Ошибка periodic_force_sync: {e}")
+
+
+# ==========================================
+# 🔥 ГЛАВНАЯ ФУНКЦИЯ (С ожиданием мастер-списка)
 # ==========================================
 async def main_async(log_func=print):
-    global okx_futures_symbols, okx_spot_symbols, stable_futures_symbols, stable_spot_symbols
+    global okx_futures_symbols, okx_spot_symbols
 
-    log_func("🚀 Запуск OKX Async Monitor...")
+    log_func("🚀 Запуск OKX Async Monitor (WORKER NODE)...")
 
-    # --- Шаг 1: Получаем белый список (стабильные монеты) ---
-    stable_f = await get_stable_coins_async('swap', STABLE_COINS_LIMIT)
-    stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
-    stable_futures_symbols = stable_f
-    stable_spot_symbols = stable_s
-    log_func(f"🔒 Белый список futures: {stable_f}")
-    log_func(f"🔒 Белый список spot: {stable_s}")
+    # 🔥 Ждём, пока Binance опубликует мастер-список (максимум 60 секунд)
+    master_f = await get_master_symbols_async('futures')
+    master_s = await get_master_symbols_async('spot')
 
-    # --- Шаг 2: Получаем кандидатов по формуле ---
-    futures_candidates = await get_top_symbols_async('swap')
-    spot_candidates = await get_top_symbols_async('spot')
+    attempts = 0
+    while (not master_f and not master_s) and attempts < 12:
+        log_func("⏳ OKX ожидает мастер-список от Binance...")
+        await asyncio.sleep(5)
+        attempts += 1
+        master_f = await get_master_symbols_async('futures')
+        master_s = await get_master_symbols_async('spot')
 
-    # --- Шаг 3: Инициализируем белый список ---
+    if not master_f and not master_s:
+        log_func("⚠️ Мастер-списки пусты после ожидания. OKX будет ждать обновления.")
+
+    # Инициализируем стаканы. Добавляем в активный список ТОЛЬКО если стакан загрузился успешно.
     active_futures = []
-    for symbol in stable_f:
-        saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
-            active_futures.append(symbol)
-            log_func(f"✅ okx futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
-
-    active_spot = []
-    for symbol in stable_s:
-        saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if saved_count > 0:
-            active_spot.append(symbol)
-            log_func(f"✅ okx spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
-
-    # --- Шаг 4: Добавляем топ по формуле (не из белого списка) ---
-    for symbol in futures_candidates[:30]:
-        if symbol in active_futures:
-            continue  # Уже в белом списке
+    for symbol in master_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         if saved_count > 0:
             active_futures.append(symbol)
             log_func(f"✅ okx futures {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ okx futures {symbol}: пропущен (не поддерживается или пустой стакан)")
 
-    for symbol in spot_candidates[:30]:
-        if symbol in active_spot:
-            continue  # Уже в белом списке
+    active_spot = []
+    for symbol in master_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         if saved_count > 0:
             active_spot.append(symbol)
             log_func(f"✅ okx spot {symbol}: принят (плотностей: {saved_count})")
+        else:
+            log_func(f"⚠️ okx spot {symbol}: пропущен (не поддерживается или пустой стакан)")
 
     okx_futures_symbols = active_futures
     okx_spot_symbols = active_spot
@@ -830,6 +687,7 @@ async def main_async(log_func=print):
         process_queue('spot', log_func),
         periodic_refresh('futures', log_func),
         periodic_refresh('spot', log_func),
+        periodic_force_sync(log_func),  # 🔥 НОВАЯ ЗАДАЧА
     ]
 
     await asyncio.gather(*tasks)
