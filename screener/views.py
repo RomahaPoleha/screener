@@ -1,6 +1,4 @@
 import ccxt
-import asyncio      # ← ДОБАВЛЕНО
-import json         # ← ДОБАВЛЕНО
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
@@ -9,8 +7,6 @@ from django.http import FileResponse, Http404
 from pathlib import Path
 import time
 from . import coin_selection
-from django.http import StreamingHttpResponse
-import queue as _queue
 
 # Глобальный exchange объект — создаётся один раз
 _binance_exchange_future = None
@@ -498,105 +494,3 @@ def api_gate_depth(request):
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
     cache.set(cache_key, result, 2)
     return JsonResponse(result)
-
-@require_http_methods(["GET"])
-def api_impulses(request):
-    """API: последние алерты по импульсам"""
-    from .impulse_monitor import impulse_monitor
-
-    try:
-        limit = int(request.GET.get('limit', 50))
-    except ValueError:
-        limit = 50
-    limit = max(1, min(limit, 100))
-
-    try:
-        threshold = float(request.GET.get('threshold', 1.0))
-        window = int(request.GET.get('window', 60))
-        # Обновляем настройки монитора из браузера
-        impulse_monitor.set_params(threshold, window)
-    except ValueError:
-        pass
-
-    # Параметр since — возвращаем только алерты новее этого timestamp
-    since = request.GET.get('since')
-    since_ts = None
-    if since:
-        try:
-            since_ts = float(since)
-        except ValueError:
-            since_ts = None
-
-    alerts = impulse_monitor.get_recent_alerts(limit, since=since_ts)
-
-    return JsonResponse({
-        'alerts': alerts,
-        'count': len(alerts),
-        'server_time': time.time(),
-    })
-
-
-
-
-@require_http_methods(["GET"])
-async def api_impulses_stream(request):
-    """API: SSE поток алертов (real-time) — АСИНХРОННАЯ версия для ASGI"""
-    from .impulse_monitor import impulse_monitor
-
-    try:
-        threshold = float(request.GET.get('threshold', 1.0))
-        window = int(request.GET.get('window', 60))
-        impulse_monitor.set_params(threshold, window)
-    except ValueError:
-        pass
-
-    q = _queue.Queue(maxsize=100)
-    impulse_monitor.subscribe(q)
-
-    async def event_stream():
-        loop = asyncio.get_running_loop()
-        try:
-            # Отправляем последние 10 алертов при подключении
-            for alert in impulse_monitor.get_recent_alerts(10):
-                yield f"data: {json.dumps(alert)}\n\n"
-
-            while True:
-                try:
-                    # 🔥 КРИТИЧЕСКИ ВАЖНО: run_in_executor предотвращает блокировку ASGI event loop
-                    # при ожидании данных из синхронной очереди
-                    alert = await loop.run_in_executor(None, q.get, True, 30)
-                    yield f"data: {json.dumps(alert)}\n\n"
-                except _queue.Empty:
-                    yield ": heartbeat\n\n"
-        except asyncio.CancelledError:
-            # 🔥 КРИТИЧЕСКИ ВАЖНО: Перехватываем отмену задачи при shutdown сервера
-            # Это позволяет мгновенно выполнить finally и освободить ресурсы
-            pass
-        finally:
-            impulse_monitor.unsubscribe(q)
-
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'  # Для nginx на Амвере
-    return response
-
-@require_http_methods(["GET"])
-def api_impulses_debug(request):
-    """Диагностика: состояние импульс-монитора"""
-    try:
-        from .impulse_monitor import impulse_monitor
-        return JsonResponse({
-            'running': impulse_monitor.running,
-            'symbols_in_history': len(impulse_monitor.price_history),
-            'total_prices_stored': sum(len(h) for h in impulse_monitor.price_history.values()),
-            'alerts_count': len(impulse_monitor.alerts),
-            'subscribers': len(impulse_monitor.subscribers),
-            'threshold': impulse_monitor.threshold,
-            'window': impulse_monitor.window,
-            'sample_symbols': list(impulse_monitor.price_history.keys())[:10],
-        })
-    except Exception as e:
-        return JsonResponse({'error': str(e)})

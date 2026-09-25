@@ -16,11 +16,4 @@ class ScreenerConfig(AppConfig):
             from .scalp_monitor import start_scalp_monitor
             start_scalp_monitor()
         except Exception as e:
-            print(f"⚠️ Scalp monitor не запущен: {e}")
-
-        # 🔥 НОВОЕ: Запуск Impulse Monitor
-        try:
-            from .impulse_monitor import start_impulse_monitor
-            start_impulse_monitor()
-        except Exception as e:
-            print(f"⚠️ Impulse monitor не запущен: {e}")
+            print(f"️ Scalp monitor не запущен: {e}")

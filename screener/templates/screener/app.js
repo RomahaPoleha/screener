@@ -61,7 +61,67 @@ function playAlertSound() {
 // ==========================================
 // WEBSOCKET ДЛЯ REAL-TIME ЦЕН (ИМПУЛЬС)
 // ==========================================
+function startImpulseWebSocket() {
+    if (impulseWsEnabled || impulseWs) return;
+    try {
+        impulseWs = new WebSocket('wss://fstream.binance.com/market/ws/!miniTicker@arr');
+        impulseWsEnabled = true;
 
+        impulseWs.onmessage = (e) => {
+            try {
+                const tickers = JSON.parse(e.data);
+                const nowSec = Date.now() / 1000;
+
+                for (const ticker of tickers) {
+                    const symbol = ticker.s;
+                    if (!symbol.endsWith('USDT')) continue;
+
+                    const cleanSymbol = symbol.replace('USDT', '');
+                    const price = parseFloat(ticker.c);
+                    if (!price) continue;
+
+                    // Обновляем priceHistory
+                    if (!priceHistory[cleanSymbol]) priceHistory[cleanSymbol] = [];
+                    const history = priceHistory[cleanSymbol];
+                    history.push({ time: nowSec, price: price });
+
+                    // Обрезаем до 5 минут
+                    while (history.length > 0 && (nowSec - history[0].time) > 300) {
+                        history.shift();
+                    }
+                }
+            } catch (err) {
+                console.warn('Impulse WS parse error:', err);
+            }
+        };
+
+        impulseWs.onclose = () => {
+            impulseWsEnabled = false;
+            impulseWs = null;
+            // Переподключение всегда если импульс включён
+            if (volumeAlertEnabled) {
+                setTimeout(startImpulseWebSocket, 3000);
+            }
+        };
+
+        impulseWs.onerror = (err) => {
+            console.warn('Impulse WS error:', err);
+            try { impulseWs.close(); } catch(e) {}
+        };
+
+        console.log('✅ Impulse WebSocket started (real-time prices)');
+    } catch (err) {
+        console.error('Failed to start impulse WS:', err);
+    }
+}
+
+function stopImpulseWebSocket() {
+    if (impulseWs) {
+        impulseWsEnabled = false;
+        try { impulseWs.close(); } catch(e) {}
+        impulseWs = null;
+    }
+}
 
 
 
@@ -226,7 +286,7 @@ const AlertManager = {
 function showVolumeAlertToast(symbol, volume, direction, priceChange) {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    volumeAlertHistory.unshift({ symbol, volume: volume || 0, time: timeStr, direction, priceChange });
+    volumeAlertHistory.unshift({ symbol, volume, time: timeStr, direction, priceChange });
     if (volumeAlertHistory.length > 20) volumeAlertHistory.pop();
     localStorage.setItem('volumeAlertHistory', JSON.stringify(volumeAlertHistory));
     unreadAlerts++;
@@ -315,7 +375,7 @@ function renderAlertHistory() {
             <span class="alert-time">${a.time}</span>
             <span class="alert-symbol">${a.symbol}</span>
             <span class="alert-rvol">${changeTxt}</span>
-            <span class="alert-vol">${a.volume ? '$' + fmt(a.volume) : ''}</span>
+            <span class="alert-vol">$${fmt(a.volume)}</span>
         </div>`;
     }).join('');
 }
@@ -327,52 +387,48 @@ function openChartFromHistory(symbol) {
     openChart(symbol);
 }
 
-// ==========================================
-// POLLING СЕРВЕРНЫХ ИМПУЛЬСОВ
-// ==========================================
+function checkVolumeAlerts() {
+    if (!volumeAlertEnabled) return;
 
-// ==========================================
-// SSE ДЛЯ СЕРВЕРНЫХ ИМПУЛЬСОВ (real-time)
-// ==========================================
-function startImpulseSSE() {
-    if (impulseSSE) return;
-    const url = `/api/impulses/stream/?threshold=${priceImpulseThreshold}&window=${priceImpulseWindow}`;
-    impulseSSE = new EventSource(url);
+    const now = Date.now();
+    const nowSec = now / 1000;
+    const COOLDOWN = Math.max(30000, Math.min(300000, priceImpulseWindow * 2000));
 
-    impulseSSE.onmessage = (e) => {
-        try {
-            const alert = JSON.parse(e.data);
-            if (!alert.symbol) return;  // пропускаем heartbeat
-            showVolumeAlertToast(
-                alert.symbol,
-                0,
-                alert.direction,
-                alert.change
-            );
-        } catch (err) {
-            console.warn('Impulse SSE parse error:', err);
+    for (const coin of allCoins) {
+        const history = priceHistory[coin.symbol] || [];
+        if (history.length === 0) continue;
+
+        const targetTime = nowSec - priceImpulseWindow;
+
+        // Защита: если данных ещё нет за нужное окно
+        if (history[0].time > targetTime) continue;
+
+        let referencePrice = null;
+        for (let i = history.length - 1; i >= 0; i--) {
+            if (history[i].time <= targetTime) {
+                referencePrice = history[i].price;
+                break;
+            }
         }
-    };
 
-    impulseSSE.onerror = () => {
-        console.warn('Impulse SSE error, EventSource reconnects automatically...');
-    };
+        if (!referencePrice || referencePrice === 0) continue;
 
-    impulseSSE.onopen = () => {
-        console.log('✅ Impulse SSE подключен к серверу (real-time)');
-    };
-}
+        // Берём текущую цену из истории (real-time из WS), а не из coin.price
+        const currentPrice = history[history.length - 1].price;
+        const priceChange = ((currentPrice - referencePrice) / referencePrice) * 100;
+        const absPriceChange = Math.abs(priceChange);
 
-function stopImpulseSSE() {
-    if (impulseSSE) {
-        impulseSSE.close();
-        impulseSSE = null;
-        console.log('🛑 Impulse SSE отключен');
+        if (absPriceChange < priceImpulseThreshold) continue;
+
+        // Кулдаун
+        const last = volumeAlertCooldown[coin.symbol] || 0;
+        if (now - last < COOLDOWN) continue;
+
+        volumeAlertCooldown[coin.symbol] = now;
+        const direction = priceChange > 0 ? '↑' : '↓';
+        showVolumeAlertToast(coin.symbol, coin.volume, direction, absPriceChange);
     }
 }
-
-
-
 
 async function loadAllData() {
     try {
@@ -1295,13 +1351,17 @@ if (priceImpulseWin) {
         else stopReconUpdates();
     }
 // Управление импульсом: WS + таймер проверки каждую секунду
-// Управление импульсом: polling к серверу
 if (volumeAlertEnabled) {
-    // Если SSE уже открыт с другими настройками — переподключаемся
-    stopImpulseSSE();
-    startImpulseSSE();
+    if (!impulseWsEnabled) startImpulseWebSocket();
+    if (!window.impulseCheckerTimer) {
+        window.impulseCheckerTimer = setInterval(checkVolumeAlerts, 1000);
+    }
 } else {
-    stopImpulseSSE();
+    if (impulseWsEnabled) stopImpulseWebSocket();
+    if (window.impulseCheckerTimer) {
+        clearInterval(window.impulseCheckerTimer);
+        window.impulseCheckerTimer = null;
+    }
 }
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }
@@ -2747,9 +2807,9 @@ els.change.addEventListener('input', (e) => {
     startNatrAutoUpdate();
     AlertManager.startAll();
 // Если импульс включён — запускаем WS и таймер
-// Если импульс включён — запускаем polling
 if (volumeAlertEnabled) {
-    startImpulseSSE();
+    startImpulseWebSocket();
+    window.impulseCheckerTimer = setInterval(checkVolumeAlerts, 1000);
 }
 });
 
