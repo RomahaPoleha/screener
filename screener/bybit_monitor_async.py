@@ -60,13 +60,13 @@ async def get_http_client():
 # 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE
 # ==========================================
 def _fetch_master_symbols_sync(market='futures'):
-    """Синхронное чтение мастер-списка из Redis"""
+    """Синхронное чтение мастер-списка из Redis.
+    Фильтрация убрана: пусть Bybit сам скажет, поддерживает он символ или нет."""
     try:
         key = f'scalp:master:{market}'
         symbols = cache.get(key)
         if isinstance(symbols, list) and len(symbols) > 0:
-            # Фильтруем невалидные символы (иероглифы, мусор)
-            return [s for s in symbols if s.isascii() and s.replace('_', '').isalnum() and len(s) <= 15]
+            return symbols
         return []
     except Exception as e:
         print(f"❌ Ошибка чтения master-списка bybit {market}: {e}")
@@ -85,10 +85,6 @@ async def get_master_symbols_async(market='futures'):
 async def init_order_book_async(symbol, market='futures', log_func=print):
     """Инициализация стакана через async HTTP"""
     try:
-        # Защита от мусорных символов
-        if not symbol.isascii() or not symbol.replace('_', '').isalnum():
-            return 0
-
         url = (BYBIT_FUTURES_REST_URL if market == 'futures' else BYBIT_SPOT_REST_URL).format(symbol)
 
         client = await get_http_client()
@@ -98,6 +94,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 return 0
             data = await resp.json()
 
+        # Если Bybit не поддерживает символ, он вернёт retCode != 0
         if data.get('retCode') != 0:
             log_func(f"⚠️ bybit {market} {symbol}: retCode={data.get('retCode')} msg={data.get('retMsg')}")
             return 0
@@ -550,14 +547,18 @@ async def periodic_refresh(market='futures', log_func=print):
             removed = old_symbols - set(master_symbols)
 
             for symbol in master_symbols:
-                new_active.append(symbol)
                 if symbol not in old_symbols:
+                    # Пытаемся добавить новую монету
                     saved_count = await init_order_book_async(symbol, market, log_func)
-                    added.append(symbol)
                     if saved_count > 0:
+                        new_active.append(symbol)
+                        added.append(symbol)
                         log_func(f"✅ bybit {market} {symbol}: добавлен (плотностей: {saved_count})")
                     else:
-                        log_func(f"⚠️ bybit {market} {symbol}: добавлен без плотностей")
+                        log_func(f"⚠️ bybit {market} {symbol}: пропущен (не поддерживается или пустой стакан)")
+                else:
+                    # Монета уже есть и валидна, оставляем её
+                    new_active.append(symbol)
 
             if market == 'futures':
                 bybit_futures_symbols = new_active
@@ -640,24 +641,24 @@ async def main_async(log_func=print):
     if not master_f and not master_s:
         log_func("⚠️ Мастер-списки пусты после ожидания. Bybit будет ждать обновления.")
 
-    # Инициализируем стаканы
+    # Инициализируем стаканы. Добавляем в активный список ТОЛЬКО если стакан загрузился успешно.
     active_futures = []
     for symbol in master_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        active_futures.append(symbol)
         if saved_count > 0:
+            active_futures.append(symbol)
             log_func(f"✅ bybit futures {symbol}: принят (плотностей: {saved_count})")
         else:
-            log_func(f"⚠️ bybit futures {symbol}: принят без плотностей")
+            log_func(f"⚠️ bybit futures {symbol}: пропущен (не поддерживается или пустой стакан)")
 
     active_spot = []
     for symbol in master_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        active_spot.append(symbol)
         if saved_count > 0:
+            active_spot.append(symbol)
             log_func(f"✅ bybit spot {symbol}: принят (плотностей: {saved_count})")
         else:
-            log_func(f"⚠️ bybit spot {symbol}: принят без плотностей")
+            log_func(f"⚠️ bybit spot {symbol}: пропущен (не поддерживается или пустой стакан)")
 
     bybit_futures_symbols = active_futures
     bybit_spot_symbols = active_spot
