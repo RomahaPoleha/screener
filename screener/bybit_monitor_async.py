@@ -8,21 +8,6 @@ import time
 import aiohttp
 import websockets
 from django.core.cache import cache
-import ccxt
-
-# ==========================================
-# ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT
-# ==========================================
-ccxt_futures_exchange = ccxt.bybit({
-    'enableRateLimit': True,
-    'timeout': 10000,
-    'options': {'defaultType': 'linear'}
-})
-ccxt_spot_exchange = ccxt.bybit({
-    'enableRateLimit': True,
-    'timeout': 10000,
-    'options': {'defaultType': 'spot'}
-})
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
@@ -61,6 +46,7 @@ _http_client = None
 
 
 async def get_http_client():
+    """Ленивая инициализация aiohttp клиента"""
     global _http_client
     if _http_client is None:
         _http_client = aiohttp.ClientSession(
@@ -74,11 +60,12 @@ async def get_http_client():
 # 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE
 # ==========================================
 def _fetch_master_symbols_sync(market='futures'):
+    """Синхронное чтение мастер-списка из Redis"""
     try:
         key = f'scalp:master:{market}'
         symbols = cache.get(key)
         if isinstance(symbols, list) and len(symbols) > 0:
-            # Фильтруем невалидные символы (например, иероглифы или мусор)
+            # Фильтруем невалидные символы (иероглифы, мусор)
             return [s for s in symbols if s.isascii() and s.replace('_', '').isalnum() and len(s) <= 15]
         return []
     except Exception as e:
@@ -87,16 +74,18 @@ def _fetch_master_symbols_sync(market='futures'):
 
 
 async def get_master_symbols_async(market='futures'):
+    """Асинхронная обёртка для чтения мастер-списка"""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _fetch_master_symbols_sync, market)
 
 
 # ==========================================
-# ИНИЦИАЛИЗАЦИЯ СТАКАНОВ
+# ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
 # ==========================================
 async def init_order_book_async(symbol, market='futures', log_func=print):
+    """Инициализация стакана через async HTTP"""
     try:
-        # Дополнительная защита от мусорных символов
+        # Защита от мусорных символов
         if not symbol.isascii() or not symbol.replace('_', '').isalnum():
             return 0
 
@@ -163,7 +152,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS
+# СИНХРОНИЗАЦИЯ В REDIS (async)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -193,6 +182,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
+                # ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
 
@@ -260,9 +250,10 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# HEARTBEAT и WEBSOCKET
+# HEARTBEAT (async) — JSON ping для Bybit
 # ==========================================
 async def ws_heartbeat(ws, market='futures', log_func=print):
+    """Отправка JSON {"op":"ping"} каждые 20 секунд для Bybit"""
     try:
         while True:
             await asyncio.sleep(20)
@@ -275,7 +266,11 @@ async def ws_heartbeat(ws, market='futures', log_func=print):
         return
 
 
+# ==========================================
+# WEBSOCKET LISTENER (async)
+# ==========================================
 async def ws_listener(market='futures', log_func=print):
+    """Бесконечный цикл подключения к WebSocket с поддержкой переподключения"""
     global bybit_futures_symbols, bybit_spot_symbols
 
     reconnect_event = bybit_futures_reconnect_event if market == 'futures' else bybit_spot_reconnect_event
@@ -332,9 +327,10 @@ async def ws_listener(market='futures', log_func=print):
 
 
 # ==========================================
-# ОБРАБОТКА ОЧЕРЕДИ
+# ОБРАБОТКА ОЧЕРЕДИ (async)
 # ==========================================
 async def process_queue(market='futures', log_func=print):
+    """Обработка очереди сообщений Bybit"""
     queue = bybit_futures_message_queue if market == 'futures' else bybit_spot_message_queue
 
     while True:
@@ -372,6 +368,7 @@ async def process_queue(market='futures', log_func=print):
 
 
 async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
+    """Обработка снапшота — полная замена стакана"""
     new_bids = {}
     new_asks = {}
 
@@ -424,6 +421,7 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
 
 
 async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
+    """Обработка дельты — обновление стакана"""
     if market == 'futures':
         async with bybit_futures_lock:
             if symbol not in bybit_futures_order_books:
@@ -437,6 +435,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price, qty = float(row[0]), float(row[1])
+
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
@@ -455,6 +454,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price, qty = float(row[0]), float(row[1])
+
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
@@ -483,6 +483,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price, qty = float(row[0]), float(row[1])
+
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
@@ -501,6 +502,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if not isinstance(row, (list, tuple)) or len(row) < 2:
                         continue
                     price, qty = float(row[0]), float(row[1])
+
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
@@ -529,6 +531,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 # 🔥 ПЕРИОДИЧЕСКОЕ ОБНОВЛЕНИЕ (Синхронизация с Binance)
 # ==========================================
 async def periodic_refresh(market='futures', log_func=print):
+    """Периодическая синхронизация с мастер-списком Binance"""
     global bybit_futures_symbols, bybit_spot_symbols
 
     while True:
@@ -590,9 +593,34 @@ async def periodic_refresh(market='futures', log_func=print):
 
 
 # ==========================================
+# 🔥 ПРИНУДИТЕЛЬНЫЙ SYNC (каждые 30 сек)
+# ==========================================
+async def periodic_force_sync(log_func=print):
+    """Принудительная синхронизация всех монет в Redis каждые 30 секунд.
+    Гарантирует, что плотности запишутся даже если Redis был недоступен при старте."""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            for symbol in list(bybit_futures_symbols):
+                try:
+                    await sync_to_cache_async(symbol, 'futures', log_func)
+                except Exception as e:
+                    log_func(f"⚠️ bybit futures force sync {symbol}: {e}")
+
+            for symbol in list(bybit_spot_symbols):
+                try:
+                    await sync_to_cache_async(symbol, 'spot', log_func)
+                except Exception as e:
+                    log_func(f"⚠️ bybit spot force sync {symbol}: {e}")
+        except Exception as e:
+            log_func(f"❌ Ошибка periodic_force_sync: {e}")
+
+
+# ==========================================
 # 🔥 ГЛАВНАЯ ФУНКЦИЯ (С ожиданием мастер-списка)
 # ==========================================
 async def main_async(log_func=print):
+    """Главная асинхронная функция — запускает все задачи"""
     global bybit_futures_symbols, bybit_spot_symbols
 
     log_func("🚀 Запуск Bybit Async Monitor (WORKER NODE)...")
@@ -610,7 +638,7 @@ async def main_async(log_func=print):
         master_s = await get_master_symbols_async('spot')
 
     if not master_f and not master_s:
-        log_func("⚠️ Мастер-списки пусты после ожидания. Bybit будет работать с пустым списком до обновления.")
+        log_func("⚠️ Мастер-списки пусты после ожидания. Bybit будет ждать обновления.")
 
     # Инициализируем стаканы
     active_futures = []
@@ -643,12 +671,14 @@ async def main_async(log_func=print):
         process_queue('spot', log_func),
         periodic_refresh('futures', log_func),
         periodic_refresh('spot', log_func),
+        periodic_force_sync(log_func),  # 🔥 НОВАЯ ЗАДАЧА
     ]
 
     await asyncio.gather(*tasks)
 
 
 def start_bybit_async_monitor(log_func=print):
+    """Синхронная обёртка для запуска из Django"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
