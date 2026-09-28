@@ -15,6 +15,13 @@ from datetime import datetime
 # Минимальный объём за 24ч
 MIN_VOLUME = 200000
 
+# 🔧 ГЛОБАЛЬНЫЙ EXCHANGE (singleton)
+_exchange = ccxt.binance({
+    'enableRateLimit': True,
+    'timeout': 10000,
+    'options': {'defaultType': 'future'}
+})
+
 # Таймфреймы для NATR
 NATR_TIMEFRAMES = {
     '5m14': {'tf': '5m', 'period': 14, 'limit': 20},
@@ -104,13 +111,7 @@ def get_symbols_from_tickers(market_type='future'):
     log(f"🔥 get_symbols_from_tickers({market_type}) СТАРТ")
 
     try:
-        exchange_config = {
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': 'future'}
-        }
-
-        exchange = ccxt.binance(exchange_config)
+        exchange = _exchange
         tickers = exchange.fetch_tickers()
 
         log(f"✅ Получено {len(tickers)} тикеров для {market_type}")
@@ -148,11 +149,7 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
     log(f"🔄 [{natr_key}] Начало расчёта для {len(symbols)} монет...")
 
     try:
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': 'future'}
-        })
+        exchange = _exchange
 
         success_count = 0
         error_count = 0
