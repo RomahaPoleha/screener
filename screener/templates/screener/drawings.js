@@ -580,3 +580,5 @@ function updateMagnetIndicator(param) {
         magnetIndicator.style.display = 'none';
     }
 }
+
+let horizontalLinePreview = null;

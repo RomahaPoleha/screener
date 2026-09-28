@@ -57,3 +57,5 @@ let isScalpLoading = false;
 
 // Таймер автообновления NATR
 let natrAutoUpdateTimer = null;
+
+let alertBeepVolume = parseFloat(localStorage.getItem('alertBeepVolume') || '0.3');
