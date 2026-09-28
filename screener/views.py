@@ -45,11 +45,7 @@ MIN_VOLUME = 100_000
 def get_symbols_from_tickers():
     """Получает список монет с Binance Futures + RVOL и цена для алертов"""
     try:
-        exchange = ccxt.binance({
-            'enableRateLimit': True,
-            'timeout': 10000,
-            'options': {'defaultType': 'future'}
-        })
+        exchange = get_binance_exchange()
         tickers = exchange.fetch_tickers()
 
         symbols_with_volume = []
