@@ -45,6 +45,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -166,3 +167,24 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = '/static/'
+
+# Откуда Django берет исходные файлы
+STATICFILES_DIRS = [
+    BASE_DIR / 'screener' / 'static',
+]
+
+# Куда Django собирает все файлы при команде collectstatic
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Настройка WhiteNoise для сжатия и кэширования статики
+# Для Django 4.2 и новее:
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Если у тебя Django старее 4.2, используй эту строку вместо STORAGES:
+# STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
