@@ -11,4 +11,37 @@
 
     {% include "screener/partials/_settings_modal.html" %}
     {% include "screener/partials/_hour_toast.html" %}
+
+    <!-- ===== СКРИПТЫ (порядок важен!) ===== -->
+
+<!-- 1. Ядро (переменные, нужные всем) -->
+<script src="{% static 'screener/state_core.js' %}"></script>
+
+<!-- 2. Утилиты -->
+<script src="{% static 'screener/utils.js' %}"></script>
+
+<!-- 3. Независимые модули -->
+<script src="{% static 'screener/sound.js' %}"></script>
+<script src="{% static 'screener/slider.js' %}"></script>
+<script src="{% static 'screener/impulse_ws.js' %}"></script>
+
+<!-- 4. Модули, зависящие от утилит и ядра -->
+<script src="{% static 'screener/alert_manager.js' %}"></script>
+<script src="{% static 'screener/data_loading.js' %}"></script>
+<script src="{% static 'screener/search.js' %}"></script>
+<script src="{% static 'screener/table.js' %}"></script>
+<script src="{% static 'screener/candle_ws.js' %}"></script>
+<script src="{% static 'screener/trades.js' %}"></script>
+<script src="{% static 'screener/drawings.js' %}"></script>
+<script src="{% static 'screener/recon.js' %}"></script>
+<script src="{% static 'screener/scalp.js' %}"></script>
+<script src="{% static 'screener/coin_groups.js' %}"></script>
+<script src="{% static 'screener/collage.js' %}"></script>
+
+<!-- 5. Модули, зависящие от многих других -->
+<script src="{% static 'screener/chart.js' %}"></script>
+<script src="{% static 'screener/settings.js' %}"></script>
+
+<!-- 6. Инициализация (последним!) -->
+<script src="{% static 'screener/init.js' %}"></script>
 {% endblock %}
