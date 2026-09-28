@@ -36,6 +36,8 @@ STABLECOINS = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
 volume_history = {}   # clean_symbol -> deque([(ts, quoteVolume)])
 _history_lock = threading.Lock()
 _pollers_started = set()
+_last_cleanup = 0
+CLEANUP_INTERVAL = 3600
 
 
 def is_valid_symbol(symbol):
@@ -68,6 +70,25 @@ def clean_spot(symbol):
     return clean
 
 
+def _cleanup_old_entries():
+    """Удаляет записи, не обновлявшиеся более 24 часов"""
+    global _last_cleanup
+    now = time.time()
+    if now - _last_cleanup < CLEANUP_INTERVAL:
+        return
+    _last_cleanup = now
+
+    with _history_lock:
+        to_remove = []
+        for symbol, dq in volume_history.items():
+            if dq and now - dq[-1][0] > 86400:  # > 24ч
+                to_remove.append(symbol)
+        for s in to_remove:
+            del volume_history[s]
+        if to_remove:
+            print(f"🧹 volume_history: удалено {len(to_remove)} старых записей")
+
+
 def update_volume_history(tickers, clean_fn):
     """Ярус 1: снимаем снапшот quoteVolume (каждые 60 сек)"""
     now = time.time()
@@ -79,7 +100,7 @@ def update_volume_history(tickers, clean_fn):
             qv = float(data.get('quoteVolume') or 0)
             dq = volume_history.setdefault(clean, deque(maxlen=120))
             dq.append((now, qv))
-
+    _cleanup_old_entries()
 
 def get_rvol(clean, quote_vol_24h):
     """RVOL: фактический объём за 5 мин / ожидаемый из 24ч"""
