@@ -118,7 +118,16 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = '/static/'
+
+# 1. Откуда Django будет брать файлы при сборке (добавь это!)
+STATICFILES_DIRS = [
+    BASE_DIR / 'screener' / 'static',
+]
+
+# 2. Куда Django сложит все файлы при команде collectstatic (уже было, оставляем)
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
 
