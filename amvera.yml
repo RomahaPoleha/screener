@@ -9,10 +9,10 @@ build:
   useCache: true
 
 run:
-  command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
-  containerPort: 8000          # ← добавил, чтобы Amvera знал, на какой порт слать трафик
+  # ВАЖНО: Сначала собираем статику (&&), потом запускаем сервер
+  command: python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 config.asgi:application
+  containerPort: 8000
   persistenceMount: /app/data
-  # env — УБРАНО отсюда!
 
 services:
   redis:

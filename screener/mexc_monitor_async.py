@@ -30,11 +30,6 @@ mexc_spot_message_queue = asyncio.Queue(maxsize=10000)
 mexc_spot_lock = asyncio.Lock()
 mexc_spot_reconnect_event = asyncio.Event()
 
-# Защита от мгновенного созревания при очистке стакана спуфером
-mexc_futures_first_load_done = set()
-mexc_spot_first_load_done = set()
-
-
 # URLs
 MEXC_FUTURES_WS_URL = "wss://contract.mexc.com/edge"
 MEXC_SPOT_WS_URL = "wss://wbs-api.mexc.com/ws"
@@ -183,20 +178,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         now = time.time()
 
         densities = []
-
-        # ✅ ИСПРАВЛЕНИЕ 1: Защита от сброса спуфером.
-        # Проверяем не пустоту ts, а факт первичной инициализации символа.
-        first_load_set = mexc_futures_first_load_done if market == 'futures' else mexc_spot_first_load_done
-        is_first_load = symbol not in first_load_set
-
-        if is_first_load:
-            first_load_set.add(symbol)
+        is_first_load = len(ts) == 0
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
-
-                # MEXC специфика: минимальный объем 10000 (оставляем как было в оригинале)
                 if volume < 10000:
                     continue
 
@@ -205,22 +191,17 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     if age < MIN_AGE_SECONDS:
                         continue
                 else:
-                    # Если это первый запуск символа — даем фору 180 сек, иначе заставляем ждать с нуля
                     if is_first_load:
-                        ts[price] = now - MIN_AGE_SECONDS
+                        ts[price] = now - 20
                     else:
                         ts[price] = now
                         continue
-
-                # ✅ ИСПРАВЛЕНИЕ 2: Рассчитываем и добавляем age_seconds для фронтенда
-                age_seconds = int(now - ts[price])
 
                 densities.append({
                     'price': price,
                     'volume': volume,
                     'side': side_name,
                     'timestamp': ts[price],
-                    'age_seconds': age_seconds,  # <-- ЭТО ПОЛЕ ЖДЕТ ВАШ ФРОНТЕНД (app.js)
                     'exchange': 'mexc'
                 })
 
@@ -242,6 +223,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
     except Exception as e:
         log_func(f"❌ sync_to_cache_async(mexc {market} {symbol}): {e}")
         return 0
+
 
 # ==========================================
 # HEARTBEAT

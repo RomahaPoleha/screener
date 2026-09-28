@@ -34,8 +34,6 @@ futures_symbols = []
 binance_futures_message_queue = asyncio.Queue(maxsize=10000)
 binance_futures_lock = asyncio.Lock()
 binance_futures_reconnect_event = asyncio.Event()
-binance_futures_first_load_done = set()
-binance_spot_first_load_done = set()
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
@@ -260,10 +258,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         now = time.time()
         densities = []
-        first_load_set = binance_futures_first_load_done if market == 'futures' else binance_spot_first_load_done
-        is_first_load = symbol not in first_load_set
-        if is_first_load:
-            first_load_set.add(symbol)
+        is_first_load = len(ts) == 0
         new_stats = {}
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
@@ -306,14 +301,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                         ts[price] = now
                         continue
 
-                age_seconds = int(now - ts[price])
-
                 densities.append({
                     'price': price,
                     'volume': volume,
                     'side': side_name,
                     'timestamp': ts[price],
-                    'age_seconds': age_seconds,  # ✅ Теперь фронт сможет фильтровать
                     'exchange': 'binance'
                 })
 
