@@ -46,19 +46,25 @@ def get_symbols_from_tickers():
     """Получает список монет с Binance Futures + RVOL и цена для алертов"""
     try:
         exchange = get_binance_exchange()
-        tickers = exchange.fetch_tickers()
+
+        # ✅ ЯВНО запрашиваем только фьючерсы (USDT-M).
+        # Это предотвращает возврат спотовых тикеров в некоторых версиях CCXT.
+        tickers = exchange.fetch_tickers(params={'type': 'future'})
 
         symbols_with_volume = []
         for symbol, data in tickers.items():
-            if ':USDT' not in symbol:
+            # ✅ Жесткая фильтрация: оставляем только строки, заканчивающиеся на ':USDT'
+            if not symbol.endswith(':USDT'):
                 continue
 
             volume = data.get('quoteVolume') or 0
             if volume < MIN_VOLUME:
                 continue
 
-            clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
+            # ✅ Более надежная очистка: "BTC/USDT:USDT" -> "BTC/USDT" -> "BTC"
+            clean_symbol = symbol.split(':')[0].replace('/USDT', '')
 
+            # Ваши существующие фильтры
             if '-' in clean_symbol:
                 continue
             if len(clean_symbol) < 1 or len(clean_symbol) > 15:
@@ -71,7 +77,6 @@ def get_symbols_from_tickers():
             except Exception:
                 rvol = 0.0
 
-            # ← ДОБАВЛЕНО: цена для импульсов
             price = float(data.get('last') or data.get('close') or 0)
 
             symbols_with_volume.append({
@@ -101,7 +106,8 @@ def api_data(request):
 
         def fetch_fn():
             exchange = get_binance_exchange()
-            return exchange.fetch_tickers()
+            # ✅ Явно указываем тип рынка и здесь
+            return exchange.fetch_tickers(params={'type': 'future'})
 
         coin_selection.start_volume_poller('binance_future', fetch_fn, coin_selection.clean_swap)
 
