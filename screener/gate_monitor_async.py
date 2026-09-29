@@ -699,30 +699,49 @@ async def periodic_force_sync(log_func=print):
 
 
 async def load_gate_contract_sizes(log_func=print):
-    """Загружает актуальные размеры контрактов (contract_size) через CCXT"""
+    """Загружает точные размеры контрактов напрямую через официальный REST API Gate.io"""
     global gate_contract_sizes
+
+    # Очищаем словарь на всякий случай
+    gate_contract_sizes.clear()
+
+    url = "https://api.gateio.ws/api/v4/futures/usdt/contracts"
+
     try:
-        log_func("🔄 Загрузка спецификаций контрактов Gate.io Futures...")
+        log_func("🔄 Загрузка спецификаций контрактов Gate.io (напрямую через REST)...")
 
-        # ✅ ИСПРАВЛЕНИЕ 1: Убираем await, так как load_markets() синхронный
-        markets = ccxt_futures_exchange.load_markets()
+        client = await get_http_client()
+        async with client.get(url) as resp:
+            if resp.status != 200:
+                log_func(f"⚠️ Ошибка загрузки контрактов: HTTP {resp.status}")
+                return
 
-        for symbol, market_data in markets.items():
-            base_currency = market_data.get('base')
-            contract_size = market_data.get('contractSize', 1.0)
+            contracts_data = await resp.json()
 
-            if base_currency and contract_size:
-                # ✅ Сохраняем в верхнем регистре для надежного поиска
-                gate_contract_sizes[base_currency.upper()] = float(contract_size)
+        count = 0
+        for contract in contracts_data:
+            # name выглядит как 'BTC_USDT', quanto_multiplier это и есть размер контракта
+            name = contract.get('name')
+            multiplier = contract.get('quanto_multiplier')
 
-        log_func(f"✅ Загружены размеры контрактов для {len(gate_contract_sizes)} монет.")
+            if name and multiplier:
+                # Превращаем 'BTC_USDT' в 'BTC'
+                base_asset = name.replace('_USDT', '').upper()
 
-        # 🔍 Отладка: проверяем, загрузился ли BTC
+                # Сохраняем как float
+                gate_contract_sizes[base_asset] = float(multiplier)
+                count += 1
+
+        log_func(f"✅ Успешно загружено {count} размеров контрактов.")
+
+        # 🔍 ЖЕСТКАЯ ПРОВЕРКА: если этого лога нет, значит, ничего не загрузилось!
         if 'BTC' in gate_contract_sizes:
-            log_func(f"🔍 Тест: BTC contract_size = {gate_contract_sizes['BTC']}")
+            log_func(f"🔍 ПРОВЕРКА: BTC contract_size = {gate_contract_sizes['BTC']}")
+        else:
+            log_func("❌ ВНИМАНИЕ: BTC не найден в загруженных контрактах!")
 
     except Exception as e:
-        log_func(f"❌ Ошибка загрузки спецификаций Gate.io: {e}")
+        log_func(f"❌ Критическая ошибка загрузки контрактов Gate.io: {e}")
         import traceback
         log_func(traceback.format_exc())
 
