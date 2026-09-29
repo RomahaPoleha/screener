@@ -48,16 +48,23 @@ CACHE_TTL = 30
 SYNC_INTERVAL = 3
 _http_client = None
 
-
 async def get_http_client():
-    """Ленивая инициализация aiohttp клиента"""
+    """Ленивая инициализация aiohttp клиента с проверкой"""
     global _http_client
-    if _http_client is None:
+    if _http_client is None or _http_client.closed:
         _http_client = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=10),
             headers={'User-Agent': 'Mozilla/5.0'}
         )
     return _http_client
+
+
+async def close_http_client():
+    """Явное закрытие сессии (для graceful shutdown)"""
+    global _http_client
+    if _http_client and not _http_client.closed:
+        await _http_client.close()
+        _http_client = None
 
 
 # ==========================================
