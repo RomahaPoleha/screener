@@ -191,6 +191,9 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS (async) — ИСПРАВЛЕНО
 # ==========================================
+# ==========================================
+# СИНХРОНИЗАЦИЯ В REDIS (async)
+# ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
         if market == 'futures':
@@ -213,8 +216,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         densities = []
 
-        # ✅ ИСПРАВЛЕНИЕ 1: Защита от сброса спуфером.
-        # Проверяем не пустоту ts, а факт первичной инициализации символа.
         first_load_set = gate_futures_first_load_done if market == 'futures' else gate_spot_first_load_done
         is_first_load = symbol not in first_load_set
 
@@ -226,28 +227,20 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
 
-                # ✅ ИСПРАВЛЕНИЕ 2: Пуленепробиваемое определение базовой валюты
-                # Превращаем 'BTCUSDT', 'btc_usdt' или 'BTC' в чистое 'BTC'
+                # Приводим имя монеты к чистому виду (BTCUSDT, BTC_USDT, btc -> BTC)
                 base_asset = symbol.upper().replace('USDT', '').replace('_', '')
 
-                # Берем размер контракта для этой монеты (если вдруг не нашли, считаем что он равен 1.0)
+                # Берем размер контракта. Если нет — считаем 1.0
                 c_size = gate_contract_sizes.get(base_asset, 1.0)
 
-                # Переводим контракты в реальные монеты
-                real_coins = qty * c_size
-
-                # Переводим реальные монеты в доллары
-                volume = real_coins * price
+                # Считаем объем в МОНЕТАХ (а не в долларах)
+                volume = qty * c_size
 
                 # ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
 
                 if volume < min_volume:
-                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
-                    # Если объём упал ниже порога, мы считаем, что ордер был изменён/уменьшен спуфером.
-                    # Мы ОБЯЗАТЕЛЬНО удаляем его из ts, чтобы при следующем увеличении объёма
-                    # он начал отсчёт времени с нуля, а не воскрес со старым возрастом (например, 47м).
                     if price in ts:
                         ts.pop(price, None)
                     continue
@@ -276,14 +269,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
-                    # Если это первый запуск символа — даем фору, иначе заставляем ждать
                     if is_first_load:
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
 
-                # ✅ ИСПРАВЛЕНИЕ 2: Рассчитываем и добавляем age_seconds для фронтенда
                 age_seconds = int(now - ts[price])
 
                 densities.append({
@@ -291,7 +282,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'volume': volume,
                     'side': side_name,
                     'timestamp': ts[price],
-                    'age_seconds': age_seconds,  # <-- ЭТО ПОЛЕ ЖДЕТ ВАШ ФРОНТЕНД (app.js)
+                    'age_seconds': age_seconds,
                     'exchange': 'gate'
                 })
 
@@ -699,52 +690,30 @@ async def periodic_force_sync(log_func=print):
 
 
 async def load_gate_contract_sizes(log_func=print):
-    """Загружает точные размеры контрактов с максимальной отладкой"""
+    """Загружает актуальные размеры контрактов (contract_size) через CCXT"""
     global gate_contract_sizes
-    gate_contract_sizes.clear()  # Очищаем на всякий случай
-
-    url = "https://api.gateio.ws/api/v4/futures/usdt/contracts"
-
     try:
-        log_func("🔄 [1/5] Начинаем запрос к Gate.io API...")
-        client = await get_http_client()
+        log_func("🔄 Загрузка спецификаций контрактов Gate.io Futures...")
 
-        async with client.get(url) as resp:
-            log_func(f"📡 [2/5] HTTP Статус ответа: {resp.status}")
+        # ✅ ИСПРАВЛЕНИЕ 1: Убираем await, так как load_markets() синхронный
+        markets = ccxt_futures_exchange.load_markets()
 
-            if resp.status != 200:
-                error_text = await resp.text()
-                log_func(f"❌ [СБОЙ] Биржа вернула ошибку! Текст: {error_text}")
-                return
+        for symbol, market_data in markets.items():
+            base_currency = market_data.get('base')
+            contract_size = market_data.get('contractSize', 1.0)
 
-            contracts_data = await resp.json()
-            log_func(f"📦 [3/5] Успешно получено JSON. Всего объектов: {len(contracts_data)}")
+            if base_currency and contract_size:
+                # ✅ Сохраняем в верхнем регистре для надежного поиска
+                gate_contract_sizes[base_currency.upper()] = float(contract_size)
 
-            # 🔥 КРИТИЧЕСКИ ВАЖНО: Смотрим, какие ключи реально прислала биржа
-            if len(contracts_data) > 0:
-                log_func(f"👀 [4/5] ПРИМЕР ДАННЫХ ОТ БИРЖИ (первые 2 монеты): {contracts_data[:2]}")
+        log_func(f"✅ Загружены размеры контрактов для {len(gate_contract_sizes)} монет.")
 
-            count = 0
-            for contract in contracts_data:
-                # Пробуем разные варианты ключей, на случай если API что-то поменял
-                name = contract.get('name') or contract.get('contract') or contract.get('symbol')
-                multiplier = contract.get('quanto_multiplier') or contract.get('contract_size') or contract.get(
-                    'multiplier')
-
-                if name and multiplier:
-                    base_asset = str(name).replace('_USDT', '').upper()
-                    gate_contract_sizes[base_asset] = float(multiplier)
-                    count += 1
-
-            log_func(f"✅ [5/5] Успешно сохранено {count} множителей в словарь.")
-
-            if 'BTC' in gate_contract_sizes:
-                log_func(f"🔍 ИТОГ: BTC contract_size = {gate_contract_sizes['BTC']}")
-            else:
-                log_func("❌ ИТОГ: BTC НЕ НАЙДЕН! Смотри пример данных выше, ключи не совпали.")
+        # 🔍 Отладка: проверяем, загрузился ли BTC
+        if 'BTC' in gate_contract_sizes:
+            log_func(f"🔍 Тест: BTC contract_size = {gate_contract_sizes['BTC']}")
 
     except Exception as e:
-        log_func(f"❌ КРИТИЧЕСКАЯ ОШИБКА в load_gate_contract_sizes: {e}")
+        log_func(f"❌ Ошибка загрузки спецификаций Gate.io: {e}")
         import traceback
         log_func(traceback.format_exc())
 
