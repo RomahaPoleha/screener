@@ -699,49 +699,52 @@ async def periodic_force_sync(log_func=print):
 
 
 async def load_gate_contract_sizes(log_func=print):
-    """Загружает точные размеры контрактов напрямую через официальный REST API Gate.io"""
+    """Загружает точные размеры контрактов с максимальной отладкой"""
     global gate_contract_sizes
-
-    # Очищаем словарь на всякий случай
-    gate_contract_sizes.clear()
+    gate_contract_sizes.clear()  # Очищаем на всякий случай
 
     url = "https://api.gateio.ws/api/v4/futures/usdt/contracts"
 
     try:
-        log_func("🔄 Загрузка спецификаций контрактов Gate.io (напрямую через REST)...")
-
+        log_func("🔄 [1/5] Начинаем запрос к Gate.io API...")
         client = await get_http_client()
+
         async with client.get(url) as resp:
+            log_func(f"📡 [2/5] HTTP Статус ответа: {resp.status}")
+
             if resp.status != 200:
-                log_func(f"⚠️ Ошибка загрузки контрактов: HTTP {resp.status}")
+                error_text = await resp.text()
+                log_func(f"❌ [СБОЙ] Биржа вернула ошибку! Текст: {error_text}")
                 return
 
             contracts_data = await resp.json()
+            log_func(f"📦 [3/5] Успешно получено JSON. Всего объектов: {len(contracts_data)}")
 
-        count = 0
-        for contract in contracts_data:
-            # name выглядит как 'BTC_USDT', quanto_multiplier это и есть размер контракта
-            name = contract.get('name')
-            multiplier = contract.get('quanto_multiplier')
+            # 🔥 КРИТИЧЕСКИ ВАЖНО: Смотрим, какие ключи реально прислала биржа
+            if len(contracts_data) > 0:
+                log_func(f"👀 [4/5] ПРИМЕР ДАННЫХ ОТ БИРЖИ (первые 2 монеты): {contracts_data[:2]}")
 
-            if name and multiplier:
-                # Превращаем 'BTC_USDT' в 'BTC'
-                base_asset = name.replace('_USDT', '').upper()
+            count = 0
+            for contract in contracts_data:
+                # Пробуем разные варианты ключей, на случай если API что-то поменял
+                name = contract.get('name') or contract.get('contract') or contract.get('symbol')
+                multiplier = contract.get('quanto_multiplier') or contract.get('contract_size') or contract.get(
+                    'multiplier')
 
-                # Сохраняем как float
-                gate_contract_sizes[base_asset] = float(multiplier)
-                count += 1
+                if name and multiplier:
+                    base_asset = str(name).replace('_USDT', '').upper()
+                    gate_contract_sizes[base_asset] = float(multiplier)
+                    count += 1
 
-        log_func(f"✅ Успешно загружено {count} размеров контрактов.")
+            log_func(f"✅ [5/5] Успешно сохранено {count} множителей в словарь.")
 
-        # 🔍 ЖЕСТКАЯ ПРОВЕРКА: если этого лога нет, значит, ничего не загрузилось!
-        if 'BTC' in gate_contract_sizes:
-            log_func(f"🔍 ПРОВЕРКА: BTC contract_size = {gate_contract_sizes['BTC']}")
-        else:
-            log_func("❌ ВНИМАНИЕ: BTC не найден в загруженных контрактах!")
+            if 'BTC' in gate_contract_sizes:
+                log_func(f"🔍 ИТОГ: BTC contract_size = {gate_contract_sizes['BTC']}")
+            else:
+                log_func("❌ ИТОГ: BTC НЕ НАЙДЕН! Смотри пример данных выше, ключи не совпали.")
 
     except Exception as e:
-        log_func(f"❌ Критическая ошибка загрузки контрактов Gate.io: {e}")
+        log_func(f"❌ КРИТИЧЕСКАЯ ОШИБКА в load_gate_contract_sizes: {e}")
         import traceback
         log_func(traceback.format_exc())
 
