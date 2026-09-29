@@ -724,6 +724,9 @@ async def main_async(log_func=print):
 
     log_func("🚀 Запуск Gate Async Monitor (WORKER NODE)...")
 
+    # 🔥 ДОБАВИТЬ ЭТУ СТРОКУ ЗДЕСЬ (перед ожиданием мастер-списка):
+    await load_gate_contract_sizes(log_func)
+
     # 🔥 Ждём, пока Binance опубликует мастер-список (максимум 60 секунд)
     master_f = await get_master_symbols_async('futures')
     master_s = await get_master_symbols_async('spot')
