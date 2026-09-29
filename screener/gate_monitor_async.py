@@ -226,15 +226,17 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
 
-                # 1. Берем размер контракта для этой монеты (если вдруг не нашли, считаем что он равен 1.0)
-                c_size = gate_contract_sizes.get(symbol, 1.0)
+                # ✅ ИСПРАВЛЕНИЕ 2: Пуленепробиваемое определение базовой валюты
+                # Превращаем 'BTCUSDT', 'btc_usdt' или 'BTC' в чистое 'BTC'
+                base_asset = symbol.upper().replace('USDT', '').replace('_', '')
 
-                # 2. Переводим контракты в реальные монеты
-                # (Например: 70 000 контрактов * 0.01 = 700 реальных монет)
+                # Берем размер контракта для этой монеты (если вдруг не нашли, считаем что он равен 1.0)
+                c_size = gate_contract_sizes.get(base_asset, 1.0)
+
+                # Переводим контракты в реальные монеты
                 real_coins = qty * c_size
 
-                # 3. Переводим реальные монеты в доллары (то, что вам нужно)
-                # (Например: 700 монет * $100 = $70 000)
+                # Переводим реальные монеты в доллары
                 volume = real_coins * price
 
                 # ГИСТЕРЕЗИС
@@ -701,19 +703,28 @@ async def load_gate_contract_sizes(log_func=print):
     global gate_contract_sizes
     try:
         log_func("🔄 Загрузка спецификаций контрактов Gate.io Futures...")
-        markets = await ccxt_futures_exchange.load_markets()
+
+        # ✅ ИСПРАВЛЕНИЕ 1: Убираем await, так как load_markets() синхронный
+        markets = ccxt_futures_exchange.load_markets()
 
         for symbol, market_data in markets.items():
-            # symbol в ccxt выглядит как 'BTC/USDT:USDT', нам нужен базовый тикер 'BTC'
             base_currency = market_data.get('base')
             contract_size = market_data.get('contractSize', 1.0)
 
             if base_currency and contract_size:
-                gate_contract_sizes[base_currency] = float(contract_size)
+                # ✅ Сохраняем в верхнем регистре для надежного поиска
+                gate_contract_sizes[base_currency.upper()] = float(contract_size)
 
         log_func(f"✅ Загружены размеры контрактов для {len(gate_contract_sizes)} монет.")
+
+        # 🔍 Отладка: проверяем, загрузился ли BTC
+        if 'BTC' in gate_contract_sizes:
+            log_func(f"🔍 Тест: BTC contract_size = {gate_contract_sizes['BTC']}")
+
     except Exception as e:
         log_func(f"❌ Ошибка загрузки спецификаций Gate.io: {e}")
+        import traceback
+        log_func(traceback.format_exc())
 
 
 # ==========================================
