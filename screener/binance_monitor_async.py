@@ -102,11 +102,24 @@ def _fetch_dynamic_by_natr_sync(market='futures', limit=20):
         if not coins_with_volume:
             return []
 
-        # Шаг 2: Batch-чтение NATR из Redis
-        natr_batch = {}
-        natr_keys = [f"natr_{s}_future" for s, _ in coins_with_volume]
-        for key in natr_keys:
-            natr_batch[key] = cache.get(key) or {}
+            # Шаг 2: Batch-чтение NATR из Redis через pipeline
+            natr_batch = {}
+            natr_keys = [f"natr_{s}_future" for s, _ in coins_with_volume]
+
+            try:
+                from django_redis import get_redis_connection
+                conn = get_redis_connection('default')
+                pipe = conn.pipeline()
+                for key in natr_keys:
+                    pipe.get(key)
+                results = pipe.execute()
+                import pickle
+                for key, val in zip(natr_keys, results):
+                    natr_batch[key] = pickle.loads(val) if val else {}
+            except Exception:
+                # Fallback: поэлементное чтение
+                for key in natr_keys:
+                    natr_batch[key] = cache.get(key) or {}
 
         # Шаг 3: Извлекаем 1m NATR и сортируем
         coins_with_natr = []
