@@ -45,6 +45,11 @@ binance_spot_message_queue = asyncio.Queue(maxsize=10000)
 binance_spot_lock = asyncio.Lock()
 binance_spot_reconnect_event = asyncio.Event()
 
+# Отслеживание первой инициализации стакана для каждого символа
+binance_futures_first_load_done = set()
+binance_spot_first_load_done = set()
+
+
 # URLs
 FUTURES_WS_URL = "wss://fstream.binance.com/ws"
 SPOT_WS_URL = "wss://stream.binance.com:9443/ws"
@@ -234,8 +239,9 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         log_func(f"❌ init_order_book_async(binance {market} {symbol}): {e}")
         return 0
 
+
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS (без изменений)
+# СИНХРОНИЗАЦИЯ В REDIS (ИСПРАВЛЕНО)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -258,7 +264,15 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         now = time.time()
         densities = []
-        is_first_load = len(ts) == 0
+
+        # ✅ ИСПРАВЛЕНИЕ 1: Защита от сброса спуфером.
+        # Проверяем не пустоту ts, а факт первичной инициализации символа.
+        first_load_set = binance_futures_first_load_done if market == 'futures' else binance_spot_first_load_done
+        is_first_load = symbol not in first_load_set
+
+        if is_first_load:
+            first_load_set.add(symbol)
+
         new_stats = {}
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
@@ -295,17 +309,22 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
+                    # Если это первый запуск символа — даем фору, иначе заставляем ждать
                     if is_first_load:
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
 
+                # ✅ ИСПРАВЛЕНИЕ 2: Рассчитываем и добавляем age_seconds для фронтенда
+                age_seconds = int(now - ts[price])
+
                 densities.append({
                     'price': price,
                     'volume': volume,
                     'side': side_name,
                     'timestamp': ts[price],
+                    'age_seconds': age_seconds,  # <-- ЭТО ПОЛЕ ЖДЕТ ВАШ ФРОНТЕНД (app.js)
                     'exchange': 'binance'
                 })
 
