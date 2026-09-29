@@ -161,7 +161,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS
+# СИНХРОНИЗАЦИЯ В REDIS — ИСПРАВЛЕНО
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -195,8 +195,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
-                # MEXC специфика: минимальный объем 10000 (оставляем как было в оригинале)
+                # MEXC специфика: минимальный объем 10000
                 if volume < 10000:
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
+                    # Если объём упал ниже порога, мы считаем, что ордер был изменён/уменьшен спуфером.
+                    # Мы ОБЯЗАТЕЛЬНО удаляем его из ts, чтобы при следующем увеличении объёма
+                    # он начал отсчёт времени с нуля, а не воскрес со старым возрастом (например, 47м).
+                    if price in ts:
+                        ts.pop(price, None)
                     continue
 
                 if price in ts:

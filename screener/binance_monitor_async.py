@@ -265,8 +265,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         now = time.time()
         densities = []
 
-        # ✅ ИСПРАВЛЕНИЕ 1: Защита от сброса спуфером.
-        # Проверяем не пустоту ts, а факт первичной инициализации символа.
         first_load_set = binance_futures_first_load_done if market == 'futures' else binance_spot_first_load_done
         is_first_load = symbol not in first_load_set
 
@@ -282,7 +280,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 # ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
+
                 if volume < min_volume:
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
+                    # Если объём упал ниже порога, мы считаем, что ордер был изменён/уменьшен спуфером.
+                    # Мы ОБЯЗАТЕЛЬНО удаляем его из ts, чтобы при следующем увеличении объёма
+                    # он начал отсчёт времени с нуля, а не воскрес со старым возрастом (например, 47м).
+                    if price in ts:
+                        ts.pop(price, None)
                     continue
 
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
@@ -309,14 +314,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
-                    # Если это первый запуск символа — даем фору, иначе заставляем ждать
                     if is_first_load:
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
 
-                # ✅ ИСПРАВЛЕНИЕ 2: Рассчитываем и добавляем age_seconds для фронтенда
                 age_seconds = int(now - ts[price])
 
                 densities.append({
@@ -324,7 +327,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'volume': volume,
                     'side': side_name,
                     'timestamp': ts[price],
-                    'age_seconds': age_seconds,  # <-- ЭТО ПОЛЕ ЖДЕТ ВАШ ФРОНТЕНД (app.js)
+                    'age_seconds': age_seconds,
                     'exchange': 'binance'
                 })
 

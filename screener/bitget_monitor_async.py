@@ -152,7 +152,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS (С оптимизациями Bitget)
+# СИНХРОНИЗАЦИЯ В REDIS (С оптимизациями Bitget + КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -195,6 +195,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 min_volume = 7000 if is_mature else 10000
 
                 if volume < min_volume:
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
+                    # Если объём упал ниже порога, мы считаем, что ордер был изменён/уменьшен спуфером.
+                    # Мы ОБЯЗАТЕЛЬНО удаляем его из ts, чтобы при следующем увеличении объёма
+                    # он начал отсчёт времени с нуля, а не воскрес со старым возрастом (например, 47м).
+                    if price in ts:
+                        ts.pop(price, None)
                     continue
 
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
