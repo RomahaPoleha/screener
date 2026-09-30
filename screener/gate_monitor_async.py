@@ -65,8 +65,8 @@ GATE_SPOT_REST_URL = "https://api.gateio.ws/api/v4/spot/order_book?currency_pair
 last_sync_time = {}
 gate_spot_last_sync_time = {}
 
-MIN_AGE_SECONDS = 180
-CACHE_TTL = 30
+MIN_AGE_SECONDS = 360
+CACHE_TTL = 10
 SYNC_INTERVAL = 3
 
 _http_client = None
