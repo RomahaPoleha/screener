@@ -196,7 +196,7 @@ function openScalpSettingsModal() {
                         <span>Futures</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="10000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="300000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
                 <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
@@ -204,7 +204,7 @@ function openScalpSettingsModal() {
                         <span>Spot</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="10000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="200000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
             </div>
         </div>`;

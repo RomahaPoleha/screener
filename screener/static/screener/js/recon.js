@@ -357,16 +357,14 @@ function stopReconUpdates() {
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
-    container.innerHTML = RECON_EXCHANGES.map(ex => `
-        <div style="display:flex;align-items:center;gap:6px;">
-            <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
-            <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
-            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
-            <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
-        </div>
-    `).join('');
+    container.innerHTML = RECON_EXCHANGES.map(ex => `<div style="display:flex;align-items:center;gap:6px;">
+        <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
+        <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
+        <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+        <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="300000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+        <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+        <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="200000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+    </div>`).join('');
 }
 
 function toggleReconSettings() {
