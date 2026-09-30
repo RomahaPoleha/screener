@@ -101,7 +101,7 @@ def detect_impulses(now_sec):
     impulses = []
 
     for window in WINDOWS:
-        cooldown_ms = max(30000, min(300000, window * 20))
+        cooldown_ms = max(30000, window * 1000)  # 1 мин → 60с, 5 мин → 300с
         current_window_start = int(now_sec // window) * window
 
         for state_key, state in candle_state.items():
