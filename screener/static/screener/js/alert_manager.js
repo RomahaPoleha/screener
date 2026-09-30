@@ -217,7 +217,7 @@ function showVolumeAlertToast(symbol, volume, direction, priceChange) {
                 ${symbol} — импульс
             </div>
             <div style="font-size:12px;">
-                Цена: ${direction} ${priceChange.toFixed(2)}% за ${priceImpulseWindow}с
+                Цена: ${direction} ${priceChange.toFixed(2)}% за ${parseInt(localStorage.getItem('priceImpulseWindow') || '60')}с
             </div>
             <div style="font-size:10px; color:#999999;">Клик — открыть график</div>
         </div>
