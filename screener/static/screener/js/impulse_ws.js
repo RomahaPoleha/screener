@@ -1,75 +1,76 @@
 // ==========================================
-// impulse_ws.js — WEBSOCKET ДЛЯ REAL-TIME ЦЕН
-// Используется для импульсных алертов
+// impulse_ws.js — POLLING СЕРВЕРНЫХ ИМПУЛЬСОВ
+// Было: WebSocket к Binance (клиент)
+// Стало: Polling серверного API
 // ==========================================
 
-// --- Переменные ---
-let impulseWs = null;
-let impulseWsEnabled = false;
-let priceHistory = {};  // symbol -> [{time, price}]
+let impulsePollingEnabled = false;
+let impulsePollingTimer = null;
+let impulseLastTimestamp = 0;  // Для фильтрации новых алертов
 
 // ==========================================
-// ЗАПУСК WEBSOCKET
+// ЗАПУСК POLLING
 // ==========================================
 function startImpulseWebSocket() {
-    if (impulseWsEnabled || impulseWs) return;
-    try {
-        impulseWs = new WebSocket('wss://fstream.binance.com/market/ws/!miniTicker@arr');
-        impulseWsEnabled = true;
+    // Функция оставлена для совместимости имени
+    if (impulsePollingEnabled) return;
+    impulsePollingEnabled = true;
 
-        impulseWs.onmessage = (e) => {
-            try {
-                const tickers = JSON.parse(e.data);
-                const nowSec = Date.now() / 1000;
-                for (const ticker of tickers) {
-                    const symbol = ticker.s;
-                    if (!symbol.endsWith('USDT')) continue;
-                    const cleanSymbol = symbol.replace('USDT', '');
-                    const price = parseFloat(ticker.c);
-                    if (!price) continue;
-
-                    // Обновляем priceHistory
-                    if (!priceHistory[cleanSymbol]) priceHistory[cleanSymbol] = [];
-                    const history = priceHistory[cleanSymbol];
-                    history.push({ time: nowSec, price: price });
-
-                    // Обрезаем до 5 минут
-                    while (history.length > 0 && (nowSec - history[0].time) > 300) {
-                        history.shift();
-                    }
-                }
-            } catch (err) {
-                console.warn('Impulse WS parse error:', err);
-            }
-        };
-
-        impulseWs.onclose = () => {
-            impulseWsEnabled = false;
-            impulseWs = null;
-            // Переподключение всегда если импульс включён
-            if (volumeAlertEnabled) {
-                setTimeout(startImpulseWebSocket, 3000);
-            }
-        };
-
-        impulseWs.onerror = (err) => {
-            console.warn('Impulse WS error:', err);
-            try { impulseWs.close(); } catch(e) {}
-        };
-
-        console.log('✅ Impulse WebSocket started (real-time prices)');
-    } catch (err) {
-        console.error('Failed to start impulse WS:', err);
-    }
+    console.log('✅ Impulse: серверный polling запущен');
+    pollImpulseAlerts();  // Первый запрос сразу
+    impulsePollingTimer = setInterval(pollImpulseAlerts, 2000);
 }
 
 // ==========================================
-// ОСТАНОВКА WEBSOCKET
+// ОСТАНОВКА POLLING
 // ==========================================
 function stopImpulseWebSocket() {
-    if (impulseWs) {
-        impulseWsEnabled = false;
-        try { impulseWs.close(); } catch(e) {}
-        impulseWs = null;
+    impulsePollingEnabled = false;
+    if (impulsePollingTimer) {
+        clearInterval(impulsePollingTimer);
+        impulsePollingTimer = null;
+    }
+    console.log('⏹️ Impulse: polling остановлен');
+}
+
+// Совместимость: проверяем что "WS включён"
+// (используется в onclose для переподключения)
+let impulseWsEnabled = false;
+Object.defineProperty(window, 'impulseWsEnabled', {
+    get: () => impulsePollingEnabled,
+    set: (v) => { impulsePollingEnabled = v; }
+});
+
+// ==========================================
+// POLLING ФУНКЦИЯ
+// ==========================================
+async function pollImpulseAlerts() {
+    if (!impulsePollingEnabled) return;
+
+    try {
+        const res = await fetch(`/api/impulse-alerts/?since=${impulseLastTimestamp}`);
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const alerts = data.alerts || [];
+
+        if (alerts.length === 0) return;
+
+        // Обновляем timestamp
+        impulseLastTimestamp = data.server_time || Date.now() / 1000;
+
+        // Обрабатываем каждый алерт
+        for (const alert of alerts) {
+            const direction = alert.direction === 'up' ? '↑' : '↓';
+            showVolumeAlertToast(
+                alert.symbol,
+                0,  // volume не передаётся с сервера
+                direction,
+                alert.price_change
+            );
+        }
+
+    } catch (err) {
+        console.warn('Impulse polling error:', err);
     }
 }

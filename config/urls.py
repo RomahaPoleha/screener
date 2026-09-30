@@ -30,6 +30,10 @@ urlpatterns = [
     path('api/mexc-depth/', views.api_mexc_depth, name='api_mexc_depth'),
     path('api/gate-depth/', views.api_gate_depth, name='api_gate_depth'),
     path('api/logo/', views.api_logo),
+    path('api/impulse-alerts/', views.api_impulse_alerts, name='api_impulse_alerts'),
+    path('api/impulse-settings/', views.api_impulse_settings, name='api_impulse_settings'),
+    path('api/impulse-settings/update/', views.api_impulse_settings_update, name='api_impulse_settings_update'),
+    path('api/impulse-status/', views.api_impulse_status, name='api_impulse_status'),
 
 
 ]

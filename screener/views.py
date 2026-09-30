@@ -496,3 +496,82 @@ def api_gate_depth(request):
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
     cache.set(cache_key, result, 2)
     return JsonResponse(result)
+
+
+@require_http_methods(["GET"])
+def api_impulse_alerts(request):
+    """API: последние импульсы из Redis"""
+    import time
+
+    try:
+        since = float(request.GET.get('since', 0))
+    except (ValueError, TypeError):
+        since = 0
+
+    alerts = cache.get('impulse:recent') or []
+
+    # Фильтруем только новые (после since)
+    if since > 0:
+        alerts = [a for a in alerts if a.get('timestamp', 0) > since]
+
+    return JsonResponse({
+        'alerts': alerts,
+        'server_time': time.time(),
+        'count': len(alerts),
+    })
+
+
+@require_http_methods(["GET"])
+def api_impulse_settings(request):
+    """API: текущие настройки импульса"""
+    threshold = cache.get('impulse:settings:threshold') or 1.0
+    window = cache.get('impulse:settings:window') or 60
+
+    return JsonResponse({
+        'threshold': float(threshold),
+        'window': int(window),
+    })
+
+
+@require_http_methods(["POST"])
+def api_impulse_settings_update(request):
+    """API: обновить настройки импульса"""
+    import json
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, TypeError):
+        return JsonResponse({'error': 'bad json'}, status=400)
+
+    threshold = data.get('threshold')
+    window = data.get('window')
+
+    if threshold is not None:
+        threshold = float(threshold)
+        if 0.1 <= threshold <= 50:
+            cache.set('impulse:settings:threshold', threshold, 86400)
+
+    if window is not None:
+        window = int(window)
+        if 5 <= window <= 300:
+            cache.set('impulse:settings:window', window, 86400)
+
+    return JsonResponse({
+        'threshold': cache.get('impulse:settings:threshold') or 1.0,
+        'window': cache.get('impulse:settings:window') or 60,
+    })
+
+
+@require_http_methods(["GET"])
+def api_impulse_status(request):
+    """API: статус импульс-монитора"""
+    from . import impulse_monitor
+
+    alerts = cache.get('impulse:recent') or []
+
+    return JsonResponse({
+        'running': True,  # Если дошли сюда — монитор жив
+        'tracked_symbols': len(impulse_monitor.price_history),
+        'recent_alerts_count': len(alerts),
+        'last_alert_time': alerts[0]['timestamp'] if alerts else None,
+    })

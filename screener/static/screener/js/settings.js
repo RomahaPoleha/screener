@@ -96,6 +96,22 @@ function applySettings() {
     localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
 }
 
+    // 🔥 Синхронизация настроек с сервером
+const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+const priceImpulseWin = document.getElementById('priceImpulseWindow');
+
+if (priceImpulseThr || priceImpulseWin) {
+    const settingsPayload = {};
+    if (priceImpulseThr) settingsPayload.threshold = parseFloat(priceImpulseThr.value);
+    if (priceImpulseWin) settingsPayload.window = parseInt(priceImpulseWin.value);
+
+    fetch('/api/impulse-settings/update/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsPayload)
+    }).catch(err => console.warn('Impulse settings sync failed:', err));
+}
+
     // Применяем настройки скальпа
     EXCHANGES_CONFIG.forEach(ex => {
         const enabledCheckbox = document.getElementById(`scalp-${ex.id}-toggle`);
@@ -174,17 +190,10 @@ function applySettings() {
 
     // Управление импульсом
     if (volumeAlertEnabled) {
-        if (!impulseWsEnabled) startImpulseWebSocket();
-        if (!window.impulseCheckerTimer) {
-            window.impulseCheckerTimer = setInterval(checkVolumeAlerts, 1000);
-        }
-    } else {
-        if (impulseWsEnabled) stopImpulseWebSocket();
-        if (window.impulseCheckerTimer) {
-            clearInterval(window.impulseCheckerTimer);
-            window.impulseCheckerTimer = null;
-        }
-    }
+    if (!impulsePollingEnabled) startImpulseWebSocket();
+} else {
+    if (impulsePollingEnabled) stopImpulseWebSocket();
+}
 
     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
 }

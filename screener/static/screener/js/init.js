@@ -138,7 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Если импульс включён — запускаем WS и таймер
     if (volumeAlertEnabled) {
-        startImpulseWebSocket();
-        window.impulseCheckerTimer = setInterval(checkVolumeAlerts, 1000);
-    }
-});
+    startImpulseWebSocket();
+
+}
