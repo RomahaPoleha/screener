@@ -81,36 +81,54 @@ function applySettings() {
 
     showDrawingTools = document.getElementById('showDrawingTools').checked;
     localStorage.setItem('showDrawingTools', showDrawingTools);
-    els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+    if (els && els.drawingToolsPanel) {
+        els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+    }
 
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
-    reconEnabled = reconToggle.checked;
-    localStorage.setItem('reconEnabled', reconEnabled);
-    for (const ex of RECON_EXCHANGES) {
-        const f = document.getElementById(`reconMinF_${ex.id}`);
-        const s = document.getElementById(`reconMinS_${ex.id}`);
-        if (f) reconMinVolumes[ex.id].futures = Math.max(300000, parseInt(f.value) || 300000);
-        if (s) reconMinVolumes[ex.id].spot = Math.max(200000, parseInt(s.value) || 200000);
+        reconEnabled = reconToggle.checked;
+        localStorage.setItem('reconEnabled', reconEnabled);
+        for (const ex of RECON_EXCHANGES) {
+            const f = document.getElementById(`reconMinF_${ex.id}`);
+            const s = document.getElementById(`reconMinS_${ex.id}`);
+            if (f) reconMinVolumes[ex.id].futures = Math.max(300000, parseInt(f.value) || 300000);
+            if (s) reconMinVolumes[ex.id].spot = Math.max(200000, parseInt(s.value) || 200000);
+        }
+        localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
-    localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
-}
 
-    // 🔥 Синхронизация настроек с сервером
-const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-const priceImpulseWin = document.getElementById('priceImpulseWindow');
+    // 🔥 Синхронизация настроек с сервером и сохранение в localStorage (ОБЪЕДИНЕНО)
+    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+    const priceImpulseWin = document.getElementById('priceImpulseWindow');
 
-if (priceImpulseThr || priceImpulseWin) {
-    const settingsPayload = {};
-    if (priceImpulseThr) settingsPayload.threshold = parseFloat(priceImpulseThr.value);
-    if (priceImpulseWin) settingsPayload.window = parseInt(priceImpulseWin.value);
+    if (priceImpulseThr || priceImpulseWin) {
+        const settingsPayload = {};
 
-    fetch('/api/impulse-settings/update/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsPayload)
-    }).catch(err => console.warn('Impulse settings sync failed:', err));
-}
+        if (priceImpulseThr) {
+            const thr = parseFloat(priceImpulseThr.value);
+            settingsPayload.threshold = thr;
+            if (thr > 0) {
+                priceImpulseThreshold = thr;
+                localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
+            }
+        }
+
+        if (priceImpulseWin) {
+            const win = parseInt(priceImpulseWin.value);
+            settingsPayload.window = win;
+            if (win >= 1 && win <= 300) {
+                priceImpulseWindow = win;
+                localStorage.setItem('priceImpulseWindow', priceImpulseWindow);
+            }
+        }
+
+        fetch('/api/impulse-settings/update/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settingsPayload)
+        }).catch(err => console.warn('Impulse settings sync failed:', err));
+    }
 
     // Применяем настройки скальпа
     EXCHANGES_CONFIG.forEach(ex => {
@@ -119,6 +137,7 @@ if (priceImpulseThr || priceImpulseWin) {
         const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
         const fInput = document.getElementById(`scalp-${ex.id}-fv`);
         const sInput = document.getElementById(`scalp-${ex.id}-sv`);
+
         if (!scalpExchanges[ex.id]) {
             scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
         }
@@ -148,26 +167,17 @@ if (priceImpulseThr || priceImpulseWin) {
         localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
     }
 
-    alertBeepVolume = parseFloat(document.getElementById('alertBeepVolume').value);
-    localStorage.setItem('alertBeepVolume', alertBeepVolume);
-    hourSoundVolume = parseFloat(document.getElementById('hourSoundVolume').value);
-    localStorage.setItem('hourSoundVolume', hourSoundVolume);
-
-    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-    if (priceImpulseThr) {
-        const thr = parseFloat(priceImpulseThr.value);
-        if (thr > 0) {
-            priceImpulseThreshold = thr;
-            localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
-        }
+    // Добавлена безопасная проверка на существование элементов перед чтением .value
+    const beepSlider = document.getElementById('alertBeepVolume');
+    if (beepSlider) {
+        alertBeepVolume = parseFloat(beepSlider.value);
+        localStorage.setItem('alertBeepVolume', alertBeepVolume);
     }
-    const priceImpulseWin = document.getElementById('priceImpulseWindow');
-    if (priceImpulseWin) {
-        const win = parseInt(priceImpulseWin.value);
-        if (win >= 1 && win <= 300) {
-            priceImpulseWindow = win;
-            localStorage.setItem('priceImpulseWindow', priceImpulseWindow);
-        }
+
+    const hourSlider = document.getElementById('hourSoundVolume');
+    if (hourSlider) {
+        hourSoundVolume = parseFloat(hourSlider.value);
+        localStorage.setItem('hourSoundVolume', hourSoundVolume);
     }
 
     updateAlertHistoryVisibility();
@@ -190,12 +200,15 @@ if (priceImpulseThr || priceImpulseWin) {
 
     // Управление импульсом
     if (volumeAlertEnabled) {
-    if (!impulsePollingEnabled) startImpulseWebSocket();
-} else {
-    if (impulsePollingEnabled) stopImpulseWebSocket();
-}
+        if (!impulsePollingEnabled) startImpulseWebSocket();
+    } else {
+        if (impulsePollingEnabled) stopImpulseWebSocket();
+    }
 
-    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+    if (modalInstance) {
+        modalInstance.hide();
+    }
 }
 
 // ==========================================
