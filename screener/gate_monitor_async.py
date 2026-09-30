@@ -65,8 +65,8 @@ GATE_SPOT_REST_URL = "https://api.gateio.ws/api/v4/spot/order_book?currency_pair
 last_sync_time = {}
 gate_spot_last_sync_time = {}
 
-MIN_AGE_SECONDS = 360
-CACHE_TTL = 10
+MIN_AGE_SECONDS = 180
+CACHE_TTL = 30
 SYNC_INTERVAL = 3
 
 _http_client = None
@@ -236,7 +236,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
                 # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
-                min_volume = 7000 if is_mature else 10000
+                min_volume = 50000 if is_mature else 60000
 
                 if volume < min_volume:
                     if price in ts:
