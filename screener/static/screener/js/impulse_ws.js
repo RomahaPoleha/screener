@@ -61,10 +61,10 @@ async function pollImpulseAlerts() {
 
         // Обрабатываем каждый алерт
         for (const alert of alerts) {
-            const direction = alert.direction === 'up' ? '↑' : '↓';
-            showVolumeAlertToast(
-                alert.symbol,
-                0,  // volume не передаётся с сервера
+         const direction = alert.direction === 'up' ? '↑' : '↓';
+         showVolumeAlertToast(
+             alert.symbol,
+             alert.volume
                 direction,
                 alert.price_change
             );
