@@ -5,7 +5,6 @@ Impulse Monitor — серверная детекция ценовых импу�
 import asyncio
 import json
 import time
-import threading
 import websockets
 from django.core.cache import cache
 from logging.handlers import RotatingFileHandler
@@ -31,21 +30,19 @@ _logger.addHandler(_console)
 # ==========================================
 # СОСТОЯНИЕ (в памяти процесса)
 # ==========================================
-price_history = {}  # symbol -> [{time: float, price: float}]
-HISTORY_MAX_AGE = 300  # 5 минут, как на клиенте
-MAX_HISTORY_LEN = 600  # макс записей на монету
+price_history = {}      # symbol -> [{time: float, price: float}]
+latest_volumes = {}     # ✅ symbol -> текущий объём в USDT (из поля 'q')
+HISTORY_MAX_AGE = 300   # 5 минут
+MAX_HISTORY_LEN = 600   # макс записей на монету
 
 # ==========================================
-# НАСТРОЙКИ (читаем из Redis, дефолты как на клиенте)
+# НАСТРОЙКИ
 # ==========================================
 DEFAULT_THRESHOLD = 1.0   # процент
 DEFAULT_WINDOW = 60       # секунд
 COOLDOWN_MULTIPLIER = 20  # кулдаун = window * multiplier (мс)
 
-# Кулдаун по монетам
 cooldowns = {}  # symbol -> timestamp последнего алерта
-
-# WebSocket URL (тот же что на клиенте)
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
 
@@ -57,10 +54,7 @@ def get_settings():
 
 
 def detect_impulses(now_sec):
-    """
-    Проверяет все монеты на импульс.
-    Возвращает список обнаруженных импульсов.
-    """
+    """Проверяет все монеты на импульс."""
     threshold, window = get_settings()
     cooldown_ms = max(30000, min(300000, window * COOLDOWN_MULTIPLIER))
     now_ms = now_sec * 1000
@@ -71,11 +65,9 @@ def detect_impulses(now_sec):
         if not history:
             continue
 
-        # Проверка: есть ли данные достаточно старые
         if history[0]['time'] > target_time:
             continue
 
-        # Находим цену в момент target_time
         reference_price = None
         for i in range(len(history) - 1, -1, -1):
             if history[i]['time'] <= target_time:
@@ -92,7 +84,6 @@ def detect_impulses(now_sec):
         if abs_change < threshold:
             continue
 
-        # Кулдаун
         last_alert = cooldowns.get(symbol, 0)
         if now_ms - last_alert < cooldown_ms:
             continue
@@ -107,27 +98,27 @@ def detect_impulses(now_sec):
             'current_price': current_price,
             'window': window,
             'timestamp': now_sec,
+            # ✅ ДОБАВЛЯЕМ ОБЪЁМ В ОТВЕТ
+            'volume': round(latest_volumes.get(symbol, 0), 2),
         })
 
     return impulses
 
 
 def trim_history():
-    """Обрезает старую историю (как на клиенте)"""
+    """Обрезает старую историю"""
     now = time.time()
     cutoff = now - HISTORY_MAX_AGE
     for symbol in list(price_history.keys()):
         history = price_history[symbol]
-        # Удаляем записи старше cutoff
         while history and history[0]['time'] < cutoff:
             history.pop(0)
-        # Ограничиваем длину
         if len(history) > MAX_HISTORY_LEN:
             price_history[symbol] = history[-MAX_HISTORY_LEN:]
 
 
 async def impulse_ws_listener():
-    """Подключается к Binance miniTicker и собирает цены"""
+    """Подключается к Binance miniTicker и собирает цены и объёмы"""
     while True:
         try:
             _logger.info("🔌 Impulse WS: подключение к Binance...")
@@ -148,13 +139,20 @@ async def impulse_ws_listener():
                             symbol = ticker.get('s', '')
                             if not symbol.endswith('USDT'):
                                 continue
+
                             clean = symbol[:-4]  # убираем USDT
                             price = float(ticker.get('c', 0))
+                            # ✅ ЧИТАЕМ ОБЪЁМ (q = quote volume в USDT)
+                            volume = float(ticker.get('q', 0))
+
                             if not price:
                                 continue
 
                             if clean not in price_history:
                                 price_history[clean] = []
+
+                            # ✅ СОХРАНЯЕМ ПОСЛЕДНИЙ ОБЪЁМ
+                            latest_volumes[clean] = volume
 
                             price_history[clean].append({
                                 'time': now_sec,
@@ -178,17 +176,13 @@ async def impulse_checker():
             await asyncio.sleep(1)
             now_sec = time.time()
 
-            # Обрезаем старую историю
             trim_history()
-
-            # Детектируем импульсы
             impulses = detect_impulses(now_sec)
 
             if impulses:
-                # Сохраняем в Redis (список последних 50)
                 existing = cache.get('impulse:recent') or []
                 existing = impulses + existing
-                existing = existing[:50]  # храним 50 последних
+                existing = existing[:50]
 
                 cache.set('impulse:recent', existing, 300)
 
@@ -196,7 +190,7 @@ async def impulse_checker():
                     _logger.info(
                         f"🔥 IMPULSE: {imp['symbol']} "
                         f"{imp['direction']} {imp['price_change']}% "
-                        f"(окно {imp['window']}с)"
+                        f"(V: ${imp['volume']}, окно {imp['window']}с)"
                     )
 
         except Exception as e:
@@ -204,7 +198,6 @@ async def impulse_checker():
 
 
 async def main():
-    """Главная async функция"""
     _logger.info("🚀 Запуск Impulse Monitor...")
     await asyncio.gather(
         impulse_ws_listener(),
@@ -213,7 +206,6 @@ async def main():
 
 
 def start_impulse_monitor():
-    """Точка входа — запускается в отдельном потоке"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:

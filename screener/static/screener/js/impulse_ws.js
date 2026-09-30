@@ -1,23 +1,21 @@
 // ==========================================
-// impulse_ws.js — POLLING СЕРВЕРНЫХ ИМПУЛЬСОВ
-// Было: WebSocket к Binance (клиент)
-// Стало: Polling серверного API
+// impulse.js — POLLING СЕРВЕРНЫХ ИМПУЛЬСОВ
 // ==========================================
 
-let impulsePollingEnabled = false;
+// ✅ 1. ДЕЛАЕМ ПЕРЕМЕННУЮ ГЛОБАЛЬНОЙ, чтобы settings.js её видел
+window.impulsePollingEnabled = false;
 let impulsePollingTimer = null;
-let impulseLastTimestamp = 0;  // Для фильтрации новых алертов
+let impulseLastTimestamp = 0;
 
 // ==========================================
 // ЗАПУСК POLLING
 // ==========================================
 function startImpulseWebSocket() {
-    // Функция оставлена для совместимости имени
-    if (impulsePollingEnabled) return;
-    impulsePollingEnabled = true;
+    if (window.impulsePollingEnabled) return;
+    window.impulsePollingEnabled = true;
 
     console.log('✅ Impulse: серверный polling запущен');
-    pollImpulseAlerts();  // Первый запрос сразу
+    pollImpulseAlerts();
     impulsePollingTimer = setInterval(pollImpulseAlerts, 2000);
 }
 
@@ -25,7 +23,7 @@ function startImpulseWebSocket() {
 // ОСТАНОВКА POLLING
 // ==========================================
 function stopImpulseWebSocket() {
-    impulsePollingEnabled = false;
+    window.impulsePollingEnabled = false;
     if (impulsePollingTimer) {
         clearInterval(impulsePollingTimer);
         impulsePollingTimer = null;
@@ -34,18 +32,16 @@ function stopImpulseWebSocket() {
 }
 
 // Совместимость: проверяем что "WS включён"
-// (используется в onclose для переподключения)
-let impulseWsEnabled = false;
 Object.defineProperty(window, 'impulseWsEnabled', {
-    get: () => impulsePollingEnabled,
-    set: (v) => { impulsePollingEnabled = v; }
+    get: () => window.impulsePollingEnabled,
+    set: (v) => { window.impulsePollingEnabled = v; }
 });
 
 // ==========================================
 // POLLING ФУНКЦИЯ
 // ==========================================
 async function pollImpulseAlerts() {
-    if (!impulsePollingEnabled) return;
+    if (!window.impulsePollingEnabled) return;
 
     try {
         const res = await fetch(`/api/impulse-alerts/?since=${impulseLastTimestamp}`);
@@ -61,10 +57,12 @@ async function pollImpulseAlerts() {
 
         // Обрабатываем каждый алерт
         for (const alert of alerts) {
-         const direction = alert.direction === 'up' ? '↑' : '↓';
-         showVolumeAlertToast(
-             alert.symbol,
-             alert.volume
+            const direction = alert.direction === 'up' ? '↑' : '↓';
+
+            // ✅ 2. ИСПРАВЛЕНО: добавлена запятая после alert.volume || 0
+            showVolumeAlertToast(
+                alert.symbol,
+                alert.volume || 0, // <-- ЗАПЯТАЯ ЗДЕСЬ
                 direction,
                 alert.price_change
             );
