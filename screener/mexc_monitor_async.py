@@ -19,7 +19,7 @@ mexc_futures_symbols = []
 mexc_futures_message_queue = asyncio.Queue(maxsize=10000)
 mexc_futures_lock = asyncio.Lock()
 mexc_futures_reconnect_event = asyncio.Event()
-
+mexc_futures_volume_stats = {}
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
 # ==========================================
@@ -29,6 +29,7 @@ mexc_spot_symbols = []
 mexc_spot_message_queue = asyncio.Queue(maxsize=10000)
 mexc_spot_lock = asyncio.Lock()
 mexc_spot_reconnect_event = asyncio.Event()
+mexc_spot_volume_stats = {}
 
 # Защита от мгновенного созревания при очистке стакана спуфером
 mexc_futures_first_load_done = set()
@@ -163,18 +164,23 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS — ИСПРАВЛЕНО
 # ==========================================
+# ==========================================
+# СИНХРОНИЗАЦИЯ В REDIS — ИСПРАВЛЕНО (пороги + зачистка призраков + стабильность)
+# ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
         if market == 'futures':
             async with mexc_futures_lock:
                 book = mexc_futures_order_books.get(symbol, {})
                 ts = mexc_futures_density_timestamps.get(symbol, {})
+                stats = mexc_futures_volume_stats.get(symbol, {})
                 if not book:
                     return 0
         else:
             async with mexc_spot_lock:
                 book = mexc_spot_order_books.get(symbol, {})
                 ts = mexc_spot_density_timestamps.get(symbol, {})
+                stats = mexc_spot_volume_stats.get(symbol, {})
                 if not book:
                     return 0
 
@@ -183,41 +189,63 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         densities = []
 
-        # ✅ ИСПРАВЛЕНИЕ 1: Защита от сброса спуфером.
-        # Проверяем не пустоту ts, а факт первичной инициализации символа.
         first_load_set = mexc_futures_first_load_done if market == 'futures' else mexc_spot_first_load_done
         is_first_load = symbol not in first_load_set
 
         if is_first_load:
             first_load_set.add(symbol)
 
+        new_stats = {}
+
+        # 🔥 ШАГ 1: Собираем все цены, которые реально есть в стакане ПРЯМО СЕЙЧАС
+        current_prices = set(book.get('bids', {}).keys()) | set(book.get('asks', {}).keys())
+
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
-                # MEXC специфика: минимальный объем 10000
-                if volume < 10000:
-                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
-                    # Если объём упал ниже порога, мы считаем, что ордер был изменён/уменьшен спуфером.
-                    # Мы ОБЯЗАТЕЛЬНО удаляем его из ts, чтобы при следующем увеличении объёма
-                    # он начал отсчёт времени с нуля, а не воскрес со старым возрастом (например, 47м).
+                # 🔥 ШАГ 2: Выравниваем пороги с recon.js (Futures: 50k, Spot: 10k)
+                is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
+
+                target_min = 50000 if market == 'futures' else 10000
+                min_volume = target_min if is_mature else int(target_min * 1.2)
+
+                if volume < min_volume:
                     if price in ts:
                         ts.pop(price, None)
                     continue
+
+                # 🔥 ШАГ 3: Проверка стабильности (защита от флэппинга)
+                prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
+                new_stat = {
+                    'min': min(prev_stat['min'], volume),
+                    'max': max(prev_stat['max'], volume),
+                    'sum': prev_stat['sum'] + volume,
+                    'count': prev_stat['count'] + 1
+                }
+                new_stats[price] = new_stat
 
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
+
+                    if new_stat['count'] >= 3:
+                        avg = new_stat['sum'] / new_stat['count']
+                        spread = new_stat['max'] - new_stat['min']
+                        stability_ratio = spread / avg if avg > 0 else 0
+
+                        if stability_ratio > 0.5:
+                            ts[price] = now
+                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
+                            continue
                 else:
-                    # Если это первый запуск символа — даем фору 180 сек, иначе заставляем ждать с нуля
                     if is_first_load:
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
 
-                # ✅ ИСПРАВЛЕНИЕ 2: Рассчитываем и добавляем age_seconds для фронтенда
                 age_seconds = int(now - ts[price])
 
                 densities.append({
@@ -225,9 +253,15 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'volume': volume,
                     'side': side_name,
                     'timestamp': ts[price],
-                    'age_seconds': age_seconds,  # <-- ЭТО ПОЛЕ ЖДЕТ ВАШ ФРОНТЕНД (app.js)
+                    'age_seconds': age_seconds,
                     'exchange': 'mexc'
                 })
+
+        # 🔥 ШАГ 4: ЖЕСТКАЯ ЗАЧИСТКА ПРИЗРАКОВ
+        prices_to_remove = [p for p in list(ts.keys()) if p not in current_prices]
+        for p in prices_to_remove:
+            ts.pop(p, None)
+            new_stats.pop(p, None)
 
         try:
             loop = asyncio.get_running_loop()
@@ -238,9 +272,11 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if market == 'futures':
             async with mexc_futures_lock:
                 mexc_futures_density_timestamps[symbol] = ts
+                mexc_futures_volume_stats[symbol] = new_stats
         else:
             async with mexc_spot_lock:
                 mexc_spot_density_timestamps[symbol] = ts
+                mexc_spot_volume_stats[symbol] = new_stats
 
         return len(densities)
 
@@ -547,6 +583,7 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             mexc_futures_order_books.pop(sym, None)
                             mexc_futures_density_timestamps.pop(sym, None)
+                            mexc_futures_volume_stats.pop(sym, None)
                     log_func(f"🗑️ mexc futures удалены: {', '.join(sorted(removed))}")
 
                 if added or removed:
@@ -559,6 +596,7 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             mexc_spot_order_books.pop(sym, None)
                             mexc_spot_density_timestamps.pop(sym, None)
+                            mexc_spot_volume_stats.pop(sym, None)
                     log_func(f"🗑️ mexc spot удалены: {', '.join(sorted(removed))}")
 
                 if added or removed:

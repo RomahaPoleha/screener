@@ -152,7 +152,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
 
 # ==========================================
-# СИНХРОНИЗАЦИЯ В REDIS (С оптимизациями Bitget + КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ)
+# СИНХРОНИЗАЦИЯ В REDIS (ИСПРАВЛЕНО: пороги + зачистка призраков)
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
@@ -176,8 +176,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         densities = []
 
-        # ✅ ИСПРАВЛЕНИЕ 1: Защита от сброса спуфером.
-        # Проверяем не пустоту ts, а факт первичной инициализации символа.
         first_load_set = bitget_futures_first_load_done if market == 'futures' else bitget_spot_first_load_done
         is_first_load = symbol not in first_load_set
 
@@ -186,19 +184,23 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         new_stats = {}
 
+        # 🔥 ШАГ 1: Собираем все цены, которые реально есть в стакане ПРЯМО СЕЙЧАС
+        current_prices = set(book.get('bids', {}).keys()) | set(book.get('asks', {}).keys())
+
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
-                # ГИСТЕРЕЗИС
+                # 🔥 ШАГ 2: Выравниваем пороги с recon.js (Futures: 50k, Spot: 10k)
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
-                min_volume = 7000 if is_mature else 10000
+
+                # Целевой порог для "созревшей" плотности
+                target_min = 50000 if market == 'futures' else 10000
+                # Для "несозревшей" делаем порог чуть выше (на 20%), чтобы отсечь мгновенный шум (флэппинг)
+                min_volume = target_min if is_mature else int(target_min * 1.2)
 
                 if volume < min_volume:
-                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
-                    # Если объём упал ниже порога, мы считаем, что ордер был изменён/уменьшен спуфером.
-                    # Мы ОБЯЗАТЕЛЬНО удаляем его из ts, чтобы при следующем увеличении объёма
-                    # он начал отсчёт времени с нуля, а не воскрес со старым возрастом (например, 47м).
+                    # Если объем упал, ОБЯЗАТЕЛЬНО удаляем из ts, чтобы сбросить таймер
                     if price in ts:
                         ts.pop(price, None)
                     continue
@@ -217,7 +219,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     if age < MIN_AGE_SECONDS:
                         continue
 
-                    # Проверка стабильности (порог 1.0 оптимален для шумных снапшотов Bitget)
+                    # Проверка стабильности (порог 1.0 оптимален для снапшотов Bitget)
                     if new_stat['count'] >= 3:
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
@@ -228,14 +230,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
-                    # Если это первый запуск символа — даем фору, иначе заставляем ждать
                     if is_first_load:
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
                         ts[price] = now
                         continue
 
-                # ✅ ИСПРАВЛЕНИЕ 2: Рассчитываем и добавляем age_seconds для фронтенда
                 age_seconds = int(now - ts[price])
 
                 densities.append({
@@ -243,9 +243,16 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'volume': volume,
                     'side': side_name,
                     'timestamp': ts[price],
-                    'age_seconds': age_seconds,  # <-- ЭТО ПОЛЕ ЖДЕТ ВАШ ФРОНТЕНД (app.js)
+                    'age_seconds': age_seconds,
                     'exchange': 'bitget'
                 })
+
+        # 🔥 ШАГ 3: ЖЕСТКАЯ ЗАЧИСТКА ПРИЗРАКОВ
+        # Удаляем из памяти всё, чего уже нет в текущем стакане, даже если оно было "созревшим"
+        prices_to_remove = [p for p in list(ts.keys()) if p not in current_prices]
+        for p in prices_to_remove:
+            ts.pop(p, None)
+            new_stats.pop(p, None)
 
         if densities:
             try:
