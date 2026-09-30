@@ -14,8 +14,8 @@ let unreadAlerts = 0;
 let rvolAlertSoundEnabled = localStorage.getItem('rvolAlertSoundEnabled') !== 'false';
 
 // Параметры импульса цены
-const priceImpulseThreshold = 1.0;  // Захардкожено
-const priceImpulseWindow = 60;      // Захардкодено
+let priceImpulseThreshold = parseFloat(localStorage.getItem('priceImpulseThreshold') || '1.0');
+let priceImpulseWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
 
 // Постоянные ценовые алерты (symbol -> массив алертов)
 let savedAlerts = {};
