@@ -29,60 +29,46 @@ cooldowns = {}  # symbol -> timestamp последнего алерта
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
-def get_settings():
-    """Читает настройки, но накладывает ЖЕСТКИЕ ограничения для защиты от коллапса"""
-    raw_threshold = cache.get('impulse:settings:threshold') or 1.0
-    raw_window = cache.get('impulse:settings:window') or 60
+# Жёсткий минимальный порог для защиты от коллапса
+MIN_THRESHOLD = 0.5
+# Сервер считает ОБА окна параллельно
+WINDOWS = [60, 300]
 
-    # ЗАЩИТА: минимум 0.5%, максимум 20%. Окно только 60 или 300 секунд.
-    threshold = max(0.5, min(20.0, float(raw_threshold)))
-    window = 300 if int(raw_window) == 300 else 60
-
-    return threshold, window
 
 def detect_impulses(now_sec):
-    threshold, window = get_settings()
-    cooldown_ms = max(30000, min(300000, window * 20)) # Кулдаун 20-100 мин
+    """Детектирует импульсы для ВСЕХ окон параллельно"""
     now_ms = now_sec * 1000
-    current_window_start = int(now_sec // window) * window
-
     impulses = []
-    for symbol, state in candle_state.items():
-        # Пропускаем, если свеча сменилась или таймфрейм не совпадает
-        if state.get('window') != window or state['start_time'] < current_window_start:
-            continue
 
-        low = state.get('low', 0)
-        high = state.get('high', 0)
-        if low == 0 or high == 0:
-            continue
+    for window in WINDOWS:
+        cooldown_ms = max(30000, min(300000, window * 20))
+        current_window_start = int(now_sec // window) * window
 
-        # Формула амплитуды: (High - Low) / Low * 100
-        amplitude = ((high - low) / low) * 100
-        if amplitude < threshold:
-            continue
-
-        # Проверка кулдауна
-        last_alert = cooldowns.get(symbol, 0)
-        if now_ms - last_alert < cooldown_ms:
-            continue
-
-        # Алерт сработал! Блокируем монету на кулдаун
-        cooldowns[symbol] = now_ms
-
-        # Определяем направление по тому, где сейчас цена относительно середины свечи
-        mid_price = (high + low) / 2
-        direction = 'up' if state.get('current', mid_price) >= mid_price else 'down'
-
-        impulses.append({
-            'symbol': symbol,
-            'price_change': round(amplitude, 2),
-            'direction': direction,
-            'current_price': state.get('current', 0),
-            'window': window,
-            'timestamp': now_sec,
-            'volume': round(state.get('volume', 0), 2),
-        })
+        for symbol, state in candle_state.items():
+            if state.get('window') != window or state['start_time'] < current_window_start:
+                continue
+            low = state.get('low', 0)
+            high = state.get('high', 0)
+            if low == 0 or high == 0:
+                continue
+            amplitude = ((high - low) / low) * 100
+            if amplitude < MIN_THRESHOLD:
+                continue
+            last_alert = cooldowns.get(f"{symbol}_{window}", 0)
+            if now_ms - last_alert < cooldown_ms:
+                continue
+            cooldowns[f"{symbol}_{window}"] = now_ms
+            mid_price = (high + low) / 2
+            direction = 'up' if state.get('current', mid_price) >= mid_price else 'down'
+            impulses.append({
+                'symbol': symbol,
+                'price_change': round(amplitude, 2),
+                'direction': direction,
+                'current_price': state.get('current', 0),
+                'window': window,
+                'timestamp': now_sec,
+                'volume': round(state.get('volume', 0), 2),
+            })
     return impulses
 
 async def impulse_ws_listener():
@@ -96,8 +82,9 @@ async def impulse_ws_listener():
                         msg = await asyncio.wait_for(ws.recv(), timeout=30)
                         tickers = json.loads(msg)
                         now_sec = time.time()
-                        _, window = get_settings()
-                        current_window_start = int(now_sec // window) * window
+                        # Сервер считает ОБА окна параллельно
+                        for window in WINDOWS:
+                            current_window_start = int(now_sec // window) * window
 
                         for ticker in tickers:
                             symbol = ticker.get('s', '')
@@ -111,24 +98,28 @@ async def impulse_ws_listener():
                                 continue
 
                             # Если это новая свеча (или первый тик для этой монеты)
-                            if clean not in candle_state or candle_state[clean]['start_time'] != current_window_start or candle_state[clean].get('window') != window:
-                                candle_state[clean] = {
-                                    'start_time': current_window_start,
-                                    'low': price,
-                                    'high': price,
-                                    'current': price,
-                                    'volume': volume,
-                                    'window': window
-                                }
-                            else:
-                                # Обновляем High, Low и текущую цену внутри той же свечи
-                                if price < candle_state[clean]['low']:
-                                    candle_state[clean]['low'] = price
-                                if price > candle_state[clean]['high']:
-                                    candle_state[clean]['high'] = price
-
-                                candle_state[clean]['current'] = price
-                                candle_state[clean]['volume'] = volume
+                            # Обновляем состояние для КАЖДОГО окна
+                            for window in WINDOWS:
+                                state_key = f"{clean}_{window}"
+                                current_window_start = int(now_sec // window) * window
+                                if state_key not in candle_state or candle_state[state_key][
+                                    'start_time'] != current_window_start:
+                                    candle_state[state_key] = {
+                                        'start_time': current_window_start,
+                                        'low': price,
+                                        'high': price,
+                                        'current': price,
+                                        'volume': volume,
+                                        'window': window,
+                                        'symbol': clean
+                                    }
+                                else:
+                                    if price < candle_state[state_key]['low']:
+                                        candle_state[state_key]['low'] = price
+                                    if price > candle_state[state_key]['high']:
+                                        candle_state[state_key]['high'] = price
+                                    candle_state[state_key]['current'] = price
+                                    candle_state[state_key]['volume'] = volume
                     except asyncio.TimeoutError:
                         continue
                     except Exception as e:
