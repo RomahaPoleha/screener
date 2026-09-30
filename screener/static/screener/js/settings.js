@@ -114,13 +114,13 @@ function applySettings() {
             }
         }
 
-        if (priceImpulseWin) {
+                if (priceImpulseWin) {
             const win = parseInt(priceImpulseWin.value);
-            settingsPayload.window = win;
-            if (win >= 1 && win <= 300) {
-                priceImpulseWindow = win;
-                localStorage.setItem('priceImpulseWindow', priceImpulseWindow);
-            }
+            // ПРИНУДИТЕЛЬНО округляем до 60 или 300 для защиты сервера
+            const safeWin = (win >= 120) ? 300 : 60;
+            settingsPayload.window = safeWin;
+            priceImpulseWindow = safeWin;
+            localStorage.setItem('priceImpulseWindow', safeWin);
         }
 
         fetch('/api/impulse-settings/update/', {
@@ -198,11 +198,15 @@ function applySettings() {
         else stopReconUpdates();
     }
 
-    // Управление импульсом
+        // Управление импульсом (ИСПРАВЛЕНО: добавлен window.)
     if (volumeAlertEnabled) {
-        if (!impulsePollingEnabled) startImpulseWebSocket();
+        if (!window.impulsePollingEnabled) {
+            startImpulseWebSocket();
+        }
     } else {
-        if (impulsePollingEnabled) stopImpulseWebSocket();
+        if (window.impulsePollingEnabled) {
+            stopImpulseWebSocket();
+        }
     }
 
     const modalInstance = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
