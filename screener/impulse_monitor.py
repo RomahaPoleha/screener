@@ -51,15 +51,19 @@ def detect_impulses(now_sec):
             high = state.get('high', 0)
             if low == 0 or high == 0:
                 continue
+
             amplitude = ((high - low) / low) * 100
             if amplitude < MIN_THRESHOLD:
                 continue
+
             last_alert = cooldowns.get(f"{symbol}_{window}", 0)
             if now_ms - last_alert < cooldown_ms:
                 continue
+
             cooldowns[f"{symbol}_{window}"] = now_ms
             mid_price = (high + low) / 2
             direction = 'up' if state.get('current', mid_price) >= mid_price else 'down'
+
             impulses.append({
                 'symbol': symbol,
                 'price_change': round(amplitude, 2),

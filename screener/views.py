@@ -535,7 +535,7 @@ def api_impulse_settings(request):
 
 @require_http_methods(["POST"])
 def api_impulse_settings_update(request):
-    """No-op: настройки теперь только на клиенте"""
+    """No-op: настройки теперь хранятся только на клиенте (localStorage)"""
     return JsonResponse({'status': 'ok', 'message': 'Settings are client-side only'})
 
 

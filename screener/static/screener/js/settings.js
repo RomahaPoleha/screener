@@ -99,31 +99,31 @@ function applySettings() {
     }
 
     // 🔥 Синхронизация настроек с сервером и сохранение в localStorage (ОБЪЕДИНЕНО)
-    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-    const priceImpulseWin = document.getElementById('priceImpulseWindow');
-
-    if (priceImpulseThr || priceImpulseWin) {
-        const settingsPayload = {};
-
-        if (priceImpulseThr) {
-            const thr = parseFloat(priceImpulseThr.value);
-            settingsPayload.threshold = thr;
-            if (thr > 0) {
-                priceImpulseThreshold = thr;
-                localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
-            }
+const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+const priceImpulseWin = document.getElementById('priceImpulseWindow');
+if (priceImpulseThr || priceImpulseWin) {
+    const settingsPayload = {};
+    if (priceImpulseThr) {
+        const thr = parseFloat(priceImpulseThr.value);
+        settingsPayload.threshold = thr;
+        if (thr > 0) {
+            priceImpulseThreshold = thr;
+            localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
         }
-
-                if (priceImpulseWin) {
-            const win = parseInt(priceImpulseWin.value);
-            // ПРИНУДИТЕЛЬНО округляем до 60 или 300 для защиты сервера
-            const safeWin = (win >= 120) ? 300 : 60;
-            settingsPayload.window = safeWin;
-            priceImpulseWindow = safeWin;
-            localStorage.setItem('priceImpulseWindow', safeWin);
-        }
-
-
+    }
+    if (priceImpulseWin) {
+        const win = parseInt(priceImpulseWin.value);
+        const safeWin = (win >= 120) ? 300 : 60;
+        settingsPayload.window = safeWin;
+        priceImpulseWindow = safeWin;
+        localStorage.setItem('priceImpulseWindow', safeWin);
+    }
+    fetch('/api/impulse-settings/update/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsPayload)
+    }).catch(err => console.warn('Impulse settings sync failed:', err));
+}
 
     // Применяем настройки скальпа
     EXCHANGES_CONFIG.forEach(ex => {

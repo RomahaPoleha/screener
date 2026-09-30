@@ -199,6 +199,7 @@ function showVolumeAlertToast(symbol, volume, direction, priceChange) {
 
     const offset = document.querySelectorAll('.volume-alert-toast').length * 90;
     const color = direction === '↑' ? '#22c55e' : '#ef4444';
+    const currentWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
 
     const toast = document.createElement('div');
     toast.className = 'volume-alert-toast';
@@ -217,7 +218,7 @@ function showVolumeAlertToast(symbol, volume, direction, priceChange) {
                 ${symbol} — импульс
             </div>
             <div style="font-size:12px;">
-                Цена: ${direction} ${priceChange.toFixed(2)}% за ${parseInt(localStorage.getItem('priceImpulseWindow') || '60')}с
+                Цена: ${direction} ${priceChange.toFixed(2)}% за ${currentWindow}с
             </div>
             <div style="font-size:10px; color:#999999;">Клик — открыть график</div>
         </div>
