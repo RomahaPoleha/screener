@@ -1,5 +1,7 @@
 """
 Impulse Monitor — детекция амплитуды свечи (Scalp Board logic)
+Сервер ловит ВСЕ импульсы >= 0.5% для обоих окон (60с и 300с).
+Клиент фильтрует по своим настройкам из localStorage.
 """
 import asyncio
 import json
@@ -23,9 +25,9 @@ _console = logging.StreamHandler()
 _console.setFormatter(logging.Formatter('%(message)s'))
 _logger.addHandler(_console)
 
-# Состояние свечей: symbol -> {'start_time': int, 'low': float, 'high': float, 'current': float, 'volume': float, 'window': int}
+# Состояние свечей: "{symbol}_{window}" -> {'start_time', 'low', 'high', 'current', 'volume', 'window', 'symbol'}
 candle_state = {}
-cooldowns = {}  # symbol -> timestamp последнего алерта
+cooldowns = {}  # "{symbol}_{window}" -> timestamp последнего алерта
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
@@ -33,6 +35,64 @@ BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 MIN_THRESHOLD = 0.5
 # Сервер считает ОБА окна параллельно
 WINDOWS = [60, 300]
+
+# Очередь для разделения приёма и обработки
+ticker_queue = None
+
+
+def process_ticker_batch(tickers, now_sec):
+    """Обработка пачки тикеров — синхронная, быстрая функция"""
+    for ticker in tickers:
+        symbol = ticker.get('s', '')
+        if not symbol.endswith('USDT'):
+            continue
+
+        clean = symbol[:-4]
+        try:
+            price = float(ticker.get('c', 0))
+            volume = float(ticker.get('q', 0))
+        except (TypeError, ValueError):
+            continue
+        if not price:
+            continue
+
+        # Обновляем состояние для КАЖДОГО окна независимо
+        for window in WINDOWS:
+            state_key = f"{clean}_{window}"
+            current_window_start = int(now_sec // window) * window
+
+            state = candle_state.get(state_key)
+            if state is None or state['start_time'] != current_window_start:
+                candle_state[state_key] = {
+                    'start_time': current_window_start,
+                    'low': price,
+                    'high': price,
+                    'current': price,
+                    'volume': volume,
+                    'window': window,
+                    'symbol': clean
+                }
+            else:
+                if price < state['low']:
+                    state['low'] = price
+                if price > state['high']:
+                    state['high'] = price
+                state['current'] = price
+                state['volume'] = volume
+
+
+async def ticker_processor():
+    """Фоновая задача — обрабатывает тикеры из очереди"""
+    global ticker_queue
+    while True:
+        try:
+            tickers, now_sec = await ticker_queue.get()
+            # Выполняем синхронную обработку в executor, чтобы не блокировать event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, process_ticker_batch, tickers, now_sec)
+        except Exception as e:
+            _logger.warning(f"⚠️ Ticker processor error: {e}")
+            await asyncio.sleep(0.1)
 
 
 def detect_impulses(now_sec):
@@ -44,7 +104,7 @@ def detect_impulses(now_sec):
         cooldown_ms = max(30000, min(300000, window * 20))
         current_window_start = int(now_sec // window) * window
 
-        for symbol, state in candle_state.items():
+        for state_key, state in candle_state.items():
             if state.get('window') != window or state['start_time'] < current_window_start:
                 continue
             low = state.get('low', 0)
@@ -56,16 +116,16 @@ def detect_impulses(now_sec):
             if amplitude < MIN_THRESHOLD:
                 continue
 
-            last_alert = cooldowns.get(f"{symbol}_{window}", 0)
+            last_alert = cooldowns.get(state_key, 0)
             if now_ms - last_alert < cooldown_ms:
                 continue
 
-            cooldowns[f"{symbol}_{window}"] = now_ms
+            cooldowns[state_key] = now_ms
             mid_price = (high + low) / 2
             direction = 'up' if state.get('current', mid_price) >= mid_price else 'down'
 
             impulses.append({
-                'symbol': symbol,
+                'symbol': state.get('symbol', ''),
                 'price_change': round(amplitude, 2),
                 'direction': direction,
                 'current_price': state.get('current', 0),
@@ -75,62 +135,49 @@ def detect_impulses(now_sec):
             })
     return impulses
 
+
 async def impulse_ws_listener():
+    global ticker_queue
+    # Очередь с ограничением размера — защита от переполнения памяти
+    ticker_queue = asyncio.Queue(maxsize=100)
+
     while True:
         try:
             _logger.info("🔌 Impulse WS: подключение к Binance...")
-            async with websockets.connect(BINANCE_TICKER_WS, ping_interval=20, ping_timeout=20) as ws:
+            # ✅ УВЕЛИЧЕНЫ ping параметры: 30с интервал, 30с таймаут
+            async with websockets.connect(
+                BINANCE_TICKER_WS,
+                ping_interval=30,
+                ping_timeout=30,
+                close_timeout=10
+            ) as ws:
                 _logger.info("✅ Impulse WS: подключен")
                 while True:
                     try:
-                        msg = await asyncio.wait_for(ws.recv(), timeout=30)
+                        # ✅ Уменьшен timeout приёма — быстрее реагируем на ошибки
+                        msg = await asyncio.wait_for(ws.recv(), timeout=20)
                         tickers = json.loads(msg)
                         now_sec = time.time()
-                        # Сервер считает ОБА окна параллельно
-                        for window in WINDOWS:
-                            current_window_start = int(now_sec // window) * window
 
-                        for ticker in tickers:
-                            symbol = ticker.get('s', '')
-                            if not symbol.endswith('USDT'):
-                                continue
+                        # ✅ КЛАДЁМ В ОЧЕРЕДЬ, а не обрабатываем сразу
+                        try:
+                            ticker_queue.put_nowait((tickers, now_sec))
+                        except asyncio.QueueFull:
+                            # Если очередь переполнена — пропускаем (лучше потерять данные, чем уронить WS)
+                            pass
 
-                            clean = symbol[:-4]
-                            price = float(ticker.get('c', 0))
-                            volume = float(ticker.get('q', 0))
-                            if not price:
-                                continue
-
-                            # Если это новая свеча (или первый тик для этой монеты)
-                            # Обновляем состояние для КАЖДОГО окна
-                            for window in WINDOWS:
-                                state_key = f"{clean}_{window}"
-                                current_window_start = int(now_sec // window) * window
-                                if state_key not in candle_state or candle_state[state_key][
-                                    'start_time'] != current_window_start:
-                                    candle_state[state_key] = {
-                                        'start_time': current_window_start,
-                                        'low': price,
-                                        'high': price,
-                                        'current': price,
-                                        'volume': volume,
-                                        'window': window,
-                                        'symbol': clean
-                                    }
-                                else:
-                                    if price < candle_state[state_key]['low']:
-                                        candle_state[state_key]['low'] = price
-                                    if price > candle_state[state_key]['high']:
-                                        candle_state[state_key]['high'] = price
-                                    candle_state[state_key]['current'] = price
-                                    candle_state[state_key]['volume'] = volume
                     except asyncio.TimeoutError:
+                        # Таймаут приёма — нормальная ситуация, продолжаем
                         continue
+                    except websockets.exceptions.ConnectionClosed as e:
+                        _logger.warning(f"⚠️ WS connection closed: {e}")
+                        break
                     except Exception as e:
                         _logger.warning(f"⚠️ Impulse WS parse: {e}")
         except Exception as e:
-            _logger.error(f"❌ Impulse WS ошибка: {e}, reconnect 3s")
-            await asyncio.sleep(3)
+            _logger.error(f"❌ Impulse WS ошибка: {e}, reconnect 5s")
+            await asyncio.sleep(5)
+
 
 async def impulse_checker():
     while True:
@@ -146,9 +193,16 @@ async def impulse_checker():
         except Exception as e:
             _logger.error(f"❌ Impulse checker ошибка: {e}")
 
+
 async def main():
     _logger.info("🚀 Запуск Impulse Monitor (Amplitude Mode)...")
-    await asyncio.gather(impulse_ws_listener(), impulse_checker())
+    # ✅ Запускаем 3 задачи параллельно: WS, обработчик очереди, чекер алертов
+    await asyncio.gather(
+        impulse_ws_listener(),
+        ticker_processor(),
+        impulse_checker()
+    )
+
 
 def start_impulse_monitor():
     loop = asyncio.new_event_loop()
