@@ -134,7 +134,10 @@ def parse_levels(levels):
 async def init_order_book_async(symbol, market='futures', log_func=print):
     """Инициализация стакана через async HTTP"""
     try:
-        url = (GATE_FUTURES_REST_URL if market == 'futures' else GATE_SPOT_REST_URL).format(symbol)
+        # 🔥 Нормализуем символ: 'BTCUSDT' или 'BTC_USDT' превращаем в 'BTC'
+        clean_symbol = symbol.upper().replace('USDT', '').replace('_', '')
+
+        url = (GATE_FUTURES_REST_URL if market == 'futures' else GATE_SPOT_REST_URL).format(clean_symbol)
 
         client = await get_http_client()
         async with client.get(url) as resp:
@@ -360,20 +363,22 @@ async def ws_listener(market='futures', log_func=print):
                     # Gate специфика: подписка с payload в виде списка
                     if market == 'futures':
                         for symbol in symbols:
+                            clean_symbol = symbol.upper().replace('USDT', '').replace('_', '')  # 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
                             msg = {
                                 "time": int(time.time()),
                                 "channel": "futures.order_book_update",
                                 "event": "subscribe",
-                                "payload": [f"{symbol}_USDT", "100ms", "100"]
+                                "payload": [f"{clean_symbol}_USDT", "100ms", "100"]  # 🔥 ИСПОЛЬЗОВАТЬ clean_symbol
                             }
                             await ws.send(json.dumps(msg))
                     else:
                         for symbol in symbols:
+                            clean_symbol = symbol.upper().replace('USDT', '').replace('_', '')  # 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
                             msg = {
                                 "time": int(time.time()),
                                 "channel": "spot.order_book_update",
                                 "event": "subscribe",
-                                "payload": [f"{symbol}_USDT", "100ms"]
+                                "payload": [f"{clean_symbol}_USDT", "100ms"]  # 🔥 ИСПОЛЬЗОВАТЬ clean_symbol
                             }
                             await ws.send(json.dumps(msg))
 
