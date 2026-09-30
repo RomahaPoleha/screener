@@ -218,7 +218,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         now = time.time()
 
         densities = []
-
         first_load_set = gate_futures_first_load_done if market == 'futures' else gate_spot_first_load_done
         is_first_load = symbol not in first_load_set
 
@@ -227,28 +226,23 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         new_stats = {}
 
+        # 🔥 СОБИРАЕМ ВСЕ ТЕКУЩИЕ ЦЕНЫ ИЗ СТАКАНА
+        current_prices = set(book.get('bids', {}).keys()) | set(book.get('asks', {}).keys())
+
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
 
-                # 🔥 ФОРМУЛА КАК В recon.js: просто цена × количество
-                # (без contract_size — именно так Gate.io показывает в стакане)
                 volume = qty * price
 
-                # ==========================================
-                # АНТИ-СПУФИНГ (этого нет в recon.js)
-                # ==========================================
-
-                # 1. ГИСТЕРЕЗИС: плотность должна "созреть" MIN_AGE_SECONDS
+                # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 min_volume = 7000 if is_mature else 10000
 
-                # 2. Если объём упал ниже порога — считаем, что ордер убран/уменьшен спуфером
                 if volume < min_volume:
                     if price in ts:
-                        ts.pop(price, None)  # Сбрасываем таймер
+                        ts.pop(price, None)
                     continue
 
-                # 3. Накопительная статистика для проверки стабильности
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
                 new_stat = {
                     'min': min(prev_stat['min'], volume),
@@ -258,25 +252,21 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 }
                 new_stats[price] = new_stat
 
-                # 4. Проверка "созревания" плотности
                 if price in ts:
                     age = now - ts[price]
                     if age < MIN_AGE_SECONDS:
                         continue
 
-                    # 5. Проверка стабильности (защита от "мигающих" ордеров)
                     if new_stat['count'] >= 3:
                         avg = new_stat['sum'] / new_stat['count']
                         spread = new_stat['max'] - new_stat['min']
                         stability_ratio = spread / avg if avg > 0 else 0
 
                         if stability_ratio > 0.5:
-                            # Ордер нестабилен — сбрасываем
                             ts[price] = now
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
-                    # Новая плотность: при первом запуске даём фору, иначе заставляем ждать
                     if is_first_load:
                         ts[price] = now - MIN_AGE_SECONDS
                     else:
@@ -293,6 +283,13 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'age_seconds': age_seconds,
                     'exchange': 'gate'
                 })
+
+        # 🔥 НОВОЕ: Удаляем "мертвые" плотности, которых нет в текущем стакане
+        prices_to_remove = [p for p in ts.keys() if p not in current_prices]
+        for p in prices_to_remove:
+            ts.pop(p, None)
+            new_stats.pop(p, None)
+            log_func(f"️ {symbol}: Удалена несуществующая плотность на цене {p}")
 
         try:
             loop = asyncio.get_running_loop()
