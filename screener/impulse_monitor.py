@@ -32,9 +32,6 @@ _logger.addHandler(_console)
 # СОСТОЯНИЕ (в памяти процесса)
 # ==========================================
 price_history = {}  # symbol -> [{time: float, price: float}]
-latest_volumes = {} # symbol -> текущий объём в USDT (из поля 'q')
-HISTORY_MAX_AGE = 300  # 5 минут, как на клиенте
-MAX_HISTORY_LEN = 600  # макс записей на монету
 HISTORY_MAX_AGE = 300  # 5 минут, как на клиенте
 MAX_HISTORY_LEN = 600  # макс записей на монету
 
@@ -110,7 +107,6 @@ def detect_impulses(now_sec):
             'current_price': current_price,
             'window': window,
             'timestamp': now_sec,
-            'volume': round(latest_volumes.get(symbol, 0), 2),
         })
 
     return impulses
@@ -154,13 +150,12 @@ async def impulse_ws_listener():
                                 continue
                             clean = symbol[:-4]  # убираем USDT
                             price = float(ticker.get('c', 0))
-                            volume = float(ticker.get('q', 0))
                             if not price:
                                 continue
 
                             if clean not in price_history:
                                 price_history[clean] = []
-                            latest_volumes[clean] = volume
+
                             price_history[clean].append({
                                 'time': now_sec,
                                 'price': price
