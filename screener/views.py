@@ -535,9 +535,8 @@ def api_impulse_settings(request):
 
 @require_http_methods(["POST"])
 def api_impulse_settings_update(request):
-    """API: обновить настройки импульса"""
+    """API: обновить настройки импульса (с жесткой защитой от коллапса)"""
     import json
-
     try:
         data = json.loads(request.body)
     except (json.JSONDecodeError, TypeError):
@@ -548,13 +547,15 @@ def api_impulse_settings_update(request):
 
     if threshold is not None:
         threshold = float(threshold)
-        if 0.1 <= threshold <= 50:
-            cache.set('impulse:settings:threshold', threshold, 86400)
+        # ЗАЩИТА: не даем установить порог ниже 0.5% или выше 20%
+        safe_threshold = max(0.5, min(20.0, threshold))
+        cache.set('impulse:settings:threshold', safe_threshold, 86400)
 
     if window is not None:
         window = int(window)
-        if 5 <= window <= 300:
-            cache.set('impulse:settings:window', window, 86400)
+        # ЗАЩИТА: разрешаем только 60 (1 мин) или 300 (5 мин)
+        safe_window = 300 if window >= 120 else 60
+        cache.set('impulse:settings:window', safe_window, 86400)
 
     return JsonResponse({
         'threshold': cache.get('impulse:settings:threshold') or 1.0,

@@ -1,6 +1,5 @@
 """
-Impulse Monitor — серверная детекция ценовых импульсов
-Заменяет клиентский WebSocket к Binance miniTicker
+Impulse Monitor — детекция амплитуды свечи (Scalp Board logic)
 """
 import asyncio
 import json
@@ -11,9 +10,6 @@ from logging.handlers import RotatingFileHandler
 import logging
 import os
 
-# ==========================================
-# ЛОГИ
-# ==========================================
 LOG_DIR = '/app/data'
 LOG_FILE = os.path.join(LOG_DIR, 'impulse_monitor.log')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -27,187 +23,137 @@ _console = logging.StreamHandler()
 _console.setFormatter(logging.Formatter('%(message)s'))
 _logger.addHandler(_console)
 
-# ==========================================
-# СОСТОЯНИЕ (в памяти процесса)
-# ==========================================
-price_history = {}      # symbol -> [{time: float, price: float}]
-latest_volumes = {}     # ✅ symbol -> текущий объём в USDT (из поля 'q')
-HISTORY_MAX_AGE = 300   # 5 минут
-MAX_HISTORY_LEN = 600   # макс записей на монету
-
-# ==========================================
-# НАСТРОЙКИ
-# ==========================================
-DEFAULT_THRESHOLD = 1.0   # процент
-DEFAULT_WINDOW = 60       # секунд
-COOLDOWN_MULTIPLIER = 20  # кулдаун = window * multiplier (мс)
-
+# Состояние свечей: symbol -> {'start_time': int, 'low': float, 'high': float, 'current': float, 'volume': float, 'window': int}
+candle_state = {}
 cooldowns = {}  # symbol -> timestamp последнего алерта
+
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
-
-# def get_settings():
-#     """Читаем настройки из Redis (или дефолты)"""
-#     threshold = cache.get('impulse:settings:threshold') or DEFAULT_THRESHOLD
-#     window = cache.get('impulse:settings:window') or DEFAULT_WINDOW
-#     return float(threshold), int(window)
-
 def get_settings():
-    """Жёстко зафиксированные безопасные настройки"""
-    return 1.0, 60  # threshold=1%, window=60 сек
+    """Читает настройки, но накладывает ЖЕСТКИЕ ограничения для защиты от коллапса"""
+    raw_threshold = cache.get('impulse:settings:threshold') or 1.0
+    raw_window = cache.get('impulse:settings:window') or 60
 
+    # ЗАЩИТА: минимум 0.5%, максимум 20%. Окно только 60 или 300 секунд.
+    threshold = max(0.5, min(20.0, float(raw_threshold)))
+    window = 300 if int(raw_window) == 300 else 60
+
+    return threshold, window
 
 def detect_impulses(now_sec):
-    """Проверяет все монеты на импульс."""
     threshold, window = get_settings()
-    cooldown_ms = max(30000, min(300000, window * COOLDOWN_MULTIPLIER))
+    cooldown_ms = max(30000, min(300000, window * 20)) # Кулдаун 20-100 мин
     now_ms = now_sec * 1000
-    target_time = now_sec - window
+    current_window_start = int(now_sec // window) * window
+
     impulses = []
-
-    for symbol, history in price_history.items():
-        if not history:
+    for symbol, state in candle_state.items():
+        # Пропускаем, если свеча сменилась или таймфрейм не совпадает
+        if state.get('window') != window or state['start_time'] < current_window_start:
             continue
 
-        if history[0]['time'] > target_time:
+        low = state.get('low', 0)
+        high = state.get('high', 0)
+        if low == 0 or high == 0:
             continue
 
-        reference_price = None
-        for i in range(len(history) - 1, -1, -1):
-            if history[i]['time'] <= target_time:
-                reference_price = history[i]['price']
-                break
-
-        if not reference_price or reference_price == 0:
+        # Формула амплитуды: (High - Low) / Low * 100
+        amplitude = ((high - low) / low) * 100
+        if amplitude < threshold:
             continue
 
-        current_price = history[-1]['price']
-        price_change = ((current_price - reference_price) / reference_price) * 100
-        abs_change = abs(price_change)
-
-        if abs_change < threshold:
-            continue
-
+        # Проверка кулдауна
         last_alert = cooldowns.get(symbol, 0)
         if now_ms - last_alert < cooldown_ms:
             continue
 
+        # Алерт сработал! Блокируем монету на кулдаун
         cooldowns[symbol] = now_ms
-        direction = 'up' if price_change > 0 else 'down'
+
+        # Определяем направление по тому, где сейчас цена относительно середины свечи
+        mid_price = (high + low) / 2
+        direction = 'up' if state.get('current', mid_price) >= mid_price else 'down'
 
         impulses.append({
             'symbol': symbol,
-            'price_change': round(abs_change, 2),
+            'price_change': round(amplitude, 2),
             'direction': direction,
-            'current_price': current_price,
+            'current_price': state.get('current', 0),
             'window': window,
             'timestamp': now_sec,
-            # ✅ ДОБАВЛЯЕМ ОБЪЁМ В ОТВЕТ
-            'volume': round(latest_volumes.get(symbol, 0), 2),
+            'volume': round(state.get('volume', 0), 2),
         })
-
     return impulses
 
-
-def trim_history():
-    """Обрезает старую историю"""
-    now = time.time()
-    cutoff = now - HISTORY_MAX_AGE
-    for symbol in list(price_history.keys()):
-        history = price_history[symbol]
-        while history and history[0]['time'] < cutoff:
-            history.pop(0)
-        if len(history) > MAX_HISTORY_LEN:
-            price_history[symbol] = history[-MAX_HISTORY_LEN:]
-
-
 async def impulse_ws_listener():
-    """Подключается к Binance miniTicker и собирает цены и объёмы"""
     while True:
         try:
             _logger.info("🔌 Impulse WS: подключение к Binance...")
-            async with websockets.connect(
-                BINANCE_TICKER_WS,
-                ping_interval=20,
-                ping_timeout=20
-            ) as ws:
+            async with websockets.connect(BINANCE_TICKER_WS, ping_interval=20, ping_timeout=20) as ws:
                 _logger.info("✅ Impulse WS: подключен")
-
                 while True:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=30)
                         tickers = json.loads(msg)
                         now_sec = time.time()
+                        _, window = get_settings()
+                        current_window_start = int(now_sec // window) * window
 
                         for ticker in tickers:
                             symbol = ticker.get('s', '')
                             if not symbol.endswith('USDT'):
                                 continue
 
-                            clean = symbol[:-4]  # убираем USDT
+                            clean = symbol[:-4]
                             price = float(ticker.get('c', 0))
-                            # ✅ ЧИТАЕМ ОБЪЁМ (q = quote volume в USDT)
                             volume = float(ticker.get('q', 0))
-
                             if not price:
                                 continue
 
-                            if clean not in price_history:
-                                price_history[clean] = []
+                            # Если это новая свеча (или первый тик для этой монеты)
+                            if clean not in candle_state or candle_state[clean]['start_time'] != current_window_start or candle_state[clean].get('window') != window:
+                                candle_state[clean] = {
+                                    'start_time': current_window_start,
+                                    'low': price,
+                                    'high': price,
+                                    'current': price,
+                                    'volume': volume,
+                                    'window': window
+                                }
+                            else:
+                                # Обновляем High, Low и текущую цену внутри той же свечи
+                                if price < candle_state[clean]['low']:
+                                    candle_state[clean]['low'] = price
+                                if price > candle_state[clean]['high']:
+                                    candle_state[clean]['high'] = price
 
-                            # ✅ СОХРАНЯЕМ ПОСЛЕДНИЙ ОБЪЁМ
-                            latest_volumes[clean] = volume
-
-                            price_history[clean].append({
-                                'time': now_sec,
-                                'price': price
-                            })
-
+                                candle_state[clean]['current'] = price
+                                candle_state[clean]['volume'] = volume
                     except asyncio.TimeoutError:
                         continue
                     except Exception as e:
                         _logger.warning(f"⚠️ Impulse WS parse: {e}")
-
         except Exception as e:
             _logger.error(f"❌ Impulse WS ошибка: {e}, reconnect 3s")
             await asyncio.sleep(3)
 
-
 async def impulse_checker():
-    """Каждую секунду проверяет импульсы и пишет в Redis"""
     while True:
         try:
             await asyncio.sleep(1)
-            now_sec = time.time()
-
-            trim_history()
-            impulses = detect_impulses(now_sec)
-
+            impulses = detect_impulses(time.time())
             if impulses:
                 existing = cache.get('impulse:recent') or []
                 existing = impulses + existing
-                existing = existing[:50]
-
-                cache.set('impulse:recent', existing, 300)
-
+                cache.set('impulse:recent', existing[:50], 300)
                 for imp in impulses:
-                    _logger.info(
-                        f"🔥 IMPULSE: {imp['symbol']} "
-                        f"{imp['direction']} {imp['price_change']}% "
-                        f"(V: ${imp['volume']}, окно {imp['window']}с)"
-                    )
-
+                    _logger.info(f"🔥 IMPULSE: {imp['symbol']} {imp['direction']} {imp['price_change']}% (V: ${imp['volume']}, {imp['window']}s)")
         except Exception as e:
             _logger.error(f"❌ Impulse checker ошибка: {e}")
 
-
 async def main():
-    _logger.info("🚀 Запуск Impulse Monitor...")
-    await asyncio.gather(
-        impulse_ws_listener(),
-        impulse_checker(),
-    )
-
+    _logger.info("🚀 Запуск Impulse Monitor (Amplitude Mode)...")
+    await asyncio.gather(impulse_ws_listener(), impulse_checker())
 
 def start_impulse_monitor():
     loop = asyncio.new_event_loop()
@@ -216,5 +162,3 @@ def start_impulse_monitor():
         loop.run_until_complete(main())
     except Exception as e:
         _logger.error(f"❌ Impulse Monitor упал: {e}")
-        import traceback
-        _logger.error(traceback.format_exc())
