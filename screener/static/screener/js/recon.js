@@ -22,12 +22,12 @@ let reconMarkets = {
     bitget:  { spot: false, futures: false },
 };
 let reconMinVolumes = {
-    binance: { spot: 10000, futures: 50000 },
-    bybit:   { spot: 10000, futures: 50000 },
-    okx:     { spot: 10000, futures: 50000 },
-    gate:    { spot: 10000, futures: 50000 },
-    mexc:    { spot: 10000, futures: 50000 },
-    bitget:  { spot: 10000, futures: 50000 }
+    binance: { spot: 200000, futures: 300000 },
+    bybit:   { spot: 200000, futures: 300000 },
+    okx:     { spot: 200000, futures: 300000 },
+    gate:    { spot: 200000, futures: 300000 },
+    mexc:    { spot: 200000, futures: 300000 },
+    bitget:  { spot: 200000, futures: 300000 }
 };
 
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
