@@ -62,7 +62,7 @@ async function pollImpulseAlerts() {
             // ✅ 2. ИСПРАВЛЕНО: добавлена запятая после alert.volume || 0
             showVolumeAlertToast(
                 alert.symbol,
-                alert.volume || 0, // <-- ЗАПЯТАЯ ЗДЕСЬ
+                alert.volume || 0,
                 direction,
                 alert.price_change
             );

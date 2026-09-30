@@ -46,11 +46,15 @@ cooldowns = {}  # symbol -> timestamp последнего алерта
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
 
+# def get_settings():
+#     """Читаем настройки из Redis (или дефолты)"""
+#     threshold = cache.get('impulse:settings:threshold') or DEFAULT_THRESHOLD
+#     window = cache.get('impulse:settings:window') or DEFAULT_WINDOW
+#     return float(threshold), int(window)
+
 def get_settings():
-    """Читаем настройки из Redis (или дефолты)"""
-    threshold = cache.get('impulse:settings:threshold') or DEFAULT_THRESHOLD
-    window = cache.get('impulse:settings:window') or DEFAULT_WINDOW
-    return float(threshold), int(window)
+    """Жёстко зафиксированные безопасные настройки"""
+    return 1.0, 60  # threshold=1%, window=60 сек
 
 
 def detect_impulses(now_sec):
