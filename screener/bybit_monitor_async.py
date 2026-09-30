@@ -107,7 +107,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         # Если Bybit не поддерживает символ, он вернёт retCode != 0
         if data.get('retCode') != 0:
-            log_func(f"⚠️ bybit {market} {symbol}: retCode={data.get('retCode')} msg={data.get('retMsg')}")
+            # log_func(f"⚠️ bybit {market} {symbol}: retCode={data.get('retCode')} msg={data.get('retMsg')}")
             return 0
 
         result = data.get('result') or {}
@@ -596,7 +596,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         added.append(symbol)
                         log_func(f"✅ bybit {market} {symbol}: добавлен (плотностей: {saved_count})")
                     else:
-                        log_func(f"⚠️ bybit {market} {symbol}: пропущен (не поддерживается или пустой стакан)")
+                        # log_func(f"⚠️ bybit {market} {symbol}: пропущен (не поддерживается или пустой стакан)")
+                        pass
                 else:
                     # Монета уже есть и валидна, оставляем её
                     new_active.append(symbol)
@@ -699,7 +700,8 @@ async def main_async(log_func=print):
             active_spot.append(symbol)
             log_func(f"✅ bybit spot {symbol}: принят (плотностей: {saved_count})")
         else:
-            log_func(f"⚠️ bybit spot {symbol}: пропущен (не поддерживается или пустой стакан)")
+            # log_func(f"⚠️ bybit spot {symbol}: пропущен (не поддерживается или пустой стакан)")
+            pass
 
     bybit_futures_symbols = active_futures
     bybit_spot_symbols = active_spot
