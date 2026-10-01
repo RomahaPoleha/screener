@@ -58,18 +58,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 5. Слайдеры фильтров (ТЕПЕРЬ ТОЛЬКО ОДИН РАЗ!)
-    els.vol.addEventListener('input', (e) => {
-        els.volVal.innerText = '$' + fmt(e.target.value);
-        updateSliderFill(e.target);
-        applyLocalFilters();
-    });
 
-    els.change.addEventListener('input', (e) => {
-        els.changeVal.innerText = e.target.value + '%';
-        updateSliderFill(e.target);
-        applyLocalFilters();
-    });
+    // 5. Слайдеры фильтров
+els.vol.addEventListener('input', (e) => {
+    minVol = parseFloat(e.target.value) || 0;
+    els.volVal.innerText = '$' + fmt(e.target.value);
+    updateSliderFill(e.target);
+    applyLocalFilters();
+});
+els.change.addEventListener('input', (e) => {
+    minChange = parseFloat(e.target.value) || -100;
+    els.changeVal.innerText = e.target.value + '%';
+    updateSliderFill(e.target);
+    applyLocalFilters();
+});
 
     // 6. Поиск
     els.search.addEventListener('input', (e) => {

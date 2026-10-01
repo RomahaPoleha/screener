@@ -45,6 +45,10 @@ let tradeBuffer = [], currentThreshold = 10000;
 // Сортировка таблицы
 let sortState = { field: null, direction: 'asc' };
 
+// Фильтры монет
+let minVol = 0;
+let minChange = -100;
+
 // Гистограмма объёма
 let volumeHistogramEnabled = true;
 if (localStorage.getItem('volumeHistogramEnabled') !== null) {
