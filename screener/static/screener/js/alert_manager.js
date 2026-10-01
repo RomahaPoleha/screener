@@ -287,6 +287,14 @@ function renderAlertHistory() {
     }).join('');
 }
 
+
+function clearAlertHistory() {
+    volumeAlertHistory = [];
+    localStorage.setItem('volumeAlertHistory', JSON.stringify(volumeAlertHistory));
+    renderAlertHistory();
+}
+
+
 function openChartFromHistory(symbol) {
     const panel = document.getElementById('alertHistoryPanel');
     if (panel) panel.classList.remove('active');
