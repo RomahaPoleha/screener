@@ -520,35 +520,3 @@ def api_impulse_alerts(request):
         'count': len(alerts),
     })
 
-
-@require_http_methods(["GET"])
-def api_impulse_settings(request):
-    """API: текущие настройки импульса"""
-    threshold = cache.get('impulse:settings:threshold') or 1.0
-    window = cache.get('impulse:settings:window') or 60
-
-    return JsonResponse({
-        'threshold': float(threshold),
-        'window': int(window),
-    })
-
-
-@require_http_methods(["POST"])
-def api_impulse_settings_update(request):
-    """No-op: настройки теперь хранятся только на клиенте (localStorage)"""
-    return JsonResponse({'status': 'ok', 'message': 'Settings are client-side only'})
-
-
-@require_http_methods(["GET"])
-def api_impulse_status(request):
-    """API: статус импульс-монитора"""
-    from . import impulse_monitor
-
-    alerts = cache.get('impulse:recent') or []
-
-    return JsonResponse({
-        'running': True,  # Если дошли сюда — монитор жив
-        'tracked_symbols': len(impulse_monitor.price_history),
-        'recent_alerts_count': len(alerts),
-        'last_alert_time': alerts[0]['timestamp'] if alerts else None,
-    })

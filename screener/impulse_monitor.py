@@ -32,7 +32,7 @@ cooldowns = {}  # "{symbol}_{window}" -> timestamp последнего алер
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
 # Жёсткий минимальный порог для защиты от коллапса
-MIN_THRESHOLD = 0.5
+MIN_THRESHOLD = 1.5
 # Сервер считает ОБА окна параллельно
 WINDOWS = [60, 300]
 
