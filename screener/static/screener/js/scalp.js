@@ -221,13 +221,13 @@ function applyScalpSettings() {
         const fInput = document.getElementById(`scalp-${ex.id}-fv`);
         const sInput = document.getElementById(`scalp-${ex.id}-sv`);
         if (!scalpExchanges[ex.id]) {
-            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
         scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
         scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
         scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 300000 : 300000;
-        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 200000 : 200000;
+        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 200000 : 200000;
+        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 100000 : 100000;
     });
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
     scalpEnabled = Object.values(scalpExchanges).some(cfg =>
