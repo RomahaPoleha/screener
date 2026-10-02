@@ -13,6 +13,8 @@ let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
 let reconPanelEl = null;
 let reconLines = [];
+let isReconLoading = false;
+
 let reconMarkets = {
     binance: { spot: false, futures: true },
     bybit:   { spot: false, futures: false },
@@ -21,13 +23,14 @@ let reconMarkets = {
     mexc:    { spot: false, futures: false },
     bitget:  { spot: false, futures: false },
 };
+
 let reconMinVolumes = {
-    binance: { spot: 200000, futures: 300000 },
-    bybit:   { spot: 200000, futures: 300000 },
-    okx:     { spot: 200000, futures: 300000 },
-    gate:    { spot: 200000, futures: 300000 },
-    mexc:    { spot: 200000, futures: 300000 },
-    bitget:  { spot: 200000, futures: 300000 }
+    binance: { spot: 10000, futures: 50000 },
+    bybit:   { spot: 10000, futures: 50000 },
+    okx:     { spot: 10000, futures: 50000 },
+    gate:    { spot: 10000, futures: 50000 },
+    mexc:    { spot: 10000, futures: 50000 },
+    bitget:  { spot: 10000, futures: 50000 }
 };
 
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
@@ -81,7 +84,6 @@ async function loadGateContractSizes() {
         console.error('❌ Gate.io contract sizes load error:', e);
     }
 }
-
 
 // ==========================================
 // СТАРЫЙ DENSITY (legacy, оставлен для совместимости)
@@ -206,7 +208,7 @@ function parseReconLevels(exId, data) {
     }
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
-        if (row && typeof row === 'object') return [parseFloat(row.p || row.price), Math.abs(parseFloat(row.v || row.vol))];
+        if (row && typeof row === 'object') return [parseFloat(row.p || row.price), Math.abs(parseFloat(row.s || row.v || row.vol))];
         return [NaN, NaN];
     };
     return { rawBids, rawAsks, toLevel };
@@ -215,12 +217,12 @@ function parseReconLevels(exId, data) {
 async function fetchReconMarket(exId, symbol, market) {
     let data;
     try {
-        // Gate теперь идет через общий else, так как getReconUrl возвращает прямой URL
         if (exId === 'mexc') {
             const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
             if (!res.ok) return [];
             data = await res.json();
         } else {
+            // Gate теперь идёт через общий else (прямой запрос к fx-api)
             const url = getReconUrl(exId, symbol, market);
             if (!url) return [];
             const res = await fetch(url);
@@ -259,7 +261,7 @@ async function fetchReconMarket(exId, symbol, market) {
             if (exId === 'gate' && market === 'futures') {
                 out.push({
                     price: p,
-                    volume: q,          // Временно используем q как volume для отображения на графике
+                    volume: q,          // Временно используем q как volume для отображения
                     isRawTest: true,    // Метка для отрисовки
                     rawQty: q
                 });
@@ -278,8 +280,8 @@ async function fetchReconMarket(exId, symbol, market) {
 }
 
 async function loadReconDensities(symbol) {
-    if (!reconEnabled || !candleSeries || (typeof window.isReconLoading !== 'undefined' && window.isReconLoading)) return;
-    window.isReconLoading = true;
+    if (!reconEnabled || !candleSeries || isReconLoading) return;
+    isReconLoading = true;
     try {
         const tasks = [];
         for (const ex of RECON_EXCHANGES) {
@@ -324,7 +326,7 @@ async function loadReconDensities(symbol) {
         clearReconLines();
         reconLines = newLines;
     } finally {
-        window.isReconLoading = false;
+        isReconLoading = false;
     }
 }
 
@@ -430,9 +432,9 @@ function renderReconSettings() {
         <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
         <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
         <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
-        <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="10000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+        <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="1000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
         <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-        <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="10000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+        <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="1000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
     </div>`).join('');
 }
 
