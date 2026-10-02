@@ -448,10 +448,6 @@ def api_gate_depth(request):
     if not symbol or market not in ['futures', 'spot']:
         return JsonResponse({'error': 'bad params'}, status=400)
 
-    cache_key = f"gate:depth:{market}:{symbol}"
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return JsonResponse(cached)
 
     if market == 'futures':
         url = f"https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={symbol}_USDT&limit=100"
@@ -494,7 +490,6 @@ def api_gate_depth(request):
         return out
 
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
-    cache.set(cache_key, result, 2)
     return JsonResponse(result)
 
 

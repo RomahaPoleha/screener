@@ -59,6 +59,28 @@ const RECON_EXCHANGES = [
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
 ];
 
+// Кэш contract_size для Gate.io Futures
+let gateContractSizes = {};
+let gateContractSizesLoaded = false;
+
+async function loadGateContractSizes() {
+    if (gateContractSizesLoaded) return;
+    try {
+        const res = await fetch('https://api.gateio.ws/api/v4/futures/usdt/contracts');
+        if (!res.ok) return;
+        const contracts = await res.json();
+        contracts.forEach(c => {
+            const symbol = c.name.replace('_USDT', '');
+            gateContractSizes[symbol] = parseFloat(c.quanto_multiplier || 1.0);
+        });
+        gateContractSizesLoaded = true;
+        console.log('✅ Gate.io contract sizes loaded:', Object.keys(gateContractSizes).length);
+    } catch (e) {
+        console.error('❌ Gate.io contract sizes load error:', e);
+    }
+}
+
+
 // ==========================================
 // СТАРЫЙ DENSITY (legacy, оставлен для совместимости)
 // ==========================================
@@ -216,13 +238,21 @@ async function fetchReconMarket(exId, symbol, market) {
     const minVolume = reconMinVolumes[exId][market];
     const out = [];
     const push = (arr) => {
-        for (const row of arr) {
-            const [p, q] = toLevel(row);
-            if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
-            const vol = p * q;
-            if (vol >= minVolume) out.push({ price: p, volume: vol });
+    for (const row of arr) {
+        const [p, q] = toLevel(row);
+        if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
+
+        let vol = p * q;
+
+        // 🔥 Для Gate.io Futures применяем contract_size
+        if (exId === 'gate' && market === 'futures') {
+            const cSize = gateContractSizes[symbol] || 1.0;
+            vol = p * q * cSize;
         }
-    };
+
+        if (vol >= minVolume) out.push({ price: p, volume: vol });
+    }
+};
     push(rawBids); push(rawAsks);
     return out;
 }
@@ -342,6 +372,7 @@ function startReconUpdates(symbol) {
     if (!reconEnabled) return;
     ensureReconPanel();
     renderReconPanel();
+    loadGateContractSizes();
     loadReconDensities(symbol);
     reconUpdateTimer = setInterval(() => {
         if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
