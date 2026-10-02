@@ -22,12 +22,12 @@ let reconMarkets = {
     bitget:  { spot: false, futures: false },
 };
 let reconMinVolumes = {
-    binance: { spot: 10000, futures: 10000 },
-    bybit:   { spot: 10000, futures: 10000 },
-    okx:     { spot: 10000, futures: 10000 },
-    gate:    { spot: 10000, futures: 10000 },
-    mexc:    { spot: 10000, futures: 10000 },
-    bitget:  { spot: 10000, futures: 10000 }
+    binance: { spot: 200000, futures: 300000 },
+    bybit:   { spot: 200000, futures: 300000 },
+    okx:     { spot: 200000, futures: 300000 },
+    gate:    { spot: 200000, futures: 300000 },
+    mexc:    { spot: 200000, futures: 300000 },
+    bitget:  { spot: 200000, futures: 300000 }
 };
 
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
@@ -58,91 +58,6 @@ const RECON_EXCHANGES = [
     { id: 'mexc',    label: 'MEX', color: '#f59e0b', domain: 'mexc.com' },
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
 ];
-
-// ==========================================
-// 🔥 НОВАЯ ФУНКЦИЯ: Эмуляция fetch через WebSocket для Gate.io
-// Возвращает Promise с объектом { bids: [...], asks: [...] },
-// чтобы идеально встроиться в существующую логику parseReconLevels.
-// ==========================================
-function fetchGateReconViaWS(symbol, market) {
-    return new Promise((resolve) => {
-        const isFutures = market === 'futures';
-        const wsUrl = isFutures ? "wss://fx-ws.gateio.ws/v4/ws/usdt" : "wss://api.gateio.ws/ws/v4/";
-        const channel = isFutures ? "futures.order_book_update" : "spot.order_book_update";
-        // Гарантируем формат BTC_USDT
-        const cleanSymbol = symbol.toUpperCase().replace('USDT', '') + '_USDT';
-
-        let resolved = false;
-        const ws = new WebSocket(wsUrl);
-
-        // Таймаут 2 секунды: этого достаточно, чтобы получить первый полный снапшот
-        const timeout = setTimeout(() => {
-            if (!resolved) {
-                resolved = true;
-                try { ws.close(); } catch(e) {}
-                console.warn(`⚠️ Gate WS таймаут для ${cleanSymbol}, возвращаем пустой стакан`);
-                resolve({ bids: [], asks: [] });
-            }
-        }, 2000);
-
-        ws.onopen = () => {
-            const subscribeMsg = {
-                time: Math.floor(Date.now() / 1000),
-                channel: channel,
-                event: "subscribe",
-                payload: [cleanSymbol, "100ms", "100"], // 100 уровней глубины
-                id: 1 // Обязательно для Gate.io v4
-            };
-            ws.send(JSON.stringify(subscribeMsg));
-        };
-
-        ws.onmessage = (e) => {
-            if (resolved) return;
-            try {
-                const msg = JSON.parse(e.data);
-
-                // Игнорируем системные сообщения (pong, ping, подтверждение подписки)
-                if (msg.event === 'pong' || msg.channel === 'futures.ping' || msg.channel === 'spot.ping' || msg.event === 'subscribe') {
-                    return;
-                }
-
-                // Ловим сообщение, которое содержит данные стакана для нашего символа
-                if (msg.channel === channel && msg.result && msg.result.s === cleanSymbol) {
-                    resolved = true;
-                    clearTimeout(timeout);
-                    try { ws.close(); } catch(e) {}
-
-                    console.log(`✅ Gate WS получил снапшот: ${cleanSymbol} | Bids: ${msg.result.b.length}, Asks: ${msg.result.a.length}`);
-
-                    // Возвращаем в том же формате, что и REST API
-                    resolve({
-                        bids: msg.result.b || [],
-                        asks: msg.result.a || []
-                    });
-                }
-            } catch (err) {
-                // Игнорируем ошибки парсинга
-            }
-        };
-
-        ws.onerror = () => {
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                try { ws.close(); } catch(e) {}
-                resolve({ bids: [], asks: [] });
-            }
-        };
-
-        ws.onclose = () => {
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                resolve({ bids: [], asks: [] });
-            }
-        };
-    });
-}
 
 // ==========================================
 // СТАРЫЙ DENSITY (legacy, оставлен для совместимости)
@@ -233,9 +148,7 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'bitget') return market === 'futures'
         ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=100`
         : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
-
-    // 🔥 ИЗМЕНЕНИЕ 1: Gate теперь через WS, REST URL не нужен
-    if (exId === 'gate') return null;
+    if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     return null;
 }
@@ -269,12 +182,12 @@ function parseReconLevels(exId, data) {
 async function fetchReconMarket(exId, symbol, market) {
     let data;
     try {
-        // 🔥 ИЗМЕНЕНИЕ 2: Если это Gate, используем WebSocket вместо fetch
-        if (exId === 'gate') {
-            data = await fetchGateReconViaWS(symbol, market);
-            if (!data || !data.bids) return [];
-        } else if (exId === 'mexc') {
+        if (exId === 'mexc') {
             const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
+            if (!res.ok) return [];
+            data = await res.json();
+        } else if (exId === 'gate') {
+            const res = await fetch(`/api/gate-depth/?market=${market}&symbol=${symbol}`);
             if (!res.ok) return [];
             data = await res.json();
         } else {
