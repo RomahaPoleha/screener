@@ -227,9 +227,9 @@ function renderScalpCards() {
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
             <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
-            <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="300000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!fEnabled || !isEnabled ? 'disabled' : ''}>
+            <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="200000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!fEnabled || !isEnabled ? 'disabled' : ''}>
             <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-            <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="200000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!sEnabled || !isEnabled ? 'disabled' : ''}>
+            <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="100000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!sEnabled || !isEnabled ? 'disabled' : ''}>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
                 <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
                 <span>F</span>
