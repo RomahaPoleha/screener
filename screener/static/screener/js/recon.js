@@ -59,19 +59,21 @@ const RECON_EXCHANGES = [
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
 ];
 
-// Кэш contract_size для Gate.io Futures
+// ==========================================
+// КЭШ CONTRACT_SIZE ДЛЯ GATE.IO FUTURES
+// ==========================================
 let gateContractSizes = {};
 let gateContractSizesLoaded = false;
 
 async function loadGateContractSizes() {
     if (gateContractSizesLoaded) return;
     try {
-        const res = await fetch('https://api.gateio.ws/api/v4/futures/usdt/contracts');
-        if (!res.ok) return;
+        const res = await fetch('https://fx-api.gateio.ws/api/v4/futures/usdt/contracts');
+        if (!res.ok) throw new Error('Network error');
         const contracts = await res.json();
         contracts.forEach(c => {
-            const symbol = c.name.replace('_USDT', '');
-            gateContractSizes[symbol] = parseFloat(c.quanto_multiplier || 1.0);
+            const sym = c.name.replace('_USDT', '');
+            gateContractSizes[sym] = parseFloat(c.quanto_multiplier || 1.0);
         });
         gateContractSizesLoaded = true;
         console.log('✅ Gate.io contract sizes loaded:', Object.keys(gateContractSizes).length);
@@ -180,7 +182,7 @@ function getReconUrl(exId, symbol, market) {
         }
     }
 
-    if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`; // MEXC лучше оставить через прокси, там бывают проблемы с CORS
+    if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     return null;
 }
 
@@ -213,12 +215,9 @@ function parseReconLevels(exId, data) {
 async function fetchReconMarket(exId, symbol, market) {
     let data;
     try {
+        // Gate теперь идет через общий else, так как getReconUrl возвращает прямой URL
         if (exId === 'mexc') {
             const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
-            if (!res.ok) return [];
-            data = await res.json();
-        } else if (exId === 'gate') {
-            const res = await fetch(`/api/gate-depth/?market=${market}&symbol=${symbol}`);
             if (!res.ok) return [];
             data = await res.json();
         } else {
@@ -228,7 +227,10 @@ async function fetchReconMarket(exId, symbol, market) {
             if (!res.ok) return [];
             data = await res.json();
         }
-    } catch (e) { return []; }
+    } catch (e) {
+        console.error(`Fetch error ${exId}:`, e);
+        return [];
+    }
 
     if (data) {
         if (exId === 'okx') {
@@ -243,32 +245,41 @@ async function fetchReconMarket(exId, symbol, market) {
         }
         if (data.msg && typeof data.msg === 'string' && data.msg.includes('not found')) return [];
     }
+
     const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
     const minVolume = reconMinVolumes[exId][market];
     const out = [];
+
     const push = (arr) => {
-    for (const row of arr) {
-        const [p, q] = toLevel(row);
-        if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
+        for (const row of arr) {
+            const [p, q] = toLevel(row);
+            if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
 
-        let vol = p * q;
+            // 🔥 РЕЖИМ ПРОВЕРКИ: Для Gate.io Futures выводим ТОЛЬКО сырое количество контрактов (q)
+            if (exId === 'gate' && market === 'futures') {
+                out.push({
+                    price: p,
+                    volume: q,          // Временно используем q как volume для отображения на графике
+                    isRawTest: true,    // Метка для отрисовки
+                    rawQty: q
+                });
+                continue; // Пропускаем стандартную проверку minVolume для gate futures
+            }
 
-        // 🔥 Для Gate.io Futures применяем contract_size
-        if (exId === 'gate' && market === 'futures') {
-            const cSize = gateContractSizes[symbol] || 1.0;
-            vol = p * q * cSize;
+            // Стандартная логика для всех остальных бирж
+            const vol = p * q;
+            if (vol >= minVolume) out.push({ price: p, volume: vol });
         }
+    };
 
-        if (vol >= minVolume) out.push({ price: p, volume: vol });
-    }
-};
-    push(rawBids); push(rawAsks);
+    push(rawBids);
+    push(rawAsks);
     return out;
 }
 
 async function loadReconDensities(symbol) {
-    if (!reconEnabled || !candleSeries || isReconLoading) return;
-    isReconLoading = true;
+    if (!reconEnabled || !candleSeries || (typeof window.isReconLoading !== 'undefined' && window.isReconLoading)) return;
+    window.isReconLoading = true;
     try {
         const tasks = [];
         for (const ex of RECON_EXCHANGES) {
@@ -280,26 +291,41 @@ async function loadReconDensities(symbol) {
             }
         }
         if (tasks.length === 0) { clearReconLines(); return; }
+
         const results = await Promise.all(tasks);
         const newLines = [];
+
         for (const r of results) {
             if (!r.data) continue;
             const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
             const suffix = r.market === 'futures' ? 'F' : 'S';
+
             const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+
             top.forEach(d => {
+                // 🔥 Если это наш тестовый режим для Gate, показываем сырое число
+                const titleText = d.isRawTest
+                    ? `${ex.label}-${suffix} RAW_QTY: ${d.rawQty}`
+                    : `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`;
+
                 const line = candleSeries.createPriceLine({
-                    price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
-                    lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
-                    axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
-                    title: `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+                    price: d.price,
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    axisLabelColor: '#ffffff',
+                    axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                    title: titleText
                 });
                 newLines.push(line);
             });
         }
         clearReconLines();
         reconLines = newLines;
-    } finally { isReconLoading = false; }
+    } finally {
+        window.isReconLoading = false;
+    }
 }
 
 function clearReconLines() {
@@ -381,7 +407,10 @@ function startReconUpdates(symbol) {
     if (!reconEnabled) return;
     ensureReconPanel();
     renderReconPanel();
+
+    // 🔥 Загружаем contract_size для Gate.io один раз при старте
     loadGateContractSizes();
+
     loadReconDensities(symbol);
     reconUpdateTimer = setInterval(() => {
         if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
