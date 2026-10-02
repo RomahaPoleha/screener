@@ -22,12 +22,12 @@ let reconMarkets = {
     bitget:  { spot: false, futures: false },
 };
 let reconMinVolumes = {
-    binance: { spot: 10000, futures: 10000 },
-    bybit:   { spot: 10000, futures: 10000 },
-    okx:     { spot: 10000, futures: 10000 },
-    gate:    { spot: 10000, futures: 10000 },
-    mexc:    { spot: 10000, futures: 10000 },
-    bitget:  { spot: 10000, futures: 10000 }
+    binance: { spot: 200000, futures: 300000 },
+    bybit:   { spot: 200000, futures: 300000 },
+    okx:     { spot: 200000, futures: 300000 },
+    gate:    { spot: 200000, futures: 300000 },
+    mexc:    { spot: 200000, futures: 300000 },
+    bitget:  { spot: 200000, futures: 300000 }
 };
 
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
@@ -58,89 +58,6 @@ const RECON_EXCHANGES = [
     { id: 'mexc',    label: 'MEX', color: '#f59e0b', domain: 'mexc.com' },
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
 ];
-
-// ==========================================
-// 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Сбор полного снапшота Gate.io через WebSocket + КЭШ
-// ==========================================
-const gateSnapshotCache = {}; // Кэш: "{symbol}_{market}" -> {bids, asks}
-
-function fetchGateReconViaWS(symbol, market) {
-    return new Promise((resolve) => {
-        const isFutures = market === 'futures';
-        const wsUrl = isFutures ? "wss://fx-ws.gateio.ws/v4/ws/usdt" : "wss://api.gateio.ws/ws/v4/";
-        const channel = isFutures ? "futures.order_book_update" : "spot.order_book_update";
-        const cleanSymbol = symbol.toUpperCase().replace('USDT', '') + '_USDT';
-        const cacheKey = `${cleanSymbol}_${market}`;
-
-        try {
-            const ws = new WebSocket(wsUrl);
-            let bestSnapshot = null;
-            let maxLevels = 0;
-
-            // Увеличиваем таймаут до 1 секунды для надежности
-            const timeout = setTimeout(() => {
-                try { ws.close(); } catch(e) {}
-                if (bestSnapshot) {
-                    // Сохраняем в кэш
-                    gateSnapshotCache[cacheKey] = bestSnapshot;
-                    console.log(`✅ Gate WS финальный снапшот ${cleanSymbol}: ${bestSnapshot.bids.length} bids, ${bestSnapshot.asks.length} asks`);
-                } else {
-                    // Если WS не успел, используем кэш
-                    if (gateSnapshotCache[cacheKey]) {
-                        console.log(`🔄 Gate WS использует кэш для ${cleanSymbol}`);
-                    } else {
-                        console.warn(`⚠️ Gate WS таймаут без данных для ${cleanSymbol}`);
-                    }
-                }
-                resolve(bestSnapshot || gateSnapshotCache[cacheKey] || []);
-            }, 1000); // 🔥 Увеличили с 400мс до 1000мс
-
-            ws.onopen = () => {
-                const subscribeMsg = {
-                    time: Math.floor(Date.now() / 1000),
-                    channel: channel,
-                    event: "subscribe",
-                    payload: isFutures ? [cleanSymbol, "100ms", "100"] : [cleanSymbol, "100ms", "100"],
-                    id: 123
-                };
-                ws.send(JSON.stringify(subscribeMsg));
-            };
-
-            ws.onmessage = (e) => {
-                try {
-                    const msg = JSON.parse(e.data);
-                    if (msg.event === 'pong' || msg.channel === 'futures.ping' || msg.channel === 'spot.ping' || msg.event === 'subscribe') {
-                        return;
-                    }
-
-                    if (msg.channel === channel && msg.result && msg.result.s === cleanSymbol) {
-                        const bids = msg.result.b || [];
-                        const asks = msg.result.a || [];
-                        const totalLevels = bids.length + asks.length;
-
-                        if (totalLevels > maxLevels) {
-                            maxLevels = totalLevels;
-                            bestSnapshot = { bids: bids, asks: asks };
-                        }
-                    }
-                } catch (err) {}
-            };
-
-            ws.onerror = () => {
-                clearTimeout(timeout);
-                try { ws.close(); } catch(e) {}
-                resolve(bestSnapshot || gateSnapshotCache[cacheKey] || []);
-            };
-
-            ws.onclose = () => {
-                clearTimeout(timeout);
-                resolve(bestSnapshot || gateSnapshotCache[cacheKey] || []);
-            };
-        } catch (err) {
-            resolve(gateSnapshotCache[cacheKey] || []);
-        }
-    });
-}
 
 // ==========================================
 // СТАРЫЙ DENSITY (legacy, оставлен для совместимости)
@@ -231,9 +148,7 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'bitget') return market === 'futures'
         ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=100`
         : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
-
-    // 🔥 Gate теперь через WS, REST URL не нужен
-    if (exId === 'gate') return null;
+    if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     return null;
 }
@@ -267,12 +182,12 @@ function parseReconLevels(exId, data) {
 async function fetchReconMarket(exId, symbol, market) {
     let data;
     try {
-        // 🔥 Gate.io работает через WebSocket (без серверного прокси)
-        if (exId === 'gate') {
-            data = await fetchGateReconViaWS(symbol, market);
-            if (!data || !data.bids) return [];
-        } else if (exId === 'mexc') {
+        if (exId === 'mexc') {
             const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
+            if (!res.ok) return [];
+            data = await res.json();
+        } else if (exId === 'gate') {
+            const res = await fetch(`/api/gate-depth/?market=${market}&symbol=${symbol}`);
             if (!res.ok) return [];
             data = await res.json();
         } else {
