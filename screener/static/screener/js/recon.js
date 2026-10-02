@@ -22,12 +22,12 @@ let reconMarkets = {
     bitget:  { spot: false, futures: false },
 };
 let reconMinVolumes = {
-    binance: { spot: 200000, futures: 300000 },
-    bybit:   { spot: 200000, futures: 300000 },
-    okx:     { spot: 200000, futures: 300000 },
-    gate:    { spot: 200000, futures: 200000 }, // Рекомендуется снизить порог для Gate futures, так как раньше он был искусственно завышен
-    mexc:    { spot: 200000, futures: 200000 },
-    bitget:  { spot: 200000, futures: 200000 }
+    binance: { spot: 10000, futures: 10000 },
+    bybit:   { spot: 10000, futures: 10000 },
+    okx:     { spot: 10000, futures: 10000},
+    gate:    { spot: 10000, futures: 10000 }, // Рекомендуется снизить порог для Gate futures, так как раньше он был искусственно завышен
+    mexc:    { spot: 10000, futures: 10000 },
+    bitget:  { spot: 10000, futures: 10000 }
 };
 
 // --- НОВОЕ: Кэш для мультипликаторов контрактов Gate.io Futures ---
@@ -94,7 +94,7 @@ async function loadDensities(symbol) {
             if (data.bids) processSide(data.bids, 'buy');
             if (data.asks) processSide(data.asks, 'sell');
             densities.sort((a, b) => b.volume - a.volume);
-            allNewData[market] = densities.slice(0, 20);
+            allNewData[market] = densities.slice(0, 30);
         } catch (e) {
             console.error(`Densities error (${market}):`, e);
             allNewData[market] = previousDensities[market] || [];
