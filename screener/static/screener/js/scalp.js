@@ -24,9 +24,9 @@ let scalpExchanges = {
     binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 };
 
 // Миграция любого старого формата + подхват сохранённых значений
@@ -174,7 +174,7 @@ function startScalpUpdates(symbol) {
 function openScalpSettingsModal() {
     const container = document.getElementById('scalpExchangesContainer');
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
-        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: ex.minFutures, minVolumeSpot: ex.minSpot };
         return `<div class="exchange-card" style="background:#3b4252; border:1px solid #475569; border-radius:6px; padding:14px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -196,7 +196,8 @@ function openScalpSettingsModal() {
                         <span>Futures</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="300000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    <!-- ЗДЕСЬ min="${ex.minFutures}" -->
+                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="${ex.minFutures}" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
                 <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
@@ -204,7 +205,8 @@ function openScalpSettingsModal() {
                         <span>Spot</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="200000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    <!-- ЗДЕСЬ min="${ex.minSpot}" -->
+                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="${ex.minSpot}" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
             </div>
         </div>`;
