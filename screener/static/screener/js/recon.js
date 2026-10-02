@@ -60,6 +60,87 @@ const RECON_EXCHANGES = [
 ];
 
 // ==========================================
+// 🔥 НОВАЯ ФУНКЦИЯ: Получение снапшота Gate.io через WebSocket
+// Возвращает Promise, который резолвится с данными стакана (как fetch),
+// чтобы идеально встроиться в существующую логику без переписывания всего файла.
+// ==========================================
+function fetchGateReconViaWS(symbol, market) {
+    return new Promise((resolve) => {
+        const isFutures = market === 'futures';
+        const wsUrl = isFutures ? "wss://fx-ws.gateio.ws/v4/ws/usdt" : "wss://api.gateio.ws/ws/v4/";
+        const channel = isFutures ? "futures.order_book_update" : "spot.order_book_update";
+        const cleanSymbol = `${symbol.toUpperCase()}_USDT`;
+
+        try {
+            const ws = new WebSocket(wsUrl);
+            let resolved = false;
+
+            // Таймаут на случай, если WS зависнет (защита от утечек)
+            const timeout = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    try { ws.close(); } catch(e) {}
+                    resolve([]);
+                }
+            }, 3000);
+
+            ws.onopen = () => {
+                const subscribeMsg = {
+                    time: Math.floor(Date.now() / 1000),
+                    channel: channel,
+                    event: "subscribe",
+                    payload: isFutures ? [cleanSymbol, "100ms", "100"] : [cleanSymbol, "100ms"]
+                };
+                ws.send(JSON.stringify(subscribeMsg));
+            };
+
+            ws.onmessage = (e) => {
+                if (resolved) return;
+                try {
+                    const msg = JSON.parse(e.data);
+                    // Игнорируем системные сообщения (pong/ping)
+                    if (msg.event === 'pong' || msg.channel === 'futures.ping' || msg.channel === 'spot.ping') return;
+
+                    // Первый пакет после подписки — это полный снапшот
+                    if (msg.event === 'update' && msg.channel === channel && msg.result && msg.result.s === cleanSymbol) {
+                        resolved = true;
+                        clearTimeout(timeout);
+                        try { ws.close(); } catch(e) {}
+
+                        // Возвращаем в том же формате, что и REST, чтобы parseReconLevels сработал без изменений
+                        resolve({
+                            bids: msg.result.b || [],
+                            asks: msg.result.a || []
+                        });
+                    }
+                } catch (err) {
+                    // Игнорируем ошибки парсинга
+                }
+            };
+
+            ws.onerror = () => {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timeout);
+                    try { ws.close(); } catch(e) {}
+                    resolve([]);
+                }
+            };
+
+            ws.onclose = () => {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timeout);
+                    resolve([]);
+                }
+            };
+        } catch (err) {
+            resolve([]);
+        }
+    });
+}
+
+// ==========================================
 // СТАРЫЙ DENSITY (legacy, оставлен для совместимости)
 // ==========================================
 async function loadDensities(symbol) {
@@ -148,7 +229,9 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'bitget') return market === 'futures'
         ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=100`
         : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
-    if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
+
+    // 🔥 Gate теперь через WS, REST URL не нужен
+    if (exId === 'gate') return null;
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     return null;
 }
@@ -182,12 +265,12 @@ function parseReconLevels(exId, data) {
 async function fetchReconMarket(exId, symbol, market) {
     let data;
     try {
-        if (exId === 'mexc') {
+        if (exId === 'gate') {
+            // 🔥 Получаем снапшот напрямую через WS Gate.io, минуя серверный прокси
+            data = await fetchGateReconViaWS(symbol, market);
+            if (!data || !data.bids) return [];
+        } else if (exId === 'mexc') {
             const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
-            if (!res.ok) return [];
-            data = await res.json();
-        } else if (exId === 'gate') {
-            const res = await fetch(`/api/gate-depth/?market=${market}&symbol=${symbol}`);
             if (!res.ok) return [];
             data = await res.json();
         } else {
