@@ -9,14 +9,14 @@ let scalpEnabled = false;
 let scalpUpdateTimer = null;
 let previousScalpData = {};
 
-// Конфигурация бирж (легко расширяется — добавь строку)
+// Конфигурация бирж (добавлены minFutures и minSpot для каждой)
 const EXCHANGES_CONFIG = [
-    { id: 'binance', name: 'Binance', label: 'BI',   domain: 'binance.com', color: '#f59e0b' },
-    { id: 'bybit',   name: 'Bybit',   label: 'BY',   domain: 'bybit.com',   color: '#f59e0b' },
-    { id: 'okx',     name: 'OKX',     label: 'OKX',  domain: 'okx.com',     color: '#ffffff' },
-    { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
-    { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
-    { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
+    { id: 'binance', name: 'Binance', label: 'BI',   domain: 'binance.com', color: '#f59e0b', minFutures: 300000, minSpot: 200000 },
+    { id: 'bybit',   name: 'Bybit',   label: 'BY',   domain: 'bybit.com',   color: '#f59e0b', minFutures: 300000, minSpot: 200000 },
+    { id: 'okx',     name: 'OKX',     label: 'OKX',  domain: 'okx.com',     color: '#ffffff', minFutures: 300000, minSpot: 200000 },
+    { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b', minFutures: 200000, minSpot: 100000 },
+    { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b', minFutures: 200000, minSpot: 100000 },
+    { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b', minFutures: 200000, minSpot: 100000 },
 ];
 
 // Текущие настройки каждой биржи
@@ -229,36 +229,48 @@ function openScalpSettingsModal() {
 
 function applyScalpSettings() {
     EXCHANGES_CONFIG.forEach(ex => {
-        const toggle = document.getElementById(`scalp-${ex.id}-toggle`);
-        const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
-        const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
-        const fInput = document.getElementById(`scalp-${ex.id}-fv`);
-        const sInput = document.getElementById(`scalp-${ex.id}-sv`);
+        // ИСПРАВЛЕНО: ID теперь точно совпадают с теми, что генерируются в openScalpSettingsModal
+        const toggle = document.getElementById(`scalpEnabled_${ex.id}`);
+        const fCheckbox = document.getElementById(`scalpFutures_${ex.id}`);
+        const sCheckbox = document.getElementById(`scalpSpot_${ex.id}`);
+        const fInput = document.getElementById(`scalpMinFutures_${ex.id}`);
+        const sInput = document.getElementById(`scalpMinSpot_${ex.id}`);
+
         if (!scalpExchanges[ex.id]) {
-            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: ex.minFutures, minVolumeSpot: ex.minSpot };
         }
+
         scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
         scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
         scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 300000 : 300000;
-        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 200000 : 200000;
+
+        // ИСПРАВЛЕНО: Берем реальное значение из input, и защищаем его через Math.max от значений ниже минимума биржи
+        const valF = fInput ? parseInt(fInput.value) : ex.minFutures;
+        const valS = sInput ? parseInt(sInput.value) : ex.minSpot;
+
+        scalpExchanges[ex.id].minVolumeFutures = Math.max(ex.minFutures, isNaN(valF) ? ex.minFutures : valF);
+        scalpExchanges[ex.id].minVolumeSpot    = Math.max(ex.minSpot,    isNaN(valS) ? ex.minSpot : valS);
     });
+
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
     scalpEnabled = Object.values(scalpExchanges).some(cfg =>
         cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
     );
-    // Всегда очищаем линии перед перерисовкой
+
     if (currentSymbol && candleSeries) {
         clearScalpLines();
         previousScalpData = {};
     }
-    // Перезапускаем обновление
+
     if (currentSymbol) {
         if (scalpEnabled) startScalpUpdates(currentSymbol);
         else {
             if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
         }
     }
-    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+
+    // ИСПРАВЛЕНО: Имя модального окна теперь совпадает с openScalpSettingsModal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('scalpSettingsModal'));
     if (modal) modal.hide();
 }
