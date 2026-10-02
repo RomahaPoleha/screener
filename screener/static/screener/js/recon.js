@@ -59,42 +59,47 @@ const RECON_EXCHANGES = [
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
 ];
 
-/// ==========================================
-// 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Получение снапшота Gate.io через WebSocket
 // ==========================================
+// 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Сбор полного снапшота Gate.io через WebSocket + КЭШ
 // ==========================================
-// 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Сбор полного снапшота Gate.io через WebSocket
-// ==========================================
+const gateSnapshotCache = {}; // Кэш: "{symbol}_{market}" -> {bids, asks}
+
 function fetchGateReconViaWS(symbol, market) {
     return new Promise((resolve) => {
         const isFutures = market === 'futures';
         const wsUrl = isFutures ? "wss://fx-ws.gateio.ws/v4/ws/usdt" : "wss://api.gateio.ws/ws/v4/";
         const channel = isFutures ? "futures.order_book_update" : "spot.order_book_update";
         const cleanSymbol = symbol.toUpperCase().replace('USDT', '') + '_USDT';
+        const cacheKey = `${cleanSymbol}_${market}`;
 
         try {
             const ws = new WebSocket(wsUrl);
             let bestSnapshot = null;
             let maxLevels = 0;
 
-            // Даем 400мс на получение пакетов. Первый пакет часто бывает пустым или маленьким,
-            // а настоящий полный снапшот приходит следом. Мы заберем самый "глубокий".
+            // Увеличиваем таймаут до 1 секунды для надежности
             const timeout = setTimeout(() => {
                 try { ws.close(); } catch(e) {}
                 if (bestSnapshot) {
+                    // Сохраняем в кэш
+                    gateSnapshotCache[cacheKey] = bestSnapshot;
                     console.log(`✅ Gate WS финальный снапшот ${cleanSymbol}: ${bestSnapshot.bids.length} bids, ${bestSnapshot.asks.length} asks`);
                 } else {
-                    console.warn(`⚠️ Gate WS таймаут без данных для ${cleanSymbol}`);
+                    // Если WS не успел, используем кэш
+                    if (gateSnapshotCache[cacheKey]) {
+                        console.log(`🔄 Gate WS использует кэш для ${cleanSymbol}`);
+                    } else {
+                        console.warn(`⚠️ Gate WS таймаут без данных для ${cleanSymbol}`);
+                    }
                 }
-                resolve(bestSnapshot || []);
-            }, 400);
+                resolve(bestSnapshot || gateSnapshotCache[cacheKey] || []);
+            }, 1000); // 🔥 Увеличили с 400мс до 1000мс
 
             ws.onopen = () => {
                 const subscribeMsg = {
                     time: Math.floor(Date.now() / 1000),
                     channel: channel,
                     event: "subscribe",
-                    // Для спота тоже указываем 100 уровней для надежности
                     payload: isFutures ? [cleanSymbol, "100ms", "100"] : [cleanSymbol, "100ms", "100"],
                     id: 123
                 };
@@ -104,7 +109,6 @@ function fetchGateReconViaWS(symbol, market) {
             ws.onmessage = (e) => {
                 try {
                     const msg = JSON.parse(e.data);
-                    // Игнорируем системные сообщения
                     if (msg.event === 'pong' || msg.channel === 'futures.ping' || msg.channel === 'spot.ping' || msg.event === 'subscribe') {
                         return;
                     }
@@ -114,7 +118,6 @@ function fetchGateReconViaWS(symbol, market) {
                         const asks = msg.result.a || [];
                         const totalLevels = bids.length + asks.length;
 
-                        // Сохраняем пакет с максимальным количеством уровней (это и есть полный снапшот)
                         if (totalLevels > maxLevels) {
                             maxLevels = totalLevels;
                             bestSnapshot = { bids: bids, asks: asks };
@@ -126,15 +129,15 @@ function fetchGateReconViaWS(symbol, market) {
             ws.onerror = () => {
                 clearTimeout(timeout);
                 try { ws.close(); } catch(e) {}
-                resolve(bestSnapshot || []);
+                resolve(bestSnapshot || gateSnapshotCache[cacheKey] || []);
             };
 
             ws.onclose = () => {
                 clearTimeout(timeout);
-                resolve(bestSnapshot || []);
+                resolve(bestSnapshot || gateSnapshotCache[cacheKey] || []);
             };
         } catch (err) {
-            resolve([]);
+            resolve(gateSnapshotCache[cacheKey] || []);
         }
     });
 }
