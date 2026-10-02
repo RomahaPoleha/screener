@@ -217,7 +217,7 @@ function renderScalpCards() {
     const container = document.getElementById('scalpExchangesContainer');
     if (!container) return;
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
-        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         const isEnabled = cfg.enabled !== false;
         const fEnabled = cfg.markets && cfg.markets.futures;
         const sEnabled = cfg.markets && cfg.markets.spot;
