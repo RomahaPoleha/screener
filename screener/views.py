@@ -439,7 +439,7 @@ def api_mexc_depth(request):
 
 @require_http_methods(["GET"])
 def api_gate_depth(request):
-    """Прокси для Gate.io стаканов (обход CORS) — БЕЗ КЭША, fx-api для фьючерсов"""
+    """Прокси для Gate.io стаканов (обход CORS)"""
     import requests as req
 
     market = request.GET.get('market', 'futures')
@@ -448,9 +448,13 @@ def api_gate_depth(request):
     if not symbol or market not in ['futures', 'spot']:
         return JsonResponse({'error': 'bad params'}, status=400)
 
-    # 🔥 1. Используем fx-api.gateio.ws специально для фьючерсов
+    cache_key = f"gate:depth:{market}:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse(cached)
+
     if market == 'futures':
-        url = f"https://fx-api.gateio.ws/api/v4/futures/usdt/order_book?contract={symbol}_USDT&limit=100"
+        url = f"https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={symbol}_USDT&limit=100"
     else:
         url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}_USDT&limit=100"
 
@@ -464,6 +468,7 @@ def api_gate_depth(request):
         print(f"⚠️ api_gate_depth({market} {symbol}): {e}")
         return JsonResponse({'bids': [], 'asks': []})
 
+    # Gate отдаёт {current: timestamp, asks: [...], bids: [...]}
     raw_bids = data.get('bids') or []
     raw_asks = data.get('asks') or []
 
@@ -489,8 +494,7 @@ def api_gate_depth(request):
         return out
 
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
-
-    # 🔥 2. КЭШ УБРАН: отдаём свежие данные напрямую в браузер
+    cache.set(cache_key, result, 2)
     return JsonResponse(result)
 
 
