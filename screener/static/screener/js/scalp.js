@@ -1,43 +1,41 @@
 // ==========================================
 // scalp.js — SCALP (ПЛОТНОСТИ С БИРЖ)
+// Загрузка через /api/scalp/, отрисовка линий, настройки бирж
 // ==========================================
 
+// --- Переменные состояния ---
 let scalpLines = [];
 let scalpEnabled = false;
 let scalpUpdateTimer = null;
 let previousScalpData = {};
 
-// 1. ИСПРАВЛЕНО: Добавлены minFutures и minSpot для каждой биржи
+// Конфигурация бирж (легко расширяется — добавь строку)
 const EXCHANGES_CONFIG = [
-    { id: 'binance', name: 'Binance', label: 'BI',   domain: 'binance.com', color: '#f59e0b', minFutures: 300000, minSpot: 200000 },
-    { id: 'bybit',   name: 'Bybit',   label: 'BY',   domain: 'bybit.com',   color: '#f59e0b', minFutures: 300000, minSpot: 200000 },
-    { id: 'okx',     name: 'OKX',     label: 'OKX',  domain: 'okx.com',     color: '#ffffff', minFutures: 300000, minSpot: 200000 },
-    { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b', minFutures: 200000, minSpot: 100000 },
-    { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b', minFutures: 200000, minSpot: 100000 },
-    { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b', minFutures: 200000, minSpot: 100000 },
+    { id: 'binance', name: 'Binance', label: 'BI',   domain: 'binance.com', color: '#f59e0b' },
+    { id: 'bybit',   name: 'Bybit',   label: 'BY',   domain: 'bybit.com',   color: '#f59e0b' },
+    { id: 'okx',     name: 'OKX',     label: 'OKX',  domain: 'okx.com',     color: '#ffffff' },
+    { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
+    { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
+    { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
 ];
 
+// Текущие настройки каждой биржи
 let scalpExchanges = {
     binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-    mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-    bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
 };
 
-// 2. ИСПРАВЛЕНО: Миграция теперь корректно защищает минимумы из EXCHANGES_CONFIG
+// Миграция любого старого формата + подхват сохранённых значений
 try {
     const saved = JSON.parse(localStorage.getItem('scalpExchanges') || 'null');
     if (saved && typeof saved === 'object') {
         for (const id of Object.keys(scalpExchanges)) {
             const s = saved[id];
             if (!s) continue;
-
-            const exConfig = EXCHANGES_CONFIG.find(e => e.id === id);
-            const minF = exConfig ? exConfig.minFutures : 300000;
-            const minS = exConfig ? exConfig.minSpot : 200000;
-
             if (typeof s === 'boolean') {
                 scalpExchanges[id].enabled = s;
             } else if (typeof s === 'object') {
@@ -46,24 +44,22 @@ try {
                     scalpExchanges[id].markets.futures = !!s.markets.futures;
                     scalpExchanges[id].markets.spot    = !!s.markets.spot;
                 }
-                if (Number(s.minVolumeFutures) > 0) {
-                    scalpExchanges[id].minVolumeFutures = Math.max(minF, Number(s.minVolumeFutures));
-                }
-                if (Number(s.minVolumeSpot) > 0) {
-                    scalpExchanges[id].minVolumeSpot = Math.max(minS, Number(s.minVolumeSpot));
-                }
+                if (Number(s.minVolumeFutures) > 0) scalpExchanges[id].minVolumeFutures = Number(s.minVolumeFutures);
+                if (Number(s.minVolumeSpot)    > 0) scalpExchanges[id].minVolumeSpot    = Number(s.minVolumeSpot);
             }
         }
     }
 } catch(e) { console.warn('⚠️ scalpExchanges повреждён'); }
 
+// Вычисляем scalpEnabled при загрузке
 scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
 
 // ==========================================
-// ЗАГРУЗКА ПЛОТНОСТЕЙ (без изменений)
+// ЗАГРУЗКА ПЛОТНОСТЕЙ
 // ==========================================
 async function loadScalpDensities(symbol) {
     if (!candleSeries || isScalpLoading) return;
+    // Если скальп выключен — очищаем линии и выходим
     if (!scalpEnabled) {
         if (scalpLines.length > 0) clearScalpLines();
         previousScalpData = {};
@@ -85,11 +81,13 @@ async function loadScalpDensities(symbol) {
                 activeKeys.add(`${exId}|spot`);
             }
         }
+        // Если нет включённых бирж/рынков — очищаем линии и выходим
         if (loadList.length === 0) {
             if (scalpLines.length > 0) clearScalpLines();
             previousScalpData = {};
             return;
         }
+        // Удаляем кэш для выключенных бирж/рынков
         for (const key in previousScalpData) {
             if (!activeKeys.has(key)) delete previousScalpData[key];
         }
@@ -101,6 +99,7 @@ async function loadScalpDensities(symbol) {
                 const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`);
                 if (!res.ok) continue;
                 const data = await res.json();
+                // Фильтруем по бирже И по возрасту >= 180 сек
                 const filtered = (data.densities || []).filter(d => {
                     if ((d.exchange || 'binance') !== item.exchange) return false;
                     if ((d.age_seconds || 0) < 180) return false;
@@ -112,6 +111,7 @@ async function loadScalpDensities(symbol) {
                 allNewData[key] = previousScalpData[key] || [];
             }
         }
+        // Проверяем изменения
         for (const key in allNewData) {
             const newData = allNewData[key];
             const prevData = previousScalpData[key] || [];
@@ -122,8 +122,10 @@ async function loadScalpDensities(symbol) {
                 previousScalpData[key] = newData;
             }
         }
+        // Проверяем удалённые ключи (были изменения)
         if (Object.keys(previousScalpData).length !== activeKeys.size) hasChanges = true;
         if (!hasChanges) return;
+        // Очищаем ВСЕ линии перед перерисовкой
         clearScalpLines();
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
@@ -167,13 +169,12 @@ function startScalpUpdates(symbol) {
 }
 
 // ==========================================
-// НАСТРОЙКИ SCALP
+// НАСТРОЙКИ SCALP (отдельная модалка)
 // ==========================================
-// 3. ИСПРАВЛЕНО: Генерация HTML с правильными ID и динамическими min="${ex.minFutures}"
 function openScalpSettingsModal() {
     const container = document.getElementById('scalpExchangesContainer');
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
-        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: ex.minFutures, minVolumeSpot: ex.minSpot };
+        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
         return `<div class="exchange-card" style="background:#3b4252; border:1px solid #475569; border-radius:6px; padding:14px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -195,7 +196,7 @@ function openScalpSettingsModal() {
                         <span>Futures</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="${ex.minFutures}" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="300000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
                 <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
@@ -203,7 +204,7 @@ function openScalpSettingsModal() {
                         <span>Spot</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="${ex.minSpot}" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="200000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
             </div>
         </div>`;
@@ -212,50 +213,38 @@ function openScalpSettingsModal() {
     modal.show();
 }
 
-// 4. ИСПРАВЛЕНО: Полностью переписана функция с ПРАВИЛЬНЫМИ ID и без жестких 300000
 function applyScalpSettings() {
     EXCHANGES_CONFIG.forEach(ex => {
-        // ВАЖНО: ID теперь точно совпадают с теми, что созданы в openScalpSettingsModal
-        const toggle = document.getElementById(`scalpEnabled_${ex.id}`);
-        const fCheckbox = document.getElementById(`scalpFutures_${ex.id}`);
-        const sCheckbox = document.getElementById(`scalpSpot_${ex.id}`);
-        const fInput = document.getElementById(`scalpMinFutures_${ex.id}`);
-        const sInput = document.getElementById(`scalpMinSpot_${ex.id}`);
-
+        const toggle = document.getElementById(`scalp-${ex.id}-toggle`);
+        const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
+        const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
+        const fInput = document.getElementById(`scalp-${ex.id}-fv`);
+        const sInput = document.getElementById(`scalp-${ex.id}-sv`);
         if (!scalpExchanges[ex.id]) {
-            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: ex.minFutures, minVolumeSpot: ex.minSpot };
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
         }
-
         scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
         scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
         scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-
-        // ВАЖНО: Берем реальное значение. Если оно меньше минимума биржи — принудительно ставим минимум
-        const valF = fInput ? parseInt(fInput.value) : ex.minFutures;
-        const valS = sInput ? parseInt(sInput.value) : ex.minSpot;
-
-        scalpExchanges[ex.id].minVolumeFutures = Math.max(ex.minFutures, isNaN(valF) ? ex.minFutures : valF);
-        scalpExchanges[ex.id].minVolumeSpot    = Math.max(ex.minSpot,    isNaN(valS) ? ex.minSpot : valS);
+        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 300000 : 300000;
+        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 200000 : 200000;
     });
-
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
     scalpEnabled = Object.values(scalpExchanges).some(cfg =>
         cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
     );
-
-    if (typeof currentSymbol !== 'undefined' && typeof candleSeries !== 'undefined' && currentSymbol && candleSeries) {
+    // Всегда очищаем линии перед перерисовкой
+    if (currentSymbol && candleSeries) {
         clearScalpLines();
         previousScalpData = {};
     }
-
-    if (typeof currentSymbol !== 'undefined' && currentSymbol) {
+    // Перезапускаем обновление
+    if (currentSymbol) {
         if (scalpEnabled) startScalpUpdates(currentSymbol);
         else {
             if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
         }
     }
-
-    const modal = bootstrap.Modal.getInstance(document.getElementById('scalpSettingsModal'));
+    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
     if (modal) modal.hide();
 }
