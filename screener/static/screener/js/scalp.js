@@ -30,12 +30,19 @@ let scalpExchanges = {
 };
 
 // Миграция любого старого формата + подхват сохранённых значений
+// Миграция любого старого формата + подхват сохранённых значений
 try {
     const saved = JSON.parse(localStorage.getItem('scalpExchanges') || 'null');
     if (saved && typeof saved === 'object') {
         for (const id of Object.keys(scalpExchanges)) {
             const s = saved[id];
             if (!s) continue;
+
+            // Находим конфиг биржи для получения минимальных значений
+            const exConfig = EXCHANGES_CONFIG.find(e => e.id === id);
+            const minF = exConfig ? exConfig.minFutures : 300000;
+            const minS = exConfig ? exConfig.minSpot : 200000;
+
             if (typeof s === 'boolean') {
                 scalpExchanges[id].enabled = s;
             } else if (typeof s === 'object') {
@@ -44,8 +51,13 @@ try {
                     scalpExchanges[id].markets.futures = !!s.markets.futures;
                     scalpExchanges[id].markets.spot    = !!s.markets.spot;
                 }
-                if (Number(s.minVolumeFutures) > 0) scalpExchanges[id].minVolumeFutures = Number(s.minVolumeFutures);
-                if (Number(s.minVolumeSpot)    > 0) scalpExchanges[id].minVolumeSpot    = Number(s.minVolumeSpot);
+                // Применяем сохранённые значения, но не ниже минимума из конфига
+                if (Number(s.minVolumeFutures) > 0) {
+                    scalpExchanges[id].minVolumeFutures = Math.max(minF, Number(s.minVolumeFutures));
+                }
+                if (Number(s.minVolumeSpot) > 0) {
+                    scalpExchanges[id].minVolumeSpot = Math.max(minS, Number(s.minVolumeSpot));
+                }
             }
         }
     }
