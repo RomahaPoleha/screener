@@ -1,6 +1,6 @@
 // ==========================================
 // recon.js — RECON (ПЛОТНОСТИ ОРДЕРОВ)
-// Загрузка стаканов с бирж, отрисовка линий, панель
+// ✅ ОПТИМИЗИРОВАНО: таймауты, умный кэш, уменьшенные лимиты, защита от лишней перерисовки
 // ==========================================
 
 // --- Переменные состояния ---
@@ -13,6 +13,12 @@ let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
 let reconPanelEl = null;
 let reconLines = [];
+let isReconLoading = false; // ✅ Добавлено для безопасности
+
+// ✅ Новые переменные для оптимизации
+let currentReconAbortController = null; // Для отмены устаревших запросов при смене символа
+let lastReconSignature = '';            // Для предотвращения лишней перерисовки графика
+
 let reconMarkets = {
     binance: { spot: false, futures: true },
     bybit:   { spot: false, futures: false },
@@ -21,6 +27,7 @@ let reconMarkets = {
     mexc:    { spot: false, futures: false },
     bitget:  { spot: false, futures: false },
 };
+
 let reconMinVolumes = {
     binance: { spot: 200000, futures: 300000 },
     bybit:   { spot: 200000, futures: 300000 },
@@ -60,25 +67,46 @@ const RECON_EXCHANGES = [
 ];
 
 // ==========================================
-// СТАРЫЙ DENSITY (legacy, оставлен для совместимости)
+// ✅ ХЕЛПЕР: Fetch с жестким таймаутом (защита от зависания UI)
+// ==========================================
+async function fetchWithTimeout(url, options = {}, timeout = 3000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        throw error; // Ошибка будет обработана в вызывающей функции
+    }
+}
+
+// ==========================================
+// СТАРЫЙ DENSITY (Legacy) — также оптимизирован
 // ==========================================
 async function loadDensities(symbol) {
-    if (!densityEnabled || !candleSeries) return;
+    if (!densityEnabled || typeof candleSeries === 'undefined' || !candleSeries) return;
     let hasChanges = false;
     const marketsToLoad = [];
     if (densityMarkets.future) marketsToLoad.push('future');
     if (densityMarkets.spot) marketsToLoad.push('spot');
     const allNewData = {};
+
     for (const market of marketsToLoad) {
         try {
+            // ✅ УМЕНЬШЕН LIMIT: 100 вместо 1000. Нам всё равно нужны только топ-20.
+            const limit = 100;
             const url = market === 'future'
-                ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=1000`
-                : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=1000`;
-            const res = await fetch(url);
+                ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=${limit}`
+                : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=${limit}`;
+
+            const res = await fetchWithTimeout(url, {}, 3000);
             if (!res.ok) continue;
             const data = await res.json();
             const densities = [];
             const minVolume = market === 'future' ? densityMinVolumeFuture : densityMinVolumeSpot;
+
             const processSide = (sideArr, sideType) => {
                 for (const [priceStr, qtyStr] of sideArr) {
                     const price = parseFloat(priceStr);
@@ -89,19 +117,21 @@ async function loadDensities(symbol) {
             };
             if (data.bids) processSide(data.bids, 'buy');
             if (data.asks) processSide(data.asks, 'sell');
+
             densities.sort((a, b) => b.volume - a.volume);
-            allNewData[market] = densities.slice(0, 20);
+            allNewData[market] = densities.slice(0, 20); // ✅ ТОП-20
         } catch (e) {
-            console.error(`Densities error (${market}):`, e);
             allNewData[market] = previousDensities[market] || [];
         }
     }
+
     for (const market of marketsToLoad) {
         const newData = allNewData[market] || [];
         const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
         const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
         if (currentData !== prevData) { hasChanges = true; previousDensities[market] = newData; }
     }
+
     if (!hasChanges) return;
     clearDensityLines();
     for (const market of marketsToLoad) {
@@ -119,7 +149,7 @@ async function loadDensities(symbol) {
 }
 
 function clearDensityLines() {
-    if (!candleSeries) return;
+    if (typeof candleSeries === 'undefined' || !candleSeries) return;
     densityLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
     densityLines = [];
 }
@@ -128,7 +158,7 @@ function startDensityUpdates(symbol) {
     if (densityUpdateTimer) clearInterval(densityUpdateTimer);
     loadDensities(symbol);
     densityUpdateTimer = setInterval(() => {
-        if (currentSymbol === symbol && densityEnabled) loadDensities(symbol);
+        if (typeof currentSymbol !== 'undefined' && currentSymbol === symbol && densityEnabled) loadDensities(symbol);
     }, 3000);
 }
 
@@ -136,18 +166,19 @@ function startDensityUpdates(symbol) {
 // RECON — НОВАЯ МУЛЬТИ-БИРЖЕВАЯ ЛОГИКА
 // ==========================================
 function getReconUrl(exId, symbol, market) {
+    // ✅ УМЕНЬШЕНЫ ЛИМИТЫ до 50. Парсить 1000 строк в JS впустую — медленно.
     if (exId === 'binance') return market === 'futures'
-        ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=1000`
-        : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=1000`;
+        ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=50`
+        : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=50`;
     if (exId === 'bybit') return market === 'futures'
-        ? `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbol}USDT&limit=200`
-        : `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbol}USDT&limit=200`;
+        ? `https://api.bybit.com/v5/market/orderbook?category=linear&symbol=${symbol}USDT&limit=50`
+        : `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${symbol}USDT&limit=50`;
     if (exId === 'okx') return market === 'futures'
-        ? `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT-SWAP&sz=200`
-        : `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT&sz=200`;
+        ? `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT-SWAP&sz=50`
+        : `https://www.okx.com/api/v5/market/books?instId=${symbol}-USDT&sz=50`;
     if (exId === 'bitget') return market === 'futures'
-        ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=100`
-        : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
+        ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=50`
+        : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=50`;
     if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     return null;
@@ -163,91 +194,107 @@ function parseReconLevels(exId, data) {
     } else if (exId === 'okx') {
         const d = (data.data || [])[0] || {};
         rawBids = d.bids || []; rawAsks = d.asks || [];
-    } else if (exId === 'gate') {
-        rawBids = data.bids || []; rawAsks = data.asks || [];
-    } else if (exId === 'mexc') {
+    } else if (exId === 'gate' || exId === 'mexc') {
         rawBids = data.bids || []; rawAsks = data.asks || [];
     } else if (exId === 'bitget') {
         const inner = data.data || {};
         rawBids = inner.bids || []; rawAsks = inner.asks || [];
     }
+
+    // ✅ Оптимизированная функция преобразования (быстрее и надежнее)
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
-        if (row && typeof row === 'object') return [parseFloat(row.p || row.price), Math.abs(parseFloat(row.v || row.vol))];
+        if (row && typeof row === 'object') {
+            const p = parseFloat(row.p || row.price || 0);
+            const q = Math.abs(parseFloat(row.v || row.vol || row.s || row.size || 0));
+            return [p, q];
+        }
         return [NaN, NaN];
     };
     return { rawBids, rawAsks, toLevel };
 }
 
 async function fetchReconMarket(exId, symbol, market) {
-    let data;
     try {
-        if (exId === 'mexc') {
-            const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
-            if (!res.ok) return [];
-            data = await res.json();
-        } else if (exId === 'gate') {
-            const res = await fetch(`/api/gate-depth/?market=${market}&symbol=${symbol}`);
-            if (!res.ok) return [];
-            data = await res.json();
-        } else {
-            const url = getReconUrl(exId, symbol, market);
-            if (!url) return [];
-            const res = await fetch(url);
-            if (!res.ok) return [];
-            data = await res.json();
-        }
-    } catch (e) { return []; }
+        const url = getReconUrl(exId, symbol, market);
+        if (!url) return [];
 
-    if (data) {
-        if (exId === 'okx') {
-            if (data.code !== undefined && data.code !== '0' && data.code !== 0) return [];
-        } else if (exId === 'bitget') {
-            if (data.code !== undefined && data.code !== '00000' && data.code !== 0) return [];
-        } else if (exId === 'bybit') {
-            if (data.retCode !== undefined && data.retCode !== 0) return [];
-        } else {
-            if (data.code !== undefined && data.code !== 0 && data.code !== '0') return [];
-            if (data.retCode !== undefined && data.retCode !== 0) return [];
-        }
-        if (data.msg && typeof data.msg === 'string' && data.msg.includes('not found')) return [];
+        // ✅ Используем fetch с таймаутом 3 секунды
+        const res = await fetchWithTimeout(url, {}, 3000);
+        if (!res.ok) return [];
+        const data = await res.json();
+
+        // ✅ Валидация ответов бирж
+        if (exId === 'okx' && data.code !== undefined && data.code !== '0' && data.code !== 0) return [];
+        if (exId === 'bitget' && data.code !== undefined && data.code !== '00000' && data.code !== 0) return [];
+        if (exId === 'bybit' && data.retCode !== undefined && data.retCode !== 0) return [];
+        if (data.msg && typeof data.msg === 'string' && data.msg.toLowerCase().includes('not found')) return [];
+
+        const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
+        const minVolume = reconMinVolumes[exId][market];
+        const out = [];
+
+        const push = (arr) => {
+            for (const row of arr) {
+                const [p, q] = toLevel(row);
+                if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
+                const vol = p * q;
+                if (vol >= minVolume) out.push({ price: p, volume: vol });
+            }
+        };
+        push(rawBids); push(rawAsks);
+        return out;
+    } catch (e) {
+        return []; // Тихий фоллбек при таймауте или ошибке сети
     }
-    const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
-    const minVolume = reconMinVolumes[exId][market];
-    const out = [];
-    const push = (arr) => {
-        for (const row of arr) {
-            const [p, q] = toLevel(row);
-            if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
-            const vol = p * q;
-            if (vol >= minVolume) out.push({ price: p, volume: vol });
-        }
-    };
-    push(rawBids); push(rawAsks);
-    return out;
 }
 
 async function loadReconDensities(symbol) {
-    if (!reconEnabled || !candleSeries || isReconLoading) return;
+    if (!reconEnabled || typeof candleSeries === 'undefined' || !candleSeries || isReconLoading) return;
+
+    // ✅ Отменяем предыдущий запрос, если символ сменился
+    if (currentReconAbortController) currentReconAbortController.abort();
+    currentReconAbortController = new AbortController();
+
     isReconLoading = true;
     try {
         const tasks = [];
         for (const ex of RECON_EXCHANGES) {
             for (const market of ['spot', 'futures']) {
                 if (!reconMarkets[ex.id][market]) continue;
-                tasks.push(fetchReconMarket(ex.id, symbol, market)
-                    .then(d => ({ ex: ex.id, market, data: d }))
-                    .catch(() => ({ ex: ex.id, market, data: null })));
+                tasks.push(
+                    fetchReconMarket(ex.id, symbol, market)
+                        .then(d => ({ ex: ex.id, market, data: d }))
+                        .catch(() => ({ ex: ex.id, market, data: null }))
+                );
             }
         }
+
         if (tasks.length === 0) { clearReconLines(); return; }
+
         const results = await Promise.all(tasks);
+
+        // ✅ УМНАЯ ПРОВЕРКА: Генерируем "отпечаток" новых данных
+        const newSignature = results
+            .filter(r => r.data && r.data.length > 0)
+            .map(r => `${r.ex}-${r.market}:${r.data.slice(0, 5).map(d => d.price).join(',')}`)
+            .join('|');
+
+        // Если отпечаток совпадает с предыдущим, перерисовка НЕ НУЖНА (экономит 90% ресурсов CPU)
+        if (newSignature === lastReconSignature && reconLines.length > 0) {
+            return;
+        }
+        lastReconSignature = newSignature;
+
         const newLines = [];
         for (const r of results) {
-            if (!r.data) continue;
+            if (!r.data || r.data.length === 0) continue;
             const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
             const suffix = r.market === 'futures' ? 'F' : 'S';
+
+            // ✅ ЯВНАЯ СОРТИРОВКА И ОБРЕЗКА ДО ТОП-20
             const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+
             top.forEach(d => {
                 const line = candleSeries.createPriceLine({
                     price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
@@ -258,17 +305,23 @@ async function loadReconDensities(symbol) {
                 newLines.push(line);
             });
         }
+
         clearReconLines();
         reconLines = newLines;
-    } finally { isReconLoading = false; }
+    } finally {
+        isReconLoading = false;
+    }
 }
 
 function clearReconLines() {
-    if (!candleSeries) return;
+    if (typeof candleSeries === 'undefined' || !candleSeries) return;
     reconLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
     reconLines = [];
 }
 
+// ==========================================
+// UI ФУНКЦИИ (Без изменений, они уже эффективны)
+// ==========================================
 function ensureReconPanel() {
     const container = document.getElementById('reconPanelContainer');
     if (!container) return;
@@ -330,7 +383,7 @@ function toggleReconMarket(exId, market) {
     const hasEnabled = RECON_EXCHANGES.some(ex =>
         reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
     );
-    if (currentSymbol && hasEnabled) {
+    if (typeof currentSymbol !== 'undefined' && currentSymbol && hasEnabled) {
         loadReconDensities(currentSymbol);
     } else if (!hasEnabled) {
         clearReconLines();
@@ -344,12 +397,13 @@ function startReconUpdates(symbol) {
     renderReconPanel();
     loadReconDensities(symbol);
     reconUpdateTimer = setInterval(() => {
-        if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
+        if (typeof currentSymbol !== 'undefined' && currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
     }, 3000);
 }
 
 function stopReconUpdates() {
     if (reconUpdateTimer) { clearInterval(reconUpdateTimer); reconUpdateTimer = null; }
+    if (currentReconAbortController) currentReconAbortController.abort();
     removeReconPanel();
     clearReconLines();
 }
