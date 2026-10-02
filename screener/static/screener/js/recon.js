@@ -265,8 +265,8 @@ function parseReconLevels(exId, data) {
 async function fetchReconMarket(exId, symbol, market) {
     let data;
     try {
+        // 🔥 Gate.io работает через WebSocket (без серверного прокси)
         if (exId === 'gate') {
-            // 🔥 Получаем снапшот напрямую через WS Gate.io, минуя серверный прокси
             data = await fetchGateReconViaWS(symbol, market);
             if (!data || !data.bids) return [];
         } else if (exId === 'mexc') {
