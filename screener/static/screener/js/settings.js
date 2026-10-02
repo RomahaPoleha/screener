@@ -134,13 +134,13 @@ if (priceImpulseThr || priceImpulseWin) {
         const sInput = document.getElementById(`scalp-${ex.id}-sv`);
 
         if (!scalpExchanges[ex.id]) {
-            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
         scalpExchanges[ex.id].enabled = enabledCheckbox ? enabledCheckbox.checked : false;
         scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
         scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-        scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(300000, parseInt(fInput.value) || 300000) : 300000;
-        scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(200000, parseInt(sInput.value) || 200000) : 200000;
+        scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(200000, parseInt(fInput.value) || 200000) : 200000;
+        scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(100000, parseInt(sInput.value) || 100000) : 100000;
     });
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
     scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
