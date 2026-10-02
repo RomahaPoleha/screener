@@ -27,8 +27,8 @@ urlpatterns = [
     path('api/scalp/<str:symbol>/', views.api_scalp, name='api_scalp'),
     path('api/sound/<str:filename>/', views.api_sound, name='api_sound'),
     path('api/scalp-active/', views.api_scalp_active),
-    path('api/mexc-depth/', views.api_mexc_depth, name='api_mexc_depth'),
-    path('api/gate-depth/', views.api_gate_depth, name='api_gate_depth'),
+    # path('api/mexc-depth/', views.api_mexc_depth, name='api_mexc_depth'),
+    # path('api/gate-depth/', views.api_gate_depth, name='api_gate_depth'),
     path('api/logo/', views.api_logo),
     path('api/impulse-alerts/', views.api_impulse_alerts, name='api_impulse_alerts'),
 
