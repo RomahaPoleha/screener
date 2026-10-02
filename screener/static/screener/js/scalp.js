@@ -1,15 +1,13 @@
 // ==========================================
 // scalp.js — SCALP (ПЛОТНОСТИ С БИРЖ)
-// Загрузка через /api/scalp/, отрисовка линий, настройки бирж
 // ==========================================
 
-// --- Переменные состояния ---
 let scalpLines = [];
 let scalpEnabled = false;
 let scalpUpdateTimer = null;
 let previousScalpData = {};
 
-// Конфигурация бирж (добавлены minFutures и minSpot для каждой)
+// 1. ИСПРАВЛЕНО: Добавлены minFutures и minSpot для каждой биржи
 const EXCHANGES_CONFIG = [
     { id: 'binance', name: 'Binance', label: 'BI',   domain: 'binance.com', color: '#f59e0b', minFutures: 300000, minSpot: 200000 },
     { id: 'bybit',   name: 'Bybit',   label: 'BY',   domain: 'bybit.com',   color: '#f59e0b', minFutures: 300000, minSpot: 200000 },
@@ -19,7 +17,6 @@ const EXCHANGES_CONFIG = [
     { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b', minFutures: 200000, minSpot: 100000 },
 ];
 
-// Текущие настройки каждой биржи
 let scalpExchanges = {
     binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
     bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
@@ -29,8 +26,7 @@ let scalpExchanges = {
     bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 };
 
-// Миграция любого старого формата + подхват сохранённых значений
-// Миграция любого старого формата + подхват сохранённых значений
+// 2. ИСПРАВЛЕНО: Миграция теперь корректно защищает минимумы из EXCHANGES_CONFIG
 try {
     const saved = JSON.parse(localStorage.getItem('scalpExchanges') || 'null');
     if (saved && typeof saved === 'object') {
@@ -38,7 +34,6 @@ try {
             const s = saved[id];
             if (!s) continue;
 
-            // Находим конфиг биржи для получения минимальных значений
             const exConfig = EXCHANGES_CONFIG.find(e => e.id === id);
             const minF = exConfig ? exConfig.minFutures : 300000;
             const minS = exConfig ? exConfig.minSpot : 200000;
@@ -51,7 +46,6 @@ try {
                     scalpExchanges[id].markets.futures = !!s.markets.futures;
                     scalpExchanges[id].markets.spot    = !!s.markets.spot;
                 }
-                // Применяем сохранённые значения, но не ниже минимума из конфига
                 if (Number(s.minVolumeFutures) > 0) {
                     scalpExchanges[id].minVolumeFutures = Math.max(minF, Number(s.minVolumeFutures));
                 }
@@ -63,15 +57,13 @@ try {
     }
 } catch(e) { console.warn('⚠️ scalpExchanges повреждён'); }
 
-// Вычисляем scalpEnabled при загрузке
 scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
 
 // ==========================================
-// ЗАГРУЗКА ПЛОТНОСТЕЙ
+// ЗАГРУЗКА ПЛОТНОСТЕЙ (без изменений)
 // ==========================================
 async function loadScalpDensities(symbol) {
     if (!candleSeries || isScalpLoading) return;
-    // Если скальп выключен — очищаем линии и выходим
     if (!scalpEnabled) {
         if (scalpLines.length > 0) clearScalpLines();
         previousScalpData = {};
@@ -93,13 +85,11 @@ async function loadScalpDensities(symbol) {
                 activeKeys.add(`${exId}|spot`);
             }
         }
-        // Если нет включённых бирж/рынков — очищаем линии и выходим
         if (loadList.length === 0) {
             if (scalpLines.length > 0) clearScalpLines();
             previousScalpData = {};
             return;
         }
-        // Удаляем кэш для выключенных бирж/рынков
         for (const key in previousScalpData) {
             if (!activeKeys.has(key)) delete previousScalpData[key];
         }
@@ -111,7 +101,6 @@ async function loadScalpDensities(symbol) {
                 const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`);
                 if (!res.ok) continue;
                 const data = await res.json();
-                // Фильтруем по бирже И по возрасту >= 180 сек
                 const filtered = (data.densities || []).filter(d => {
                     if ((d.exchange || 'binance') !== item.exchange) return false;
                     if ((d.age_seconds || 0) < 180) return false;
@@ -123,7 +112,6 @@ async function loadScalpDensities(symbol) {
                 allNewData[key] = previousScalpData[key] || [];
             }
         }
-        // Проверяем изменения
         for (const key in allNewData) {
             const newData = allNewData[key];
             const prevData = previousScalpData[key] || [];
@@ -134,10 +122,8 @@ async function loadScalpDensities(symbol) {
                 previousScalpData[key] = newData;
             }
         }
-        // Проверяем удалённые ключи (были изменения)
         if (Object.keys(previousScalpData).length !== activeKeys.size) hasChanges = true;
         if (!hasChanges) return;
-        // Очищаем ВСЕ линии перед перерисовкой
         clearScalpLines();
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
@@ -181,8 +167,9 @@ function startScalpUpdates(symbol) {
 }
 
 // ==========================================
-// НАСТРОЙКИ SCALP (отдельная модалка)
+// НАСТРОЙКИ SCALP
 // ==========================================
+// 3. ИСПРАВЛЕНО: Генерация HTML с правильными ID и динамическими min="${ex.minFutures}"
 function openScalpSettingsModal() {
     const container = document.getElementById('scalpExchangesContainer');
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
@@ -208,7 +195,6 @@ function openScalpSettingsModal() {
                         <span>Futures</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <!-- ЗДЕСЬ min="${ex.minFutures}" -->
                     <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="${ex.minFutures}" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
                 <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
@@ -217,7 +203,6 @@ function openScalpSettingsModal() {
                         <span>Spot</span>
                     </label>
                     <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
-                    <!-- ЗДЕСЬ min="${ex.minSpot}" -->
                     <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="${ex.minSpot}" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>
             </div>
@@ -227,9 +212,10 @@ function openScalpSettingsModal() {
     modal.show();
 }
 
+// 4. ИСПРАВЛЕНО: Полностью переписана функция с ПРАВИЛЬНЫМИ ID и без жестких 300000
 function applyScalpSettings() {
     EXCHANGES_CONFIG.forEach(ex => {
-        // ИСПРАВЛЕНО: ID теперь точно совпадают с теми, что генерируются в openScalpSettingsModal
+        // ВАЖНО: ID теперь точно совпадают с теми, что созданы в openScalpSettingsModal
         const toggle = document.getElementById(`scalpEnabled_${ex.id}`);
         const fCheckbox = document.getElementById(`scalpFutures_${ex.id}`);
         const sCheckbox = document.getElementById(`scalpSpot_${ex.id}`);
@@ -244,7 +230,7 @@ function applyScalpSettings() {
         scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
         scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
 
-        // ИСПРАВЛЕНО: Берем реальное значение из input, и защищаем его через Math.max от значений ниже минимума биржи
+        // ВАЖНО: Берем реальное значение. Если оно меньше минимума биржи — принудительно ставим минимум
         const valF = fInput ? parseInt(fInput.value) : ex.minFutures;
         const valS = sInput ? parseInt(sInput.value) : ex.minSpot;
 
@@ -258,19 +244,18 @@ function applyScalpSettings() {
         cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
     );
 
-    if (currentSymbol && candleSeries) {
+    if (typeof currentSymbol !== 'undefined' && typeof candleSeries !== 'undefined' && currentSymbol && candleSeries) {
         clearScalpLines();
         previousScalpData = {};
     }
 
-    if (currentSymbol) {
+    if (typeof currentSymbol !== 'undefined' && currentSymbol) {
         if (scalpEnabled) startScalpUpdates(currentSymbol);
         else {
             if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
         }
     }
 
-    // ИСПРАВЛЕНО: Имя модального окна теперь совпадает с openScalpSettingsModal
     const modal = bootstrap.Modal.getInstance(document.getElementById('scalpSettingsModal'));
     if (modal) modal.hide();
 }
