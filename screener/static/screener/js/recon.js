@@ -25,10 +25,14 @@ let reconMinVolumes = {
     binance: { spot: 200000, futures: 300000 },
     bybit:   { spot: 200000, futures: 300000 },
     okx:     { spot: 200000, futures: 300000 },
-    gate:    { spot: 200000, futures: 300000 },
-    mexc:    { spot: 200000, futures: 300000 },
-    bitget:  { spot: 200000, futures: 300000 }
+    gate:    { spot: 200000, futures: 200000 }, // Рекомендуется снизить порог для Gate futures, так как раньше он был искусственно завышен
+    mexc:    { spot: 200000, futures: 200000 },
+    bitget:  { spot: 200000, futures: 200000 }
 };
+
+// --- НОВОЕ: Кэш для мультипликаторов контрактов Gate.io Futures ---
+let gateFuturesMultipliers = {};
+let isGateMultipliersLoading = false;
 
 if (localStorage.getItem('densityMinVolumeFuture')) densityMinVolumeFuture = parseInt(localStorage.getItem('densityMinVolumeFuture'));
 if (localStorage.getItem('densityMinVolumeSpot')) densityMinVolumeSpot = parseInt(localStorage.getItem('densityMinVolumeSpot'));
@@ -179,7 +183,35 @@ function parseReconLevels(exId, data) {
     return { rawBids, rawAsks, toLevel };
 }
 
+// --- НОВОЕ: Функция для загрузки мультипликаторов контрактов Gate.io ---
+async function loadGateFuturesMultipliers() {
+    // Если уже загружено или идет загрузка, ничего не делаем
+    if (Object.keys(gateFuturesMultipliers).length > 0 || isGateMultipliersLoading) return;
+
+    isGateMultipliersLoading = true;
+    try {
+        // Прямой запрос к публичному API Gate.io (обычно не имеет CORS-ограничений для GET)
+        const res = await fetch('https://api.gateio.ws/api/v4/futures/usdt/contracts');
+        if (res.ok) {
+            const contracts = await res.json();
+            contracts.forEach(c => {
+                // Сохраняем мультипликатор (quanto_multiplier) для каждой пары
+                gateFuturesMultipliers[c.name] = parseFloat(c.quanto_multiplier);
+            });
+        }
+    } catch (e) {
+        console.warn('Не удалось загрузить мультипликаторы Gate.io futures. Будет использован запасной вариант (x1).', e);
+    } finally {
+        isGateMultipliersLoading = false;
+    }
+}
+
 async function fetchReconMarket(exId, symbol, market) {
+    // --- НОВОЕ: Гарантируем загрузку мультипликаторов перед обработкой фьючерсов Gate ---
+    if (exId === 'gate' && market === 'futures') {
+        await loadGateFuturesMultipliers();
+    }
+
     let data;
     try {
         if (exId === 'mexc') {
@@ -212,18 +244,32 @@ async function fetchReconMarket(exId, symbol, market) {
         }
         if (data.msg && typeof data.msg === 'string' && data.msg.includes('not found')) return [];
     }
+
     const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
     const minVolume = reconMinVolumes[exId][market];
     const out = [];
+
     const push = (arr) => {
         for (const row of arr) {
             const [p, q] = toLevel(row);
             if (!isFinite(p) || !isFinite(q) || p <= 0) continue;
-            const vol = p * q;
-            if (vol >= minVolume) out.push({ price: p, volume: vol });
+
+            // --- НОВОЕ: Исправление расчета объема для Gate.io Futures ---
+            let vol = p * q;
+            if (exId === 'gate' && market === 'futures') {
+                // Берем мультипликатор из кэша, если его нет (ошибка загрузки), используем 1 как безопасный fallback
+                const multiplier = gateFuturesMultipliers[symbol] || 1;
+                vol = p * q * multiplier;
+            }
+
+            if (vol >= minVolume) {
+                out.push({ price: p, volume: vol });
+            }
         }
     };
-    push(rawBids); push(rawAsks);
+
+    push(rawBids);
+    push(rawAsks);
     return out;
 }
 
