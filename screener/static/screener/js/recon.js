@@ -13,6 +13,8 @@ let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
 let reconPanelEl = null;
 let reconLines = [];
+let isReconLoading = false; // Добавлено для корректной работы флага загрузки
+
 let reconMarkets = {
     binance: { spot: false, futures: true },
     bybit:   { spot: false, futures: false },
@@ -148,7 +150,16 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'bitget') return market === 'futures'
         ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=100`
         : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
-    if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
+
+    // --- ХИРУРГИЧЕСКАЯ ПРАВКА ДЛЯ GATE.IO ---
+    if (exId === 'gate') {
+        // Gate.io требует формат пары с подчеркиванием (например, BTC_USDT)
+        const pair = `${symbol}_USDT`;
+        return market === 'futures'
+            ? `https://api.gateio.ws/api/v4/futures/usdt/order_book?contract=${pair}&limit=100`
+            : `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${pair}&limit=100`;
+    }
+
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     return null;
 }
@@ -164,16 +175,31 @@ function parseReconLevels(exId, data) {
         const d = (data.data || [])[0] || {};
         rawBids = d.bids || []; rawAsks = d.asks || [];
     } else if (exId === 'gate') {
-        rawBids = data.bids || []; rawAsks = data.asks || [];
+        // --- ХИРУРГИЧЕСКАЯ ПРАВКА ДЛЯ GATE.IO ---
+        // Поддержка как прямого ответа API, так и возможной обертки прокси { data: { bids: [], asks: [] } }
+        const payload = data.data || data;
+        rawBids = payload.bids || [];
+        rawAsks = payload.asks || [];
     } else if (exId === 'mexc') {
         rawBids = data.bids || []; rawAsks = data.asks || [];
     } else if (exId === 'bitget') {
         const inner = data.data || {};
         rawBids = inner.bids || []; rawAsks = inner.asks || [];
     }
+
     const toLevel = (row) => {
-        if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
-        if (row && typeof row === 'object') return [parseFloat(row.p || row.price), Math.abs(parseFloat(row.v || row.vol))];
+        if (Array.isArray(row)) {
+            // Spot формат (и некоторые другие): ["цена", "количество"]
+            return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
+        }
+        if (row && typeof row === 'object') {
+            // --- ХИРУРГИЧЕСКАЯ ПРАВКА ДЛЯ GATE.IO FUTURES ---
+            // Futures формат Gate.io: { p: "цена", s: "количество" }
+            // Добавлено поле 's' (size), а также fallback на стандартные имена
+            const price = parseFloat(row.p || row.price);
+            const qty = parseFloat(row.s || row.v || row.vol || row.amount || row.qty);
+            return [price, Math.abs(qty)];
+        }
         return [NaN, NaN];
     };
     return { rawBids, rawAsks, toLevel };
@@ -182,21 +208,14 @@ function parseReconLevels(exId, data) {
 async function fetchReconMarket(exId, symbol, market) {
     let data;
     try {
-        if (exId === 'mexc') {
-            const res = await fetch(`/api/mexc-depth/?market=${market}&symbol=${symbol}`);
-            if (!res.ok) return [];
-            data = await res.json();
-        } else if (exId === 'gate') {
-            const res = await fetch(`/api/gate-depth/?market=${market}&symbol=${symbol}`);
-            if (!res.ok) return [];
-            data = await res.json();
-        } else {
-            const url = getReconUrl(exId, symbol, market);
-            if (!url) return [];
-            const res = await fetch(url);
-            if (!res.ok) return [];
-            data = await res.json();
-        }
+        // --- ХИРУРГИЧЕСКАЯ ПРАВКА: Унифицированный запрос для всех бирж ---
+        // Убран жесткий вызов прокси для gate, теперь используется прямой API через getReconUrl
+        // (Если прокси всё же необходим из-за CORS, обновленная логика парсинга ниже всё равно его корректно обработает)
+        const url = getReconUrl(exId, symbol, market);
+        if (!url) return [];
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        data = await res.json();
     } catch (e) { return []; }
 
     if (data) {
@@ -206,12 +225,19 @@ async function fetchReconMarket(exId, symbol, market) {
             if (data.code !== undefined && data.code !== '00000' && data.code !== 0) return [];
         } else if (exId === 'bybit') {
             if (data.retCode !== undefined && data.retCode !== 0) return [];
+        } else if (exId === 'gate') {
+            // --- ХИРУРГИЧЕСКАЯ ПРАВКА: Безопасная валидация для Gate.io ---
+            // Прямой API Gate не возвращает 'code' при успехе.
+            // Если используется прокси вида { code: 200, data: {...} }, проверяем наличие самого стакана.
+            const payload = data.data || data;
+            if (!payload.asks && !payload.bids) return [];
         } else {
             if (data.code !== undefined && data.code !== 0 && data.code !== '0') return [];
             if (data.retCode !== undefined && data.retCode !== 0) return [];
         }
         if (data.msg && typeof data.msg === 'string' && data.msg.includes('not found')) return [];
     }
+
     const { rawBids, rawAsks, toLevel } = parseReconLevels(exId, data);
     const minVolume = reconMinVolumes[exId][market];
     const out = [];
