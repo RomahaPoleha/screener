@@ -8,9 +8,35 @@ from pathlib import Path
 import time
 from . import coin_selection
 
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Глобальная сессия для переиспользования TCP-соединений (Keep-Alive)
+# Это главный секрет ускорения повторных запросов к одним и тем же биржам
+_http_session = None
+
+def get_http_session():
+    global _http_session
+    if _http_session is None:
+        _http_session = requests.Session()
+        # Настройка пула соединений и быстрых повторных попыток при сбоях
+        retry = Retry(total=1, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(pool_connections=20, pool_maxsize=40, max_retries=retry)
+        _http_session.mount('http://', adapter)
+        _http_session.mount('https://', adapter)
+    return _http_session
+
+
+
+
 # Глобальный exchange объект — создаётся один раз
 _binance_exchange_future = None
 _volume_poller_started = False
+
+
+
+
 
 def get_binance_exchange():
     """Ленивая инициализация exchange (экономит 50-100мс на запрос)"""
@@ -381,9 +407,7 @@ def api_scalp_active(request):
 
 @require_http_methods(["GET"])
 def api_mexc_depth(request):
-    """Прокси для MEXC стаканов (обход CORS)"""
-    import requests as req
-
+    """Прокси для MEXC стаканов (обход CORS) - ОПТИМИЗИРОВАНО"""
     market = request.GET.get('market', 'futures')
     symbol = request.GET.get('symbol', '').upper()
 
@@ -391,31 +415,39 @@ def api_mexc_depth(request):
         return JsonResponse({'error': 'bad params'}, status=400)
 
     cache_key = f"mexc:depth:{market}:{symbol}"
+
+    # ✅ УМЕНЬШЕННЫЙ КЭШ: 1 секунда вместо 2.
+    # Если данные есть и они свежее 1 сек, отдаем мгновенно.
     cached = cache.get(cache_key)
     if cached is not None:
         return JsonResponse(cached)
 
+    # ✅ УМЕНЬШЕННЫЙ LIMIT: 50 вместо 100. Меньше данных по сети = быстрее парсинг.
+    # Если вам нужно только ближайшее окружение, поставьте limit=20
+    limit = 50
+
     if market == 'futures':
-        url = f"https://contract.mexc.com/api/v1/contract/depth/{symbol}_USDT?limit=100"
+        url = f"https://contract.mexc.com/api/v1/contract/depth/{symbol}_USDT?limit={limit}"
     else:
-        url = f"https://api.mexc.com/api/v3/depth?symbol={symbol}USDT&limit=100"
+        url = f"https://api.mexc.com/api/v3/depth?symbol={symbol}USDT&limit={limit}"
 
     try:
-        res = req.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+        # ✅ ИСПОЛЬЗУЕМ СЕССИЮ И ЖЕСТКИЙ ТАЙМАУТ (3 сек вместо 8)
+        res = get_http_session().get(url, timeout=3, headers={'User-Agent': 'Mozilla/5.0'})
         if not res.ok:
             return JsonResponse({'bids': [], 'asks': []})
         data = res.json()
     except Exception as e:
         print(f"⚠️ api_mexc_depth({market} {symbol}): {e}")
+        # При ошибке можно вернуть старый кэш, если он есть (даже протухший), чтобы не ломать фронт
+        if cached:
+            return JsonResponse(cached)
         return JsonResponse({'bids': [], 'asks': []})
 
-    # MEXC futures: {success:true, data:{bids:[{p,v}], asks:[{p,v}]}}
-    # MEXC spot: {bids:[[p,q]], asks:[[p,q]]}
     inner = data.get('data') or data or {}
     raw_bids = inner.get('bids') or []
     raw_asks = inner.get('asks') or []
 
-    # Нормализация в формат [[price, qty], ...]
     def norm(levels):
         out = []
         for row in levels:
@@ -433,15 +465,15 @@ def api_mexc_depth(request):
         return out
 
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
-    cache.set(cache_key, result, 2)
+
+    # ✅ Кэшируем на 1 секунду. Для скальпинга это оптимальный баланс.
+    cache.set(cache_key, result, 1)
     return JsonResponse(result)
 
 
 @require_http_methods(["GET"])
 def api_gate_depth(request):
-    """Прокси для Gate.io стаканов (обход CORS)"""
-    import requests as req
-
+    """Прокси для Gate.io стаканов (обход CORS) - ОПТИМИЗИРОВАНО"""
     market = request.GET.get('market', 'futures')
     symbol = request.GET.get('symbol', '').upper()
 
@@ -453,36 +485,39 @@ def api_gate_depth(request):
     if cached is not None:
         return JsonResponse(cached)
 
+    limit = 50  # ✅ Уменьшено с 100 для ускорения
+
     if market == 'futures':
-        url = f"https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={symbol}_USDT&limit=100"
+        url = f"https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={symbol}_USDT&limit={limit}"
     else:
-        url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}_USDT&limit=100"
+        url = f"https://api.gateio.ws/api/v4/spot/order_book?currency_pair={symbol}_USDT&limit={limit}"
 
     try:
-        res = req.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+        # ✅ ИСПОЛЬЗУЕМ СЕССИЮ И ТАЙМАУТ 3 сек
+        res = get_http_session().get(url, timeout=3, headers={'User-Agent': 'Mozilla/5.0'})
         if not res.ok:
             print(f"⚠️ api_gate_depth({market} {symbol}): HTTP {res.status_code}")
+            if cached:
+                return JsonResponse(cached)
             return JsonResponse({'bids': [], 'asks': []})
         data = res.json()
     except Exception as e:
         print(f"⚠️ api_gate_depth({market} {symbol}): {e}")
+        if cached:
+            return JsonResponse(cached)
         return JsonResponse({'bids': [], 'asks': []})
 
-    # Gate отдаёт {current: timestamp, asks: [...], bids: [...]}
     raw_bids = data.get('bids') or []
     raw_asks = data.get('asks') or []
 
-    # Нормализация в формат [[price, qty], ...]
     def norm(levels):
         out = []
         for row in levels:
             try:
                 if isinstance(row, dict):
-                    # Gate futures: {"p": "...", "s": "..."}
                     p = float(row.get('p') or row.get('price') or 0)
                     q = abs(float(row.get('s') or row.get('size') or 0))
                 elif isinstance(row, (list, tuple)):
-                    # Gate spot: ["price", "size"]
                     p = float(row[0])
                     q = abs(float(row[1]))
                 else:
@@ -494,7 +529,9 @@ def api_gate_depth(request):
         return out
 
     result = {'bids': norm(raw_bids), 'asks': norm(raw_asks)}
-    cache.set(cache_key, result, 2)
+
+    # ✅ Кэшируем на 1 секунду
+    cache.set(cache_key, result, 1)
     return JsonResponse(result)
 
 
