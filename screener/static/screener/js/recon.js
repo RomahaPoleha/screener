@@ -62,88 +62,78 @@ const RECON_EXCHANGES = [
 /// ==========================================
 // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Получение снапшота Gate.io через WebSocket
 // ==========================================
+// ==========================================
+// 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Сбор полного снапшота Gate.io через WebSocket
+// ==========================================
 function fetchGateReconViaWS(symbol, market) {
     return new Promise((resolve) => {
         const isFutures = market === 'futures';
         const wsUrl = isFutures ? "wss://fx-ws.gateio.ws/v4/ws/usdt" : "wss://api.gateio.ws/ws/v4/";
         const channel = isFutures ? "futures.order_book_update" : "spot.order_book_update";
-
-        // Гарантируем формат BTC_USDT (даже если пришло BTC или BTCUSDT)
         const cleanSymbol = symbol.toUpperCase().replace('USDT', '') + '_USDT';
 
         try {
             const ws = new WebSocket(wsUrl);
-            let resolved = false;
+            let bestSnapshot = null;
+            let maxLevels = 0;
 
-            // Увеличили таймаут до 5 секунд для надежности
+            // Даем 400мс на получение пакетов. Первый пакет часто бывает пустым или маленьким,
+            // а настоящий полный снапшот приходит следом. Мы заберем самый "глубокий".
             const timeout = setTimeout(() => {
-                if (!resolved) {
-                    resolved = true;
-                    try { ws.close(); } catch(e) {}
-                    console.warn(`⚠️ Gate WS таймаут для ${cleanSymbol}`);
-                    resolve([]);
+                try { ws.close(); } catch(e) {}
+                if (bestSnapshot) {
+                    console.log(`✅ Gate WS финальный снапшот ${cleanSymbol}: ${bestSnapshot.bids.length} bids, ${bestSnapshot.asks.length} asks`);
+                } else {
+                    console.warn(`⚠️ Gate WS таймаут без данных для ${cleanSymbol}`);
                 }
-            }, 5000);
+                resolve(bestSnapshot || []);
+            }, 400);
 
             ws.onopen = () => {
                 const subscribeMsg = {
                     time: Math.floor(Date.now() / 1000),
                     channel: channel,
                     event: "subscribe",
-                    payload: isFutures ? [cleanSymbol, "100ms", "100"] : [cleanSymbol, "100ms"],
-                    id: 1 // 🔥 КРИТИЧНО: Gate.io требует id для корректной обработки подписки
+                    // Для спота тоже указываем 100 уровней для надежности
+                    payload: isFutures ? [cleanSymbol, "100ms", "100"] : [cleanSymbol, "100ms", "100"],
+                    id: 123
                 };
                 ws.send(JSON.stringify(subscribeMsg));
             };
 
             ws.onmessage = (e) => {
-                if (resolved) return;
                 try {
                     const msg = JSON.parse(e.data);
-
-                    // Игнорируем системные сообщения и подтверждения подписки
+                    // Игнорируем системные сообщения
                     if (msg.event === 'pong' || msg.channel === 'futures.ping' || msg.channel === 'spot.ping' || msg.event === 'subscribe') {
                         return;
                     }
 
-                    // 🔥 Ловим первый же пакет с данными стакана для нашего символа
-                    // (Первый пакет после подписки у Gate.io ВСЕГДА является полным снапшотом)
                     if (msg.channel === channel && msg.result && msg.result.s === cleanSymbol) {
-                        resolved = true;
-                        clearTimeout(timeout);
-                        try { ws.close(); } catch(e) {}
+                        const bids = msg.result.b || [];
+                        const asks = msg.result.a || [];
+                        const totalLevels = bids.length + asks.length;
 
-                        console.log(`✅ Gate WS получил снапшот: ${cleanSymbol} | Bids: ${msg.result.b.length}, Asks: ${msg.result.a.length}`);
-
-                        resolve({
-                            bids: msg.result.b || [],
-                            asks: msg.result.a || []
-                        });
+                        // Сохраняем пакет с максимальным количеством уровней (это и есть полный снапшот)
+                        if (totalLevels > maxLevels) {
+                            maxLevels = totalLevels;
+                            bestSnapshot = { bids: bids, asks: asks };
+                        }
                     }
-                } catch (err) {
-                    // Игнорируем ошибки парсинга
-                }
+                } catch (err) {}
             };
 
             ws.onerror = () => {
-                if (!resolved) {
-                    resolved = true;
-                    clearTimeout(timeout);
-                    try { ws.close(); } catch(e) {}
-                    console.error(`❌ Gate WS ошибка соединения для ${cleanSymbol}`);
-                    resolve([]);
-                }
+                clearTimeout(timeout);
+                try { ws.close(); } catch(e) {}
+                resolve(bestSnapshot || []);
             };
 
             ws.onclose = () => {
-                if (!resolved) {
-                    resolved = true;
-                    clearTimeout(timeout);
-                    resolve([]);
-                }
+                clearTimeout(timeout);
+                resolve(bestSnapshot || []);
             };
         } catch (err) {
-            console.error(`❌ Gate WS ошибка создания:`, err);
             resolve([]);
         }
     });
