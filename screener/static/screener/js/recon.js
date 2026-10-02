@@ -227,40 +227,137 @@ async function fetchReconMarket(exId, symbol, market) {
     return out;
 }
 
+// ==========================================
+// RECON — WEBSOCKET МЕНЕДЖЕР (НОВОЕ)
+// ==========================================
+let reconWsConnections = {};
+let reconWsData = {};
+
+function initReconWebSocket(exId, symbol, market) {
+    const connKey = `${exId}_${market}`;
+    if (reconWsConnections[connKey]) return;
+
+    let wsUrl = '', subscribeMsg = null;
+    const sym = symbol.toUpperCase();
+
+    if (exId === 'binance') {
+        wsUrl = market === 'futures'
+            ? `wss://fstream.binance.com/ws/${sym.toLowerCase()}usdt@depth20@100ms`
+            : `wss://stream.binance.com:9443/ws/${sym.toLowerCase()}usdt@depth20@100ms`;
+    } else if (exId === 'bybit') {
+        wsUrl = market === 'futures' ? 'wss://stream.bybit.com/v5/public/linear' : 'wss://stream.bybit.com/v5/public/spot';
+        subscribeMsg = {"op": "subscribe", "args": [`orderbook.200.${sym}USDT`]};
+    } else if (exId === 'okx') {
+        wsUrl = 'wss://ws.okx.com:8443/ws/v5/public';
+        const instId = market === 'futures' ? `${sym}-USDT-SWAP` : `${sym}-USDT`;
+        subscribeMsg = {"op": "subscribe", "args": [{"channel": "books", "instId": instId}]};
+    } else if (exId === 'bitget') {
+        wsUrl = 'wss://ws.bitget.com/v2/ws/public';
+        const instType = market === 'futures' ? 'UMCBL' : 'SPBL';
+        subscribeMsg = {"op": "subscribe", "args": [{"instType": instType, "channel": "books", "instId": `${sym}USDT`}]};
+    } else if (exId === 'mexc') {
+        wsUrl = market === 'futures' ? 'wss://contract.mexc.com/ws' : 'wss://wbs.mexc.com/ws';
+        subscribeMsg = {"method": "sub.depth", "param": {"symbol": market === 'futures' ? `${sym}_USDT` : `${sym}USDT`, "limit": 100}};
+    } else if (exId === 'gate') {
+        wsUrl = market === 'futures' ? 'wss://fx-ws.gateio.ws/v4/ws/usdt' : 'wss://api.gateio.ws/ws/v4/';
+        const channel = market === 'futures' ? 'futures.order_book_update' : 'spot.order_book_update';
+        subscribeMsg = {"time": Math.floor(Date.now()/1000), "channel": channel, "event": "subscribe", "payload": [`${sym}_USDT`, "100ms", "0"]};
+    }
+
+    if (!wsUrl) return;
+
+    const ws = new WebSocket(wsUrl);
+    reconWsConnections[connKey] = ws;
+
+    ws.onopen = () => {
+        if (subscribeMsg) ws.send(JSON.stringify(subscribeMsg));
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+
+            if (msg.ping) { ws.send(JSON.stringify({pong: msg.ping})); return; }
+            if (msg.event === "ping") { ws.send(JSON.stringify({event: "pong", time: Math.floor(Date.now()/1000)})); return; }
+            if (msg.action === "ping") { ws.send(JSON.stringify({action: "pong"})); return; }
+
+            let bids = [], asks = [];
+            if (exId === 'binance') {
+                bids = msg.b || []; asks = msg.a || [];
+            } else if (exId === 'bybit') {
+                if (msg.data) { bids = msg.data.b || []; asks = msg.data.a || []; }
+            } else if (exId === 'okx') {
+                if (msg.data && msg.data[0]) { bids = msg.data[0].bids || []; asks = msg.data[0].asks || []; }
+            } else if (exId === 'bitget') {
+                if (msg.data && msg.data[0]) { bids = msg.data[0].bids || []; asks = msg.data[0].asks || []; }
+            } else if (exId === 'mexc') {
+                if (msg.data) {
+                    bids = (msg.data.bids || []).map(x => [x.p, x.v]);
+                    asks = (msg.data.asks || []).map(x => [x.p, x.v]);
+                }
+            } else if (exId === 'gate') {
+                if (msg.result) { bids = msg.result.b || []; asks = msg.result.a || []; }
+            }
+
+            const processData = (arr, side) => {
+                return arr.map(row => {
+                    const p = parseFloat(Array.isArray(row) ? row[0] : (row.p || row.price));
+                    const q = Math.abs(parseFloat(Array.isArray(row) ? row[1] : (row.v || row.vol || row.size)));
+                    return { price: p, volume: p * q, side: side };
+                }).filter(d => isFinite(d.price) && d.price > 0 && isFinite(d.volume));
+            };
+
+            if (!reconWsData[exId]) reconWsData[exId] = { spot: [], futures: [] };
+            reconWsData[exId][market] = [...processData(bids, 'buy'), ...processData(asks, 'sell')];
+
+            if (currentSymbol === symbol && reconEnabled) {
+                loadReconDensities(symbol);
+            }
+        } catch (e) {}
+    };
+
+    ws.onclose = () => {
+        delete reconWsConnections[connKey];
+    };
+}
+
+
 async function loadReconDensities(symbol) {
     if (!reconEnabled || !candleSeries || isReconLoading) return;
     isReconLoading = true;
     try {
-        const tasks = [];
+        const newLines = [];
         for (const ex of RECON_EXCHANGES) {
             for (const market of ['spot', 'futures']) {
                 if (!reconMarkets[ex.id][market]) continue;
-                tasks.push(fetchReconMarket(ex.id, symbol, market)
-                    .then(d => ({ ex: ex.id, market, data: d }))
-                    .catch(() => ({ ex: ex.id, market, data: null })));
-            }
-        }
-        if (tasks.length === 0) { clearReconLines(); return; }
-        const results = await Promise.all(tasks);
-        const newLines = [];
-        for (const r of results) {
-            if (!r.data) continue;
-            const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
-            const suffix = r.market === 'futures' ? 'F' : 'S';
-            const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
-            top.forEach(d => {
-                const line = candleSeries.createPriceLine({
-                    price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
-                    lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
-                    axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
-                    title: `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+
+                const data = (reconWsData[ex.id] && reconWsData[ex.id][market]) || [];
+                if (!data || data.length === 0) continue;
+
+                const suffix = market === 'futures' ? 'F' : 'S';
+                const minVolume = reconMinVolumes[ex.id][market];
+
+                const top = data
+                    .filter(d => d.volume >= minVolume)
+                    .sort((a, b) => b.volume - a.volume)
+                    .slice(0, 20);
+
+                top.forEach(d => {
+                    const line = candleSeries.createPriceLine({
+                        price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+                        axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                        title: `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+                    });
+                    newLines.push(line);
                 });
-                newLines.push(line);
-            });
+            }
         }
         clearReconLines();
         reconLines = newLines;
-    } finally { isReconLoading = false; }
+    } finally {
+        isReconLoading = false;
+    }
 }
 
 function clearReconLines() {
@@ -342,16 +439,34 @@ function startReconUpdates(symbol) {
     if (!reconEnabled) return;
     ensureReconPanel();
     renderReconPanel();
-    loadReconDensities(symbol);
+
+    for (const ex of RECON_EXCHANGES) {
+        for (const market of ['spot', 'futures']) {
+            if (reconMarkets[ex.id][market]) {
+                initReconWebSocket(ex.id, symbol, market);
+            }
+        }
+    }
+
     reconUpdateTimer = setInterval(() => {
-        if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
-    }, 3000);
+        if (currentSymbol === symbol && reconEnabled) {
+            loadReconDensities(symbol);
+        }
+    }, 5000);
 }
 
 function stopReconUpdates() {
     if (reconUpdateTimer) { clearInterval(reconUpdateTimer); reconUpdateTimer = null; }
     removeReconPanel();
     clearReconLines();
+
+    for (const key in reconWsConnections) {
+        try {
+            reconWsConnections[key].close();
+        } catch(e) {}
+    }
+    reconWsConnections = {};
+    reconWsData = {};
 }
 
 function renderReconSettings() {
