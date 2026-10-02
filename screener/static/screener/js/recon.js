@@ -170,8 +170,17 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'bitget') return market === 'futures'
         ? `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${symbol}USDT&productType=USDT-FUTURES&limit=100`
         : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
-    if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
-    if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
+
+    // 🔥 ПРЯМОЙ ЗАПРОС К GATE.IO (БЕЗ ПРОКСИ)
+    if (exId === 'gate') {
+        if (market === 'futures') {
+            return `https://fx-api.gateio.ws/api/v4/futures/usdt/order_book?contract=${symbol}_USDT&limit=100`;
+        } else {
+            return `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${symbol}_USDT&limit=100`;
+        }
+    }
+
+    if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`; // MEXC лучше оставить через прокси, там бывают проблемы с CORS
     return null;
 }
 
