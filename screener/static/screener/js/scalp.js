@@ -21,12 +21,12 @@ const EXCHANGES_CONFIG = [
 
 // Текущие настройки каждой биржи
 let scalpExchanges = {
-    binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
-    bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 300000, minVolumeSpot: 200000 },
+    binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 };
 
 // Миграция любого старого формата + подхват сохранённых значений
