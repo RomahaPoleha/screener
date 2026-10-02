@@ -215,50 +215,36 @@ function openScalpSettingsModal() {
 
 function applyScalpSettings() {
     EXCHANGES_CONFIG.forEach(ex => {
-        // ID должны совпадать с теми, что создаются в openScalpSettingsModal()
-        const toggle    = document.getElementById(`scalpEnabled_${ex.id}`);
-        const fCheckbox = document.getElementById(`scalpFutures_${ex.id}`);
-        const sCheckbox = document.getElementById(`scalpSpot_${ex.id}`);
-        const fInput    = document.getElementById(`scalpMinFutures_${ex.id}`);
-        const sInput    = document.getElementById(`scalpMinSpot_${ex.id}`);
-
+        const toggle = document.getElementById(`scalp-${ex.id}-toggle`);
+        const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
+        const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
+        const fInput = document.getElementById(`scalp-${ex.id}-fv`);
+        const sInput = document.getElementById(`scalp-${ex.id}-sv`);
         if (!scalpExchanges[ex.id]) {
-            scalpExchanges[ex.id] = {
-                enabled: false,
-                markets: { futures: false, spot: false },
-                minVolumeFutures: 200000,
-                minVolumeSpot: 100000
-            };
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
-
-        scalpExchanges[ex.id].enabled            = toggle    ? toggle.checked    : false;
-        scalpExchanges[ex.id].markets.futures    = fCheckbox ? fCheckbox.checked : false;
-        scalpExchanges[ex.id].markets.spot       = sCheckbox ? sCheckbox.checked : false;
-        scalpExchanges[ex.id].minVolumeFutures   = fInput    ? parseInt(fInput.value) || 200000 : 200000;
-        scalpExchanges[ex.id].minVolumeSpot      = sInput    ? parseInt(sInput.value) || 100000 : 100000;
+        scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
+        scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
+        scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
+        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 200000 : 200000;
+        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 100000 : 100000;
     });
-
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
     scalpEnabled = Object.values(scalpExchanges).some(cfg =>
         cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
     );
-
+    // Всегда очищаем линии перед перерисовкой
     if (currentSymbol && candleSeries) {
         clearScalpLines();
         previousScalpData = {};
     }
-
+    // Перезапускаем обновление
     if (currentSymbol) {
         if (scalpEnabled) startScalpUpdates(currentSymbol);
         else {
-            if (scalpUpdateTimer) {
-                clearInterval(scalpUpdateTimer);
-                scalpUpdateTimer = null;
-            }
+            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
         }
     }
-
     const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
     if (modal) modal.hide();
 }
