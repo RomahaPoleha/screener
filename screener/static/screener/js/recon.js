@@ -424,10 +424,16 @@ function toggleReconMarket(exId, market) {
     reconMarkets[exId][market] = !reconMarkets[exId][market];
     localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
     renderReconPanel();
+
     const hasEnabled = RECON_EXCHANGES.some(ex =>
         reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
     );
+
     if (currentSymbol && hasEnabled) {
+        // НОВОЕ: Инициализируем WebSocket для только что включенной биржи
+        if (reconMarkets[exId][market]) {
+            initReconWebSocket(exId, currentSymbol, market);
+        }
         loadReconDensities(currentSymbol);
     } else if (!hasEnabled) {
         clearReconLines();
