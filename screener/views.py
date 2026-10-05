@@ -386,7 +386,7 @@ def api_candles_history(request, symbol):
     }
     limit = limits.get(tf, 1000)
     
-    cache_key = f"candles_hist_{symbol}_{tf}_future"
+    cache_key = f"candles_hist_v2_{symbol}_{tf}_future"  # v2: для 1m теперь 3 дня (4320 свечей)
     cached = cache.get(cache_key)
     
     # Используем кэш, если он свежий (30 минут для истории)
@@ -403,7 +403,53 @@ def api_candles_history(request, symbol):
     try:
         exchange = get_binance_exchange()
         pair = f"{symbol}/USDT:USDT"
-        ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=limit)
+        
+        # Binance имеет ограничение на количество свечей за один запрос
+        # Для futures, максимальный лимит обычно 1000 свечей
+        # Если запросили больше, делаем несколько запросов
+        ohlcv = []
+        
+        if tf == '1m' and limit > 1000:
+            # Для 1m делаем несколько запросов чтобы получить 3 дня (4320 свечей)
+            # Binance Futures ограничивает 1000 свечей за запрос
+            # Рассчитываем timestamp для 3 дней назад (в миллисекундах)
+            import time
+            now_ms = int(time.time() * 1000)
+            three_days_ago_ms = now_ms - (3 * 24 * 60 * 60 * 1000)  # 3 дня назад
+            
+            # Получаем свечи порциями по 1000
+            since = three_days_ago_ms
+            batch_size = 1000
+            
+            while len(ohlcv) < limit:
+                try:
+                    batch = exchange.fetch_ohlcv(pair, timeframe=tf, since=since, limit=batch_size)
+                    if not batch:
+                        break
+                    
+                    ohlcv.extend(batch)
+                    
+                    # Если получили меньше чем запросили, значит данные закончились
+                    if len(batch) < batch_size:
+                        break
+                    
+                    # Устанавливаем since для следующего батча как время последней свечи + 1 минута
+                    since = batch[-1][0] + 60 * 1000
+                    
+                    # Не зацикливаться
+                    if len(ohlcv) >= limit or since > now_ms:
+                        break
+                        
+                except Exception as e:
+                    print(f"Ошибка при получении батча для {symbol} {tf}: {e}")
+                    break
+            
+            # Ограничиваем лимитом и сортируем по времени (от старых к новым)
+            ohlcv = ohlcv[:limit]
+            ohlcv.sort(key=lambda x: x[0])  # Сортировка по timestamp
+        else:
+            # Для других таймфреймов один запрос
+            ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=limit)
         
         candles = [
             {
