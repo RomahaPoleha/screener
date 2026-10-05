@@ -369,6 +369,68 @@ def api_scalp_debug(request, symbol):
     return JsonResponse(result)
 
 @require_http_methods(["GET"])
+async def api_candles_history(request, symbol):
+    """API: глубокая история свечей (до 1500 свечей)"""
+    tf = request.GET.get('tf', '1m')
+    
+    # Определяем лимит в зависимости от таймфрейма (TradingView-подобные интервалы)
+    limits = {
+        '1m': 1440,   # 1 день
+        '5m': 2016,   # 1 неделя
+        '15m': 2880,  # 1 месяц
+        '30m': 1440,  # 1 месяц  
+        '1h': 2160,   # 3 месяца
+        '4h': 1080,   # 6 месяцев
+        '1d': 365,    # 1 год
+        '1w': 260,    # 5 лет
+    }
+    limit = limits.get(tf, 1000)
+    
+    cache_key = f"candles_hist_{symbol}_{tf}_future"
+    cached = await get_cache(cache_key)
+    
+    # Используем кэш, если он свежий (30 минут для истории)
+    if cached:
+        try:
+            # Проверяем свежесть последней свечи
+            now_ts = int(time.time())
+            last_candle_ts = cached[-1]['time']
+            if now_ts - last_candle_ts < 1800:  # 30 минут
+                return JsonResponse(cached, safe=False)
+        except (KeyError, IndexError, TypeError):
+            pass  # Кэш повреждён
+    
+    try:
+        exchange = await get_binance_exchange_async()
+        pair = f"{symbol}/USDT:USDT"
+        ohlcv = await exchange.fetch_ohlcv(pair, timeframe=tf, limit=limit)
+        
+        candles = [
+            {
+                'time': int(ts / 1000),
+                'open': float(o),
+                'high': float(h),
+                'low': float(l),
+                'close': float(c),
+                'volume': float(v)
+            }
+            for ts, o, h, l, c, v in ohlcv
+        ]
+        
+        # Кэшируем на 1 час для истории
+        await set_cache(cache_key, candles, 3600)
+        return JsonResponse(candles, safe=False)
+    except Exception as e:
+        # В случае ошибки попробуем отдать старый кэш, если он есть
+        if cached:
+            return JsonResponse(cached, safe=False)
+        return JsonResponse({'error': str(e)}, status=500)
+    finally:
+        if exchange:
+            await exchange.close()
+            
+            
+@require_http_methods(["GET"])
 def api_scalp_active(request):
     """Возвращает монеты, у которых сейчас есть плотности"""
     from . import binance_monitor

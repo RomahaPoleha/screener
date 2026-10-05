@@ -362,3 +362,126 @@ function applyCandlesToChart(history) {
     chart.timeScale().fitContent();
     chart.timeScale().scrollToPosition(12, false);
 }
+// ==========================================
+// ЗАГРУЗКА ГЛУБОКОЙ ИСТОРИИ
+// ==========================================
+
+async function loadChartHistory() {
+    if (!currentSymbol || !currentTF) {
+        console.warn('Нет активного символа или таймфрейма для загрузки истории');
+        return;
+    }
+    
+    const btn = document.getElementById('loadHistoryBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Загрузка...';
+    }
+    
+    try {
+        const url = `/api/candles-history/${currentSymbol}/?tf=${currentTF}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const history = await response.json();
+        
+        if (Array.isArray(history) && history.length > 0) {
+            // Объединяем текущие свечи с историей (удаляем дубликаты)
+            const currentData = candleSeries.data() || [];
+            const historyMap = new Map();
+            
+            // Сначала добавляем всю историю
+            history.forEach(candle => {
+                const time = safeTime(candle.time);
+                historyMap.set(time, candle);
+            });
+            
+            // Затем добавляем текущие свечи (более новые)
+            currentData.forEach(candle => {
+                historyMap.set(candle.time, candle);
+            });
+            
+            // Сортируем по времени
+            const mergedData = Array.from(historyMap.values())
+                .sort((a, b) => a.time - b.time);
+            
+            // Применяем к графику
+            applyCandlesToChart(mergedData);
+            
+            // Обновляем кэш
+            const cacheKey = `${currentSymbol}_${currentTF}`;
+            candlesCache.set(cacheKey, {
+                data: mergedData,
+                timestamp: Date.now()
+            });
+            
+            console.log(`✓ Загружено ${history.length} исторических свечей`);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+        alert(`Ошибка загрузки истории: ${error.message}`);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-clock-history"></i> История';
+        }
+    }
+}
+
+// ==========================================
+// СОЗДАНИЕ КНОПКИ ЗАГРУЗКИ ИСТОРИИ
+// ==========================================
+
+function createHistoryButton() {
+    // Удаляем старую кнопку, если есть
+    const oldBtn = document.getElementById('loadHistoryBtn');
+    if (oldBtn) oldBtn.remove();
+    
+    // Создаём новую кнопку
+    const btn = document.createElement('button');
+    btn.id = 'loadHistoryBtn';
+    btn.className = 'btn btn-sm btn-outline-secondary chart-history-btn';
+    btn.innerHTML = '<i class="bi bi-clock-history"></i> История';
+    btn.title = 'Загрузить глубоку историю свечей';
+    btn.onclick = loadChartHistory;
+    
+    // Размещаем кнопку рядом с другими элементами управления графиком
+    const chartControls = document.querySelector('.chart-controls') || 
+                         document.querySelector('.timeframe-buttons') ||
+                         document.getElementById('chartStats');
+    
+    if (chartControls) {
+        chartControls.appendChild(btn);
+    } else {
+        // Если нет панели управления, добавляем прямо в chart-wrapper
+        const chartWrapper = document.getElementById('chart');
+        if (chartWrapper) {
+            chartWrapper.style.position = 'relative';
+            btn.style.position = 'absolute';
+            btn.style.top = '10px';
+            btn.style.left = '120px';
+            btn.style.zIndex = '100';
+            chartWrapper.appendChild(btn);
+        }
+    }
+    
+    return btn;
+}
+
+// Создаём кнопку при открытии графика
+document.addEventListener('DOMContentLoaded', () => {
+    // Создаём кнопку сразу
+    createHistoryButton();
+    
+    // Пересоздаём кнопку при каждом открытии графика
+    const originalOpenChart = window.openChart;
+    if (originalOpenChart) {
+        window.openChart = async function(...args) {
+            await originalOpenChart.apply(this, args);
+            setTimeout(createHistoryButton, 100); // Даём время на инициализацию графика
+        };
+    }
+});

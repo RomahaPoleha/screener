@@ -658,3 +658,42 @@ body {
 .coin-row.active .coin-symbol {
     color: #f59e0b;
 }
+/* ==========================================
+   КНОПКА ЗАГРУЗКИ ИСТОРИИ ГРАФИКА
+   ========================================== */
+
+.chart-history-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 4px;
+    border: 1px solid #444444;
+    background: #2a2a2a;
+    color: #cccccc;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    height: 28px;
+    margin-left: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.chart-history-btn:hover {
+    background: #333333;
+    color: #f59e0b;
+    border-color: #666666;
+}
+
+.chart-history-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #222222;
+    color: #888888;
+}
+
+.chart-history-btn i {
+    font-size: 11px;
+}
