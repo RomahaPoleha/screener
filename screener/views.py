@@ -150,6 +150,33 @@ def api_impulse_alerts(request):
     return JsonResponse({
         'alerts': alerts,
         'server_time': time.time(),
+
+@require_http_methods(["GET"])
+def api_data(request):
+    """API: список монет (только Futures) + ленивый старт RVOL поллера"""
+    global _volume_poller_started
+
+    # Ленивый старт поллера при первом запросе
+    if not _volume_poller_started:
+        _volume_poller_started = True
+
+        def fetch_fn():
+            exchange = get_binance_exchange()
+            # ✅ Явно указываем тип рынка и здесь
+            return exchange.fetch_tickers(params={'type': 'future'})
+
+        coin_selection.start_volume_poller('binance_future', fetch_fn, coin_selection.clean_swap)
+
+    cache_key = "coins_future"
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse(cached, safe=False)
+
+    coins = get_symbols_from_tickers()
+    cache.set(cache_key, coins, 60)
+
+    return JsonResponse(coins, safe=False)
+
         'count': len(alerts),
     })
 
