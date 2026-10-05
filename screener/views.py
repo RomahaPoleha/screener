@@ -242,3 +242,11 @@ async def api_binance_depth(request):
         return JsonResponse({'error': str(e)}, status=500)
     finally:
         if exchange: await exchange.close()
+
+
+# --- Временные заглушки для восстановления работы сервера ---
+
+@require_http_methods(["GET"])
+def api_candles(request, symbol):
+    """Временная заглушка для api_candles"""
+    return JsonResponse({'error': f'Function api_candles for {symbol} is temporarily unavailable.'}, status=501)
