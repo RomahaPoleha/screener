@@ -369,7 +369,7 @@ def api_scalp_debug(request, symbol):
     return JsonResponse(result)
 
 @require_http_methods(["GET"])
-async def api_candles_history(request, symbol):
+def api_candles_history(request, symbol):
     """API: глубокая история свечей (до 1500 свечей)"""
     tf = request.GET.get('tf', '1m')
     
@@ -387,7 +387,7 @@ async def api_candles_history(request, symbol):
     limit = limits.get(tf, 1000)
     
     cache_key = f"candles_hist_{symbol}_{tf}_future"
-    cached = await get_cache(cache_key)
+    cached = cache.get(cache_key)
     
     # Используем кэш, если он свежий (30 минут для истории)
     if cached:
@@ -401,9 +401,9 @@ async def api_candles_history(request, symbol):
             pass  # Кэш повреждён
     
     try:
-        exchange = await get_binance_exchange_async()
+        exchange = get_binance_exchange()
         pair = f"{symbol}/USDT:USDT"
-        ohlcv = await exchange.fetch_ohlcv(pair, timeframe=tf, limit=limit)
+        ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=limit)
         
         candles = [
             {
@@ -418,16 +418,13 @@ async def api_candles_history(request, symbol):
         ]
         
         # Кэшируем на 1 час для истории
-        await set_cache(cache_key, candles, 3600)
+        cache.set(cache_key, candles, 3600)
         return JsonResponse(candles, safe=False)
     except Exception as e:
         # В случае ошибки попробуем отдать старый кэш, если он есть
         if cached:
             return JsonResponse(cached, safe=False)
         return JsonResponse({'error': str(e)}, status=500)
-    finally:
-        if exchange:
-            await exchange.close()
             
             
 @require_http_methods(["GET"])
