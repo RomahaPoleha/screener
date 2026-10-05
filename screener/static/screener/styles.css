@@ -1,3 +1,8 @@
+@keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 0.4; }
+    100% { opacity: 0.7; }
+}
 * { box-sizing: border-box; }
 body {
     background-color: #0f0f0f;
@@ -80,6 +85,19 @@ body {
     text-transform: uppercase; letter-spacing: 0.5px;
 }
 .chart-reset-btn:hover { color: #f59e0b; border-color: #f59e0b; }
+.chart-history-btn {
+    position: absolute; top: 8px; right: 80px; z-index: 10;
+    background: #0f0f0f; border: 1px solid #333333;
+    color: #999999; padding: 3px 10px; border-radius: 0; cursor: pointer; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.chart-history-btn:hover { color: #3b82f6; border-color: #3b82f6; }
+.chart-history-btn.loading { 
+    color: #999999; 
+    opacity: 0.7; 
+    cursor: wait;
+    animation: pulse 1.5s infinite;
+}
 .chart-watermark {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     font-size: 48px; font-weight: 400; color: rgba(255, 255, 255, 0.02);
@@ -657,6 +675,7 @@ body {
 }
 .coin-row.active .coin-symbol {
     color: #f59e0b;
+
 }
 /* ==========================================
    КНОПКА ЗАГРУЗКИ ИСТОРИИ ГРАФИКА

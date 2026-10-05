@@ -375,7 +375,9 @@ async function loadChartHistory() {
     const btn = document.getElementById('loadHistoryBtn');
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Загрузка...';
+        btn.classList.add('loading');
+        btn.textContent = '⏳ Загрузка...';
+        btn.title = 'Загрузка истории...';
     }
     
     try {
@@ -418,70 +420,55 @@ async function loadChartHistory() {
                 timestamp: Date.now()
             });
             
-            console.log(`✓ Загружено ${history.length} исторических свечей`);
+            // Уведомление
+            const oldCount = currentData.length;
+            const newCount = mergedData.length;
+            console.log(`✓ История загружена: ${oldCount} → ${newCount} свечей (+${history.length} исторических)`);
+            
+            if (btn) {
+                btn.title = `История загружена: +${history.length} свечей`;
+                // Кратковременная подсветка успеха
+                btn.style.color = '#3b82f6';
+                btn.style.borderColor = '#3b82f6';
+                setTimeout(() => {
+                    if (btn) {
+                        btn.style.color = '';
+                        btn.style.borderColor = '';
+                    }
+                }, 2000);
+            }
+        } else {
+            console.warn('История пуста или неверный формат данных');
+            if (btn) {
+                btn.title = 'Нет исторических данных';
+            }
         }
     } catch (error) {
         console.error('Ошибка загрузки истории:', error);
-        alert(`Ошибка загрузки истории: ${error.message}`);
+        // Не блокируем alert, пока оставим console.error
+        if (btn) {
+            btn.title = `Ошибка: ${error.message.substring(0, 50)}...`;
+        }
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-clock-history"></i> История';
+            btn.classList.remove('loading');
+            btn.textContent = '⌛ История';
+            btn.title = 'Загрузить глубоку историю свечей';
         }
     }
 }
 
 // ==========================================
-// СОЗДАНИЕ КНОПКИ ЗАГРУЗКИ ИСТОРИИ
+// ИНИЦИАЛИЗАЦИЯ КНОПКИ ЗАГРУЗКИ ИСТОРИИ (уже есть в HTML)
 // ==========================================
 
-function createHistoryButton() {
-    // Удаляем старую кнопку, если есть
-    const oldBtn = document.getElementById('loadHistoryBtn');
-    if (oldBtn) oldBtn.remove();
-    
-    // Создаём новую кнопку
-    const btn = document.createElement('button');
-    btn.id = 'loadHistoryBtn';
-    btn.className = 'btn btn-sm btn-outline-secondary chart-history-btn';
-    btn.innerHTML = '<i class="bi bi-clock-history"></i> История';
-    btn.title = 'Загрузить глубоку историю свечей';
-    btn.onclick = loadChartHistory;
-    
-    // Размещаем кнопку рядом с другими элементами управления графиком
-    const chartControls = document.querySelector('.chart-controls') || 
-                         document.querySelector('.timeframe-buttons') ||
-                         document.getElementById('chartStats');
-    
-    if (chartControls) {
-        chartControls.appendChild(btn);
-    } else {
-        // Если нет панели управления, добавляем прямо в chart-wrapper
-        const chartWrapper = document.getElementById('chart');
-        if (chartWrapper) {
-            chartWrapper.style.position = 'relative';
-            btn.style.position = 'absolute';
-            btn.style.top = '10px';
-            btn.style.left = '120px';
-            btn.style.zIndex = '100';
-            chartWrapper.appendChild(btn);
-        }
-    }
-    
-    return btn;
-}
-
-// Создаём кнопку при открытии графика
+// Кнопка уже есть в HTML шаблоне, просто добавляем слушатели если нужно
 document.addEventListener('DOMContentLoaded', () => {
-    // Создаём кнопку сразу
-    createHistoryButton();
-    
-    // Пересоздаём кнопку при каждом открытии графика
-    const originalOpenChart = window.openChart;
-    if (originalOpenChart) {
-        window.openChart = async function(...args) {
-            await originalOpenChart.apply(this, args);
-            setTimeout(createHistoryButton, 100); // Даём время на инициализацию графика
-        };
+    // Убедимся, что кнопка существует
+    const historyBtn = document.getElementById('loadHistoryBtn');
+    if (historyBtn) {
+        // Добавляем класс для визуального обозначения
+        historyBtn.classList.add('chart-history-btn');
     }
 });
