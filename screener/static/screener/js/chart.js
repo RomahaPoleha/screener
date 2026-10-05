@@ -98,11 +98,13 @@ async function openChart(symbol) {
     clearScalpLines(); previousScalpData = {}; if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
     stopReconUpdates();
     currentSymbol = symbol;
-    currentSymbol = symbol;
     updateActiveCoinHighlight();
     els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
-    els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
     tradeBuffer = []; lastCandlePrice = null;
+    // Обновляем текст кнопки истории при открытии графика
+    setTimeout(() => {
+        updateHistoryButtonText();
+    }, 100);
     if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
     try {
         chart = LightweightCharts.createChart(els.chartWrapper, {
@@ -376,7 +378,7 @@ async function loadChartHistory() {
     if (btn) {
         btn.disabled = true;
         btn.classList.add('loading');
-        btn.textContent = '⏳ Загрузка...';
+        btn.textContent = 'Загрузка...';
         btn.title = 'Загрузка истории...';
     }
     
@@ -453,14 +455,37 @@ async function loadChartHistory() {
         if (btn) {
             btn.disabled = false;
             btn.classList.remove('loading');
-            btn.textContent = '⌛ История';
-            btn.title = 'Загрузить глубоку историю свечей';
+            updateHistoryButtonText(); // Восстанавливаем текст по текущему таймфрейму
         }
     }
 }
 
 // ==========================================
-// ИНИЦИАЛИЗАЦИЯ КНОПКИ ЗАГРУЗКИ ИСТОРИИ (уже есть в HTML)
+// ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ТЕКСТА КНОПКИ ИСТОРИИ ПО ТАЙМФРЕЙМУ
+// ==========================================
+
+function updateHistoryButtonText() {
+    const btn = document.getElementById('loadHistoryBtn');
+    if (!btn || !currentTF) return;
+    
+    const tfMap = {
+        '1m': 'сутки',
+        '5m': 'неделю',
+        '15m': 'месяц',
+        '30m': 'месяц',
+        '1h': '3 месяца',
+        '4h': '6 месяцев',
+        '1d': 'год',
+        '1w': '5 лет'
+    };
+    
+    const period = tfMap[currentTF] || 'историю';
+    btn.textContent = `История за ${period}`;
+    btn.title = `Загрузить историю свечей за ${period}`;
+}
+
+// ==========================================
+// ИНИЦИАЛИЗАЦИЯ КНОПКИ ЗАГРУЗКИ ИСТОРИИ
 // ==========================================
 
 // Кнопка уже есть в HTML шаблоне, просто добавляем слушатели если нужно
@@ -470,5 +495,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (historyBtn) {
         // Добавляем класс для визуального обозначения
         historyBtn.classList.add('chart-history-btn');
+        
+        // Добавляем слушатель на изменение таймфрейма
+        const originalFunc = typeof updateTfButtons === 'function' ? updateTfButtons : null;
+        if (originalFunc) {
+            window.updateTfButtons = function(...args) {
+                const result = originalFunc.apply(this, args);
+                // После обновления таймфреймов обновляем текст кнопки
+                setTimeout(() => {
+                    updateHistoryButtonText();
+                }, 50);
+                return result;
+            };
+        }
+        
+        // Обновляем текст кнопки при загрузке
+        if (currentTF) {
+            updateHistoryButtonText();
+        }
     }
 });
