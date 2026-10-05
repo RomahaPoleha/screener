@@ -101,10 +101,12 @@ async function openChart(symbol) {
     updateActiveCoinHighlight();
     els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
     tradeBuffer = []; lastCandlePrice = null;
-    // Обновляем текст кнопки истории при открытии графика
-    setTimeout(() => {
-        updateHistoryButtonText();
-    }, 100);
+    // Сбрасываем текст кнопки истории при открытии новой монеты
+    const historyBtn = document.getElementById('loadHistoryBtn');
+    if (historyBtn) {
+        historyBtn.textContent = 'Загрузить историю';
+        historyBtn.title = 'Загрузить глубокую историю свечей';
+    }
     if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
     try {
         chart = LightweightCharts.createChart(els.chartWrapper, {
@@ -428,7 +430,8 @@ async function loadChartHistory() {
             console.log(`✓ История загружена: ${oldCount} → ${newCount} свечей (+${history.length} исторических)`);
             
             if (btn) {
-                btn.title = `История загружена: +${history.length} свечей`;
+                // Обновляем текст кнопки на "История за [таймфрейм]"
+                updateHistoryButtonTextAfterLoad();
                 // Кратковременная подсветка успеха
                 btn.style.color = '#3b82f6';
                 btn.style.borderColor = '#3b82f6';
@@ -443,6 +446,9 @@ async function loadChartHistory() {
             console.warn('История пуста или неверный формат данных');
             if (btn) {
                 btn.title = 'Нет исторических данных';
+                // Если данных нет, возвращаем исходный текст
+                btn.textContent = 'Загрузить историю';
+                btn.title = 'Загрузить глубокую историю свечей';
             }
         }
     } catch (error) {
@@ -450,21 +456,26 @@ async function loadChartHistory() {
         // Не блокируем alert, пока оставим console.error
         if (btn) {
             btn.title = `Ошибка: ${error.message.substring(0, 50)}...`;
+            // При ошибке возвращаем исходный текст
+            btn.textContent = 'Загрузить историю';
+            btn.title = 'Загрузить глубокую историю свечей';
         }
     } finally {
         if (btn) {
             btn.disabled = false;
             btn.classList.remove('loading');
-            updateHistoryButtonText(); // Восстанавливаем текст по текущему таймфрейму
+            // Текст остается "История за [таймфрейм]" если загрузка успешна, 
+            // или восстанавливается к "Загрузить историю" если ошибка
+            // (это решает updateHistoryButtonTextAfterLoad())
         }
     }
 }
 
 // ==========================================
-// ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ТЕКСТА КНОПКИ ИСТОРИИ ПО ТАЙМФРЕЙМУ
+// ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ТЕКСТА КНОПКИ ИСТОРИИ ПОСЛЕ ЗАГРУЗКИ
 // ==========================================
 
-function updateHistoryButtonText() {
+function updateHistoryButtonTextAfterLoad() {
     const btn = document.getElementById('loadHistoryBtn');
     if (!btn || !currentTF) return;
     
@@ -481,7 +492,7 @@ function updateHistoryButtonText() {
     
     const period = tfMap[currentTF] || 'историю';
     btn.textContent = `История за ${period}`;
-    btn.title = `Загрузить историю свечей за ${period}`;
+    btn.title = `Загружена история за ${period}. Нажмите для обновления`;
 }
 
 // ==========================================
@@ -496,22 +507,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Добавляем класс для визуального обозначения
         historyBtn.classList.add('chart-history-btn');
         
-        // Добавляем слушатель на изменение таймфрейма
-        const originalFunc = typeof updateTfButtons === 'function' ? updateTfButtons : null;
-        if (originalFunc) {
-            window.updateTfButtons = function(...args) {
-                const result = originalFunc.apply(this, args);
-                // После обновления таймфреймов обновляем текст кнопки
-                setTimeout(() => {
-                    updateHistoryButtonText();
-                }, 50);
-                return result;
-            };
-        }
-        
-        // Обновляем текст кнопки при загрузке
-        if (currentTF) {
-            updateHistoryButtonText();
-        }
+        // Устанавливаем изначальный текст
+        historyBtn.textContent = 'Загрузить историю';
+        historyBtn.title = 'Загрузить глубокую историю свечей';
     }
 });
