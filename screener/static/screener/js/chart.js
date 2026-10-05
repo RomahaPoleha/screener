@@ -480,7 +480,7 @@ function updateHistoryButtonTextAfterLoad() {
     if (!btn || !currentTF) return;
     
     const tfMap = {
-        '1m': 'сутки',
+        '1m': '3 дня',
         '5m': 'неделю',
         '15m': 'месяц',
         '30m': 'месяц',
