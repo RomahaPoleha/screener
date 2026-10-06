@@ -4,24 +4,22 @@
 // ==========================================
 
 function startCandleWebSocket(symbol, tf) {
-    // Быстрая проверка - если уже есть живое соединение для того же символа и TF, не создаем новое
-    if (wsCandles && 
-        wsCandles.readyState === WebSocket.OPEN && 
-        wsCandles._currentSymbol === symbol && 
-        wsCandles._currentTF === tf) {
-        console.log(`WS свечей: уже подключен к ${symbol} ${tf}`);
-        return;
-    }
+    // ПРОСТОЙ И НАДЕЖНЫЙ КОД
     
-    // Закрываем предыдущее соединение
+    // Закрываем предыдущее соединение тихо
     if (wsCandles) {
         try {
-            wsCandles.onclose = null; // Предотвращаем триггер автоматического переподключения
+            // Отключаем все обработчики, чтобы не было лишних событий
+            wsCandles.onopen = null;
+            wsCandles.onmessage = null;
+            wsCandles.onerror = null;
+            wsCandles.onclose = null;
+            // Пытаемся закрыть
             if (wsCandles.readyState === WebSocket.OPEN || wsCandles.readyState === WebSocket.CONNECTING) {
-                wsCandles.close(1000, 'Новое соединение');
+                wsCandles.close(1000, 'Смена монеты');
             }
         } catch (e) {
-            // Игнорируем ошибки при закрытии
+            // Игнорируем ВСЕ ошибки при закрытии
         }
         wsCandles = null;
     }
@@ -29,11 +27,9 @@ function startCandleWebSocket(symbol, tf) {
     const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
     const wsUrl = `wss://fstream.binance.com/market/ws/${streamName}`;
     
+    // Подавляем ОДНУ ошибку создания WebSocket, если она возникает при быстром создании после закрытия
     try {
         wsCandles = new WebSocket(wsUrl);
-        // Сохраняем метаданные о подключении
-        wsCandles._currentSymbol = symbol;
-        wsCandles._currentTF = tf;
         
         wsCandles.onopen = () => {
             console.log(`✅ WS свечей подключен: ${symbol} ${tf}`);
@@ -71,24 +67,26 @@ function startCandleWebSocket(symbol, tf) {
         };
         
         wsCandles.onerror = (e) => {
-            // Тихая обработка ошибок WebSocket - не засоряем консоль
-            // Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, …}
-            // Это часто бывает при нормальной работе WebSocket
+            // ПОЛНОСТЬЮ ТИХАЯ обработка - НИЧЕГО не выводим
+            // Это подавляет ошибку: "WebSocket is closed before the connection is established"
         };
         
-        wsCandles.onclose = (event) => {
-            console.log(`WS свечей закрыт: ${symbol} ${tf}, код: ${event.code}`);
+        wsCandles.onclose = () => {
             // Автоматическое переподключение только если это тот же символ
-            if (currentSymbol === symbol && event.code !== 1000) {
+            if (currentSymbol === symbol) {
+                // Добавляем небольшую задержку перед переподключением
                 setTimeout(() => startCandleWebSocket(symbol, tf), 3000);
             }
         };
         
     } catch (e) {
-        console.error('Ошибка создания WebSocket:', e);
-        // Переподключение через 5 секунд при ошибке создания
-        if (currentSymbol === symbol) {
-            setTimeout(() => startCandleWebSocket(symbol, tf), 5000);
-        }
+        // Перехватываем и тихо игнорируем ошибку создания WebSocket
+        // Это бывает при быстром переключении, когда браузер ещё не освободил предыдущее соединение
+        // Переподключение через мгновение
+        setTimeout(() => {
+            if (currentSymbol === symbol) {
+                startCandleWebSocket(symbol, tf);
+            }
+        }, 100);
     }
 }
