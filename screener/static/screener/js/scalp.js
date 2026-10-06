@@ -24,7 +24,7 @@ let scalpExchanges = {
     binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
     bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
     okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
-    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 50000, minVolumeSpot: 10000 }, // Futures: 25% от Binance, Spot: стандартный порог
     mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
     bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 };
