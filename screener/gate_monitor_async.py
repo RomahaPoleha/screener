@@ -65,8 +65,9 @@ GATE_SPOT_REST_URL = "https://api.gateio.ws/api/v4/spot/order_book?currency_pair
 last_sync_time = {}
 gate_spot_last_sync_time = {}
 
-# 🔥 ВРЕМЕННОЙ ФИЛЬТР ДЛЯ SCALP: 180 секунд (3 минуты)
+# 🔥 ФИЛЬТР ДЛЯ SCALP: 180 секунд (3 минуты)
 # Плотности должны стоять минимум 3 минуты для Scalp
+# Это анти-спуфинг механизм: спуферы редко стоят так долго
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
 SYNC_INTERVAL = 3

@@ -177,7 +177,11 @@ function parseReconLevels(exId, data) {
     }
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
-        if (row && typeof row === 'object') return [parseFloat(row.p || row.price), Math.abs(parseFloat(row.v || row.vol))];
+        if (row && typeof row === 'object') {
+            // Gate Futures использует "s" для size, другие могут использовать "v" или "vol"
+            const size = row.s !== undefined ? row.s : (row.v !== undefined ? row.v : row.vol);
+            return [parseFloat(row.p || row.price), Math.abs(parseFloat(size || 0))];
+        }
         return [NaN, NaN];
     };
     return { rawBids, rawAsks, toLevel };
