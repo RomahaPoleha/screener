@@ -306,7 +306,7 @@ async function openChart(symbol) {
 
     await loadChartData(symbol, currentTF);
     AlertManager.restoreLines(symbol);
-    updateCurrentCandleSymbol(symbol, currentTF);
+    startCandleWebSocket(symbol, currentTF);
     updateWatermark();
     updateChartStats();
     if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);

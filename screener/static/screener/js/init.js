@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (currentSymbol && chart) {
                 loadChartData(currentSymbol, currentTF);
-                updateCurrentCandleSymbol(currentSymbol, currentTF);
+                startCandleWebSocket(currentSymbol, currentTF);
                 updateWatermark();
             }
         });

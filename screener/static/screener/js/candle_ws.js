@@ -1,33 +1,25 @@
 // ==========================================
-// candle_ws.js — WEBSOCKET СВЕЧЕЙ (ИСПРАВЛЕННЫЙ)
-// ОДНО соединение для всех монет (Binance поддерживает до 1024 stream в одном соединении)
+// candle_ws.js — WEBSOCKET СВЕЧЕЙ (ВРЕМЕННАЯ ВЕРСИЯ)
+// Добавляем старую функцию обратно для совместимости
 // ==========================================
 
+// НОВЫЕ ФУНКЦИИ (исправленные)
 let wsCandles = null;
-let activeStreams = new Set();  // Активные потоки: 'btcusdt@kline_1m'
-let currentSymbol = null;       // Текущая монета на графике
-let currentTf = '1m';           // Текущий таймфрейм
+let activeStreams = new Set();
+let currentSymbol = null;
+let currentTf = '1m';
 
-// ОДНО соединение для всех монет
 function initCandleWebSocket() {
-    if (wsCandles && wsCandles.readyState === WebSocket.OPEN) {
-        return; // Уже подключены
-    }
+    if (wsCandles && wsCandles.readyState === WebSocket.OPEN) return;
     
-    // Закрываем старое соединение если есть
     if (wsCandles) {
         wsCandles.onclose = null;
         wsCandles.close();
         wsCandles = null;
     }
     
-    // Если нет активных потоков, не подключаемся
-    if (activeStreams.size === 0) {
-        return;
-    }
+    if (activeStreams.size === 0) return;
     
-    // Binance позволяет подписаться на несколько stream в одном соединении
-    // Формат: wss://fstream.binance.com/stream?streams=btcusdt@kline_1m/ethusdt@kline_1m
     const streams = Array.from(activeStreams).join('/');
     const wsUrl = `wss://fstream.binance.com/stream?streams=${streams}`;
     
@@ -40,13 +32,10 @@ function initCandleWebSocket() {
     wsCandles.onmessage = (e) => {
         try {
             const data = JSON.parse(e.data);
-            
-            // Binance возвращает { stream: 'btcusdt@kline_1m', data: {...} }
             if (data.stream && data.data && data.data.k) {
-                const streamName = data.stream; // 'btcusdt@kline_1m'
+                const streamName = data.stream;
                 const symbol = streamName.split('@')[0].replace('usdt', '').toUpperCase();
                 
-                // Обновляем только если это текущая монета на графике
                 if (symbol === currentSymbol && candleSeries) {
                     const k = data.data.k;
                     const candle = {
@@ -60,7 +49,6 @@ function initCandleWebSocket() {
                     
                     candleSeries.update(candle);
                     
-                    // Обновляем кэш свечей
                     if (window.candleData) {
                         const lastCandle = window.candleData[window.candleData.length - 1];
                         if (lastCandle && lastCandle.time === candle.time) {
@@ -70,7 +58,6 @@ function initCandleWebSocket() {
                         }
                     }
                     
-                    // Обновляем volume series
                     if (volumeSeries) {
                         volumeSeries.update({
                             time: candle.time,
@@ -95,7 +82,6 @@ function initCandleWebSocket() {
     };
 }
 
-// Добавить символ в отслеживание
 function addCandleSubscription(symbol, tf = '1m') {
     const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
     
@@ -103,7 +89,6 @@ function addCandleSubscription(symbol, tf = '1m') {
         activeStreams.add(streamName);
         console.log(`➕ Добавлена свеча: ${symbol} ${tf}`);
         
-        // Переподключаемся с новым списком потоков
         if (wsCandles) {
             wsCandles.onclose = null;
             wsCandles.close();
@@ -113,7 +98,6 @@ function addCandleSubscription(symbol, tf = '1m') {
     }
 }
 
-// Удалить символ из отслеживание
 function removeCandleSubscription(symbol, tf = '1m') {
     const streamName = `${symbol.toLowerCase()}usdt@kline_${tf}`;
     
@@ -121,7 +105,6 @@ function removeCandleSubscription(symbol, tf = '1m') {
         activeStreams.delete(streamName);
         console.log(`➖ Удалена свеча: ${symbol} ${tf}`);
         
-        // Если потоков не осталось, закрываем соединение
         if (activeStreams.size === 0 && wsCandles) {
             wsCandles.onclose = null;
             wsCandles.close();
@@ -130,22 +113,28 @@ function removeCandleSubscription(symbol, tf = '1m') {
     }
 }
 
-// Обновить текущий символ на графике (вместо старой startCandleWebSocket)
+// СТАРАЯ ФУНКЦИЯ ДЛЯ СОВМЕСТИМОСТИ
+function startCandleWebSocket(symbol, tf) {
+    console.log(`⚠️ Используется старая startCandleWebSocket для ${symbol} ${tf}`);
+    console.log(`⚠️ Переключитесь на updateCurrentCandleSymbol`);
+    
+    // Вызываем новую функцию для совместимости
+    updateCurrentCandleSymbol(symbol, tf);
+}
+
+// НОВАЯ ФУНКЦИЯ
 function updateCurrentCandleSymbol(symbol, tf = '1m') {
     const oldSymbol = currentSymbol;
     currentSymbol = symbol;
     currentTf = tf;
     
-    // Удаляем старый символ если он был
     if (oldSymbol && oldSymbol !== symbol) {
         removeCandleSubscription(oldSymbol, tf);
     }
     
-    // Добавляем новый
     addCandleSubscription(symbol, tf);
 }
 
-// Очистить все подписки (при закрытии вкладки)
 function clearAllCandleSubscriptions() {
     activeStreams.clear();
     if (wsCandles) {
@@ -156,13 +145,10 @@ function clearAllCandleSubscriptions() {
     console.log('🧹 Все подписки свечей очищены');
 }
 
-// Инициализация при загрузке
+// Инициализация
 document.addEventListener('DOMContentLoaded', () => {
-    // Закрываем WS при закрытии вкладки
     window.addEventListener('beforeunload', clearAllCandleSubscriptions);
     
-    // Пример: подписаться на первую монету при загрузке
-    // Это будет переопределено когда пользователь выберет монету
     setTimeout(() => {
         if (window.activeSymbol) {
             updateCurrentCandleSymbol(window.activeSymbol, '1m');
