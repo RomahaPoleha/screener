@@ -86,7 +86,7 @@ const AlertManager = {
     ensureStream(symbol) {
         if (this.streams[symbol]) return;
         if (!getActiveAlertsFor(symbol).length) return;
-        const url = `wss://fstream.binance.com/market/ws/${symbol.toLowerCase()}usdt@kline_1m`;
+        const url = `wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@kline_1m`;
         const ws = new WebSocket(url);
         this.streams[symbol] = ws;
         ws.onmessage = (e) => {
