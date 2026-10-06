@@ -65,6 +65,8 @@ GATE_SPOT_REST_URL = "https://api.gateio.ws/api/v4/spot/order_book?currency_pair
 last_sync_time = {}
 gate_spot_last_sync_time = {}
 
+# 🔥 ВРЕМЕННОЙ ФИЛЬТР ДЛЯ SCALP: 180 секунд (3 минуты)
+# Плотности должны стоять минимум 3 минуты для Scalp
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
 SYNC_INTERVAL = 3
@@ -198,6 +200,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 # СИНХРОНИЗАЦИЯ В REDIS (async) — как в recon.js + анти-спуфинг
 # ==========================================
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
+    global gate_contract_sizes
     try:
         if market == 'futures':
             async with gate_futures_lock:
@@ -232,11 +235,28 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
 
-                volume = qty * price
+                # 🔥 ИСПРАВЛЕНИЕ: ПРАВИЛЬНЫЙ РАСЧЕТ ОБЪЕМА ДЛЯ FUTURES (совместимый с recon.js)
+                if market == 'futures':
+                    # Получаем symbol как в recon.js (например, 'BTC' из 'BTCUSDT')
+                    clean_symbol = symbol.upper().replace('USDT', '').replace('_', '')
+                    multiplier = gate_contract_sizes.get(clean_symbol, 1.0)
+                    # Отладка: логируем множитель для первых записей
+                    if len(densities) < 3 and price % 100 < 1:  # Раз в 100 цен
+                        log_func(f"🔍 Gate {market} {symbol}: qty={qty}, multiplier={multiplier}, price={price}, volume={qty * multiplier * price:.2f}")
+                    volume = qty * multiplier * price
+                else:
+                    volume = qty * price
 
                 # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
-                min_volume = 50000 if is_mature else 60000
+                # 🔥 ВЫРАВНИВАНИЕ С ДРУГИМИ БИРЖАМИ: 
+                # Gate Futures использует множитель quanto_multiplier, поэтому объемы сопоставимы
+                if market == 'futures':
+                    target_min = 50000  # Стандартный Futures порог как у других бирж
+                else:
+                    target_min = 10000  # Стандартный Spot порог
+                
+                min_volume = target_min if is_mature else int(target_min * 1.2)
 
                 if volume < min_volume:
                     if price in ts:
@@ -697,27 +717,37 @@ async def periodic_force_sync(log_func=print):
 
 
 async def load_gate_contract_sizes(log_func=print):
-    """Загружает актуальные размеры контрактов (contract_size) через CCXT"""
+    """Загружает актуальные размеры контрактов (quanto_multiplier) как в recon.js"""
     global gate_contract_sizes
     try:
-        log_func("🔄 Загрузка спецификаций контрактов Gate.io Futures...")
+        log_func("🔄 Загрузка мультипликаторов Gate.io Futures (quanto_multiplier)...")
+        
+        # Загружаем напрямую через API как recon.js
+        client = await get_http_client()
+        url = "https://api.gateio.ws/api/v4/futures/usdt/contracts"
+        
+        async with client.get(url, timeout=10) as resp:
+            if resp.status != 200:
+                log_func(f"⚠️ Ошибка загрузки Gate contracts: HTTP {resp.status}")
+                return
+            contracts = await resp.json()
+        
+        for contract in contracts:
+            try:
+                symbol = contract.get('name', '').replace('_USDT', '')
+                quanto_multiplier = contract.get('quanto_multiplier')
+                
+                if symbol and quanto_multiplier:
+                    # Сохраняем множитель как в recon.js
+                    gate_contract_sizes[symbol.upper()] = float(quanto_multiplier)
+            except Exception:
+                continue
 
-        # ✅ ИСПРАВЛЕНИЕ 1: Убираем await, так как load_markets() синхронный
-        markets = ccxt_futures_exchange.load_markets()
-
-        for symbol, market_data in markets.items():
-            base_currency = market_data.get('base')
-            contract_size = market_data.get('contractSize', 1.0)
-
-            if base_currency and contract_size:
-                # ✅ Сохраняем в верхнем регистре для надежного поиска
-                gate_contract_sizes[base_currency.upper()] = float(contract_size)
-
-        log_func(f"✅ Загружены размеры контрактов для {len(gate_contract_sizes)} монет.")
+        log_func(f"✅ Загружены множители для {len(gate_contract_sizes)} монет.")
 
         # 🔍 Отладка: проверяем, загрузился ли BTC
         if 'BTC' in gate_contract_sizes:
-            log_func(f"🔍 Тест: BTC contract_size = {gate_contract_sizes['BTC']}")
+            log_func(f"🔍 Тест: BTC quanto_multiplier = {gate_contract_sizes['BTC']}")
 
     except Exception as e:
         log_func(f"❌ Ошибка загрузки спецификаций Gate.io: {e}")
