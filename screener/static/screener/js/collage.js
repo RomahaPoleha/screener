@@ -220,7 +220,7 @@ function initCollageChart(index, symbol) {
         })
         .catch(() => {});
 
-    const ws = new WebSocket(`wss://fstream.binance.com/ws/${symbol.toLowerCase()}usdt@kline_${currentTF}`);
+    const ws = new WebSocket(`wss://fstream.binance.com/market/ws/${symbol.toLowerCase()}usdt@kline_${currentTF}`);
     entry.ws = ws;
 
     ws.onmessage = (e) => {
