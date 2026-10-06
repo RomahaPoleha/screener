@@ -730,7 +730,7 @@ async def main_async(log_func=print):
             log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
     # --- Шаг 4: Добавляем топ по NATR ---
-    for symbol in futures_candidates[:20]:
+    for symbol in futures_candidates[:40]:
         if symbol in active_futures:
             continue
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
@@ -738,7 +738,7 @@ async def main_async(log_func=print):
             active_futures.append(symbol)
             log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
 
-    for symbol in spot_candidates[:20]:
+    for symbol in spot_candidates[:40]:
         if symbol in active_spot:
             continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
