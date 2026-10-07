@@ -19,10 +19,10 @@ let isHorizontalLineEnabled = false, activeHorizontalLines = [];
 let pencilStrokes = [];
 let currentStroke = null;
 
-// --- Хранение рисунков по символам (для коллажа) ---
-let savedTrendLines = {};      // symbol -> array of trendlines
-let savedHorizontalLines = {}; // symbol -> array of horizontal lines  
-let savedPencilDrawings = {};  // symbol -> array of pencil strokes
+// --- Глобальные переменные для хранения рисунков по символам ---
+let savedTrendLines = {};
+let savedHorizontalLines = {};
+let savedPencilDrawings = {};
 
 // Загрузить из localStorage
 try {
@@ -30,7 +30,9 @@ try {
     savedHorizontalLines = JSON.parse(localStorage.getItem('savedHorizontalLines') || '{}');
     savedPencilDrawings = JSON.parse(localStorage.getItem('savedPencilDrawings') || '{}');
 } catch(e) {
-    savedTrendLines = {}; savedHorizontalLines = {}; savedPencilDrawings = {};
+    savedTrendLines = {};
+    savedHorizontalLines = {};
+    savedPencilDrawings = {};
 }
 
 if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStorage.getItem('magnetEnabled') === 'true';
@@ -64,7 +66,7 @@ function clearSpecificDrawings(type) {
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
     }
     
-    // Сохраняем изменения в localStorage
+    // Сохранить изменения в localStorage
     if (currentSymbol) {
         localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
         localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
@@ -75,56 +77,6 @@ function clearSpecificDrawings(type) {
 function updateToolUI(btnId, isActive) {
     const btn = document.getElementById(btnId);
     if (btn) btn.classList.toggle('active', isActive);
-}
-
-// ==========================================
-// СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ РИСУНКОВ ПО СИМВОЛАМ
-// ==========================================
-function saveCurrentDrawings(symbol) {
-    if (!symbol) return;
-    
-    // Сохраняем текущие рисунки для символа
-    savedTrendLines[symbol] = activeTrendlines;
-    savedHorizontalLines[symbol] = activeHorizontalLines;
-    savedPencilDrawings[symbol] = pencilStrokes;
-    
-    // Сохраняем в localStorage
-    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
-    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
-    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
-}
-
-function restoreDrawingsForSymbol(symbol) {
-    // Восстанавливаем рисунки для символа
-    activeTrendlines = savedTrendLines[symbol] || [];
-    activeHorizontalLines = savedHorizontalLines[symbol] || [];
-    pencilStrokes = savedPencilDrawings[symbol] || [];
-    
-    // Перерисовываем горизонтальные линии
-    activeHorizontalLines.forEach(hl => {
-        try { candleSeries.removePriceLine(hl.line); } catch(e){}
-    });
-    activeHorizontalLines.forEach(hl => {
-        const line = candleSeries.createPriceLine({
-            price: hl.price, color: hl.color || '#f59e0b', lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
-            title: `${hl.price.toFixed(currentPrecision)}`
-        });
-        hl.line = line;
-    });
-    
-    // Перерисовываем все рисунки
-    redrawAllPersistentDrawings();
-}
-
-function clearDrawingsForSymbol(symbol) {
-    if (savedTrendLines[symbol]) delete savedTrendLines[symbol];
-    if (savedHorizontalLines[symbol]) delete savedHorizontalLines[symbol];
-    if (savedPencilDrawings[symbol]) delete savedPencilDrawings[symbol];
-    
-    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
-    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
-    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
 }
 
 function toggleDrawingToolsVisibility() {
@@ -475,7 +427,7 @@ function handleChartClick(param) {
         });
         activeHorizontalLines.push({ price: price, line: line });
         
-        // Сохраняем горизонтальные линии для текущего символа
+        // Сохранить горизонтальные линии для текущего символа
         if (currentSymbol) {
             savedHorizontalLines[currentSymbol] = activeHorizontalLines;
             localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
@@ -500,7 +452,7 @@ function handleChartClick(param) {
             trendLinePreview = null;
             redrawAllPersistentDrawings();
             
-            // Сохраняем трендовые линии для текущего символа
+            // Сохранить трендовые линии для текущего символа
             if (currentSymbol) {
                 savedTrendLines[currentSymbol] = activeTrendlines;
                 localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
@@ -547,6 +499,60 @@ function showRulerMeasurement(start, end) {
             if (lastCandle) {
                 const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
                 const indexDiff = point.logicalIndex - (candles.length - 1);
+}
+
+// ==========================================
+// СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ РИСУНКОВ ПО СИМВОЛАМ
+// ==========================================
+
+// Сохранить текущие рисунки для указанного символа
+function saveCurrentDrawings(symbol) {
+    if (!symbol) return;
+    
+    savedTrendLines[symbol] = activeTrendlines;
+    savedHorizontalLines[symbol] = activeHorizontalLines;
+    savedPencilDrawings[symbol] = pencilStrokes;
+    
+    // Сохранить в localStorage
+    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+}
+
+// Восстановить рисунки для указанного символа
+function restoreDrawingsForSymbol(symbol) {
+    // Восстановить рисунки из сохраненных данных
+    activeTrendlines = savedTrendLines[symbol] || [];
+    activeHorizontalLines = savedHorizontalLines[symbol] || [];
+    pencilStrokes = savedPencilDrawings[symbol] || [];
+    
+    // Перерисовать горизонтальные линии
+    activeHorizontalLines.forEach(hl => {
+        try { candleSeries.removePriceLine(hl.line); } catch(e){}
+    });
+    activeHorizontalLines.forEach(hl => {
+        const line = candleSeries.createPriceLine({
+            price: hl.price, color: hl.color || '#f59e0b', lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
+            title: `${hl.price.toFixed(currentPrecision)}`
+        });
+        hl.line = line;
+    });
+    
+    // Перерисовать все рисунки
+    redrawAllPersistentDrawings();
+}
+
+// Очистить сохраненные рисунки для указанного символа
+function clearDrawingsForSymbol(symbol) {
+    if (savedTrendLines[symbol]) delete savedTrendLines[symbol];
+    if (savedHorizontalLines[symbol]) delete savedHorizontalLines[symbol];
+    if (savedPencilDrawings[symbol]) delete savedPencilDrawings[symbol];
+    
+    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+}
                 return lastCandle.time + (indexDiff * secondsPerBar);
             }
         }
