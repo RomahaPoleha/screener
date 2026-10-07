@@ -73,7 +73,7 @@ binance_spot_volume_stats = {}
 # ==========================================
 # ТОП МОНЕТ (Теперь по NATR, а не по RVOL+Score)
 # ==========================================
-def _fetch_dynamic_by_natr_sync(market='futures', limit=20):
+def _fetch_dynamic_by_natr_sync(market='futures', limit=40):
     """Отбирает топ-N монет по 1-минутному NATR из Redis"""
     try:
         exchange = ccxt_futures_exchange if market == 'futures' else ccxt_spot_exchange
@@ -135,7 +135,7 @@ def _fetch_dynamic_by_natr_sync(market='futures', limit=20):
 async def get_top_symbols_async(market='futures'):
     """Асинхронная обёртка для отбора по NATR"""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_dynamic_by_natr_sync, market, 20)
+    return await loop.run_in_executor(None, _fetch_dynamic_by_natr_sync, market, 40)
 
 # ==========================================
 # БЕЛЫЙ СПИСОК (без изменений)
@@ -593,7 +593,7 @@ async def periodic_refresh(log_func=print):
 
             # ШАГ 2: Добавляем топ по NATR
             for symbol in candidates_f:
-                if len(new_active) >= 30:
+                if len(new_active) >= 50:
                     break
                 if symbol in new_active:
                     continue
@@ -649,7 +649,7 @@ async def periodic_refresh(log_func=print):
                         log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
             for symbol in candidates_s:
-                if len(new_active) >= 30:
+                if len(new_active) >= 50:
                     break
                 if symbol in new_active:
                     continue
