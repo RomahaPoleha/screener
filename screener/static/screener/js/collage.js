@@ -173,7 +173,9 @@ function initCollageChart(index, symbol) {
         priceScaleId: 'volume'
     });
     chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
-    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container };
+
+    // 🔹 ИСПРАВЛЕНИЕ: добавлено свойство data: null для хранения локальных данных графика
+    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null };
     collageCharts.push(entry);
 
     const coin = allCoins.find(c => c.symbol === symbol);
@@ -188,6 +190,10 @@ function initCollageChart(index, symbol) {
         .then(history => {
             if (!history || !history.length) return;
             const data = history.slice(-200).map(c => ({ ...c, time: safeTime(c.time) }));
+
+            // 🔹 ИСПРАВЛЕНИЕ: сохраняем данные в entry для последующего расчёта координат
+            entry.data = data;
+
             const first = data[0].close;
             const precision = first < 1 ? (first < 0.01 ? 8 : 5) : 2;
             const minMove = first < 1 ? (first < 0.01 ? 0.00000001 : 0.00001) : 0.01;
@@ -200,15 +206,15 @@ function initCollageChart(index, symbol) {
             })));
             chart.timeScale().fitContent();
 
-            // 🔹 ИСПРАВЛЕНИЕ: requestAnimationFrame даёт время графику обновить координаты
+            // 🔹 ИСПРАВЛЕНИЕ: передаём entry.data в функцию отрисовки
             requestAnimationFrame(() => {
-                drawCollageDrawings(chart, candleSeries, container, symbol);
+                drawCollageDrawings(chart, candleSeries, container, symbol, entry.data);
             });
 
-            // 🔹 Перерисовка при скролле/зуме
+            // 🔹 ИСПРАВЛЕНИЕ: передаём entry.data при перерисовке во время скролла/зума
             chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
                 requestAnimationFrame(() => {
-                    drawCollageDrawings(chart, candleSeries, container, symbol);
+                    drawCollageDrawings(chart, candleSeries, container, symbol, entry.data);
                 });
             });
         })
@@ -239,7 +245,7 @@ function initCollageChart(index, symbol) {
     };
 }
 
-function drawCollageDrawings(chart, candleSeries, container, symbol) {
+function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) {
     if (typeof window.savedTrendLines === 'undefined' ||
         typeof window.savedHorizontalLines === 'undefined' ||
         typeof window.savedPencilDrawings === 'undefined') return;
@@ -264,7 +270,6 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
         } catch(e) {}
     });
 
-    // 2. Трендовые линии + карандаш — на отдельном канвасе
     const needCanvas = trendLines.length > 0 || pencilStrokes.length > 0;
     if (!needCanvas) return;
 
@@ -282,26 +287,53 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Трендовые линии
+    // 🔹 ИСПРАВЛЕНИЕ: Умный хелпер для получения координат с резервным расчётом
+    const getXY = (time, price) => {
+        let x = chart.timeScale().timeToCoordinate(time);
+        let y = candleSeries.priceToCoordinate(price);
+
+        // Если нативный метод сработал, возвращаем результат
+        if (x !== null && y !== null) return { x, y };
+
+        // 🔹 Резервный алгоритм (как в drawings.js, но для локальных данных коллажа)
+        if (chartData && chartData.length > 1) {
+            const lastCandle = chartData[chartData.length - 1];
+            const firstCandle = chartData[0];
+
+            const lastX = chart.timeScale().timeToCoordinate(lastCandle.time);
+            const firstX = chart.timeScale().timeToCoordinate(firstCandle.time);
+
+            if (lastX !== null && firstX !== null) {
+                const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+                const timeDiff = time - lastCandle.time;
+                const barsOffset = timeDiff / secondsPerBar;
+                const totalBars = chartData.length - 1;
+                const pixelsPerBar = (lastX - firstX) / totalBars;
+
+                x = lastX + (barsOffset * pixelsPerBar);
+            }
+        }
+        return { x, y };
+    };
+
+    // 2. Трендовые линии
     ctx.strokeStyle = '#f59e0b80';
     ctx.lineWidth = 1;
     ctx.setLineDash([]);
     trendLines.forEach(tl => {
         try {
-            const x1 = chart.timeScale().timeToCoordinate(tl.time1);
-            const y1 = candleSeries.priceToCoordinate(tl.price1);
-            const x2 = chart.timeScale().timeToCoordinate(tl.time2);
-            const y2 = candleSeries.priceToCoordinate(tl.price2);
-            if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+            const p1 = getXY(tl.time1, tl.price1);
+            const p2 = getXY(tl.time2, tl.price2);
+            if (p1.x !== null && p1.y !== null && p2.x !== null && p2.y !== null) {
                 ctx.beginPath();
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
                 ctx.stroke();
             }
         } catch(e) {}
     });
 
-    // Карандашные рисунки
+    // 3. Карандашные рисунки
     if (pencilStrokes.length > 0) {
         ctx.strokeStyle = '#f59e0b80';
         ctx.lineWidth = 1.5;
@@ -314,11 +346,10 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
             ctx.beginPath();
             let started = false;
             for (const point of stroke) {
-                const x = chart.timeScale().timeToCoordinate(point.time);
-                const y = candleSeries.priceToCoordinate(point.price);
-                if (x === null || y === null) { started = false; continue; }
-                if (!started) { ctx.moveTo(x, y); started = true; }
-                else { ctx.lineTo(x, y); }
+                const p = getXY(point.time, point.price);
+                if (p.x === null || p.y === null) { started = false; continue; }
+                if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+                else { ctx.lineTo(p.x, p.y); }
             }
             ctx.stroke();
         });
