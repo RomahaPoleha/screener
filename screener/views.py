@@ -476,8 +476,8 @@ def api_candles_history(request, symbol):
 @require_http_methods(["GET"])
 def api_scalp_active(request):
     """Возвращает монеты, у которых сейчас есть плотности"""
-    from . import binance_monitor
-    from . import bybit_monitor
+    from . import binance_monitor_async as binance_monitor
+    from . import bybit_monitor_async as bybit_monitor
 
     active = {}
 
