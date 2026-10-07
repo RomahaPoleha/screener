@@ -20,19 +20,20 @@ let pencilStrokes = [];
 let currentStroke = null;
 
 // --- Глобальные переменные для хранения рисунков по символам ---
-let savedTrendLines = {};
-let savedHorizontalLines = {};
-let savedPencilDrawings = {};
+// Сохраняем в window для глобальной доступности
+window.savedTrendLines = {};
+window.savedHorizontalLines = {};
+window.savedPencilDrawings = {};
 
 // Загрузить из localStorage
 try {
-    savedTrendLines = JSON.parse(localStorage.getItem('savedTrendLines') || '{}');
-    savedHorizontalLines = JSON.parse(localStorage.getItem('savedHorizontalLines') || '{}');
-    savedPencilDrawings = JSON.parse(localStorage.getItem('savedPencilDrawings') || '{}');
+    window.savedTrendLines = JSON.parse(localStorage.getItem('savedTrendLines') || '{}');
+    window.savedHorizontalLines = JSON.parse(localStorage.getItem('savedHorizontalLines') || '{}');
+    window.savedPencilDrawings = JSON.parse(localStorage.getItem('savedPencilDrawings') || '{}');
 } catch(e) {
-    savedTrendLines = {};
-    savedHorizontalLines = {};
-    savedPencilDrawings = {};
+    window.savedTrendLines = {};
+    window.savedHorizontalLines = {};
+    window.savedPencilDrawings = {};
 }
 
 if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStorage.getItem('magnetEnabled') === 'true';
@@ -429,8 +430,8 @@ function handleChartClick(param) {
         
         // Сохранить горизонтальные линии для текущего символа
         if (currentSymbol) {
-            savedHorizontalLines[currentSymbol] = activeHorizontalLines;
-            localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
+            window.savedHorizontalLines[currentSymbol] = activeHorizontalLines;
+            localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
         }
     }
     else if (isTrendLineEnabled) {
@@ -499,7 +500,11 @@ function showRulerMeasurement(start, end) {
             if (lastCandle) {
                 const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
                 const indexDiff = point.logicalIndex - (candles.length - 1);
-}
+                return lastCandle.time + indexDiff * secondsPerBar;
+            }
+        }
+        return 0;
+    };
 
 // ==========================================
 // СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ РИСУНКОВ ПО СИМВОЛАМ
@@ -509,22 +514,22 @@ function showRulerMeasurement(start, end) {
 function saveCurrentDrawings(symbol) {
     if (!symbol) return;
     
-    savedTrendLines[symbol] = activeTrendlines;
-    savedHorizontalLines[symbol] = activeHorizontalLines;
-    savedPencilDrawings[symbol] = pencilStrokes;
+    window.savedTrendLines[symbol] = activeTrendlines;
+    window.savedHorizontalLines[symbol] = activeHorizontalLines;
+    window.savedPencilDrawings[symbol] = pencilStrokes;
     
     // Сохранить в localStorage
-    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
-    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
-    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+    localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
 }
 
 // Восстановить рисунки для указанного символа
 function restoreDrawingsForSymbol(symbol) {
     // Восстановить рисунки из сохраненных данных
-    activeTrendlines = savedTrendLines[symbol] || [];
-    activeHorizontalLines = savedHorizontalLines[symbol] || [];
-    pencilStrokes = savedPencilDrawings[symbol] || [];
+    activeTrendlines = window.savedTrendLines[symbol] || [];
+    activeHorizontalLines = window.savedHorizontalLines[symbol] || [];
+    pencilStrokes = window.savedPencilDrawings[symbol] || [];
     
     // Перерисовать горизонтальные линии
     activeHorizontalLines.forEach(hl => {
@@ -545,13 +550,13 @@ function restoreDrawingsForSymbol(symbol) {
 
 // Очистить сохраненные рисунки для указанного символа
 function clearDrawingsForSymbol(symbol) {
-    if (savedTrendLines[symbol]) delete savedTrendLines[symbol];
-    if (savedHorizontalLines[symbol]) delete savedHorizontalLines[symbol];
-    if (savedPencilDrawings[symbol]) delete savedPencilDrawings[symbol];
+    if (window.savedTrendLines[symbol]) delete window.savedTrendLines[symbol];
+    if (window.savedHorizontalLines[symbol]) delete window.savedHorizontalLines[symbol];
+    if (window.savedPencilDrawings[symbol]) delete window.savedPencilDrawings[symbol];
     
-    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
-    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
-    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+    localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
 }
                 return lastCandle.time + (indexDiff * secondsPerBar);
             }

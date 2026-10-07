@@ -2,7 +2,6 @@
 // collage.js — КОЛЛАЖ ГРУПП МОНЕТ
 // Мини-графики монет одной цветовой группы
 // ==========================================
-
 // --- Переменные состояния ---
 let collageState = null;   // { colorId, symbols, page }
 let collageCharts = [];    // { chart, candleSeries, volumeSeries, ws, symbol, container }
@@ -13,50 +12,82 @@ let collageCharts = [];    // { chart, candleSeries, volumeSeries, ws, symbol, c
 function openCollage(colorId) {
     const symbols = Object.keys(coinColors).filter(s => coinColors[s] === colorId).sort();
     if (symbols.length < 2) return;
+    openCollageWithSymbols(colorId, symbols);
+}
 
+// Универсальная функция открытия коллажа по массиву символов
+function openCollageWithSymbols(colorId, symbols) {
+    if (!symbols || symbols.length < 1) {
+        alert('Нет монет для отображения');
+        return;
+    }
     collageState = { colorId, symbols, page: 0 };
     els.chartWrapper.style.display = 'none';
     els.chartHint.style.display = 'none';
-
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'none';
-
     const resetBtn = document.querySelector('.chart-reset-btn');
     if (resetBtn) resetBtn.style.display = 'none';
-
     els.drawingToolsPanel.style.display = 'none';
     els.chartWatermark.style.display = 'none';
     els.pencilCanvas.style.display = 'none';
     els.rulerMeasurement.style.display = 'none';
-
     const wrap = document.getElementById('collageWrap');
     if (wrap) wrap.style.display = 'grid';
-
     renderCollagePage();
+}
+
+// 🔹 НОВАЯ ФУНКЦИЯ: открыть коллаж только по монетам с рисунками
+function openCollageWithDrawings() {
+    const symbolsWithDrawings = new Set();
+
+    // Собираем символы, у которых есть хотя бы один рисунок
+    if (window.savedTrendLines) {
+        for (const sym in window.savedTrendLines) {
+            if (Array.isArray(window.savedTrendLines[sym]) && window.savedTrendLines[sym].length > 0) {
+                symbolsWithDrawings.add(sym);
+            }
+        }
+    }
+    if (window.savedHorizontalLines) {
+        for (const sym in window.savedHorizontalLines) {
+            if (Array.isArray(window.savedHorizontalLines[sym]) && window.savedHorizontalLines[sym].length > 0) {
+                symbolsWithDrawings.add(sym);
+            }
+        }
+    }
+    if (window.savedPencilDrawings) {
+        for (const sym in window.savedPencilDrawings) {
+            if (Array.isArray(window.savedPencilDrawings[sym]) && window.savedPencilDrawings[sym].length > 0) {
+                symbolsWithDrawings.add(sym);
+            }
+        }
+    }
+
+    const symbols = [...symbolsWithDrawings].sort();
+    if (symbols.length === 0) {
+        alert('Нет монет с рисунками. Нарисуйте что-нибудь на графике.');
+        return;
+    }
+
+    openCollageWithSymbols('drawings', symbols);
 }
 
 function exitCollage() {
     if (!collageState) return;
     destroyCollageCharts();
     collageState = null;
-
     const wrap = document.getElementById('collageWrap');
     if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
-
     const controls = document.getElementById('collageControls');
     if (controls) controls.style.display = 'none';
-
     els.chartWrapper.style.display = '';
-
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'flex';
-
     const resetBtn = document.querySelector('.chart-reset-btn');
     if (resetBtn) resetBtn.style.display = '';
-
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
     els.pencilCanvas.style.display = '';
-
     if (chart) chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
 }
 
@@ -87,13 +118,10 @@ function collageNextPage() {
 function updateCollageControls(pages) {
     const controls = document.getElementById('collageControls');
     if (!controls) return;
-
     controls.style.display = 'flex';
     const multi = pages > 1;
-
     document.getElementById('collagePrev').style.display = multi ? 'inline-block' : 'none';
     document.getElementById('collageNext').style.display = multi ? 'inline-block' : 'none';
-
     const info = document.getElementById('collagePageInfo');
     info.style.display = multi ? 'inline-block' : 'none';
     info.textContent = `${collageState.page + 1}/${pages}`;
@@ -121,30 +149,23 @@ function destroyCollageCharts() {
 // ==========================================
 function renderCollagePage() {
     destroyCollageCharts();
-
     const wrap = document.getElementById('collageWrap');
     if (!wrap || !collageState) return;
-
     wrap.innerHTML = '';
-
     const perPage = 4;
     const pages = Math.ceil(collageState.symbols.length / perPage);
     const pageSymbols = collageState.symbols.slice(collageState.page * perPage, collageState.page * perPage + perPage);
     const count = pageSymbols.length;
-
     let cols, rows;
     if (count === 1) { cols = 1; rows = 1; }
     else if (count === 2) { cols = 2; rows = 1; }
     else { cols = 2; rows = 2; }
-
     wrap.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     wrap.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
     wrap.style.gap = '2px';
-
     for (let i = 0; i < cols * rows; i++) {
         const cell = document.createElement('div');
         cell.style.cssText = 'position:relative; background:#0f0f0f; overflow:hidden; min-height:0; min-width:0;';
-
         const sym = pageSymbols[i];
         if (sym) {
             cell.innerHTML = `<div class="collage-label" id="collageLabel_${i}"></div><div id="collageChart_${i}" style="width:100%;height:100%;"></div>`;
@@ -153,11 +174,9 @@ function renderCollagePage() {
         } else {
             cell.innerHTML = '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#333333; font-size:11px; text-transform:uppercase; letter-spacing:1px;">—</div>';
         }
-
         wrap.appendChild(cell);
         if (sym) initCollageChart(i, sym);
     }
-
     updateCollageControls(pages);
 }
 
@@ -167,7 +186,6 @@ function renderCollagePage() {
 function initCollageChart(index, symbol) {
     const container = document.getElementById('collageChart_' + index);
     if (!container) return;
-
     const chart = LightweightCharts.createChart(container, {
         width: container.clientWidth,
         height: container.clientHeight,
@@ -179,26 +197,21 @@ function initCollageChart(index, symbol) {
         handleScroll: false,
         handleScale: false,
     });
-
     const candleSeries = chart.addCandlestickSeries({
         upColor: '#22c55e', downColor: '#ef4444',
         borderVisible: false,
         wickUpColor: '#22c55e', wickDownColor: '#ef4444'
     });
-
     const volumeSeries = chart.addHistogramSeries({
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume'
     });
-
     chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
-
     const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container };
     collageCharts.push(entry);
 
     const coin = allCoins.find(c => c.symbol === symbol);
     const change = coin ? coin.change : 0;
-
     const label = document.getElementById('collageLabel_' + index);
     if (label) {
         label.innerHTML = `<span style="font-weight:700; color:#ffffff;">${symbol}</span> <span style="color:${change >= 0 ? '#22c55e' : '#ef4444'};">${change >= 0 ? '+' : ''}${change}%</span>`;
@@ -212,26 +225,21 @@ function initCollageChart(index, symbol) {
             const first = data[0].close;
             const precision = first < 1 ? (first < 0.01 ? 8 : 5) : 2;
             const minMove = first < 1 ? (first < 0.01 ? 0.00000001 : 0.00001) : 0.01;
-
             candleSeries.applyOptions({ priceFormat: { type: 'price', precision, minMove } });
             candleSeries.setData(data);
-
             volumeSeries.setData(data.map(c => ({
                 time: c.time,
                 value: c.volume,
                 color: c.close >= c.open ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.6)'
             })));
-
             chart.timeScale().fitContent();
-            
-            // Отображаем сохраненные рисунки на мини-графике
-            drawCollageDrawings(chart, candleSeries, container, symbol, index);
+            // 🔹 Отображаем сохранённые рисунки на мини-графике
+            drawCollageDrawings(chart, candleSeries, container, symbol);
         })
         .catch(() => {});
 
     const ws = new WebSocket(`wss://fstream.binance.com/market/ws/${symbol.toLowerCase()}usdt@kline_${currentTF}`);
     entry.ws = ws;
-
     ws.onmessage = (e) => {
         try {
             const d = JSON.parse(e.data);
@@ -260,64 +268,98 @@ function initCollageChart(index, symbol) {
 // ==========================================
 function drawCollageDrawings(chart, candleSeries, container, symbol, index) {
     // Отображаем только если доступны сохраненные данные
-    if (typeof savedTrendLines === 'undefined' || typeof savedHorizontalLines === 'undefined') return;
-    
-    // 1. Алерты (из AlertManager) - уже отображаются автоматически через savedAlerts
-    // 2. Горизонтальные линии
+    if (typeof savedTrendLines === 'undefined' ||
+        typeof savedHorizontalLines === 'undefined' ||
+        typeof savedPencilDrawings === 'undefined') return;
+
     const horizontalLines = savedHorizontalLines[symbol] || [];
+    const trendLines = savedTrendLines[symbol] || [];
+    const pencilStrokes = savedPencilDrawings[symbol] || [];
+
+    const hasAnyDrawings = horizontalLines.length > 0 || trendLines.length > 0 || pencilStrokes.length > 0;
+    if (!hasAnyDrawings) return;
+
+    // 1. Горизонтальные линии (через встроенный API LightweightCharts)
     horizontalLines.forEach(hl => {
         try {
-            const line = candleSeries.createPriceLine({
+            candleSeries.createPriceLine({
                 price: hl.price,
-                color: '#f59e0b80', // Полупрозрачный цвет
+                color: (hl.color && typeof hl.color === 'string') ? hl.color : '#f59e0b80',
                 lineWidth: 1,
                 lineStyle: LightweightCharts.LineStyle.Dashed,
                 axisLabelVisible: false
             });
         } catch(e) {}
     });
-    
-    // 3. Трендовые линии (отображаем на канвасе поверх графика)
-    const trendLines = savedTrendLines[symbol] || [];
-    if (trendLines.length > 0) {
-        // Создаем canvas для рисунков если его еще нет
-        let canvas = container.querySelector('.collage-drawing-canvas');
-        if (!canvas) {
-            canvas = document.createElement('canvas');
-            canvas.className = 'collage-drawing-canvas';
-            canvas.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:5;';
-            container.appendChild(canvas);
-        }
-        
-        // Устанавливаем размеры канваса
-        const rect = container.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-        
-        const ctx = canvas.getContext('2d');
-        
-        // Очищаем канвас перед рисованием (очищаем на первом элементе)
-        if (index === 0) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        
-        // Рисуем все трендовые линии
-        trendLines.forEach(tl => {
-            try {
-                const x1 = chart.timeScale().timeToCoordinate(tl.time1);
-                const y1 = candleSeries.priceToCoordinate(tl.price1);
-                const x2 = chart.timeScale().timeToCoordinate(tl.time2);
-                const y2 = candleSeries.priceToCoordinate(tl.price2);
-                
-                if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
-                    ctx.beginPath();
-                    ctx.strokeStyle = '#f59e0b80'; // Полупрозрачный
-                    ctx.lineWidth = 1;
-                    ctx.moveTo(x1, y1);
-                    ctx.lineTo(x2, y2);
-                    ctx.stroke();
+
+    // 2. Трендовые линии + карандашные рисунки — рисуем на общем канвасе
+    const needCanvas = trendLines.length > 0 || pencilStrokes.length > 0;
+    if (!needCanvas) return;
+
+    // Создаем canvas для рисунков если его еще нет
+    let canvas = container.querySelector('.collage-drawing-canvas');
+    if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.className = 'collage-drawing-canvas';
+        canvas.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:5;';
+        container.appendChild(canvas);
+    }
+
+    // Устанавливаем размеры канваса
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    const ctx = canvas.getContext('2d');
+
+    // 🔹 ИСПРАВЛЕНИЕ: очищаем канвас ВСЕГДА, а не только при index === 0
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Рисуем все трендовые линии
+    ctx.strokeStyle = '#f59e0b80';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    trendLines.forEach(tl => {
+        try {
+            const x1 = chart.timeScale().timeToCoordinate(tl.time1);
+            const y1 = candleSeries.priceToCoordinate(tl.price1);
+            const x2 = chart.timeScale().timeToCoordinate(tl.time2);
+            const y2 = candleSeries.priceToCoordinate(tl.price2);
+            if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        } catch(e) {}
+    });
+
+    // 🔹 НОВОЕ: карандашные рисунки
+    if (pencilStrokes.length > 0) {
+        ctx.strokeStyle = '#f59e0b80';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+
+        pencilStrokes.forEach(stroke => {
+            if (!Array.isArray(stroke) || stroke.length < 2) return;
+            ctx.beginPath();
+            let started = false;
+            for (const point of stroke) {
+                const x = chart.timeScale().timeToCoordinate(point.time);
+                const y = candleSeries.priceToCoordinate(point.price);
+                if (x === null || y === null) {
+                    started = false;
+                    continue;
                 }
-            } catch(e) {}
+                if (!started) {
+                    ctx.moveTo(x, y);
+                    started = true;
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
         });
     }
 }
