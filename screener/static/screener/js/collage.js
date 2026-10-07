@@ -128,8 +128,6 @@ function renderCollagePage() {
                 exitCollage();
                 openChart(sym);
             });
-
-            cell.title = 'Используйте колесико или перетаскивание для навации. Нажмите кнопку в углу для открытия.';
         } else {
             cell.innerHTML = '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#333333; font-size:11px; text-transform:uppercase; letter-spacing:1px;">—</div>';
         }
@@ -202,13 +200,12 @@ function initCollageChart(index, symbol) {
             })));
             chart.timeScale().fitContent();
 
-            // 🔹 Первичная отрисовка рисунков
+            // 🔹 ИСПРАВЛЕНИЕ: requestAnimationFrame даёт время графику обновить координаты
             requestAnimationFrame(() => {
                 drawCollageDrawings(chart, candleSeries, container, symbol);
             });
 
-            // 🔹 ИСПРАВЛЕНИЕ: Подписка на изменение видимого диапазона
-            // При скролле/зуме перерисовываем рисунки на канвасе
+            // 🔹 Перерисовка при скролле/зуме
             chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
                 requestAnimationFrame(() => {
                     drawCollageDrawings(chart, candleSeries, container, symbol);
@@ -254,7 +251,7 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
     const hasAnyDrawings = horizontalLines.length > 0 || trendLines.length > 0 || pencilStrokes.length > 0;
     if (!hasAnyDrawings) return;
 
-    // 1. Горизонтальные линии (через встроенный API — работает автоматически)
+    // 1. Горизонтальные линии (через встроенный API)
     horizontalLines.forEach(hl => {
         try {
             candleSeries.createPriceLine({
@@ -283,8 +280,6 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
     canvas.width = rect.width;
     canvas.height = rect.height;
     const ctx = canvas.getContext('2d');
-
-    // 🔹 ИСПРАВЛЕНИЕ: очищаем канвас ВСЕГДА, а не только при index === 0
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Трендовые линии
