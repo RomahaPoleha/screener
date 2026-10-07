@@ -67,7 +67,7 @@ gate_spot_last_sync_time = {}
 
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
-SYNC_INTERVAL = 3
+SYNC_INTERVAL = 10
 
 _http_client = None
 
@@ -236,7 +236,10 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
                 # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
-                min_volume = 50000 if is_mature else 60000
+                # Целевой порог для "созревшей" плотности
+                target_min = 50000 if market == 'futures' else 10000
+                # Для "несозревшей" делаем порог чуть выше (на 20%), чтобы отсечь мгновенный шум
+                min_volume = target_min if is_mature else int(target_min * 1.2)
 
                 if volume < min_volume:
                     if price in ts:

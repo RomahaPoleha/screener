@@ -13,7 +13,7 @@ from django.core.cache import cache
 from datetime import datetime
 
 # Минимальный объём за 24ч
-MIN_VOLUME = 200000
+MIN_VOLUME = 100_000
 
 # 🔧 ГЛОБАЛЬНЫЙ EXCHANGE (singleton)
 _exchange = ccxt.binance({
