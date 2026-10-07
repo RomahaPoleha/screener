@@ -18,9 +18,9 @@ let pencilHotkeyActive = false;
 let isHorizontalLineEnabled = false, activeHorizontalLines = [];
 let pencilStrokes = [];
 let currentStroke = null;
+let horizontalLinePreview = null;
 
 // --- Глобальные переменные для хранения рисунков по символам ---
-// Сохраняем в window для глобальной доступности
 window.savedTrendLines = {};
 window.savedHorizontalLines = {};
 window.savedPencilDrawings = {};
@@ -46,15 +46,15 @@ function clearSpecificDrawings(type) {
     if (type === 'alerts') {
         if (currentSymbol) AlertManager.clearSymbol(currentSymbol);
     } else if (type === 'trendlines') {
-        if (currentSymbol) savedTrendLines[currentSymbol] = [];
+        if (currentSymbol) window.savedTrendLines[currentSymbol] = [];
         activeTrendlines = [];
         redrawAllPersistentDrawings();
     } else if (type === 'horizontalLines') {
-        if (currentSymbol) savedHorizontalLines[currentSymbol] = [];
+        if (currentSymbol) window.savedHorizontalLines[currentSymbol] = [];
         activeHorizontalLines.forEach(hl => { try { candleSeries.removePriceLine(hl.line); } catch(e){} });
         activeHorizontalLines = [];
     } else if (type === 'pencil') {
-        if (currentSymbol) savedPencilDrawings[currentSymbol] = [];
+        if (currentSymbol) window.savedPencilDrawings[currentSymbol] = [];
         pencilStrokes = [];
         currentStroke = null;
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
@@ -66,12 +66,12 @@ function clearSpecificDrawings(type) {
         els.rulerMeasurement.style.display = 'none';
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
     }
-    
+
     // Сохранить изменения в localStorage
     if (currentSymbol) {
-        localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
-        localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
-        localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+        localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
+        localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
+        localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
     }
 }
 
@@ -257,6 +257,7 @@ function redrawPencilStrokes() {
     pencilCtx.lineWidth = 2;
     pencilCtx.lineCap = 'round';
     pencilCtx.lineJoin = 'round';
+
     const drawStroke = (stroke) => {
         if (stroke.length < 2) return;
         pencilCtx.beginPath();
@@ -270,6 +271,7 @@ function redrawPencilStrokes() {
         }
         pencilCtx.stroke();
     };
+
     pencilStrokes.forEach(drawStroke);
     if (currentStroke && currentStroke.length >= 2) drawStroke(currentStroke);
 }
@@ -280,13 +282,16 @@ function drawRulerRectangle(start, end) {
     const x2 = getXByTime(end.time);
     const y2 = candleSeries.priceToCoordinate(end.price);
     if (x1 === null || y1 === null || x2 === null || y2 === null) return;
+
     const isUp = end.price >= start.price;
     const color = isUp ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)';
     const borderColor = isUp ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)';
+
     const left = Math.min(x1, x2);
     const top = Math.min(y1, y2);
     const width = Math.abs(x2 - x1);
     const height = Math.abs(y2 - y1);
+
     pencilCtx.fillStyle = color;
     pencilCtx.fillRect(left, top, width, height);
     pencilCtx.strokeStyle = borderColor;
@@ -299,9 +304,11 @@ function drawRulerRectangle(start, end) {
 function redrawAllPersistentDrawings() {
     if (!pencilCtx || !chart) return;
     pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
+
     pencilCtx.strokeStyle = '#3b82f6';
     pencilCtx.lineWidth = 2;
     pencilCtx.setLineDash([5, 5]);
+
     activeTrendlines.forEach(tl => {
         const x1 = getXByTime(tl.time1);
         const x2 = getXByTime(tl.time2);
@@ -314,6 +321,7 @@ function redrawAllPersistentDrawings() {
             pencilCtx.stroke();
         }
     });
+
     if (isDrawingTrendLine && trendLinePreview) {
         const x1 = getXByTime(trendLinePreview.time1);
         const x2 = getXByTime(trendLinePreview.time2);
@@ -329,8 +337,10 @@ function redrawAllPersistentDrawings() {
             pencilCtx.stroke();
         }
     }
+
     if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
     if (rulerFixedMeasurement) drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
+
     redrawPencilStrokes();
     pencilCtx.setLineDash([]);
 }
@@ -356,7 +366,8 @@ function deleteLineAtPoint(x, y) {
     const clickPrice = candleSeries.coordinateToPrice(y);
     if (!clickPrice) return;
     const threshold = 50;
-    const savedList = savedAlerts[currentSymbol] || [];
+
+    const savedList = window.savedAlerts?.[currentSymbol] || [];
     for (let i = savedList.length - 1; i >= 0; i--) {
         const alert = savedList[i];
         const alertY = candleSeries.priceToCoordinate(alert.price);
@@ -365,6 +376,7 @@ function deleteLineAtPoint(x, y) {
             return;
         }
     }
+
     for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
         const hl = activeHorizontalLines[i];
         const hlY = candleSeries.priceToCoordinate(hl.price);
@@ -374,6 +386,7 @@ function deleteLineAtPoint(x, y) {
             return;
         }
     }
+
     for (let i = activeTrendlines.length - 1; i >= 0; i--) {
         const tl = activeTrendlines[i];
         const x1 = getXByTime(tl.time1);
@@ -389,6 +402,7 @@ function deleteLineAtPoint(x, y) {
             }
         }
     }
+
     for (let i = pencilStrokes.length - 1; i >= 0; i--) {
         const stroke = pencilStrokes[i];
         for (const point of stroke) {
@@ -413,6 +427,7 @@ function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
     if (isEraserEnabled) { deleteLineAtPoint(param.point.x, param.point.y); return; }
     if (isRulerEnabled) return;
+
     if (isAlertModeEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
@@ -426,11 +441,14 @@ function handleChartClick(param) {
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             title: `${price.toFixed(currentPrecision)}`
         });
-        activeHorizontalLines.push({ price: price, line: line });
-        
-        // Сохранить горизонтальные линии для текущего символа
+        activeHorizontalLines.push({ price: price, color: '#f59e0b' });
+
+        // 🔹 ИСПРАВЛЕНИЕ: сохраняем без поля line (оно не сериализуется)
         if (currentSymbol) {
-            window.savedHorizontalLines[currentSymbol] = activeHorizontalLines;
+            window.savedHorizontalLines[currentSymbol] = activeHorizontalLines.map(hl => ({
+                price: hl.price,
+                color: hl.color || '#f59e0b'
+            }));
             localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
         }
     }
@@ -439,6 +457,7 @@ function handleChartClick(param) {
         const time = param.time || getTimeByX(param.point.x);
         const logicalIndex = getLogicalIndexByX(param.point.x);
         if (!price || isNaN(price) || !time) return;
+
         if (!isDrawingTrendLine) {
             trendLineStart = { time, price, logicalIndex, x: param.point.x, y: param.point.y };
             isDrawingTrendLine = true;
@@ -452,11 +471,11 @@ function handleChartClick(param) {
             trendLineStart = null;
             trendLinePreview = null;
             redrawAllPersistentDrawings();
-            
+
             // Сохранить трендовые линии для текущего символа
             if (currentSymbol) {
-                savedTrendLines[currentSymbol] = activeTrendlines;
-                localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
+                window.savedTrendLines[currentSymbol] = activeTrendlines;
+                localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
             }
         }
     }
@@ -468,8 +487,10 @@ function handlePencilDraw(param) {
     const time = param.time || getTimeByX(param.point.x);
     const logicalIndex = getLogicalIndexByX(param.point.x);
     if (!price || !time) { lastPencilPoint = param.point; return; }
+
     if (!currentStroke) currentStroke = [{ time, price, logicalIndex }];
     else currentStroke.push({ time, price, logicalIndex });
+
     if (lastPencilPoint) {
         pencilCtx.strokeStyle = '#f59e0b'; pencilCtx.lineWidth = 2;
         pencilCtx.lineCap = 'round'; pencilCtx.lineJoin = 'round';
@@ -484,13 +505,16 @@ function handlePencilDraw(param) {
 // ==========================================
 function showRulerMeasurement(start, end) {
     if (!start || !end || !candleSeries) return;
+
     const priceDiff = Math.abs(end.price - start.price);
     const pricePercent = ((priceDiff / start.price) * 100).toFixed(2);
     const direction = end.price >= start.price ? '↑' : '↓';
     const color = end.price >= start.price ? '#22c55e' : '#ef4444';
+
     const candles = window.candleData || [];
     const lastRealCandle = candles[candles.length - 1];
     const lastRealTime = lastRealCandle ? lastRealCandle.time : 0;
+
     const getTimeValue = (point) => {
         if (!point) return 0;
         if (typeof point.time === 'number') return point.time;
@@ -506,80 +530,27 @@ function showRulerMeasurement(start, end) {
         return 0;
     };
 
-// ==========================================
-// СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ РИСУНКОВ ПО СИМВОЛАМ
-// ==========================================
-
-// Сохранить текущие рисунки для указанного символа
-function saveCurrentDrawings(symbol) {
-    if (!symbol) return;
-    
-    window.savedTrendLines[symbol] = activeTrendlines;
-    window.savedHorizontalLines[symbol] = activeHorizontalLines;
-    window.savedPencilDrawings[symbol] = pencilStrokes;
-    
-    // Сохранить в localStorage
-    localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
-    localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
-    localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
-}
-
-// Восстановить рисунки для указанного символа
-function restoreDrawingsForSymbol(symbol) {
-    // Восстановить рисунки из сохраненных данных
-    activeTrendlines = window.savedTrendLines[symbol] || [];
-    activeHorizontalLines = window.savedHorizontalLines[symbol] || [];
-    pencilStrokes = window.savedPencilDrawings[symbol] || [];
-    
-    // Перерисовать горизонтальные линии
-    activeHorizontalLines.forEach(hl => {
-        try { candleSeries.removePriceLine(hl.line); } catch(e){}
-    });
-    activeHorizontalLines.forEach(hl => {
-        const line = candleSeries.createPriceLine({
-            price: hl.price, color: hl.color || '#f59e0b', lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
-            title: `${hl.price.toFixed(currentPrecision)}`
-        });
-        hl.line = line;
-    });
-    
-    // Перерисовать все рисунки
-    redrawAllPersistentDrawings();
-}
-
-// Очистить сохраненные рисунки для указанного символа
-function clearDrawingsForSymbol(symbol) {
-    if (window.savedTrendLines[symbol]) delete window.savedTrendLines[symbol];
-    if (window.savedHorizontalLines[symbol]) delete window.savedHorizontalLines[symbol];
-    if (window.savedPencilDrawings[symbol]) delete window.savedPencilDrawings[symbol];
-    
-    localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
-    localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
-    localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
-}
-                return lastCandle.time + (indexDiff * secondsPerBar);
-            }
-        }
-        return 0;
-    };
     const startTime = getTimeValue(start);
     const endTime = getTimeValue(end);
     const startInRealArea = startTime <= lastRealTime && startTime > 0;
     const endInRealArea = endTime <= lastRealTime && endTime > 0;
     const bothInRealArea = startInRealArea && endInRealArea;
+
     let barsCount = 0;
     let totalVolume = 0;
     let maxPrice = '-';
     let minPrice = '-';
     let hasRealData = false;
+
     const rangeStart = Math.min(startTime, endTime);
     const rangeEnd = Math.max(startTime, endTime);
+
     if (rangeStart > 0 && rangeEnd > 0) {
         const rangeCandles = candles.filter(c => {
             const candleTime = typeof c.time === 'number' ? c.time : (c.time && c.time.timestamp ? c.time.timestamp : 0);
             return candleTime >= rangeStart && candleTime <= rangeEnd && candleTime <= lastRealTime;
         });
+
         if (rangeCandles.length > 0) {
             hasRealData = true;
             barsCount = rangeCandles.length;
@@ -594,28 +565,34 @@ function clearDrawingsForSymbol(symbol) {
             minPrice = lowest.toFixed(currentPrecision);
         }
     }
+
     const formatTime = (t) => {
         if (!t || t === 0) return '---';
         const date = new Date(t * 1000);
         return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
     };
+
     const volumeFormatted = totalVolume >= 1000000 ? `${(totalVolume / 1000000).toFixed(2)}M` :
-                            totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
-                            totalVolume > 0 ? totalVolume.toFixed(2) : '0';
+                           totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}K` :
+                           totalVolume > 0 ? totalVolume.toFixed(2) : '0';
+
     if (hasRealData) {
         els.rulerMeasurement.innerHTML = `<div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}</div><div style="font-size:11px; color:#d1d5db; line-height:1.6;"><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#94a3b8;">Бары:</span><span style="font-weight:600;">${barsCount}</span></div><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#94a3b8;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span></div><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#94a3b8;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span></div><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#94a3b8;">Объем:</span><span style="font-weight:600;">${volumeFormatted}</span></div><div style="border-top:1px solid #475569; margin-top:6px; padding-top:6px;"><div style="display:flex; justify-content:space-between; font-size:10px; color:#94a3b8;"><span>Max: <span style="color:#22c55e;">${maxPrice}</span></span><span>Min: <span style="color:#ef4444;">${minPrice}</span></span></div></div><div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">${formatTime(startTime)} → ${formatTime(endTime)}</div>${!bothInRealArea ? '<div style="font-size:9px; color:#f59e0b; margin-top:4px; text-align:center; font-style:italic;">Часть в пустой зоне</div>' : ''}</div>`;
     } else {
         els.rulerMeasurement.innerHTML = `<div style="font-weight:700; color:${color}; margin-bottom:8px; font-size:13px;">${direction} ${pricePercent}% | ${priceDiff.toFixed(currentPrecision)}</div><div style="font-size:11px; color:#d1d5db; line-height:1.6;"><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#94a3b8;">Цена:</span><span style="font-weight:600;">${start.price.toFixed(currentPrecision)} → ${end.price.toFixed(currentPrecision)}</span></div><div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#94a3b8;">Изменение:</span><span style="font-weight:600; color:${color};">${direction} ${pricePercent}%</span></div><div style="border-top:1px solid #475569; margin-top:6px; padding-top:6px; text-align:center;"><div style="font-size:9px; color:#f59e0b; font-style:italic;">Зона будущих свечей</div></div><div style="font-size:9px; color:#6b7280; margin-top:4px; text-align:center;">${formatTime(startTime)} → ${formatTime(endTime)}</div></div>`;
     }
+
     const measurementWidth = 230;
     const measurementHeight = 220;
     const chartWidth = els.chartWrapper.clientWidth;
     const chartHeight = els.chartWrapper.clientHeight;
+
     let displayX = end.x - measurementWidth - 15;
     if (displayX < 10) displayX = 10;
     let displayY = end.y - (measurementHeight / 2);
     if (displayY < 10) displayY = 10;
     if (displayY + measurementHeight > chartHeight - 10) displayY = chartHeight - measurementHeight - 10;
+
     els.rulerMeasurement.style.left = `${displayX}px`;
     els.rulerMeasurement.style.top = `${displayY}px`;
     els.rulerMeasurement.style.display = 'block';
@@ -644,30 +621,39 @@ function updateMagnetIndicator(param) {
         if (magnetIndicator) magnetIndicator.style.display = 'none';
         return;
     }
+
     const candles = window.candleData || [];
     if (candles.length === 0) return;
+
     let cursorTime = param.time || chart.timeScale().coordinateToTime(param.point.x);
     let nearestCandle = candles[candles.length - 1];
     let minTimeDiff = Infinity;
+
     for (const candle of candles) {
         const timeDiff = Math.abs(candle.time - cursorTime);
         if (timeDiff < minTimeDiff) { minTimeDiff = timeDiff; nearestCandle = candle; }
     }
+
     const priceAtCursor = candleSeries.coordinateToPrice(param.point.y);
     if (priceAtCursor === null || priceAtCursor === undefined) return;
+
     const magnetPoints = [
         { type: 'ohlc', price: nearestCandle.open, distance: Math.abs(nearestCandle.open - priceAtCursor) },
         { type: 'ohlc', price: nearestCandle.high, distance: Math.abs(nearestCandle.high - priceAtCursor) },
         { type: 'ohlc', price: nearestCandle.low, distance: Math.abs(nearestCandle.low - priceAtCursor) },
         { type: 'ohlc', price: nearestCandle.close, distance: Math.abs(nearestCandle.close - priceAtCursor) }
     ];
-    getActiveAlertsFor(currentSymbol).forEach(a => {
+
+    (typeof getActiveAlertsFor === 'function' ? getActiveAlertsFor(currentSymbol) : []).forEach(a => {
         magnetPoints.push({ type: 'alert', price: a.price, distance: Math.abs(a.price - priceAtCursor) });
     });
+
     magnetPoints.sort((a, b) => a.distance - b.distance);
     const nearest = magnetPoints[0];
+
     const snapX = chart.timeScale().timeToCoordinate(nearestCandle.time);
     const snapY = candleSeries.priceToCoordinate(nearest.price);
+
     if (snapX !== null && snapY !== null) {
         magnetIndicator.style.display = 'block';
         magnetIndicator.style.left = `${snapX - 3}px`;
@@ -678,4 +664,53 @@ function updateMagnetIndicator(param) {
     }
 }
 
-let horizontalLinePreview = null;
+// ==========================================
+// СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ РИСУНКОВ ПО СИМВОЛАМ
+// ==========================================
+function saveCurrentDrawings(symbol) {
+    if (!symbol) return;
+    window.savedTrendLines[symbol] = activeTrendlines;
+    window.savedHorizontalLines[symbol] = activeHorizontalLines.map(hl => ({
+        price: hl.price,
+        color: hl.color || '#f59e0b'
+    }));
+    window.savedPencilDrawings[symbol] = pencilStrokes;
+
+    localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
+}
+
+function restoreDrawingsForSymbol(symbol) {
+    activeTrendlines = window.savedTrendLines[symbol] || [];
+    activeHorizontalLines = (window.savedHorizontalLines[symbol] || []).map(hl => ({
+        price: hl.price,
+        color: hl.color || '#f59e0b',
+        line: null
+    }));
+    pencilStrokes = window.savedPencilDrawings[symbol] || [];
+
+    // Перерисовать горизонтальные линии
+    activeHorizontalLines.forEach(hl => {
+        try {
+            if (hl.line) candleSeries.removePriceLine(hl.line);
+        } catch(e){}
+        const line = candleSeries.createPriceLine({
+            price: hl.price, color: hl.color || '#f59e0b', lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
+            title: `${hl.price.toFixed(currentPrecision)}`
+        });
+        hl.line = line;
+    });
+
+    redrawAllPersistentDrawings();
+}
+
+function clearDrawingsForSymbol(symbol) {
+    if (window.savedTrendLines[symbol]) delete window.savedTrendLines[symbol];
+    if (window.savedHorizontalLines[symbol]) delete window.savedHorizontalLines[symbol];
+    if (window.savedPencilDrawings[symbol]) delete window.savedPencilDrawings[symbol];
+    localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
+}
