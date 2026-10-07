@@ -2,14 +2,9 @@
 // collage.js — КОЛЛАЖ ГРУПП МОНЕТ
 // ==========================================
 
-// 🔹 ИСПРАВЛЕНИЕ: делаем переменные глобальными через window,
-// чтобы chart.js мог их прочитать
 window.collageState = null;
 let collageCharts = [];
 
-// ==========================================
-// ОТКРЫТИЕ КОЛЛАЖА
-// ==========================================
 function openCollage(colorId) {
     const symbols = Object.keys(coinColors).filter(s => coinColors[s] === colorId).sort();
     if (symbols.length < 2) return;
@@ -53,9 +48,6 @@ function openCollageFromModal(colorId) {
     openCollage(colorId);
 }
 
-// ==========================================
-// НАВИГАЦИЯ ПО СТРАНИЦАМ
-// ==========================================
 function collagePrevPage() {
     if (!window.collageState || window.collageState.page === 0) return;
     window.collageState.page--;
@@ -83,9 +75,6 @@ function updateCollageControls(pages) {
     info.textContent = `${window.collageState.page + 1}/${pages}`;
 }
 
-// ==========================================
-// УНИЧТОЖЕНИЕ ГРАФИКОВ
-// ==========================================
 function destroyCollageCharts() {
     for (const entry of collageCharts) {
         try { if (entry.ws) { entry.ws.onclose = null; entry.ws.close(); } } catch(e) {}
@@ -100,9 +89,6 @@ function destroyCollageCharts() {
     collageCharts = [];
 }
 
-// ==========================================
-// РЕНДЕР СТРАНИЦЫ
-// ==========================================
 function renderCollagePage() {
     destroyCollageCharts();
     const wrap = document.getElementById('collageWrap');
@@ -136,9 +122,6 @@ function renderCollagePage() {
     updateCollageControls(pages);
 }
 
-// ==========================================
-// ИНИЦИАЛИЗАЦИЯ МИНИ-ГРАФИКА
-// ==========================================
 function initCollageChart(index, symbol) {
     const container = document.getElementById('collageChart_' + index);
     if (!container) return;
@@ -189,7 +172,12 @@ function initCollageChart(index, symbol) {
                 color: c.close >= c.open ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.6)'
             })));
             chart.timeScale().fitContent();
-            drawCollageDrawings(chart, candleSeries, container, symbol);
+
+            // 🔹 ИСПРАВЛЕНИЕ: requestAnimationFrame даёт chart время обновить координаты после fitContent().
+            // Без этого timeToCoordinate() вернёт null, и рисунки не отобразятся.
+            requestAnimationFrame(() => {
+                drawCollageDrawings(chart, candleSeries, container, symbol);
+            });
         })
         .catch(() => {});
 
@@ -218,9 +206,6 @@ function initCollageChart(index, symbol) {
     };
 }
 
-// ==========================================
-// ОТОБРАЖЕНИЕ РИСУНКОВ В КОЛЛАЖЕ
-// ==========================================
 function drawCollageDrawings(chart, candleSeries, container, symbol) {
     if (typeof window.savedTrendLines === 'undefined' ||
         typeof window.savedHorizontalLines === 'undefined' ||

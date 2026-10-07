@@ -2,7 +2,6 @@
 // drawings.js — ИНСТРУМЕНТЫ РИСОВАНИЯ
 // ==========================================
 
-// --- Состояние инструментов ---
 let isDrawingTrendLine = false, trendLinePreview = null;
 let isMagnetEnabled = false, isAlertModeEnabled = false, magnetIndicator = null, activeAlerts = [];
 let isTrendLineEnabled = false, trendLineStart = null, activeTrendlines = [];
@@ -19,7 +18,6 @@ let pencilStrokes = [];
 let currentStroke = null;
 let horizontalLinePreview = null;
 
-// --- Глобальные хранилища ---
 window.savedTrendLines = {};
 window.savedHorizontalLines = {};
 window.savedPencilDrawings = {};
@@ -37,9 +35,6 @@ try {
 if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStorage.getItem('magnetEnabled') === 'true';
 if (localStorage.getItem('showDrawingTools') !== null) showDrawingTools = localStorage.getItem('showDrawingTools') === 'true';
 
-// ==========================================
-// УТИЛИТЫ
-// ==========================================
 function clearSpecificDrawings(type) {
     if (type === 'alerts') {
         if (currentSymbol) AlertManager.clearSymbol(currentSymbol);
@@ -91,9 +86,6 @@ function clearAllDrawings() {
     clearSpecificDrawings('ruler');
 }
 
-// ==========================================
-// TOGGLE ИНСТРУМЕНТОВ
-// ==========================================
 function toggleMagnet() {
     isMagnetEnabled = !isMagnetEnabled;
     updateToolUI('magnetBtn', isMagnetEnabled);
@@ -152,7 +144,6 @@ function togglePencil() {
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
         initPencilCanvas();
     } else {
-        // 🔹 Завершаем текущий штрих перед выключением
         finishPencilStroke();
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
         redrawAllPersistentDrawings();
@@ -187,9 +178,6 @@ function toggleEraser() {
     }
 }
 
-// ==========================================
-// КООРДИНАТНЫЕ ПРЕОБРАЗОВАНИЯ
-// ==========================================
 function initPencilCanvas() {
     if (!chart || !els.pencilCanvas) return;
     const rect = els.chartWrapper.getBoundingClientRect();
@@ -197,6 +185,21 @@ function initPencilCanvas() {
     els.pencilCanvas.height = rect.height;
     pencilCtx = els.pencilCanvas.getContext('2d');
     redrawAllPersistentDrawings();
+
+    // 🔹 ИСПРАВЛЕНИЕ: добавляем обработчики событий, чтобы isDrawing корректно переключался.
+    // Без этого handlePencilDraw всегда сразу делал return, и рисование было невозможно.
+    els.pencilCanvas.onmousedown = (e) => {
+        if (!isPencilEnabled) return;
+        isDrawing = true;
+    };
+    els.pencilCanvas.onmouseup = () => {
+        if (!isPencilEnabled) return;
+        finishPencilStroke();
+    };
+    els.pencilCanvas.onmouseleave = () => {
+        if (!isPencilEnabled) return;
+        finishPencilStroke();
+    };
 }
 
 function getTimeByX(x) {
@@ -246,9 +249,6 @@ function getXByTime(time) {
     return lastCandleX + (barsOffset * pixelsPerLogicalUnit);
 }
 
-// ==========================================
-// ОТРИСОВКА
-// ==========================================
 function redrawPencilStrokes() {
     if (!pencilCtx || !chart || !candleSeries) return;
     pencilCtx.strokeStyle = '#f59e0b';
@@ -343,9 +343,6 @@ function redrawAllPersistentDrawings() {
     pencilCtx.setLineDash([]);
 }
 
-// ==========================================
-// ЛАСТИК
-// ==========================================
 function pointToLineDistance(px, py, x1, y1, x2, y2) {
     const A = px - x1; const B = py - y1; const C = x2 - x1; const D = y2 - y1;
     const dot = A * C + B * D;
@@ -418,9 +415,6 @@ function deleteLineAtPoint(x, y) {
     }
 }
 
-// ==========================================
-// ОБРАБОТЧИКИ ГРАФИКА
-// ==========================================
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
     if (isEraserEnabled) { deleteLineAtPoint(param.point.x, param.point.y); return; }
@@ -441,7 +435,6 @@ function handleChartClick(param) {
         });
         activeHorizontalLines.push({ price: price, line: line, color: '#f59e0b' });
 
-        // 🔹 Сохраняем БЕЗ поля line (оно не сериализуется)
         if (currentSymbol) {
             window.savedHorizontalLines[currentSymbol] = activeHorizontalLines.map(hl => ({
                 price: hl.price,
@@ -497,7 +490,6 @@ function handlePencilDraw(param) {
     lastPencilPoint = param.point;
 }
 
-// 🔹 Завершение штриха карандаша
 function finishPencilStroke() {
     if (!isDrawing) return;
     if (currentStroke && currentStroke.length >= 2) {
@@ -512,9 +504,6 @@ function finishPencilStroke() {
     lastPencilPoint = null;
 }
 
-// ==========================================
-// ЛИНЕЙКА
-// ==========================================
 function showRulerMeasurement(start, end) {
     if (!start || !end || !candleSeries) return;
 
@@ -610,9 +599,6 @@ function showRulerMeasurement(start, end) {
     els.rulerMeasurement.style.display = 'block';
 }
 
-// ==========================================
-// МАГНИТ
-// ==========================================
 function createMagnetIndicator() {
     if (!chart || !els.chartWrapper) return;
     removeMagnetIndicator();
@@ -676,9 +662,6 @@ function updateMagnetIndicator(param) {
     }
 }
 
-// ==========================================
-// СОХРАНЕНИЕ / ВОССТАНОВЛЕНИЕ
-// ==========================================
 function saveCurrentDrawings(symbol) {
     if (!symbol) return;
     window.savedTrendLines[symbol] = activeTrendlines;
