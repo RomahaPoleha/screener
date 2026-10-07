@@ -103,6 +103,7 @@ function renderGroupsModal() {
                 <span style="width:12px; height:12px; background:${c.hex}; display:inline-block;"></span>
                 <span style="font-size:11px; font-weight:700; color:${c.hex}; text-transform:uppercase; letter-spacing:1px;">${c.label} (${symbols.length})</span>
                 ${symbols.length >= 2 ? `<button onclick="openCollageFromModal('${c.id}')" style="margin-left:auto; padding:2px 8px; background:#2a2a2a; border:1px solid #444444; color:#ffffff; font-size:10px; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">Коллаж</button>` : ''}
+                ${symbols.length >= 1 ? `<button onclick="clearColorGroup('${c.id}')" style="margin-left:auto; padding:2px 6px; background:#555; border:1px solid #777; color:#fff; font-size:10px; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">Очистить</button>` : ''}
             </div>`;
 
         for (const s of symbols) {
@@ -114,6 +115,18 @@ function renderGroupsModal() {
         html += '</div>';
     }
     body.innerHTML = html;
+}
+
+function clearColorGroup(colorId) {
+    // Remove all coins of this color from coinColors
+    Object.keys(coinColors).forEach(symbol => {
+        if (coinColors[symbol] === colorId) {
+            delete coinColors[symbol];
+        }
+    });
+    localStorage.setItem('coinColors', JSON.stringify(coinColors));
+    applyLocalFilters();
+    renderGroupsModal();
 }
 
 function openChartFromGroup(symbol) {
