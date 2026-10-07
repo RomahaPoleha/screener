@@ -2,13 +2,9 @@
 // collage.js — КОЛЛАЖ ГРУПП МОНЕТ
 // ==========================================
 
-// 🔹 Глобальная переменная, чтобы chart.js мог её читать
 window.collageState = null;
 let collageCharts = [];
 
-// ==========================================
-// ОТКРЫТИЕ КОЛЛАЖА
-// ==========================================
 function openCollage(colorId) {
     const symbols = Object.keys(coinColors).filter(s => coinColors[s] === colorId).sort();
     if (symbols.length < 2) return;
@@ -52,9 +48,6 @@ function openCollageFromModal(colorId) {
     openCollage(colorId);
 }
 
-// ==========================================
-// НАВИГАЦИЯ ПО СТРАНИЦАМ
-// ==========================================
 function collagePrevPage() {
     if (!window.collageState || window.collageState.page === 0) return;
     window.collageState.page--;
@@ -82,9 +75,6 @@ function updateCollageControls(pages) {
     info.textContent = `${window.collageState.page + 1}/${pages}`;
 }
 
-// ==========================================
-// УНИЧТОЖЕНИЕ ГРАФИКОВ
-// ==========================================
 function destroyCollageCharts() {
     for (const entry of collageCharts) {
         try { if (entry.ws) { entry.ws.onclose = null; entry.ws.close(); } } catch(e) {}
@@ -99,9 +89,6 @@ function destroyCollageCharts() {
     collageCharts = [];
 }
 
-// ==========================================
-// РЕНДЕР СТРАНИЦЫ
-// ==========================================
 function renderCollagePage() {
     destroyCollageCharts();
     const wrap = document.getElementById('collageWrap');
@@ -125,7 +112,6 @@ function renderCollagePage() {
         const sym = pageSymbols[i];
 
         if (sym) {
-            // 🔹 Добавляем кнопку "Развернуть" и убираем cell.onclick
             cell.innerHTML = `
                 <div class="collage-label" id="collageLabel_${i}"></div>
                 <div id="collageChart_${i}" style="width:100%;height:100%;"></div>
@@ -136,10 +122,9 @@ function renderCollagePage() {
                 </div>
             `;
 
-            // 🔹 Только кнопка открывает график, обычный клик по ячейке ничего не делает
             const expandBtn = cell.querySelector('.collage-expand-btn');
             expandBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Останавливаем всплытие, чтобы не мешать графику
+                e.stopPropagation();
                 exitCollage();
                 openChart(sym);
             });
@@ -154,9 +139,6 @@ function renderCollagePage() {
     updateCollageControls(pages);
 }
 
-// ==========================================
-// ИНИЦИАЛИЗАЦИЯ МИНИ-ГРАФИКА
-// ==========================================
 function initCollageChart(index, symbol) {
     const container = document.getElementById('collageChart_' + index);
     if (!container) return;
@@ -169,7 +151,6 @@ function initCollageChart(index, symbol) {
         timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#222222', rightOffset: 6, barSpacing: 4 },
         rightPriceScale: { borderColor: '#222222', scaleMargins: { top: 0.1, bottom: 0.2 } },
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        // 🔹 ВКЛЮЧАЕМ интерактивность (скролл и зум)
         handleScroll: {
             mouseWheel: true,
             pressedMouseMove: true,
@@ -226,7 +207,8 @@ function initCollageChart(index, symbol) {
                 drawCollageDrawings(chart, candleSeries, container, symbol);
             });
 
-            // 🔹 Перерисовка рисунков при скролле/зуме пользователем
+            // 🔹 ИСПРАВЛЕНИЕ: Подписка на изменение видимого диапазона
+            // При скролле/зуме перерисовываем рисунки на канвасе
             chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
                 requestAnimationFrame(() => {
                     drawCollageDrawings(chart, candleSeries, container, symbol);
@@ -260,9 +242,6 @@ function initCollageChart(index, symbol) {
     };
 }
 
-// ==========================================
-// ОТОБРАЖЕНИЕ СОХРАНЕННЫХ РИСУНКОВ В КОЛЛАЖЕ
-// ==========================================
 function drawCollageDrawings(chart, candleSeries, container, symbol) {
     if (typeof window.savedTrendLines === 'undefined' ||
         typeof window.savedHorizontalLines === 'undefined' ||
@@ -275,7 +254,7 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
     const hasAnyDrawings = horizontalLines.length > 0 || trendLines.length > 0 || pencilStrokes.length > 0;
     if (!hasAnyDrawings) return;
 
-    // 1. Горизонтальные линии
+    // 1. Горизонтальные линии (через встроенный API — работает автоматически)
     horizontalLines.forEach(hl => {
         try {
             candleSeries.createPriceLine({
