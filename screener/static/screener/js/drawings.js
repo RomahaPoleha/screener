@@ -155,7 +155,8 @@ function togglePencil() {
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
         initPencilCanvas();
     } else {
-        isDrawing = false; lastPencilPoint = null;
+        // 🔹 ИСПРАВЛЕНИЕ: сохраняем текущий штрих перед выключением
+        finishPencilStroke();
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
         redrawAllPersistentDrawings();
     }
@@ -498,6 +499,27 @@ function handlePencilDraw(param) {
         pencilCtx.lineTo(param.point.x, param.point.y); pencilCtx.stroke();
     }
     lastPencilPoint = param.point;
+}
+
+// 🔹 НОВАЯ ФУНКЦИЯ: завершение рисования карандашом
+function finishPencilStroke() {
+    if (!isDrawing) return;
+
+    // Сохраняем текущий штрих в массив
+    if (currentStroke && currentStroke.length >= 2) {
+        pencilStrokes.push(currentStroke);
+
+        // Сохраняем в localStorage
+        if (currentSymbol) {
+            window.savedPencilDrawings[currentSymbol] = pencilStrokes;
+            localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
+        }
+    }
+
+    // Сбрасываем состояние
+    isDrawing = false;
+    currentStroke = null;
+    lastPencilPoint = null;
 }
 
 // ==========================================
