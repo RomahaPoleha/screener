@@ -10,6 +10,11 @@ function openCollage(colorId) {
     if (symbols.length < 2) return;
     window.collageState = { colorId, symbols, page: 0 };
     els.chartWrapper.style.display = 'none';
+    // Скрываем кнопку загрузки истории при открытии коллажа
+    const historyBtn = document.getElementById('loadHistoryBtn');
+    if (historyBtn) {
+        historyBtn.style.display = 'none';
+    }
     els.chartHint.style.display = 'none';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'none';
@@ -28,6 +33,11 @@ function exitCollage() {
     if (!window.collageState) return;
     destroyCollageCharts();
     window.collageState = null;
+    // Показываем кнопку загрузки истории при закрытии коллажа
+    const historyBtn = document.getElementById('loadHistoryBtn');
+    if (historyBtn) {
+        historyBtn.style.display = '';
+    }
     const wrap = document.getElementById('collageWrap');
     if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
     const controls = document.getElementById('collageControls');
