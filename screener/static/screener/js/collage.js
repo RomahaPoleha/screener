@@ -2,9 +2,13 @@
 // collage.js — КОЛЛАЖ ГРУПП МОНЕТ
 // ==========================================
 
+// 🔹 Глобальная переменная, чтобы chart.js мог её читать
 window.collageState = null;
 let collageCharts = [];
 
+// ==========================================
+// ОТКРЫТИЕ КОЛЛАЖА
+// ==========================================
 function openCollage(colorId) {
     const symbols = Object.keys(coinColors).filter(s => coinColors[s] === colorId).sort();
     if (symbols.length < 2) return;
@@ -48,6 +52,9 @@ function openCollageFromModal(colorId) {
     openCollage(colorId);
 }
 
+// ==========================================
+// НАВИГАЦИЯ ПО СТРАНИЦАМ
+// ==========================================
 function collagePrevPage() {
     if (!window.collageState || window.collageState.page === 0) return;
     window.collageState.page--;
@@ -75,6 +82,9 @@ function updateCollageControls(pages) {
     info.textContent = `${window.collageState.page + 1}/${pages}`;
 }
 
+// ==========================================
+// УНИЧТОЖЕНИЕ ГРАФИКОВ
+// ==========================================
 function destroyCollageCharts() {
     for (const entry of collageCharts) {
         try { if (entry.ws) { entry.ws.onclose = null; entry.ws.close(); } } catch(e) {}
@@ -89,6 +99,9 @@ function destroyCollageCharts() {
     collageCharts = [];
 }
 
+// ==========================================
+// РЕНДЕР СТРАНИЦЫ
+// ==========================================
 function renderCollagePage() {
     destroyCollageCharts();
     const wrap = document.getElementById('collageWrap');
@@ -105,14 +118,33 @@ function renderCollagePage() {
     wrap.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     wrap.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
     wrap.style.gap = '2px';
+
     for (let i = 0; i < cols * rows; i++) {
         const cell = document.createElement('div');
         cell.style.cssText = 'position:relative; background:#0f0f0f; overflow:hidden; min-height:0; min-width:0;';
         const sym = pageSymbols[i];
+
         if (sym) {
-            cell.innerHTML = `<div class="collage-label" id="collageLabel_${i}"></div><div id="collageChart_${i}" style="width:100%;height:100%;"></div>`;
-            cell.onclick = ((s) => () => { exitCollage(); openChart(s); })(sym);
-            cell.title = 'Открыть в полном графике';
+            // 🔹 Добавляем кнопку "Развернуть" и убираем cell.onclick
+            cell.innerHTML = `
+                <div class="collage-label" id="collageLabel_${i}"></div>
+                <div id="collageChart_${i}" style="width:100%;height:100%;"></div>
+                <div class="collage-expand-btn" data-symbol="${sym}" title="Открыть полный график">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                    </svg>
+                </div>
+            `;
+
+            // 🔹 Только кнопка открывает график, обычный клик по ячейке ничего не делает
+            const expandBtn = cell.querySelector('.collage-expand-btn');
+            expandBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Останавливаем всплытие, чтобы не мешать графику
+                exitCollage();
+                openChart(sym);
+            });
+
+            cell.title = 'Используйте колесико или перетаскивание для навации. Нажмите кнопку в углу для открытия.';
         } else {
             cell.innerHTML = '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#333333; font-size:11px; text-transform:uppercase; letter-spacing:1px;">—</div>';
         }
@@ -122,9 +154,13 @@ function renderCollagePage() {
     updateCollageControls(pages);
 }
 
+// ==========================================
+// ИНИЦИАЛИЗАЦИЯ МИНИ-ГРАФИКА
+// ==========================================
 function initCollageChart(index, symbol) {
     const container = document.getElementById('collageChart_' + index);
     if (!container) return;
+
     const chart = LightweightCharts.createChart(container, {
         width: container.clientWidth,
         height: container.clientHeight,
@@ -133,9 +169,21 @@ function initCollageChart(index, symbol) {
         timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#222222', rightOffset: 6, barSpacing: 4 },
         rightPriceScale: { borderColor: '#222222', scaleMargins: { top: 0.1, bottom: 0.2 } },
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        handleScroll: false,
-        handleScale: false,
+        // 🔹 ВКЛЮЧАЕМ интерактивность (скролл и зум)
+        handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: false
+        },
+        handleScale: {
+            mouseWheel: true,
+            pinch: true,
+            axisPressedMouseMove: true,
+            axisDoubleClickReset: true
+        },
     });
+
     const candleSeries = chart.addCandlestickSeries({
         upColor: '#22c55e', downColor: '#ef4444',
         borderVisible: false,
@@ -173,10 +221,16 @@ function initCollageChart(index, symbol) {
             })));
             chart.timeScale().fitContent();
 
-            // 🔹 ИСПРАВЛЕНИЕ: requestAnimationFrame даёт chart время обновить координаты после fitContent().
-            // Без этого timeToCoordinate() вернёт null, и рисунки не отобразятся.
+            // 🔹 Первичная отрисовка рисунков
             requestAnimationFrame(() => {
                 drawCollageDrawings(chart, candleSeries, container, symbol);
+            });
+
+            // 🔹 Перерисовка рисунков при скролле/зуме пользователем
+            chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+                requestAnimationFrame(() => {
+                    drawCollageDrawings(chart, candleSeries, container, symbol);
+                });
             });
         })
         .catch(() => {});
@@ -206,6 +260,9 @@ function initCollageChart(index, symbol) {
     };
 }
 
+// ==========================================
+// ОТОБРАЖЕНИЕ СОХРАНЕННЫХ РИСУНКОВ В КОЛЛАЖЕ
+// ==========================================
 function drawCollageDrawings(chart, candleSeries, container, symbol) {
     if (typeof window.savedTrendLines === 'undefined' ||
         typeof window.savedHorizontalLines === 'undefined' ||
@@ -231,7 +288,7 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
         } catch(e) {}
     });
 
-    // 2. Тренды + карандаш — на отдельном канвасе
+    // 2. Трендовые линии + карандаш — на отдельном канвасе
     const needCanvas = trendLines.length > 0 || pencilStrokes.length > 0;
     if (!needCanvas) return;
 
@@ -247,6 +304,8 @@ function drawCollageDrawings(chart, candleSeries, container, symbol) {
     canvas.width = rect.width;
     canvas.height = rect.height;
     const ctx = canvas.getContext('2d');
+
+    // 🔹 ИСПРАВЛЕНИЕ: очищаем канвас ВСЕГДА, а не только при index === 0
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Трендовые линии

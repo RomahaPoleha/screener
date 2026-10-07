@@ -721,3 +721,30 @@ body {
 .chart-history-btn i {
     font-size: 11px;
 }
+
+.collage-expand-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    background: rgba(15, 15, 15, 0.8);
+    border: 1px solid #334155;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.15s ease;
+    backdrop-filter: blur(2px);
+}
+.collage-expand-btn:hover {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border-color: #f59e0b;
+}
+.collage-expand-btn svg {
+    pointer-events: none;
+}
