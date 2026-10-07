@@ -39,7 +39,15 @@ function exitCollage() {
     if (resetBtn) resetBtn.style.display = '';
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
     els.pencilCanvas.style.display = '';
-    if (chart) chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
+    if (chart) {
+        chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
+
+        // 🔹 ИСПРАВЛЕНИЕ: восстанавливаем рисунки основного графика после выхода из коллажа
+        requestAnimationFrame(() => {
+            if (typeof initPencilCanvas === 'function') initPencilCanvas();
+            if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
+        });
+    }
 }
 
 function openCollageFromModal(colorId) {
@@ -174,7 +182,6 @@ function initCollageChart(index, symbol) {
     });
     chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
 
-    // 🔹 ИСПРАВЛЕНИЕ: добавлено свойство data: null для хранения локальных данных графика
     const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null };
     collageCharts.push(entry);
 
@@ -190,8 +197,6 @@ function initCollageChart(index, symbol) {
         .then(history => {
             if (!history || !history.length) return;
             const data = history.slice(-200).map(c => ({ ...c, time: safeTime(c.time) }));
-
-            // 🔹 ИСПРАВЛЕНИЕ: сохраняем данные в entry для последующего расчёта координат
             entry.data = data;
 
             const first = data[0].close;
@@ -206,12 +211,39 @@ function initCollageChart(index, symbol) {
             })));
             chart.timeScale().fitContent();
 
-            // 🔹 ИСПРАВЛЕНИЕ: передаём entry.data в функцию отрисовки
+            // 🔹 Горизонтальные линии — создаём ОДИН РАЗ через встроенный API
+            const hLines = (window.savedHorizontalLines && window.savedHorizontalLines[symbol]) || [];
+            hLines.forEach(hl => {
+                try {
+                    candleSeries.createPriceLine({
+                        price: hl.price,
+                        color: (hl.color && typeof hl.color === 'string') ? hl.color : '#f59e0b80',
+                        lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Dashed,
+                        axisLabelVisible: false
+                    });
+                } catch(e) {}
+            });
+
+            // 🔹 Алерты — создаём ОДИН РАЗ через встроенный API
+            const alerts = (window.savedAlerts && window.savedAlerts[symbol]) || [];
+            alerts.forEach(alert => {
+                try {
+                    candleSeries.createPriceLine({
+                        price: alert.price,
+                        color: '#ef444480',
+                        lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Dotted,
+                        axisLabelVisible: false
+                    });
+                } catch(e) {}
+            });
+
+            // 🔹 Canvas-рисунки (трендовые + карандаш) — с перерисовкой при скролле
             requestAnimationFrame(() => {
                 drawCollageDrawings(chart, candleSeries, container, symbol, entry.data);
             });
 
-            // 🔹 ИСПРАВЛЕНИЕ: передаём entry.data при перерисовке во время скролла/зума
             chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
                 requestAnimationFrame(() => {
                     drawCollageDrawings(chart, candleSeries, container, symbol, entry.data);
@@ -247,31 +279,12 @@ function initCollageChart(index, symbol) {
 
 function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) {
     if (typeof window.savedTrendLines === 'undefined' ||
-        typeof window.savedHorizontalLines === 'undefined' ||
         typeof window.savedPencilDrawings === 'undefined') return;
 
-    const horizontalLines = window.savedHorizontalLines[symbol] || [];
     const trendLines = window.savedTrendLines[symbol] || [];
     const pencilStrokes = window.savedPencilDrawings[symbol] || [];
 
-    const hasAnyDrawings = horizontalLines.length > 0 || trendLines.length > 0 || pencilStrokes.length > 0;
-    if (!hasAnyDrawings) return;
-
-    // 1. Горизонтальные линии (через встроенный API)
-    horizontalLines.forEach(hl => {
-        try {
-            candleSeries.createPriceLine({
-                price: hl.price,
-                color: (hl.color && typeof hl.color === 'string') ? hl.color : '#f59e0b80',
-                lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Dashed,
-                axisLabelVisible: false
-            });
-        } catch(e) {}
-    });
-
-    const needCanvas = trendLines.length > 0 || pencilStrokes.length > 0;
-    if (!needCanvas) return;
+    if (trendLines.length === 0 && pencilStrokes.length === 0) return;
 
     let canvas = container.querySelector('.collage-drawing-canvas');
     if (!canvas) {
@@ -287,36 +300,34 @@ function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) 
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 🔹 ИСПРАВЛЕНИЕ: Умный хелпер для получения координат с резервным расчётом
+    // 🔹 Умный хелпер с точным fallback через getVisibleLogicalRange
     const getXY = (time, price) => {
         let x = chart.timeScale().timeToCoordinate(time);
         let y = candleSeries.priceToCoordinate(price);
 
-        // Если нативный метод сработал, возвращаем результат
         if (x !== null && y !== null) return { x, y };
 
-        // 🔹 Резервный алгоритм (как в drawings.js, но для локальных данных коллажа)
-        if (chartData && chartData.length > 1) {
-            const lastCandle = chartData[chartData.length - 1];
-            const firstCandle = chartData[0];
-
-            const lastX = chart.timeScale().timeToCoordinate(lastCandle.time);
-            const firstX = chart.timeScale().timeToCoordinate(firstCandle.time);
-
-            if (lastX !== null && firstX !== null) {
-                const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
-                const timeDiff = time - lastCandle.time;
-                const barsOffset = timeDiff / secondsPerBar;
-                const totalBars = chartData.length - 1;
-                const pixelsPerBar = (lastX - firstX) / totalBars;
-
-                x = lastX + (barsOffset * pixelsPerBar);
+        // Fallback для X через видимый диапазон
+        if (x === null && chartData && chartData.length > 1) {
+            const visibleRange = chart.timeScale().getVisibleLogicalRange();
+            if (visibleRange && visibleRange.to !== visibleRange.from) {
+                const lastCandle = chartData[chartData.length - 1];
+                const lastX = chart.timeScale().timeToCoordinate(lastCandle.time);
+                if (lastX !== null) {
+                    const secondsPerBar = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400}[currentTF] || 60;
+                    const barsOffset = (time - lastCandle.time) / secondsPerBar;
+                    const chartWidth = container.clientWidth;
+                    const barsCount = visibleRange.to - visibleRange.from;
+                    const pixelsPerBar = chartWidth / barsCount;
+                    x = lastX + (barsOffset * pixelsPerBar);
+                }
             }
         }
+
         return { x, y };
     };
 
-    // 2. Трендовые линии
+    // Трендовые линии
     ctx.strokeStyle = '#f59e0b80';
     ctx.lineWidth = 1;
     ctx.setLineDash([]);
@@ -333,7 +344,7 @@ function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) 
         } catch(e) {}
     });
 
-    // 3. Карандашные рисунки
+    // Карандашные рисунки
     if (pencilStrokes.length > 0) {
         ctx.strokeStyle = '#f59e0b80';
         ctx.lineWidth = 1.5;
