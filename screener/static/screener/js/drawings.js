@@ -1,9 +1,8 @@
 // ==========================================
 // drawings.js — ИНСТРУМЕНТЫ РИСОВАНИЯ
-// Тренды, карандаш, линейка, ластик, магнит, горизонтальные линии
 // ==========================================
 
-// --- Переменные состояния инструментов ---
+// --- Состояние инструментов ---
 let isDrawingTrendLine = false, trendLinePreview = null;
 let isMagnetEnabled = false, isAlertModeEnabled = false, magnetIndicator = null, activeAlerts = [];
 let isTrendLineEnabled = false, trendLineStart = null, activeTrendlines = [];
@@ -20,12 +19,11 @@ let pencilStrokes = [];
 let currentStroke = null;
 let horizontalLinePreview = null;
 
-// --- Глобальные переменные для хранения рисунков по символам ---
+// --- Глобальные хранилища ---
 window.savedTrendLines = {};
 window.savedHorizontalLines = {};
 window.savedPencilDrawings = {};
 
-// Загрузить из localStorage
 try {
     window.savedTrendLines = JSON.parse(localStorage.getItem('savedTrendLines') || '{}');
     window.savedHorizontalLines = JSON.parse(localStorage.getItem('savedHorizontalLines') || '{}');
@@ -40,7 +38,7 @@ if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStora
 if (localStorage.getItem('showDrawingTools') !== null) showDrawingTools = localStorage.getItem('showDrawingTools') === 'true';
 
 // ==========================================
-// УТИЛИТЫ ИНСТРУМЕНТОВ
+// УТИЛИТЫ
 // ==========================================
 function clearSpecificDrawings(type) {
     if (type === 'alerts') {
@@ -67,7 +65,6 @@ function clearSpecificDrawings(type) {
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
     }
 
-    // Сохранить изменения в localStorage
     if (currentSymbol) {
         localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
         localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
@@ -155,7 +152,7 @@ function togglePencil() {
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
         initPencilCanvas();
     } else {
-        // 🔹 ИСПРАВЛЕНИЕ: сохраняем текущий штрих перед выключением
+        // 🔹 Завершаем текущий штрих перед выключением
         finishPencilStroke();
         if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
         redrawAllPersistentDrawings();
@@ -347,7 +344,7 @@ function redrawAllPersistentDrawings() {
 }
 
 // ==========================================
-// УДАЛЕНИЕ (ЛАСТИК)
+// ЛАСТИК
 // ==========================================
 function pointToLineDistance(px, py, x1, y1, x2, y2) {
     const A = px - x1; const B = py - y1; const C = x2 - x1; const D = y2 - y1;
@@ -368,7 +365,7 @@ function deleteLineAtPoint(x, y) {
     if (!clickPrice) return;
     const threshold = 50;
 
-    const savedList = window.savedAlerts?.[currentSymbol] || [];
+    const savedList = (window.savedAlerts && window.savedAlerts[currentSymbol]) || [];
     for (let i = savedList.length - 1; i >= 0; i--) {
         const alert = savedList[i];
         const alertY = candleSeries.priceToCoordinate(alert.price);
@@ -422,7 +419,7 @@ function deleteLineAtPoint(x, y) {
 }
 
 // ==========================================
-// ОБРАБОТЧИКИ СОБЫТИЙ ГРАФИКА
+// ОБРАБОТЧИКИ ГРАФИКА
 // ==========================================
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
@@ -442,9 +439,9 @@ function handleChartClick(param) {
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
             title: `${price.toFixed(currentPrecision)}`
         });
-        activeHorizontalLines.push({ price: price, color: '#f59e0b' });
+        activeHorizontalLines.push({ price: price, line: line, color: '#f59e0b' });
 
-        // 🔹 ИСПРАВЛЕНИЕ: сохраняем без поля line (оно не сериализуется)
+        // 🔹 Сохраняем БЕЗ поля line (оно не сериализуется)
         if (currentSymbol) {
             window.savedHorizontalLines[currentSymbol] = activeHorizontalLines.map(hl => ({
                 price: hl.price,
@@ -473,7 +470,6 @@ function handleChartClick(param) {
             trendLinePreview = null;
             redrawAllPersistentDrawings();
 
-            // Сохранить трендовые линии для текущего символа
             if (currentSymbol) {
                 window.savedTrendLines[currentSymbol] = activeTrendlines;
                 localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
@@ -501,29 +497,23 @@ function handlePencilDraw(param) {
     lastPencilPoint = param.point;
 }
 
-// 🔹 НОВАЯ ФУНКЦИЯ: завершение рисования карандашом
+// 🔹 Завершение штриха карандаша
 function finishPencilStroke() {
     if (!isDrawing) return;
-
-    // Сохраняем текущий штрих в массив
     if (currentStroke && currentStroke.length >= 2) {
         pencilStrokes.push(currentStroke);
-
-        // Сохраняем в localStorage
         if (currentSymbol) {
             window.savedPencilDrawings[currentSymbol] = pencilStrokes;
             localStorage.setItem('savedPencilDrawings', JSON.stringify(window.savedPencilDrawings));
         }
     }
-
-    // Сбрасываем состояние
     isDrawing = false;
     currentStroke = null;
     lastPencilPoint = null;
 }
 
 // ==========================================
-// ЛИНЕЙКА — ПОКАЗ ИЗМЕРЕНИЙ
+// ЛИНЕЙКА
 // ==========================================
 function showRulerMeasurement(start, end) {
     if (!start || !end || !candleSeries) return;
@@ -687,7 +677,7 @@ function updateMagnetIndicator(param) {
 }
 
 // ==========================================
-// СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ РИСУНКОВ ПО СИМВОЛАМ
+// СОХРАНЕНИЕ / ВОССТАНОВЛЕНИЕ
 // ==========================================
 function saveCurrentDrawings(symbol) {
     if (!symbol) return;
@@ -712,11 +702,8 @@ function restoreDrawingsForSymbol(symbol) {
     }));
     pencilStrokes = window.savedPencilDrawings[symbol] || [];
 
-    // Перерисовать горизонтальные линии
     activeHorizontalLines.forEach(hl => {
-        try {
-            if (hl.line) candleSeries.removePriceLine(hl.line);
-        } catch(e){}
+        try { if (hl.line) candleSeries.removePriceLine(hl.line); } catch(e){}
         const line = candleSeries.createPriceLine({
             price: hl.price, color: hl.color || '#f59e0b', lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
