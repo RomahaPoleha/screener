@@ -19,6 +19,20 @@ let isHorizontalLineEnabled = false, activeHorizontalLines = [];
 let pencilStrokes = [];
 let currentStroke = null;
 
+// --- Хранение рисунков по символам (для коллажа) ---
+let savedTrendLines = {};      // symbol -> array of trendlines
+let savedHorizontalLines = {}; // symbol -> array of horizontal lines  
+let savedPencilDrawings = {};  // symbol -> array of pencil strokes
+
+// Загрузить из localStorage
+try {
+    savedTrendLines = JSON.parse(localStorage.getItem('savedTrendLines') || '{}');
+    savedHorizontalLines = JSON.parse(localStorage.getItem('savedHorizontalLines') || '{}');
+    savedPencilDrawings = JSON.parse(localStorage.getItem('savedPencilDrawings') || '{}');
+} catch(e) {
+    savedTrendLines = {}; savedHorizontalLines = {}; savedPencilDrawings = {};
+}
+
 if (localStorage.getItem('magnetEnabled') !== null) isMagnetEnabled = localStorage.getItem('magnetEnabled') === 'true';
 if (localStorage.getItem('showDrawingTools') !== null) showDrawingTools = localStorage.getItem('showDrawingTools') === 'true';
 
@@ -29,12 +43,15 @@ function clearSpecificDrawings(type) {
     if (type === 'alerts') {
         if (currentSymbol) AlertManager.clearSymbol(currentSymbol);
     } else if (type === 'trendlines') {
+        if (currentSymbol) savedTrendLines[currentSymbol] = [];
         activeTrendlines = [];
         redrawAllPersistentDrawings();
     } else if (type === 'horizontalLines') {
+        if (currentSymbol) savedHorizontalLines[currentSymbol] = [];
         activeHorizontalLines.forEach(hl => { try { candleSeries.removePriceLine(hl.line); } catch(e){} });
         activeHorizontalLines = [];
     } else if (type === 'pencil') {
+        if (currentSymbol) savedPencilDrawings[currentSymbol] = [];
         pencilStrokes = [];
         currentStroke = null;
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
@@ -46,11 +63,68 @@ function clearSpecificDrawings(type) {
         els.rulerMeasurement.style.display = 'none';
         if (pencilCtx) pencilCtx.clearRect(0, 0, els.pencilCanvas.width, els.pencilCanvas.height);
     }
+    
+    // Сохраняем изменения в localStorage
+    if (currentSymbol) {
+        localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
+        localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
+        localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+    }
 }
 
 function updateToolUI(btnId, isActive) {
     const btn = document.getElementById(btnId);
     if (btn) btn.classList.toggle('active', isActive);
+}
+
+// ==========================================
+// СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ РИСУНКОВ ПО СИМВОЛАМ
+// ==========================================
+function saveCurrentDrawings(symbol) {
+    if (!symbol) return;
+    
+    // Сохраняем текущие рисунки для символа
+    savedTrendLines[symbol] = activeTrendlines;
+    savedHorizontalLines[symbol] = activeHorizontalLines;
+    savedPencilDrawings[symbol] = pencilStrokes;
+    
+    // Сохраняем в localStorage
+    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+}
+
+function restoreDrawingsForSymbol(symbol) {
+    // Восстанавливаем рисунки для символа
+    activeTrendlines = savedTrendLines[symbol] || [];
+    activeHorizontalLines = savedHorizontalLines[symbol] || [];
+    pencilStrokes = savedPencilDrawings[symbol] || [];
+    
+    // Перерисовываем горизонтальные линии
+    activeHorizontalLines.forEach(hl => {
+        try { candleSeries.removePriceLine(hl.line); } catch(e){}
+    });
+    activeHorizontalLines.forEach(hl => {
+        const line = candleSeries.createPriceLine({
+            price: hl.price, color: hl.color || '#f59e0b', lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
+            title: `${hl.price.toFixed(currentPrecision)}`
+        });
+        hl.line = line;
+    });
+    
+    // Перерисовываем все рисунки
+    redrawAllPersistentDrawings();
+}
+
+function clearDrawingsForSymbol(symbol) {
+    if (savedTrendLines[symbol]) delete savedTrendLines[symbol];
+    if (savedHorizontalLines[symbol]) delete savedHorizontalLines[symbol];
+    if (savedPencilDrawings[symbol]) delete savedPencilDrawings[symbol];
+    
+    localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
+    localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
+    localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
 }
 
 function toggleDrawingToolsVisibility() {
@@ -400,6 +474,12 @@ function handleChartClick(param) {
             title: `${price.toFixed(currentPrecision)}`
         });
         activeHorizontalLines.push({ price: price, line: line });
+        
+        // Сохраняем горизонтальные линии для текущего символа
+        if (currentSymbol) {
+            savedHorizontalLines[currentSymbol] = activeHorizontalLines;
+            localStorage.setItem('savedHorizontalLines', JSON.stringify(savedHorizontalLines));
+        }
     }
     else if (isTrendLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
@@ -419,6 +499,12 @@ function handleChartClick(param) {
             trendLineStart = null;
             trendLinePreview = null;
             redrawAllPersistentDrawings();
+            
+            // Сохраняем трендовые линии для текущего символа
+            if (currentSymbol) {
+                savedTrendLines[currentSymbol] = activeTrendlines;
+                localStorage.setItem('savedTrendLines', JSON.stringify(savedTrendLines));
+            }
         }
     }
 }

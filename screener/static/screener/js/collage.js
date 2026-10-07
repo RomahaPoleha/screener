@@ -7,6 +7,13 @@
 let collageState = null;   // { colorId, symbols, page }
 let collageCharts = [];    // { chart, candleSeries, volumeSeries, ws, symbol, container }
 
+// Глобальные переменные для рисунков (определяются в drawings.js)
+// Определим их здесь, если они еще не определены
+if (typeof savedTrendLines === 'undefined') var savedTrendLines = {};
+if (typeof savedHorizontalLines === 'undefined') var savedHorizontalLines = {};
+if (typeof savedPencilDrawings === 'undefined') var savedPencilDrawings = {};
+if (typeof savedAlerts === 'undefined') var savedAlerts = {};
+
 // ==========================================
 // ОТКРЫТИЕ КОЛЛАЖА
 // ==========================================
@@ -100,12 +107,98 @@ function updateCollageControls(pages) {
 }
 
 // ==========================================
+// ОТОБРАЖЕНИЕ РИСУНКОВ НА МИНИ-ГРАФИКАХ
+// ==========================================
+function drawCollageDrawings(chart, candleSeries, container, symbol, index) {
+    // Рисуем только если доступны сохраненные данные
+    if (typeof savedTrendLines === 'undefined' || typeof savedHorizontalLines === 'undefined') return;
+    
+    // Алерты (из AlertManager)
+    try {
+        if (typeof savedAlerts !== 'undefined' && savedAlerts[symbol]) {
+            const alerts = savedAlerts[symbol].filter(a => a.active);
+            alerts.forEach(alert => {
+                try {
+                    const line = candleSeries.createPriceLine({
+                        price: alert.price,
+                        color: 'rgba(59, 130, 246, 0.6)', // Полупрозрачный синий
+                        lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Dashed,
+                        axisLabelVisible: false // Не показываем метки на маленьких графиках
+                    });
+                } catch(e) {}
+            });
+        }
+    } catch(e) {}
+    
+    // Горизонтальные линии
+    const horizontalLines = savedHorizontalLines[symbol] || [];
+    horizontalLines.forEach(hl => {
+        try {
+            const line = candleSeries.createPriceLine({
+                price: hl.price,
+                color: '#f59e0b80', // Полупрозрачный цвет для маленьких графиков
+                lineWidth: 1,       // Тонкие линии
+                lineStyle: LightweightCharts.LineStyle.Dashed,
+                axisLabelVisible: false // Не показываем метки на маленьких графиках
+            });
+        } catch(e) {}
+    });
+    
+    // Трендовые линии (рисуем на канвасе поверх графика)
+    const trendLines = savedTrendLines[symbol] || [];
+    trendLines.forEach(tl => {
+        try {
+            const x1 = chart.timeScale().timeToCoordinate(tl.time1);
+            const y1 = candleSeries.priceToCoordinate(tl.price1);
+            const x2 = chart.timeScale().timeToCoordinate(tl.time2);
+            const y2 = candleSeries.priceToCoordinate(tl.price2);
+            
+            if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+                // Создаем canvas для рисунков если его еще нет
+                let canvas = container.querySelector('.collage-drawing-canvas');
+                if (!canvas) {
+                    canvas = document.createElement('canvas');
+                    canvas.className = 'collage-drawing-canvas';
+                    canvas.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:5;';
+                    container.appendChild(canvas);
+                }
+                
+                // Устанавливаем размеры канваса
+                const rect = container.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                
+                const ctx = canvas.getContext('2d');
+                
+                // Очищаем канвас перед рисованием (очищаем на первом элементе)
+                if (index === 0) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+                
+                ctx.beginPath();
+                ctx.strokeStyle = '#f59e0b80'; // Полупрозрачный
+                ctx.lineWidth = 1;
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        } catch(e) {}
+    });
+}
+
+// ==========================================
 // УНИЧТОЖЕНИЕ ГРАФИКОВ
 // ==========================================
 function destroyCollageCharts() {
     for (const entry of collageCharts) {
         try { if (entry.ws) { entry.ws.onclose = null; entry.ws.close(); } } catch(e) {}
         try { entry.chart.remove(); } catch(e) {}
+        // Очищаем canvas для рисунков
+        if (entry.container) {
+            const canvas = entry.container.querySelector('.collage-drawing-canvas');
+            if (canvas) canvas.remove();
+        }
     }
     collageCharts = [];
 }
@@ -217,6 +310,10 @@ function initCollageChart(index, symbol) {
             })));
 
             chart.timeScale().fitContent();
+            
+            // Отображаем рисунки на мини-графике в коллаже
+            drawCollageDrawings(chart, candleSeries, container, symbol, index);
+        })
         })
         .catch(() => {});
 

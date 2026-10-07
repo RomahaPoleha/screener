@@ -60,6 +60,11 @@ function updateChartStats() {
 // ЗАКРЫТИЕ ГРАФИКА
 // ==========================================
 function closeChart() {
+    // Сохраняем рисунки текущей монеты перед закрытием
+    if (currentSymbol && typeof saveCurrentDrawings === 'function') {
+        saveCurrentDrawings(currentSymbol);
+    }
+    
     clearSpecificDrawings('trendlines');
     clearSpecificDrawings('horizontalLines');
     clearSpecificDrawings('pencil');
@@ -92,6 +97,12 @@ function closeChart() {
 // ==========================================
 async function openChart(symbol) {
     if (collageState) exitCollage();
+    
+    // Сохраняем рисунки текущей монеты (если есть)
+    if (currentSymbol && typeof saveCurrentDrawings === 'function') {
+        saveCurrentDrawings(currentSymbol);
+    }
+    
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
@@ -265,6 +276,12 @@ async function openChart(symbol) {
                 if (currentStroke && currentStroke.length > 0) {
                     pencilStrokes.push(currentStroke);
                     currentStroke = null;
+                    
+                    // Сохраняем рисунки карандаша для текущего символа
+                    if (currentSymbol && typeof savedPencilDrawings !== 'undefined') {
+                        savedPencilDrawings[currentSymbol] = pencilStrokes;
+                        localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+                    }
                 }
             }
             if (isRulerEnabled && e.button === 0 && isRulerDragging) {
@@ -291,6 +308,12 @@ async function openChart(symbol) {
                 if (currentStroke && currentStroke.length > 0) {
                     pencilStrokes.push(currentStroke);
                     currentStroke = null;
+                    
+                    // Сохраняем рисунки карандаша для текущего символа
+                    if (currentSymbol && typeof savedPencilDrawings !== 'undefined') {
+                        savedPencilDrawings[currentSymbol] = pencilStrokes;
+                        localStorage.setItem('savedPencilDrawings', JSON.stringify(savedPencilDrawings));
+                    }
                 }
             }
             if (isRulerDragging) {
@@ -306,6 +329,11 @@ async function openChart(symbol) {
 
     await loadChartData(symbol, currentTF);
     AlertManager.restoreLines(symbol);
+    
+    // Восстанавливаем рисунки для текущего символа
+    if (typeof restoreDrawingsForSymbol === 'function') {
+        restoreDrawingsForSymbol(symbol);
+    }
     startCandleWebSocket(symbol, currentTF);
     updateWatermark();
     updateChartStats();
