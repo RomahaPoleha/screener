@@ -283,6 +283,22 @@ function initCollageChart(index, symbol) {
 }
 
 // ==========================================
+// Принудительная очистка скальпа на всех графиках коллажа
+// ==========================================
+function clearAllCollageScalpLines() {
+    for (const entry of collageCharts) {
+        if (entry && entry.scalpLines && entry.scalpLines.length > 0) {
+            entry.scalpLines.forEach(line => {
+                try { entry.candleSeries.removePriceLine(line); } catch(e) {}
+            });
+            entry.scalpLines = []; // Обнуляем массив
+        }
+    }
+    collageScalpCache = {}; // Сбрасываем кэш сигнатур
+}
+
+
+// ==========================================
 // УМНОЕ ОБНОВЛЕНИЕ СКАЛЬПА В КОЛЛАЖЕ
 // ==========================================
 function startCollageScalpUpdates(symbols) {
@@ -293,6 +309,12 @@ function startCollageScalpUpdates(symbols) {
         if (!window.collageState) {
             stopCollageScalpUpdates();
             return;
+        }
+
+        // 🔹 НОВОЕ: Если пользователь выключил скальп в настройках прямо сейчас
+        if (typeof scalpEnabled !== 'undefined' && !scalpEnabled) {
+            clearAllCollageScalpLines(); // Удаляем линии
+            return; // Прерываем цикл, запросы к серверу НЕ отправляются
         }
 
         for (const sym of symbols) {
@@ -308,7 +330,7 @@ function startCollageScalpUpdates(symbols) {
                     .map(d => `${d.price}-${d.volume}`)
                     .join('|');
 
-                // Если данные не изменились, пропускаем перерисовку (защита от мерцания)
+                // Если данные не изменились, пропускаем перерисовку
                 if (collageScalpCache[sym] === signature) continue;
 
                 // Данные изменились! Обновляем кэш и перерисовываем
@@ -319,7 +341,7 @@ function startCollageScalpUpdates(symbols) {
                     await drawScalpOnCollageChart(sym, entry.candleSeries, entry);
                 }
             } catch (e) {
-                // Игнорируем ошибки сети для отдельных монет
+                // Игнорируем ошибки сети
             }
         }
     }, 5000); // Обновление каждые 5 секунд
