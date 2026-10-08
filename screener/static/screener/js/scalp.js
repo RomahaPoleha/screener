@@ -4,32 +4,29 @@
 // ==========================================
 
 // --- Переменные состояния ---
-// (isScalpLoading уже объявлен в state_core.js, здесь не объявляем!)
 let scalpLines = [];
 let scalpEnabled = false;
 let scalpUpdateTimer = null;
 let previousScalpData = {};
 
-// Конфигурация бирж
+// Конфигурация бирж (легко расширяется — добавь строку)
 const EXCHANGES_CONFIG = [
-    { id: 'binance',       name: 'Binance',       label: 'BI',  domain: 'binance.com', color: '#f59e0b' },
-    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BA',  domain: 'binance.com', color: '#8b5cf6' },
-    { id: 'bybit',         name: 'Bybit',         label: 'BY',  domain: 'bybit.com',   color: '#f59e0b' },
-    { id: 'okx',           name: 'OKX',           label: 'OKX', domain: 'okx.com',     color: '#ffffff' },
-    { id: 'gate',          name: 'Gate.io',       label: 'GT',  domain: 'gate.io',     color: '#17e8a5' },
-    { id: 'mexc',          name: 'MEXC',          label: 'MEX', domain: 'mexc.com',    color: '#17e8a5' },
-    { id: 'bitget',        name: 'Bitget',        label: 'BGB', domain: 'bitget.com',  color: '#00f0e6' },
+    { id: 'binance', name: 'Binance', label: 'BI',   domain: 'binance.com', color: '#f59e0b' },
+    { id: 'bybit',   name: 'Bybit',   label: 'BY',   domain: 'bybit.com',   color: '#f59e0b' },
+    { id: 'okx',     name: 'OKX',     label: 'OKX',  domain: 'okx.com',     color: '#ffffff' },
+    { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
+    { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
+    { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
 ];
 
 // Текущие настройки каждой биржи
 let scalpExchanges = {
-    binance:       { enabled: true, markets: { futures: true, spot: false, alpha: false }, minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 },
-    binance_alpha: { enabled: true, markets: { alpha: true }, minVolumeAlpha: 50000 },
-    bybit:         { enabled: true, markets: { futures: true, spot: false, alpha: false }, minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 },
-    okx:           { enabled: true, markets: { futures: true, spot: false, alpha: false }, minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 },
-    gate:          { enabled: true, markets: { futures: true, spot: true, alpha: false },  minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 },
-    mexc:          { enabled: true, markets: { futures: true, spot: true, alpha: false },  minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 },
-    bitget:        { enabled: true, markets: { futures: true, spot: true, alpha: false },  minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 },
+    binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 };
 
 // Миграция любого старого формата + подхват сохранённых значений
@@ -39,11 +36,6 @@ try {
         for (const id of Object.keys(scalpExchanges)) {
             const s = saved[id];
             if (!s) continue;
-
-            if (!scalpExchanges[id]) {
-                scalpExchanges[id] = { enabled: false, markets: { futures: false, spot: false, alpha: false }, minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 };
-            }
-
             if (typeof s === 'boolean') {
                 scalpExchanges[id].enabled = s;
             } else if (typeof s === 'object') {
@@ -51,43 +43,35 @@ try {
                 if (s.markets) {
                     scalpExchanges[id].markets.futures = !!s.markets.futures;
                     scalpExchanges[id].markets.spot    = !!s.markets.spot;
-                    scalpExchanges[id].markets.alpha   = !!s.markets.alpha;
                 }
                 if (Number(s.minVolumeFutures) > 0) scalpExchanges[id].minVolumeFutures = Number(s.minVolumeFutures);
                 if (Number(s.minVolumeSpot)    > 0) scalpExchanges[id].minVolumeSpot    = Number(s.minVolumeSpot);
-                if (Number(s.minVolumeAlpha)   > 0) scalpExchanges[id].minVolumeAlpha   = Number(s.minVolumeAlpha);
             }
         }
     }
-} catch(e) { console.warn('⚠️ scalpExchanges повреждён или не читается', e); }
+} catch(e) { console.warn('⚠️ scalpExchanges повреждён'); }
 
 // Вычисляем scalpEnabled при загрузке
-scalpEnabled = Object.values(scalpExchanges).some(cfg =>
-    cfg.enabled && (cfg.markets.futures || cfg.markets.spot || cfg.markets.alpha)
-);
+scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
 
 // ==========================================
 // ЗАГРУЗКА ПЛОТНОСТЕЙ
 // ==========================================
 async function loadScalpDensities(symbol) {
-    // Используем window.isScalpLoading, который объявлен в state_core.js
-    if (!window.candleSeries || window.isScalpLoading) return;
-
+    if (!candleSeries || isScalpLoading) return;
+    // Если скальп выключен — очищаем линии и выходим
     if (!scalpEnabled) {
         if (scalpLines.length > 0) clearScalpLines();
         previousScalpData = {};
         return;
     }
-
-    window.isScalpLoading = true;
+    isScalpLoading = true;
     try {
         const loadList = [];
         const activeKeys = new Set();
-
         for (const exId in scalpExchanges) {
             const ex = scalpExchanges[exId];
             if (!ex.enabled) continue;
-
             if (ex.markets.futures) {
                 loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
                 activeKeys.add(`${exId}|futures`);
@@ -96,32 +80,26 @@ async function loadScalpDensities(symbol) {
                 loadList.push({ exchange: exId, market: 'spot', minVol: ex.minVolumeSpot });
                 activeKeys.add(`${exId}|spot`);
             }
-            if (ex.markets.alpha) {
-                loadList.push({ exchange: exId, market: 'alpha', minVol: ex.minVolumeAlpha });
-                activeKeys.add(`${exId}|alpha`);
-            }
         }
-
+        // Если нет включённых бирж/рынков — очищаем линии и выходим
         if (loadList.length === 0) {
             if (scalpLines.length > 0) clearScalpLines();
             previousScalpData = {};
             return;
         }
-
+        // Удаляем кэш для выключенных бирж/рынков
         for (const key in previousScalpData) {
             if (!activeKeys.has(key)) delete previousScalpData[key];
         }
-
         const allNewData = {};
         let hasChanges = false;
-
         for (const item of loadList) {
             const key = `${item.exchange}|${item.market}`;
             try {
                 const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`);
                 if (!res.ok) continue;
                 const data = await res.json();
-
+                // Фильтруем по бирже И по возрасту >= 180 сек
                 const filtered = (data.densities || []).filter(d => {
                     if ((d.exchange || 'binance') !== item.exchange) return false;
                     if ((d.age_seconds || 0) < 180) return false;
@@ -133,7 +111,7 @@ async function loadScalpDensities(symbol) {
                 allNewData[key] = previousScalpData[key] || [];
             }
         }
-
+        // Проверяем изменения
         for (const key in allNewData) {
             const newData = allNewData[key];
             const prevData = previousScalpData[key] || [];
@@ -144,45 +122,27 @@ async function loadScalpDensities(symbol) {
                 previousScalpData[key] = newData;
             }
         }
-
+        // Проверяем удалённые ключи (были изменения)
         if (Object.keys(previousScalpData).length !== activeKeys.size) hasChanges = true;
         if (!hasChanges) return;
-
+        // Очищаем ВСЕ линии перед перерисовкой
         clearScalpLines();
-
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
             const densities = allNewData[key];
-
-            const PREFIX = {
-                binance: 'BI',
-                binance_alpha: 'BA',
-                bybit: 'BY',
-                okx: 'OK',
-                gate: 'G',
-                mexc: 'MX',
-                bitget: 'BG'
-            };
+            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG' };
             const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
-            const marketSuffix = market === 'futures' ? 'F' : (market === 'alpha' ? 'A' : 'S');
+            const marketSuffix = market === 'futures' ? 'F' : 'S';
             const prefix = `${exchangePrefix}-${marketSuffix}`;
-
             densities.forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
-                const ageText = typeof formatAge === 'function' ? formatAge(ageSeconds) : `${ageSeconds}s`;
-                const volumeText = typeof formatVolumeText === 'function' ? formatVolumeText(d.volume) : (d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume);
+                const ageText = formatAge(ageSeconds);
+                const volumeText = formatVolumeText(d.volume);
                 const volumeNum = parseFloat(d.volume) || 0;
-
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
-
-                const line = window.candleSeries.createPriceLine({
-                    price: d.price,
-                    color: lineColor,
-                    lineWidth: 1,
-                    lineStyle: LightweightCharts.LineStyle.Solid,
-                    axisLabelVisible: true,
-                    axisLabelColor: '#000000',
-                    axisLabelBackgroundColor: lineColor,
+                const line = candleSeries.createPriceLine({
+                    price: d.price, color: lineColor, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true, axisLabelColor: '#000000', axisLabelBackgroundColor: lineColor,
                     title: `${prefix} ${volumeText} ${ageText}`
                 });
                 scalpLines.push(line);
@@ -191,13 +151,12 @@ async function loadScalpDensities(symbol) {
     } catch (err) {
         console.error('Scalp load error:', err);
     } finally {
-        window.isScalpLoading = false;
+        isScalpLoading = false;
     }
 }
 
 function clearScalpLines() {
-    if (!window.candleSeries) return;
-    scalpLines.forEach(l => { try { window.candleSeries.removePriceLine(l); } catch(e){} });
+    scalpLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
     scalpLines = [];
 }
 
@@ -205,103 +164,87 @@ function startScalpUpdates(symbol) {
     if (scalpUpdateTimer) clearInterval(scalpUpdateTimer);
     loadScalpDensities(symbol);
     scalpUpdateTimer = setInterval(() => {
-        if (window.currentSymbol === symbol && scalpEnabled) loadScalpDensities(symbol);
+        if (currentSymbol === symbol && scalpEnabled) loadScalpDensities(symbol);
     }, 3000);
 }
 
 // ==========================================
-// НАСТРОЙКИ SCALP
+// НАСТРОЙКИ SCALP (отдельная модалка)
 // ==========================================
-function renderScalpCards() {
+function openScalpSettingsModal() {
     const container = document.getElementById('scalpExchangesContainer');
-    if (!container) return;
-
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
-        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false, alpha: false }, minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 };
-        const isEnabled = cfg.enabled !== false;
-
-        const marketsToRender = [];
-        if (ex.id === 'binance_alpha') {
-            marketsToRender.push({ key: 'alpha', label: 'A', minVolKey: 'minVolumeAlpha', defaultVol: 50000, minAttr: 10000 });
-        } else {
-            marketsToRender.push({ key: 'futures', label: 'F', minVolKey: 'minVolumeFutures', defaultVol: 200000, minAttr: 10000 });
-            marketsToRender.push({ key: 'spot', label: 'S', minVolKey: 'minVolumeSpot', defaultVol: 100000, minAttr: 10000 });
-        }
-
-        const marketsHtml = marketsToRender.map(m => {
-            const mEnabled = cfg.markets && cfg.markets[m.key];
-            const vol = cfg[m.minVolKey] || m.defaultVol;
-            return `
-                <span style="font-size:11px;color:#94a3b8;min-width:10px;">${m.label}:</span>
-                <input type="number" id="scalp-${ex.id}-${m.key}v" value="${vol}" min="${m.minAttr}" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!mEnabled || !isEnabled ? 'disabled' : ''}>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-                    <input type="checkbox" id="scalp-${ex.id}-${m.key}" ${mEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:${ex.color};width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-${m.key}v').disabled = !this.checked">
-                    <span>${m.label}</span>
+        const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
+        return `<div class="exchange-card" style="background:#3b4252; border:1px solid #475569; border-radius:6px; padding:14px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="position:relative; width:26px; height:26px; display:inline-block;">
+                        <span style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-weight:700; color:${ex.color}; font-size:14px;">${ex.name[0]}</span>
+                        <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=64" onerror="this.style.display='none'" style="position:relative; width:26px; height:26px; border-radius:6px;">
+                    </span>
+                    <span style="font-weight:600; color:${ex.color}; font-size:14px; min-width:90px;">${ex.label || ex.name}</span>
+                </div>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0;">
+                    <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} style="accent-color:${ex.color}; width:16px; height:16px;">
+                    <span>Включить</span>
                 </label>
-            `;
-        }).join('');
-
-        return `<div style="display:flex;align-items:center;gap:8px; flex-wrap: wrap;">
-            <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
-            ${marketsHtml}
-            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer; margin-left: auto;" title="Включить/выключить биржу">
-                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} style="opacity:0;width:0;height:0;" onchange="toggleScalpExchange('${ex.id}', this.checked)">
-                <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? ex.color : '#475569'};border-radius:20px;transition:.3s;">
-                    <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
-                </span>
-            </label>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
+                        <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                        <span>Futures</span>
+                    </label>
+                    <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="200000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                </div>
+                <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
+                        <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                        <span>Spot</span>
+                    </label>
+                    <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="100000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                </div>
+            </div>
         </div>`;
     }).join('');
+    const modal = new bootstrap.Modal(document.getElementById('scalpSettingsModal'));
+    modal.show();
 }
 
-function toggleScalpExchange(exchangeId, enabled) {
-    if (!scalpExchanges[exchangeId]) {
-        scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false, alpha: false }, minVolumeFutures: 200000, minVolumeSpot: 100000, minVolumeAlpha: 50000 };
-    }
-    scalpExchanges[exchangeId].enabled = enabled;
-    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
-
-    ['futures', 'spot', 'alpha'].forEach(market => {
-        const checkbox = document.getElementById(`scalp-${exchangeId}-${market}`);
-        const input = document.getElementById(`scalp-${exchangeId}-${market}v`);
-
-        if (checkbox) checkbox.disabled = !enabled;
-        if (input) {
-            input.disabled = !enabled ? true : !checkbox.checked;
+function applyScalpSettings() {
+    EXCHANGES_CONFIG.forEach(ex => {
+        const toggle = document.getElementById(`scalp-${ex.id}-toggle`);
+        const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
+        const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
+        const fInput = document.getElementById(`scalp-${ex.id}-fv`);
+        const sInput = document.getElementById(`scalp-${ex.id}-sv`);
+        if (!scalpExchanges[ex.id]) {
+            scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
+        scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
+        scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
+        scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
+        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 200000 : 200000;
+        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 100000 : 100000;
     });
-
-    renderScalpCards();
-    applyScalpSettingsSilent();
-}
-
-function applyScalpSettingsSilent() {
-    window.scalpEnabled = Object.values(scalpExchanges).some(cfg =>
-        cfg.enabled && (cfg.markets.futures || cfg.markets.spot || cfg.markets.alpha)
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+    scalpEnabled = Object.values(scalpExchanges).some(cfg =>
+        cfg.enabled && (cfg.markets.futures || cfg.markets.spot)
     );
-
-    if (window.currentSymbol && window.candleSeries) {
+    // Всегда очищаем линии перед перерисовкой
+    if (currentSymbol && candleSeries) {
         clearScalpLines();
-        window.previousScalpData = {};
+        previousScalpData = {};
     }
-
-    if (window.currentSymbol) {
-        if (window.scalpEnabled) {
-            startScalpUpdates(window.currentSymbol);
-        } else {
-            if (window.scalpUpdateTimer) { clearInterval(window.scalpUpdateTimer); window.scalpUpdateTimer = null; }
+    // Перезапускаем обновление
+    if (currentSymbol) {
+        if (scalpEnabled) startScalpUpdates(currentSymbol);
+        else {
+            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
         }
     }
-
-    const btn = document.getElementById('settingsBtn');
-    if (btn) {
-        if (window.densityEnabled || window.scalpEnabled || window.reconEnabled) {
-            btn.style.background = '#f59e0b';
-            btn.style.color = '#000000';
-        } else {
-            btn.style.background = '#2a2a2a';
-            btn.style.color = '#ffffff';
-        }
-    }
+    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+    if (modal) modal.hide();
 }

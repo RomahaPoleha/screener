@@ -37,16 +37,14 @@ def start_scalp_monitor():
     log("🔧 Вызов start_scalp_monitor()...")
 
     try:
-        # Импорты функций запуска
         from .binance_monitor_async import start_binance_async_monitor
-        from .binance_alpha_monitor_async import start_alpha_async_monitor  # 🔥 НОВОЕ
+        from .gate_monitor_async import start_gate_async_monitor
+        from .bitget_monitor_async import start_bitget_async_monitor
         from .bybit_monitor_async import start_bybit_async_monitor
         from .okx_monitor_async import start_okx_async_monitor
-        from .gate_monitor_async import start_gate_async_monitor
         from .mexc_monitor_async import start_mexc_async_monitor
-        from .bitget_monitor_async import start_bitget_async_monitor
 
-        # 1. Bybit
+
         bybit_async_thread = threading.Thread(
             target=lambda: start_bybit_async_monitor(log),
             name='Bybit-Async-Monitor',
@@ -55,7 +53,6 @@ def start_scalp_monitor():
         bybit_async_thread.start()
         log("✅ Bybit Async Monitor поток запущен")
 
-        # 2. Bitget
         bitget_async_thread = threading.Thread(
             target=lambda: start_bitget_async_monitor(log),
             name='Bitget-Async-Monitor',
@@ -64,7 +61,7 @@ def start_scalp_monitor():
         bitget_async_thread.start()
         log("✅ Bitget Async Monitor поток запущен")
 
-        # 3. OKX
+
         okx_async_thread = threading.Thread(
             target=lambda: start_okx_async_monitor(log),
             name='OKX-Async-Monitor',
@@ -73,7 +70,6 @@ def start_scalp_monitor():
         okx_async_thread.start()
         log("✅ OKX Async Monitor поток запущен")
 
-        # 4. Gate.io
         gate_async_thread = threading.Thread(
             target=lambda: start_gate_async_monitor(log),
             name='Gate-Async-Monitor',
@@ -82,7 +78,6 @@ def start_scalp_monitor():
         gate_async_thread.start()
         log("✅ Gate Async Monitor поток запущен")
 
-        # 5. MEXC
         mexc_async_thread = threading.Thread(
             target=lambda: start_mexc_async_monitor(log),
             name='MEXC-Async-Monitor',
@@ -91,7 +86,6 @@ def start_scalp_monitor():
         mexc_async_thread.start()
         log("✅ MEXC Async Monitor поток запущен")
 
-        # 6. Binance (Spot/Futures)
         binance_async_thread = threading.Thread(
             target=lambda: start_binance_async_monitor(log),
             name='Binance-Async-Monitor',
@@ -100,16 +94,9 @@ def start_scalp_monitor():
         binance_async_thread.start()
         log("✅ Binance Async Monitor поток запущен")
 
-        # 7. 🔥 Binance Alpha (Новый монитор)
-        binance_alpha_async_thread = threading.Thread(
-            target=lambda: start_alpha_async_monitor(log),
-            name='Binance-Alpha-Async-Monitor',
-            daemon=True
-        )
-        binance_alpha_async_thread.start()
-        log("✅ Binance Alpha Async Monitor поток запущен")
-
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")
         import traceback
         log(traceback.format_exc())
+
+
