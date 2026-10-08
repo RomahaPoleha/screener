@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/gate-depth/', views.api_gate_depth, name='api_gate_depth'),
     path('api/logo/', views.api_logo),
     path('api/impulse-alerts/', views.api_impulse_alerts, name='api_impulse_alerts'),
+    path('api/trades-count/', views.api_trades_count, name='api_trades_count'),
 
 
 

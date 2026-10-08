@@ -104,13 +104,18 @@ def get_symbols_from_tickers():
                 rvol = 0.0
 
             price = float(data.get('last') or data.get('close') or 0)
+            # ✅ НОВОЕ: Оценка количества сделок за 24ч
+            # Приблизительно: deals ≈ volume / (price * 10)
+            # Предполагаем средний размер сделки ~10 USDT
+            estimated_deals = int(volume / max(price, 1) / 10) if price > 0 else 0
 
             symbols_with_volume.append({
                 'symbol': clean_symbol,
                 'volume': volume,
                 'change': round(data.get('percentage') or 0, 2),
                 'rvol': round(rvol, 2),
-                'price': price
+                'price': price,
+                'deals': estimated_deals  # 💡 Количество сделок за 24ч (оценка)
             })
 
         symbols_with_volume.sort(key=lambda x: x['volume'], reverse=True)
@@ -146,6 +151,43 @@ def api_data(request):
     cache.set(cache_key, coins, 60)
 
     return JsonResponse(coins, safe=False)
+
+
+@require_http_methods(["GET"])
+def api_trades_count(request):
+    """API: точный count сделок за 24ч для топ монет"""
+    global _volume_poller_started
+    
+    # Ленивый старт - запускаем один раз
+    if not _volume_poller_started:
+        _volume_poller_started = True
+    
+    exchange = get_binance_exchange()
+    
+    # Берем только топ монет для экономии запросов
+    # Получаем тикеры
+    tickers = exchange.fetch_tickers(params={'type': 'future'})
+    
+    trades_data = {}
+    for symbol, data in tickers.items():
+        if not symbol.endswith(':USDT'):
+            continue
+        
+        # Получаем count сделок из ticker info
+        # у Binance есть поле 'tradeCount' в дополнительных данных
+        info = data.get('info', {})
+        trade_count = info.get('tradeCount', 0) if info else 0
+        
+        # Также можно использовать len(ticker['trades']) но это дорого
+        # trade_count = len(data.get('trades', []))  # Too expensive
+        
+        if trade_count > 0:
+            #_clean symbol
+            clean_symbol = symbol.split(':')[0].replace('/USDT', '')
+            if '-' not in clean_symbol and len(clean_symbol) <= 15:
+                trades_data[clean_symbol] = trade_count
+    
+    return JsonResponse(trades_data)
 
 
 # ==========================================
