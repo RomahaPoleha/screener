@@ -358,13 +358,9 @@ function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) 
 // Загрузка и отрисовка скальпа (плотностей) для мини-графика коллажа
 // ==========================================
 async function drawScalpOnCollageChart(symbol, candleSeries) {
-    // 1. Проверяем, загружены ли глобальные переменные из scalp.js
     if (typeof scalpExchanges === 'undefined' || typeof scalpEnabled === 'undefined') {
-        console.log(`[Scalp Collage] Переменные скальпа ещё не загружены для ${symbol}`);
         return;
     }
-
-    // 2. Если скальп глобально выключен, ничего не делаем
     if (!scalpEnabled) return;
 
     const loadList = [];
@@ -379,25 +375,17 @@ async function drawScalpOnCollageChart(symbol, candleSeries) {
         }
     }
 
-    if (loadList.length === 0) {
-        console.log(`[Scalp Collage] Нет включенных бирж для ${symbol}`);
-        return;
-    }
+    if (loadList.length === 0) return;
 
-    let totalLinesDrawn = 0;
-
-    // 3. Загружаем данные для каждой включенной биржи
     for (const item of loadList) {
         try {
             const url = `/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`;
             const res = await fetch(url);
-
             if (!res.ok) continue;
 
             const data = await res.json();
             if (!data.densities || data.densities.length === 0) continue;
 
-            // Фильтруем по бирже и возрасту (>= 180 секунд, как в основном скальпе)
             const filtered = data.densities.filter(d => {
                 if ((d.exchange || 'binance') !== item.exchange) return false;
                 if ((d.age_seconds || 0) < 180) return false;
@@ -414,37 +402,40 @@ async function drawScalpOnCollageChart(symbol, candleSeries) {
             filtered.forEach(d => {
                 const volumeNum = parseFloat(d.volume) || 0;
 
-                // Безопасное форматирование объема (если глобальной функции нет)
+                // Гарантированно получаем строку объема
                 let volumeText = '';
                 if (typeof formatVolumeText === 'function') {
-                    volumeText = formatVolumeText(volumeNum);
+                    try { volumeText = formatVolumeText(volumeNum); }
+                    catch(e) { volumeText = (volumeNum / 1000).toFixed(0) + 'K'; }
                 } else {
                     volumeText = volumeNum >= 1000000 ? (volumeNum / 1000000).toFixed(1) + 'M' : (volumeNum / 1000).toFixed(0) + 'K';
                 }
 
                 const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
 
+                // 🔹 Формируем четкий заголовок для тултипа
+                const lineTitle = `${prefix} | ${volumeText}`;
+
+                // 🔹 ОТЛАДКА: смотрим в консоль, что именно мы передаем в график
+                console.log(`[Scalp] ${symbol}: создаем линию ${lineTitle} на цене ${d.price}`);
+
                 try {
-                    // 🔹 ВАЖНО: axisLabelVisible: false, чтобы не ломать верстку мини-графика
                     candleSeries.createPriceLine({
                         price: d.price,
                         color: lineColor,
                         lineWidth: 1,
                         lineStyle: LightweightCharts.LineStyle.Solid,
-                        axisLabelVisible: false,
-                        title: `${prefix} ${volumeText}`
+                        // 🔹 ВАЖНО: Попробуем включить true, чтобы надпись гарантированно была видна справа.
+                        // Если будет слишком много текста, поменяй обратно на false.
+                        axisLabelVisible: true,
+                        title: lineTitle
                     });
-                    totalLinesDrawn++;
                 } catch (e) {
-                    console.error(`[Scalp Collage] Ошибка создания линии для ${symbol}:`, e);
+                    console.error(`[Scalp] Ошибка создания линии:`, e);
                 }
             });
         } catch (e) {
-            console.error(`[Scalp Collage] Ошибка fetch для ${item.exchange}/${item.market} (${symbol}):`, e);
+            console.error(`[Scalp] Ошибка fetch для ${item.exchange}:`, e);
         }
-    }
-
-    if (totalLinesDrawn > 0) {
-        console.log(`[Scalp Collage] ✅ Успешно нарисовано ${totalLinesDrawn} линий плотностей для ${symbol}`);
     }
 }
