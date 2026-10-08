@@ -196,7 +196,7 @@ function initCollageChart(index, symbol) {
     chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
 
     // 🔹 Добавлен массив scalpLines для отслеживания и очистки линий
-    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null, scalpLines: [] };
+    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null, scalpLinesMap: new Map() };
     collageCharts.push(entry);
 
     const coin = allCoins.find(c => c.symbol === symbol);
@@ -287,14 +287,14 @@ function initCollageChart(index, symbol) {
 // ==========================================
 function clearAllCollageScalpLines() {
     for (const entry of collageCharts) {
-        if (entry && entry.scalpLines && entry.scalpLines.length > 0) {
-            entry.scalpLines.forEach(line => {
+        if (entry && entry.scalpLinesMap && entry.scalpLinesMap.size > 0) {
+            for (const [key, line] of entry.scalpLinesMap) {
                 try { entry.candleSeries.removePriceLine(line); } catch(e) {}
-            });
-            entry.scalpLines = []; // Обнуляем массив
+            }
+            entry.scalpLinesMap.clear();
         }
     }
-    collageScalpCache = {}; // Сбрасываем кэш сигнатур
+    collageScalpCache = {};
 }
 
 
@@ -358,17 +358,14 @@ function stopCollageScalpUpdates() {
 // ==========================================
 // ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ
 // ==========================================
+// ==========================================
+// ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ (БЕЗ МЕРЦАНИЯ)
+// ==========================================
 async function drawScalpOnCollageChart(symbol, candleSeries, entry) {
     if (typeof scalpExchanges === 'undefined' || typeof scalpEnabled === 'undefined' || !scalpEnabled) return;
+    if (!entry || !entry.scalpLinesMap) return;
 
-    // Очищаем старые линии скальпа на этом конкретном графике
-    if (entry && entry.scalpLines) {
-        entry.scalpLines.forEach(line => {
-            try { candleSeries.removePriceLine(line); } catch(e) {}
-        });
-        entry.scalpLines = [];
-    }
-
+    // 1. СНАЧАЛА загружаем новые данные (старые линии остаются на месте!)
     const loadList = [];
     for (const exId in scalpExchanges) {
         const ex = scalpExchanges[exId];
@@ -396,30 +393,63 @@ async function drawScalpOnCollageChart(symbol, candleSeries, entry) {
         } catch (e) {}
     }
 
-    // Сортируем по объему и берем топ-15, чтобы не засорять мини-график
+    // Сортируем и берём топ-15
     allDensities.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume));
     const topDensities = allDensities.slice(0, 15);
 
     const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG' };
 
+    // 2. Строим набор новых ключей
+    const newKeys = new Set();
+    const newDataMap = new Map();
+
     topDensities.forEach(d => {
+        const priceKey = `${d.exchange}-${d.price}`;
+        newKeys.add(priceKey);
+        newDataMap.set(priceKey, d);
+    });
+
+    // 3. Удаляем ТОЛЬКО те линии, которых больше нет в новых данных
+    for (const [key, line] of entry.scalpLinesMap) {
+        if (!newKeys.has(key)) {
+            try { candleSeries.removePriceLine(line); } catch(e) {}
+            entry.scalpLinesMap.delete(key);
+        }
+    }
+
+    // 4. Для каждой новой плотности: обновляем существующую или создаём новую
+    for (const [key, d] of newDataMap) {
         const volumeNum = parseFloat(d.volume) || 0;
-        let volumeText = volumeNum >= 1000000 ? (volumeNum / 1000000).toFixed(1) + 'M' : (volumeNum / 1000).toFixed(0) + 'K';
+        let volumeText = volumeNum >= 1000000
+            ? (volumeNum / 1000000).toFixed(1) + 'M'
+            : (volumeNum / 1000).toFixed(0) + 'K';
         const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
         const exchangePrefix = PREFIX[d.exchange] || d.exchange.slice(0, 2).toUpperCase();
+        const title = `${exchangePrefix} ${volumeText}`;
 
-        try {
-            const line = candleSeries.createPriceLine({
-                price: d.price,
-                color: lineColor,
-                lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Solid,
-                axisLabelVisible: true, // 🔹 Включено, чтобы было видно биржу и объем справа
-                title: `${exchangePrefix} ${volumeText}`
-            });
-            if (entry) entry.scalpLines.push(line);
-        } catch (e) {}
-    });
+        if (entry.scalpLinesMap.has(key)) {
+            // 🔹 Линия уже существует — просто обновляем цвет и заголовок (БЕЗ пересоздания!)
+            try {
+                entry.scalpLinesMap.get(key).applyOptions({
+                    color: lineColor,
+                    title: title
+                });
+            } catch(e) {}
+        } else {
+            // 🔹 Новая линия — создаём
+            try {
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: lineColor,
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    title: title
+                });
+                entry.scalpLinesMap.set(key, line);
+            } catch (e) {}
+        }
+    }
 }
 
 // ==========================================
