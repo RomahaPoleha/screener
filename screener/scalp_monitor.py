@@ -39,7 +39,7 @@ def start_scalp_monitor():
     try:
         # Импорты функций запуска
         from .binance_monitor_async import start_binance_async_monitor
-        from .binance_alpha_monitor_async import start_binance_alpha_async_monitor  # 🔥 НОВОЕ
+        from .binance_alpha_monitor_async import start_alpha_async_monitor  # 🔥 НОВОЕ
         from .bybit_monitor_async import start_bybit_async_monitor
         from .okx_monitor_async import start_okx_async_monitor
         from .gate_monitor_async import start_gate_async_monitor
@@ -102,7 +102,7 @@ def start_scalp_monitor():
 
         # 7. 🔥 Binance Alpha (Новый монитор)
         binance_alpha_async_thread = threading.Thread(
-            target=lambda: start_binance_alpha_async_monitor(log),
+            target=lambda: start_alpha_async_monitor(log),
             name='Binance-Alpha-Async-Monitor',
             daemon=True
         )
