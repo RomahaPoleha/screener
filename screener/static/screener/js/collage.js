@@ -167,29 +167,15 @@ function initCollageChart(index, symbol) {
         timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#222222', rightOffset: 6, barSpacing: 4 },
         rightPriceScale: { borderColor: '#222222', scaleMargins: { top: 0.1, bottom: 0.2 } },
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        handleScroll: {
-            mouseWheel: true,
-            pressedMouseMove: true,
-            horzTouchDrag: true,
-            vertTouchDrag: false
-        },
-        handleScale: {
-            mouseWheel: true,
-            pinch: true,
-            axisPressedMouseMove: true,
-            axisDoubleClickReset: true
-        },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+        handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
     });
 
     const candleSeries = chart.addCandlestickSeries({
-        upColor: '#22c55e', downColor: '#ef4444',
-        borderVisible: false,
+        upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
         wickUpColor: '#22c55e', wickDownColor: '#ef4444'
     });
-    const volumeSeries = chart.addHistogramSeries({
-        priceFormat: { type: 'volume' },
-        priceScaleId: 'volume'
-    });
+    const volumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'volume' });
     chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
 
     const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null };
@@ -215,41 +201,37 @@ function initCollageChart(index, symbol) {
             candleSeries.applyOptions({ priceFormat: { type: 'price', precision, minMove } });
             candleSeries.setData(data);
             volumeSeries.setData(data.map(c => ({
-                time: c.time,
-                value: c.volume,
+                time: c.time, value: c.volume,
                 color: c.close >= c.open ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.6)'
             })));
             chart.timeScale().fitContent();
 
-            // 🔹 Горизонтальные линии — создаём ОДИН РАЗ через встроенный API
+            // 🔹 НОВОЕ: Загрузка плотностей скальпа для этого мини-графика
+            drawScalpOnCollageChart(symbol, candleSeries);
+
+            // Горизонтальные линии
             const hLines = (window.savedHorizontalLines && window.savedHorizontalLines[symbol]) || [];
             hLines.forEach(hl => {
                 try {
                     candleSeries.createPriceLine({
-                        price: hl.price,
-                        color: (hl.color && typeof hl.color === 'string') ? hl.color : '#f59e0b80',
-                        lineWidth: 1,
-                        lineStyle: LightweightCharts.LineStyle.Dashed,
-                        axisLabelVisible: false
+                        price: hl.price, color: (hl.color && typeof hl.color === 'string') ? hl.color : '#f59e0b80',
+                        lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false
                     });
                 } catch(e) {}
             });
 
-            // 🔹 Алерты — создаём ОДИН РАЗ через встроенный API
+            // Алерты
             const alerts = (window.savedAlerts && window.savedAlerts[symbol]) || [];
             alerts.forEach(alert => {
                 try {
                     candleSeries.createPriceLine({
-                        price: alert.price,
-                        color: '#ef444480',
-                        lineWidth: 1,
-                        lineStyle: LightweightCharts.LineStyle.Dotted,
-                        axisLabelVisible: false
+                        price: alert.price || alert.value, color: '#ef444480',
+                        lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: false
                     });
                 } catch(e) {}
             });
 
-            // 🔹 Canvas-рисунки (трендовые + карандаш) — с перерисовкой при скролле
+            // Canvas-рисунки (трендовые + карандаш)
             requestAnimationFrame(() => {
                 drawCollageDrawings(chart, candleSeries, container, symbol, entry.data);
             });
@@ -270,17 +252,12 @@ function initCollageChart(index, symbol) {
             if (!d.k) return;
             const k = d.k;
             const candle = {
-                time: Math.floor(k.t / 1000),
-                open: parseFloat(k.o),
-                high: parseFloat(k.h),
-                low: parseFloat(k.l),
-                close: parseFloat(k.c),
-                volume: parseFloat(k.v)
+                time: Math.floor(k.t / 1000), open: parseFloat(k.o), high: parseFloat(k.h),
+                low: parseFloat(k.l), close: parseFloat(k.c), volume: parseFloat(k.v)
             };
             candleSeries.update(candle);
             volumeSeries.update({
-                time: candle.time,
-                value: candle.volume,
+                time: candle.time, value: candle.volume,
                 color: candle.close >= candle.open ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.6)'
             });
         } catch (err) {}
