@@ -30,8 +30,8 @@ function renderTable(data) {
         const isActive = coin.symbol === currentSymbol;
         const activeClass = isActive ? ' active' : '';
 
-        // Добавляем столбец "Сделки"
-        const dealsTxt = (coin.deals !== undefined && coin.deals !== null) ? coin.deals.toFixed(0) : '-';
+        // Добавляем столбец "Сделки" (формат как объём: 1M, 100K)
+        const dealsTxt = (coin.deals !== undefined && coin.deals !== null) ? formatVolumeText(coin.deals) : '-';
         return `<div class="coin-row${activeClass}" data-symbol="${coin.symbol}" onclick="openChart('${coin.symbol}')">
             <div class="coin-color-dot" style="background:${colorHex || 'transparent'};"
                  onclick="event.stopPropagation(); openColorPicker(event, '${coin.symbol}')"
