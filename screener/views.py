@@ -174,9 +174,9 @@ def api_trades_count(request):
             continue
         
         # Получаем count сделок из ticker info
-        # у Binance есть поле 'tradeCount' в дополнительных данных
+        # у Binance есть поле 'count' в дополнительных данных (количество сделок за 24ч)
         info = data.get('info', {})
-        trade_count = info.get('tradeCount', 0) if info else 0
+        trade_count = info.get('count', 0) if info else 0
         
         # Также можно использовать len(ticker['trades']) но это дорого
         # trade_count = len(data.get('trades', []))  # Too expensive

@@ -387,7 +387,7 @@ body {
 .coins-table-wrap::-webkit-scrollbar { width: 4px; }
 .coins-table-wrap::-webkit-scrollbar-thumb { background: #333333; border-radius: 0; }
 .coin-row {
-    display: grid; grid-template-columns: 20px 70px 1fr 1fr 50px 50px;
+    display: grid; grid-template-columns: 16px 60px 1fr 1fr 45px 45px 45px;
     gap: 4px; padding: 6px 12px; border-bottom: 1px solid #1f1f1f;
     cursor: pointer; font-size: 11px; align-items: center;
     transition: background 0.1s;
@@ -404,7 +404,7 @@ body {
 .natr-mid { color: #f59e0b; }
 .natr-high { color: #ef4444; }
 .coins-header {
-    display: grid; grid-template-columns: 20px 70px 1fr 1fr 50px 50px; gap: 4px;
+    display: grid; grid-template-columns: 16px 60px 1fr 1fr 45px 45px 45px; gap: 4px;
     padding: 6px 12px; background: #0f0f0f; font-size: 10px; color: #999999;
     border-bottom: 2px solid #333333; position: sticky; top: 0;
     font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
@@ -667,20 +667,10 @@ body {
 .coin-row.active {
     background: #1f1f1f;
     border-left: 3px solid #f59e0b;
-    padding-left: 9px; /* компенсируем 3px бордер */
+    padding-left: 6px;
 }
 .coin-row.active .coin-symbol {
     color: #f59e0b;
-}
-
-.coin-row.active {
-    background: #1f1f1f;
-    border-left: 3px solid #f59e0b;
-    padding-left: 9px;
-}
-.coin-row.active .coin-symbol {
-    color: #f59e0b;
-
 }
 /* ==========================================
    КНОПКА ЗАГРУЗКИ ИСТОРИИ ГРАФИКА
