@@ -79,48 +79,57 @@ function openSettingsModal() {
 // ПРИМЕНЕНИЕ НАСТРОЕК
 // ==========================================
 function applySettings() {
+    // 1. Гистограмма объёма
     const volHist = document.getElementById('showVolumeHistogram');
     if (volHist) {
-        window.volumeHistogramEnabled = volHist.checked;
-        localStorage.setItem('volumeHistogramEnabled', window.volumeHistogramEnabled);
-        if (window.volumeSeries) window.volumeSeries.applyOptions({ visible: window.volumeHistogramEnabled });
+        volumeHistogramEnabled = volHist.checked;
+        localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
+        if (typeof volumeSeries !== 'undefined' && volumeSeries) {
+            volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
+        }
     }
 
+    // 2. Дельта
     const deltaHist = document.getElementById('showDeltaHistogram');
     if (deltaHist) {
-        window.deltaEnabled = deltaHist.checked;
-        localStorage.setItem('deltaEnabled', window.deltaEnabled);
-        if (window.deltaSeries) window.deltaSeries.applyOptions({ visible: window.deltaEnabled });
+        deltaEnabled = deltaHist.checked;
+        localStorage.setItem('deltaEnabled', deltaEnabled);
+        if (typeof deltaSeries !== 'undefined' && deltaSeries) {
+            deltaSeries.applyOptions({ visible: deltaEnabled });
+        }
     }
 
+    // 3. Инструменты рисования
     const drawTools = document.getElementById('showDrawingTools');
     if (drawTools) {
-        window.showDrawingTools = drawTools.checked;
-        localStorage.setItem('showDrawingTools', window.showDrawingTools);
-        if (window.els && window.els.drawingToolsPanel) {
-            window.els.drawingToolsPanel.style.display = window.showDrawingTools ? 'flex' : 'none';
+        showDrawingTools = drawTools.checked;
+        localStorage.setItem('showDrawingTools', showDrawingTools);
+        if (typeof els !== 'undefined' && els && els.drawingToolsPanel) {
+            els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
         }
     }
 
+    // 4. Recon (ИСПРАВЛЕНО: убран window. перед const/let переменными)
     const reconToggle = document.getElementById('reconPanelToggle');
     if (reconToggle) {
-        window.reconEnabled = reconToggle.checked;
-        localStorage.setItem('reconEnabled', window.reconEnabled);
-        if (typeof RECON_EXCHANGES !== 'undefined') {
-            for (const ex of window.RECON_EXCHANGES) {
+        reconEnabled = reconToggle.checked;
+        localStorage.setItem('reconEnabled', reconEnabled);
+
+        if (typeof RECON_EXCHANGES !== 'undefined' && typeof reconMinVolumes !== 'undefined') {
+            for (const ex of RECON_EXCHANGES) {
                 const f = document.getElementById(`reconMinF_${ex.id}`);
                 const s = document.getElementById(`reconMinS_${ex.id}`);
-                const a = document.getElementById(`reconMin_alpha_${ex.id}`); // Поддержка Alpha в recon
+                const a = document.getElementById(`reconMin_alpha_${ex.id}`); // Поддержка Alpha
 
-                if (f && window.reconMinVolumes[ex.id]) window.reconMinVolumes[ex.id].futures = Math.max(10000, parseInt(f.value) || 10000);
-                if (s && window.reconMinVolumes[ex.id]) window.reconMinVolumes[ex.id].spot = Math.max(10000, parseInt(s.value) || 10000);
-                if (a && window.reconMinVolumes[ex.id]) window.reconMinVolumes[ex.id].alpha = Math.max(10000, parseInt(a.value) || 50000);
+                if (f && reconMinVolumes[ex.id]) reconMinVolumes[ex.id].futures = Math.max(10000, parseInt(f.value) || 10000);
+                if (s && reconMinVolumes[ex.id]) reconMinVolumes[ex.id].spot = Math.max(10000, parseInt(s.value) || 10000);
+                if (a && reconMinVolumes[ex.id]) reconMinVolumes[ex.id].alpha = Math.max(10000, parseInt(a.value) || 50000);
             }
-            localStorage.setItem('reconMinVolumes', JSON.stringify(window.reconMinVolumes));
+            localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
         }
     }
 
-    // Синхронизация настроек импульса с сервером
+    // 5. Синхронизация настроек импульса с сервером
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
     if (priceImpulseThr || priceImpulseWin) {
@@ -129,15 +138,15 @@ function applySettings() {
             const thr = parseFloat(priceImpulseThr.value);
             settingsPayload.threshold = thr;
             if (thr > 0) {
-                window.priceImpulseThreshold = thr;
-                localStorage.setItem('priceImpulseThreshold', window.priceImpulseThreshold);
+                priceImpulseThreshold = thr;
+                localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
             }
         }
         if (priceImpulseWin) {
             const win = parseInt(priceImpulseWin.value);
             const safeWin = (win >= 120) ? 300 : 60;
             settingsPayload.window = safeWin;
-            window.priceImpulseWindow = safeWin;
+            priceImpulseWindow = safeWin;
             localStorage.setItem('priceImpulseWindow', safeWin);
         }
         fetch('/api/impulse-settings/update/', {
@@ -147,7 +156,7 @@ function applySettings() {
         }).catch(err => console.warn('Impulse settings sync failed:', err));
     }
 
-    // 🔥 Применяем настройки скальпа (ДИНАМИЧЕСКИ для futures, spot, alpha)
+    // 6. Применяем настройки скальпа (ДИНАМИЧЕСКИ для futures, spot, alpha)
     if (typeof EXCHANGES_CONFIG !== 'undefined' && typeof scalpExchanges !== 'undefined') {
         EXCHANGES_CONFIG.forEach(ex => {
             const enabledCheckbox = document.getElementById(`scalp-${ex.id}-toggle`);
@@ -162,7 +171,7 @@ function applySettings() {
             ['futures', 'spot', 'alpha'].forEach(market => {
                 const checkbox = document.getElementById(`scalp-${ex.id}-${market}`);
                 const input = document.getElementById(`scalp-${ex.id}-${market}v`);
-                const minVolKey = `minVolume${market.charAt(0).toUpperCase() + market.slice(1)}`; // minVolumeFutures, minVolumeAlpha
+                const minVolKey = `minVolume${market.charAt(0).toUpperCase() + market.slice(1)}`;
                 const defaultVol = market === 'alpha' ? 50000 : (market === 'futures' ? 200000 : 100000);
 
                 if (checkbox) scalpExchanges[ex.id].markets[market] = checkbox.checked;
@@ -174,48 +183,53 @@ function applySettings() {
 
         localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
 
-        // Обновляем глобальный флаг: включен ли хоть один рынок на любой бирже
-        window.scalpEnabled = Object.values(scalpExchanges).some(cfg =>
+        // Обновляем глобальный флаг
+        scalpEnabled = Object.values(scalpExchanges).some(cfg =>
             cfg.enabled && (cfg.markets.futures || cfg.markets.spot || cfg.markets.alpha)
         );
 
-        if (window.currentSymbol && window.candleSeries) {
+        if (typeof currentSymbol !== 'undefined' && currentSymbol && typeof candleSeries !== 'undefined' && candleSeries) {
             if (typeof clearScalpLines === 'function') clearScalpLines();
-            window.previousScalpData = {};
+            previousScalpData = {};
         }
 
-        if (window.currentSymbol) {
-            if (window.scalpEnabled) {
-                if (typeof startScalpUpdates === 'function') startScalpUpdates(window.currentSymbol);
+        if (typeof currentSymbol !== 'undefined' && currentSymbol) {
+            if (scalpEnabled) {
+                if (typeof startScalpUpdates === 'function') startScalpUpdates(currentSymbol);
             } else {
-                if (window.scalpUpdateTimer) { clearInterval(window.scalpUpdateTimer); window.scalpUpdateTimer = null; }
+                if (typeof scalpUpdateTimer !== 'undefined' && scalpUpdateTimer) {
+                    clearInterval(scalpUpdateTimer);
+                    scalpUpdateTimer = null;
+                }
             }
         }
     }
 
+    // 7. Оповещения и звуки
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) {
-        window.volumeAlertEnabled = volAlertToggle.checked;
-        localStorage.setItem('volumeAlertEnabled', window.volumeAlertEnabled);
+        volumeAlertEnabled = volAlertToggle.checked;
+        localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
     }
 
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) {
-        window.alertBeepVolume = parseFloat(beepSlider.value);
-        localStorage.setItem('alertBeepVolume', window.alertBeepVolume);
+        alertBeepVolume = parseFloat(beepSlider.value);
+        localStorage.setItem('alertBeepVolume', alertBeepVolume);
     }
 
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) {
-        window.hourSoundVolume = parseFloat(hourSlider.value);
-        localStorage.setItem('hourSoundVolume', window.hourSoundVolume);
+        hourSoundVolume = parseFloat(hourSlider.value);
+        localStorage.setItem('hourSoundVolume', hourSoundVolume);
     }
 
     if (typeof updateAlertHistoryVisibility === 'function') updateAlertHistoryVisibility();
 
+    // 8. Обновление кнопки настроек
     const btn = document.getElementById('settingsBtn');
     if (btn) {
-        if (window.densityEnabled || window.scalpEnabled || window.reconEnabled) {
+        if (densityEnabled || scalpEnabled || reconEnabled) {
             btn.style.background = '#f59e0b';
             btn.style.color = '#000000';
         } else {
@@ -224,22 +238,27 @@ function applySettings() {
         }
     }
 
-    if (window.currentSymbol) {
-        if (window.reconEnabled && typeof startReconUpdates === 'function') startReconUpdates(window.currentSymbol);
-        else if (typeof stopReconUpdates === 'function') stopReconUpdates();
+    // 9. Перезапуск Recon
+    if (typeof currentSymbol !== 'undefined' && currentSymbol) {
+        if (reconEnabled && typeof startReconUpdates === 'function') {
+            startReconUpdates(currentSymbol);
+        } else if (typeof stopReconUpdates === 'function') {
+            stopReconUpdates();
+        }
     }
 
-    // Управление импульсом
-    if (window.volumeAlertEnabled) {
-        if (!window.impulsePollingEnabled && typeof startImpulseWebSocket === 'function') {
+    // 10. Управление импульсом
+    if (volumeAlertEnabled) {
+        if (typeof impulsePollingEnabled !== 'undefined' && !impulsePollingEnabled && typeof startImpulseWebSocket === 'function') {
             startImpulseWebSocket();
         }
     } else {
-        if (window.impulsePollingEnabled && typeof stopImpulseWebSocket === 'function') {
+        if (typeof impulsePollingEnabled !== 'undefined' && impulsePollingEnabled && typeof stopImpulseWebSocket === 'function') {
             stopImpulseWebSocket();
         }
     }
 
+    // 11. Закрытие модалки
     const modalEl = document.getElementById('settingsModal');
     if (modalEl) {
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
@@ -309,11 +328,7 @@ function toggleScalpExchange(exchangeId, enabled) {
 
         if (checkbox) checkbox.disabled = !enabled;
         if (input) {
-            if (!enabled) {
-                input.disabled = true;
-            } else {
-                input.disabled = !checkbox.checked;
-            }
+            input.disabled = !enabled ? true : !checkbox.checked;
         }
     });
 
@@ -322,26 +337,29 @@ function toggleScalpExchange(exchangeId, enabled) {
 }
 
 function applyScalpSettingsSilent() {
-    window.scalpEnabled = Object.values(scalpExchanges).some(cfg =>
+    scalpEnabled = Object.values(scalpExchanges).some(cfg =>
         cfg.enabled && (cfg.markets.futures || cfg.markets.spot || cfg.markets.alpha)
     );
 
-    if (window.currentSymbol && window.candleSeries) {
+    if (typeof currentSymbol !== 'undefined' && currentSymbol && typeof candleSeries !== 'undefined' && candleSeries) {
         if (typeof clearScalpLines === 'function') clearScalpLines();
-        window.previousScalpData = {};
+        previousScalpData = {};
     }
 
-    if (window.currentSymbol) {
-        if (window.scalpEnabled) {
-            if (typeof startScalpUpdates === 'function') startScalpUpdates(window.currentSymbol);
+    if (typeof currentSymbol !== 'undefined' && currentSymbol) {
+        if (scalpEnabled) {
+            if (typeof startScalpUpdates === 'function') startScalpUpdates(currentSymbol);
         } else {
-            if (window.scalpUpdateTimer) { clearInterval(window.scalpUpdateTimer); window.scalpUpdateTimer = null; }
+            if (typeof scalpUpdateTimer !== 'undefined' && scalpUpdateTimer) {
+                clearInterval(scalpUpdateTimer);
+                scalpUpdateTimer = null;
+            }
         }
     }
 
     const btn = document.getElementById('settingsBtn');
     if (btn) {
-        if (window.densityEnabled || window.scalpEnabled || window.reconEnabled) {
+        if (densityEnabled || scalpEnabled || reconEnabled) {
             btn.style.background = '#f59e0b';
             btn.style.color = '#000000';
         } else {
