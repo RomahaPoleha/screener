@@ -311,23 +311,51 @@ function startCollageScalpUpdates(symbols) {
             return;
         }
 
-        // 🔹 НОВОЕ: Если пользователь выключил скальп в настройках прямо сейчас
+        // 🔹 Если скальп выключен — очищаем линии и выходим
         if (typeof scalpEnabled !== 'undefined' && !scalpEnabled) {
-            clearAllCollageScalpLines(); // Удаляем линии
-            return; // Прерываем цикл, запросы к серверу НЕ отправляются
+            clearAllCollageScalpLines();
+            return;
         }
 
         for (const sym of symbols) {
             try {
-                const res = await fetch(`/api/scalp/${sym}/?min_volume=100000&market=futures&limit=20`);
-                if (!res.ok) continue;
-                const data = await res.json();
+                // 🔹 ВАЖНО: Используем ТОТ ЖЕ запрос, что и при первой отрисовке
+                // (те же настройки бирж из scalpExchanges)
+                const loadList = [];
+                for (const exId in scalpExchanges) {
+                    const ex = scalpExchanges[exId];
+                    if (!ex || !ex.enabled) continue;
+                    if (ex.markets && ex.markets.futures) {
+                        loadList.push({ exchange: exId, minVol: ex.minVolumeFutures });
+                    }
+                }
 
-                // Создаем сигнатуру данных для сравнения (топ-10 плотностей)
-                const signature = (data.densities || [])
-                    .filter(d => (d.age_seconds || 0) >= 180)
-                    .slice(0, 10)
-                    .map(d => `${d.price}-${d.volume}`)
+                if (loadList.length === 0) continue;
+
+                // Собираем плотности со всех бирж (как в drawScalpOnCollageChart)
+                let allDensities = [];
+                for (const item of loadList) {
+                    try {
+                        const res = await fetch(`/api/scalp/${sym}/?min_volume=${item.minVol}&market=futures&limit=20`);
+                        if (!res.ok) continue;
+                        const data = await res.json();
+
+                        const filtered = (data.densities || []).filter(d => {
+                            if ((d.exchange || 'binance') !== item.exchange) return false;
+                            if ((d.age_seconds || 0) < 180) return false;
+                            return true;
+                        });
+                        allDensities = allDensities.concat(filtered);
+                    } catch (e) {}
+                }
+
+                // Сортируем и берём топ-15 (как в drawScalpOnCollageChart)
+                allDensities.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume));
+                const topDensities = allDensities.slice(0, 15);
+
+                // 🔹 ВАЖНО: Сигнатура теперь по ВСЕМ топ-15, а не только по 10
+                const signature = topDensities
+                    .map(d => `${d.exchange}-${d.price}-${d.volume}`)
                     .join('|');
 
                 // Если данные не изменились, пропускаем перерисовку
@@ -341,7 +369,7 @@ function startCollageScalpUpdates(symbols) {
                     await drawScalpOnCollageChart(sym, entry.candleSeries, entry);
                 }
             } catch (e) {
-                // Игнорируем ошибки сети
+                // Игнорируем ошибки сети для отдельных монет
             }
         }
     }, 5000); // Обновление каждые 5 секунд
