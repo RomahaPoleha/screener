@@ -233,14 +233,13 @@ function applyScalpSettings() {
         if (!scalpExchanges[ex.id]) {
             scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
-        scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
+        // Force Alpha disabled
         if (isAlpha) {
-            const alphaCheckbox = document.getElementById(`scalpAlpha_${ex.id}`);
-            const alphaInput = document.getElementById(`scalpMinAlpha_${ex.id}`);
-            scalpExchanges[ex.id].markets.futures = alphaCheckbox ? alphaCheckbox.checked : false;
+            scalpExchanges[ex.id].enabled = false;
+            scalpExchanges[ex.id].markets.futures = false;
             scalpExchanges[ex.id].markets.spot = false;
-            scalpExchanges[ex.id].minVolumeFutures = alphaInput ? parseInt(alphaInput.value) || 50000 : 50000;
         } else {
+            scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
             const fCheckbox = document.getElementById(`scalpFutures_${ex.id}`);
             const sCheckbox = document.getElementById(`scalpSpot_${ex.id}`);
             const fInput = document.getElementById(`scalpMinFutures_${ex.id}`);

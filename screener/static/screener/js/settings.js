@@ -140,14 +140,13 @@ if (priceImpulseThr || priceImpulseWin) {
         if (!scalpExchanges[ex.id]) {
             scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
-        scalpExchanges[ex.id].enabled = enabledCheckbox ? enabledCheckbox.checked : false;
+        // Force Alpha disabled
         if (isAlpha) {
-            const alphaCheckbox = document.getElementById(`scalp-${ex.id}-f`);
-            const alphaInput = document.getElementById(`scalp-${ex.id}-fv`);
-            scalpExchanges[ex.id].markets.futures = alphaCheckbox ? alphaCheckbox.checked : false;
+            scalpExchanges[ex.id].enabled = false;
+            scalpExchanges[ex.id].markets.futures = false;
             scalpExchanges[ex.id].markets.spot = false;
-            scalpExchanges[ex.id].minVolumeFutures = alphaInput ? Math.max(50000, parseInt(alphaInput.value) || 50000) : 50000;
         } else {
+            scalpExchanges[ex.id].enabled = enabledCheckbox ? enabledCheckbox.checked : false;
             const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
             const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
             const fInput = document.getElementById(`scalp-${ex.id}-fv`);
@@ -246,11 +245,11 @@ function renderScalpCards() {
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
             ${isAlpha ? `
-                <span style="font-size:11px;color:#94a3b8;min-width:10px;">A:</span>
-                <input type="number" id="scalp-${ex.id}-fv" value="${alphaVol}" min="50000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!alphaEnabled || !isEnabled ? 'disabled' : ''}>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-                    <input type="checkbox" id="scalp-${ex.id}-f" ${alphaEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-                    <span>A</span>
+                <span style="font-size:11px;color:#666;min-width:10px;">A:</span>
+                <input type="number" id="scalp-${ex.id}-fv" value="${alphaVol}" min="50000" step="10000" disabled style="width:70px;background:#1e293b;border:1px solid #475569;color:#666;padding:4px 6px;border-radius:3px;font-size:12px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:not-allowed;font-size:12px;color:#888;">
+                    <input type="checkbox" id="scalp-${ex.id}-f" ${alphaEnabled ? 'checked' : ''} disabled style="accent-color:#f59e0b;width:14px;height:14px;">
+                    <span>A — unavailable</span>
                 </label>
             ` : `
                 <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
@@ -266,8 +265,8 @@ function renderScalpCards() {
                     <span>S</span>
                 </label>
             `}
-            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">
-                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} style="opacity:0;width:0;height:0;" onchange="toggleScalpExchange('${ex.id}', this.checked)">
+            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:not-allowed;opacity:0.5;">
+                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} disabled style="opacity:0;width:0;height:0;">
                 <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? '#f59e0b' : '#475569'};border-radius:20px;transition:.3s;">
                     <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
                 </span>
@@ -277,6 +276,9 @@ function renderScalpCards() {
 }
 
 function toggleScalpExchange(exchangeId, enabled) {
+    // Prevent enabling Binance Alpha (not ready yet)
+    if (exchangeId === 'binance_alpha') return;
+    
     if (!scalpExchanges[exchangeId]) {
         scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
     }
