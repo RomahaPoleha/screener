@@ -102,6 +102,7 @@ function renderExchangesMenu(data, symbol) {
         { key: 'gate', name: 'Gate.io', color: '#00C6FF' },
         { key: 'mexc', name: 'MEXC', color: '#00D47E' },
         { key: 'bitget', name: 'Bitget', color: '#F58220' },
+        { key: 'binance_alpha', name: 'Binance Alpha', color: '#8b5cf6' },
     ];
     
     let html = `<div class="context-menu-header">📊 Торговые площадки: ${symbol}</div>`;
