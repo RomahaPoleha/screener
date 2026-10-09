@@ -152,7 +152,6 @@ async function fetchAlphaSymbolMap() {
         if (res.ok) {
             const data = await res.json();
             alphaSymbolMap = data.map || {};
-            console.log('Alpha map loaded:', alphaSymbolMap);
         }
     } catch (e) {
         console.error('Alpha map fetch error:', e);
@@ -188,11 +187,8 @@ function getReconUrl(exId, symbol, market) {
         // Alpha — спотовая торговля на BSC/Base/Robinhood, символ ALPHA_{tokenId}USDT
         if (market !== 'spot') return null;
         const alphaSym = getAlphaSymbol(symbol);
-        console.log('Alpha lookup:', symbol, '->', alphaSym);
         if (!alphaSym) return null;
-        const url = `https://www.binance.com/bapi/defi/v1/public/alpha-trade/fullDepth?symbol=${alphaSym}&limit=500`;
-        console.log('Alpha fullDepth URL:', url);
-        return url;
+        return `https://www.binance.com/bapi/defi/v1/public/alpha-trade/fullDepth?symbol=${alphaSym}&limit=500`;
     }
     return null;
 }
@@ -272,11 +268,9 @@ async function fetchReconMarket(exId, symbol, market) {
             if (!url) return [];
             const res = await fetch(url);
             if (!res.ok) {
-                console.log('Alpha fetch failed:', res.status);
                 return [];
             }
             data = await res.json();
-            console.log('Alpha response:', data);
         }
     } catch (e) { return []; }
 
@@ -322,7 +316,6 @@ async function fetchReconMarket(exId, symbol, market) {
 
     push(rawBids);
     push(rawAsks);
-    console.log('Alpha fetch result:', exId, market, 'minVol', minVolume, 'levels', out.length, 'sample', out.slice(0,3));
     return out;
 }
 
