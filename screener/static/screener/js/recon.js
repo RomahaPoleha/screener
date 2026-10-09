@@ -20,7 +20,7 @@ let reconMarkets = {
     gate:    { spot: false, futures: false },
     mexc:    { spot: false, futures: false },
     bitget:  { spot: false, futures: false },
-    binance_alpha: { spot: false, futures: false },
+    binance_alpha: { spot: true, futures: false },
 };
 let reconMinVolumes = {
     binance: { spot: 10000, futures: 10000 },
@@ -152,6 +152,7 @@ async function fetchAlphaSymbolMap() {
         if (res.ok) {
             const data = await res.json();
             alphaSymbolMap = data.map || {};
+            console.log('Alpha map loaded:', alphaSymbolMap);
         }
     } catch (e) {
         console.error('Alpha map fetch error:', e);
@@ -187,8 +188,11 @@ function getReconUrl(exId, symbol, market) {
         // Alpha — спотовая торговля на BSC/Base/Robinhood, символ ALPHA_{tokenId}USDT
         if (market !== 'spot') return null;
         const alphaSym = getAlphaSymbol(symbol);
+        console.log('Alpha lookup:', symbol, '->', alphaSym);
         if (!alphaSym) return null;
-        return `https://www.binance.com/bapi/defi/v1/public/alpha-trade/fullDepth?symbol=${alphaSym}&limit=500`;
+        const url = `https://www.binance.com/bapi/defi/v1/public/alpha-trade/fullDepth?symbol=${alphaSym}&limit=500`;
+        console.log('Alpha fullDepth URL:', url);
+        return url;
     }
     return null;
 }
@@ -267,8 +271,12 @@ async function fetchReconMarket(exId, symbol, market) {
             const url = getReconUrl(exId, symbol, market);
             if (!url) return [];
             const res = await fetch(url);
-            if (!res.ok) return [];
+            if (!res.ok) {
+                console.log('Alpha fetch failed:', res.status);
+                return [];
+            }
             data = await res.json();
+            console.log('Alpha response:', data);
         }
     } catch (e) { return []; }
 
@@ -400,10 +408,10 @@ function renderReconPanel() {
                 </div>`;
         };
         
-        // Alpha: только фьючерсы, показываем одну галочку "A"
+        // Alpha: спотовая торговля, показываем галочку "S"
         const isAlpha = ex.id === 'binance_alpha';
         const togglesHtml = isAlpha
-            ? mkToggle('futures', 'A')
+            ? mkToggle('spot', 'S')
             : mkToggle('spot', 'S') + mkToggle('futures', 'F');
         
         return `<div style="display:flex;align-items:center;gap:5px;">
