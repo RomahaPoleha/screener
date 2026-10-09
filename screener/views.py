@@ -384,34 +384,6 @@ def index(request):
     return render(request, 'screener/index.html')
 
 @require_http_methods(["GET"])
-def api_scalp_debug(request, symbol):
-    """Временная диагностика кэша для scalp"""
-    symbol_upper = symbol.upper()
-
-    keys = {
-        'binance_futures': f"scalp:futures:binance:{symbol_upper}",
-        'bybit_futures': f"scalp:futures:bybit:{symbol_upper}",
-        'okx_futures': f"scalp:futures:okx:{symbol_upper}",
-        'binance_spot': f"scalp:spot:binance:{symbol_upper}",
-        'bybit_spot': f"scalp:spot:bybit:{symbol_upper}",
-        'okx_spot': f"scalp:spot:okx:{symbol_upper}",
-    }
-
-    result = {}
-
-    for name, key in keys.items():
-        data = cache.get(key)
-
-        result[name] = {
-            'key': key,
-            'exists': data is not None,
-            'count': len(data) if data else 0,
-            'sample': data[:3] if data else []
-        }
-
-    return JsonResponse(result)
-
-@require_http_methods(["GET"])
 def api_candles_history(request, symbol):
     """API: глубокая история свечей (до 1500 свечей)"""
     tf = request.GET.get('tf', '1m')
@@ -942,16 +914,6 @@ def _fetch_alpha_token_list():
         return []
 
 
-@require_http_methods(["GET"])
-def api_alpha_token_list_debug(request):
-    """DEBUG: сырой ответ Alpha token list"""
-    try:
-        r = requests.get(ALPHA_TOKEN_LIST_URL, timeout=10)
-        return JsonResponse(r.json())
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
 def _build_alpha_map():
     """Строит маппинг base_symbol -> ALPHA_{id}USDT"""
     global _alpha_symbol_map
@@ -1045,126 +1007,9 @@ def api_exchanges(request, symbol):
 
 
 @require_http_methods(["GET"])
-def api_exchanges_cache_debug(request):
-    """DEBUG: кэшированные полные списки символов всех бирж"""
-    return JsonResponse({
-        'binance': {'futures': sorted(get_binance_symbols()[0]), 'spot': sorted(get_binance_symbols()[1])},
-        'bybit': {'futures': sorted(get_bybit_symbols()[0]), 'spot': sorted(get_bybit_symbols()[1])},
-        'okx': {'futures': sorted(get_okx_symbols()[0]), 'spot': sorted(get_okx_symbols()[1])},
-        'gate': {'futures': sorted(get_gate_symbols()[0]), 'spot': sorted(get_gate_symbols()[1])},
-        'mexc': {'futures': sorted(get_mexc_symbols()[0]), 'spot': sorted(get_mexc_symbols()[1])},
-        'bitget': {'futures': sorted(get_bitget_symbols()[0]), 'spot': sorted(get_bitget_symbols()[1])},
-    })
-
-
-@require_http_methods(["GET"])
 def api_exchange_alpha_map(request):
     """API: маппинг base_symbol -> ALPHA_{tokenId}USDT для Recon/Scalp"""
     return JsonResponse({'map': get_alpha_symbol_map()})
-
-
-@require_http_methods(["GET"])
-def api_exchange_check_debug(request, symbol):
-    """DEBUG: детальная проверка символа на конкретной бирже"""
-    symbol = symbol.upper().strip()
-    
-    # Проверяем каждый парсер по отдельности
-    binance_fut, binance_spot = get_binance_symbols()
-    bybit_fut, bybit_spot = get_bybit_symbols()
-    okx_fut, okx_spot = get_okx_symbols()
-    gate_fut, gate_spot = get_gate_symbols()
-    mexc_fut, mexc_spot = get_mexc_symbols()
-    bitget_fut, bitget_spot = get_bitget_symbols()
-    
-    # Ищем похожие символы (substring match)
-    def find_similar(symbol_set, target):
-        return [s for s in symbol_set if target in s or s in target]
-    
-    return JsonResponse({
-        'symbol': symbol,
-        'exact_match': {
-            'binance': {'futures': symbol in binance_fut, 'spot': symbol in binance_spot},
-            'bybit': {'futures': symbol in bybit_fut, 'spot': symbol in bybit_spot},
-            'okx': {'futures': symbol in okx_fut, 'spot': symbol in okx_spot},
-            'gate': {'futures': symbol in gate_fut, 'spot': symbol in gate_spot},
-            'mexc': {'futures': symbol in mexc_fut, 'spot': symbol in mexc_spot},
-            'bitget': {'futures': symbol in bitget_fut, 'spot': symbol in bitget_spot},
-        },
-        'similar_in_bybit_futures': find_similar(bybit_fut, symbol),
-        'similar_in_bybit_spot': find_similar(bybit_spot, symbol),
-        'bybit_futures_sample': sorted(list(bybit_fut))[:20],
-        'bybit_spot_sample': sorted(list(bybit_spot))[:20],
-    })
-
-
-@require_http_methods(["GET"])
-def api_exchange_raw_debug(request):
-    """DEBUG: сырой формат тикеров с каждой биржи (первые 20)"""
-    try:
-        # Binance
-        ex_b = get_binance_exchange()
-        fut_b = ex_b.fetch_tickers(params={'type': 'future'})
-        spot_b = ex_b.fetch_tickers(params={'type': 'spot'})
-        
-        # Bybit
-        ex_by = ccxt.bybit({'enableRateLimit': True, 'timeout': 10000})
-        fut_by = ex_by.fetch_tickers(params={'type': 'linear'})
-        spot_by = ex_by.fetch_tickers(params={'type': 'spot'})
-        
-        # OKX
-        ex_okx = ccxt.okx({'enableRateLimit': True, 'timeout': 10000})
-        fut_okx = ex_okx.fetch_tickers(params={'instType': 'SWAP'})
-        spot_okx = ex_okx.fetch_tickers(params={'instType': 'SPOT'})
-        
-        # Gate
-        ex_gate = ccxt.gate({'enableRateLimit': True, 'timeout': 10000})
-        fut_gate = ex_gate.fetch_tickers(params={'settle': 'usdt'})
-        spot_gate = ex_gate.fetch_tickers()
-        
-        # MEXC
-        mexc_fut = {}
-        mexc_spot = {}
-        try:
-            import requests
-            r = requests.get('https://contract.mexc.com/api/v1/contract/detail', timeout=10)
-            mexc_fut = {item.get('symbol', ''): item for item in r.json().get('data', [])}
-            r = requests.get('https://api.mexc.com/api/v3/exchangeInfo', timeout=10)
-            mexc_spot = {item.get('symbol', ''): item for item in r.json().get('symbols', [])}
-        except: pass
-        
-        # Bitget
-        ex_bg = ccxt.bitget({'enableRateLimit': True, 'timeout': 10000})
-        fut_bg = ex_bg.fetch_tickers(params={'productType': 'USDT-FUTURES'})
-        spot_bg = ex_bg.fetch_tickers(params={'productType': 'SPOT'})
-        
-        return JsonResponse({
-            'binance': {
-                'futures_keys': list(fut_b.keys())[:20],
-                'spot_keys': list(spot_b.keys())[:20],
-            },
-            'bybit': {
-                'futures_keys': list(fut_by.keys())[:20],
-                'spot_keys': list(spot_by.keys())[:20],
-            },
-            'okx': {
-                'futures_keys': list(fut_okx.keys())[:20],
-                'spot_keys': list(spot_okx.keys())[:20],
-            },
-            'gate': {
-                'futures_keys': list(fut_gate.keys())[:20],
-                'spot_keys': list(spot_gate.keys())[:20],
-            },
-            'mexc': {
-                'futures_keys': list(mexc_fut.keys())[:20],
-                'spot_keys': list(mexc_spot.keys())[:20],
-            },
-            'bitget': {
-                'futures_keys': list(fut_bg.keys())[:20],
-                'spot_keys': list(spot_bg.keys())[:20],
-            },
-        })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
 
 
 @csrf_exempt

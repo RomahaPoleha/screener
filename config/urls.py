@@ -35,12 +35,8 @@ urlpatterns = [
     path('api/trades-count/', views.api_trades_count, name='api_trades_count'),
     path('api/exchanges/<str:symbol>/', views.api_exchanges, name='api_exchanges'),
     path('api/binance-check/<str:symbol>/', views.api_binance_check_symbol, name='api_binance_check_symbol'),
-    path('api/exchanges-cache-debug/', views.api_exchanges_cache_debug, name='api_exchanges_cache_debug'),
-    path('api/exchange-check-debug/<str:symbol>/', views.api_exchange_check_debug, name='api_exchange_check_debug'),
-    path('api/exchange-raw-debug/', views.api_exchange_raw_debug, name='api_exchange_raw_debug'),
     path('api/clear-exchange-cache/', views.api_clear_exchange_cache, name='api_clear_exchange_cache'),
     path('api/exchange-alpha-map/', views.api_exchange_alpha_map, name='api_exchange_alpha_map'),
-    path('api/alpha-token-list-debug/', views.api_alpha_token_list_debug, name='api_alpha_token_list_debug'),
 
 
 

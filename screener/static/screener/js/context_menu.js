@@ -1,6 +1,6 @@
 // ==========================================
 // context_menu.js — КОНТЕКСТНОЕ МЕНЮ БИРЖ
-// Shift + hover on coin -> "Exchanges"
+// Shift + наведение на монету -> "Торговые площадки"
 // ==========================================
 
 let contextMenuSymbol = null;
@@ -66,8 +66,8 @@ function showContextMenu(x, y, symbol) {
     menu.dataset.symbol = symbol;
     
     menu.innerHTML = `
-        <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Exchanges: ${symbol}</div>
-        <div class="context-menu-loading" style="color:#666;font-size:12px;padding:8px 12px;">Loading...</div>
+        <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Торговые площадки: ${symbol}</div>
+        <div class="context-menu-loading" style="color:#666;font-size:12px;padding:8px 12px;">Загрузка...</div>
     `;
     
     // Ограничиваем чтобы не выходило за экран
@@ -85,8 +85,8 @@ function showContextMenu(x, y, symbol) {
         .then(data => renderExchangesMenu(data, symbol))
         .catch(err => {
             menu.innerHTML = `
-                <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Exchanges: ${symbol}</div>
-                <div class="context-menu-error" style="color:#666;font-size:12px;padding:8px 12px;">Load error</div>
+                <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Торговые площадки: ${symbol}</div>
+                <div class="context-menu-error" style="color:#666;font-size:12px;padding:8px 12px;">Ошибка загрузки</div>
             `;
         });
 }
@@ -102,24 +102,34 @@ function renderExchangesMenu(data, symbol) {
         { key: 'gate', name: 'Gate.io', color: '#00C6FF' },
         { key: 'mexc', name: 'MEXC', color: '#00D47E' },
         { key: 'bitget', name: 'Bitget', color: '#F58220' },
-        { key: 'binance_alpha', name: 'Block A', color: '#8b5cf6' },
+        { key: 'binance_alpha', name: 'Binance Alpha', color: '#8b5cf6' },
     ];
     
-    let html = `<div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Exchanges: ${symbol}</div>`;
+    let html = `<div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Торговые площадки: ${symbol}</div>`;
     
     exchanges.forEach(ex => {
         const exData = data[ex.key] || { futures: false, spot: false };
+        const isAlpha = ex.key === 'binance_alpha';
         const hasFutures = exData.futures;
         const hasSpot = exData.spot;
         const hasAny = hasFutures || hasSpot;
+        
+        let marketTags = '';
+        if (isAlpha) {
+            marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Alpha" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};">A</span>`;
+        } else {
+            marketTags = `
+                <span class="market-tag ${hasFutures ? 'active' : ''}" title="Futures" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};">F</span>
+                <span class="market-tag ${hasSpot ? 'active' : ''}" title="Spot" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};">S</span>
+            `;
+        }
         
         html += `
             <div class="context-menu-exchange ${hasAny ? '' : 'unavailable'}" 
                  style="--exchange-color: ${ex.color};">
                 <div class="exchange-name" style="color:#ccc;font-size:13px;font-weight:500;">${ex.name}</div>
                 <div class="exchange-markets">
-                    <span class="market-tag ${hasFutures ? 'active' : ''}" title="Futures" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};">F</span>
-                    <span class="market-tag ${hasSpot ? 'active' : ''}" title="Spot" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};">S</span>
+                    ${marketTags}
                 </div>
             </div>
         `;
