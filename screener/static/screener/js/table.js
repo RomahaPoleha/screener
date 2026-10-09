@@ -38,6 +38,7 @@ function renderTable(data) {
                  title="Цвет группы"></div>
             <div class="coin-symbol">${coin.symbol}</div>
             <div class="coin-change ${isUp ? 'text-up' : 'text-down'}">${isUp ? '+' : ''}${coin.change}%</div>
+            <div class="coin-gap"></div>
             <div class="coin-deals" title="Сделок за 24ч">${dealsTxt}</div>
             <div class="coin-volume">$${fmt(coin.volume)}</div>
             <div class="coin-natr ${n1 ? getNatrClass(n1) : 'empty'}">${n1Txt}</div>
