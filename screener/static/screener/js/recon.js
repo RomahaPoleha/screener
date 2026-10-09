@@ -322,6 +322,7 @@ async function fetchReconMarket(exId, symbol, market) {
 
     push(rawBids);
     push(rawAsks);
+    console.log('Alpha fetch result:', exId, market, 'minVol', minVolume, 'levels', out.length, 'sample', out.slice(0,3));
     return out;
 }
 
