@@ -126,11 +126,6 @@ if (priceImpulseThr || priceImpulseWin) {
         priceImpulseWindow = safeWin;
         localStorage.setItem('priceImpulseWindow', safeWin);
     }
-    fetch('/api/impulse-settings/update/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsPayload)
-    }).catch(err => console.warn('Impulse settings sync failed:', err));
 }
 
     // Применяем настройки скальпа
