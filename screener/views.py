@@ -708,7 +708,7 @@ def api_impulse_alerts(request):
 @require_http_methods(["GET"])
 def api_exchanges(request, symbol):
     """API: проверка доступности символа на биржах"""
-    symbol = symbol.upper()
+    symbol = symbol.upper().strip()
     
     # Импортируем списки символов из всех мониторов
     from . import binance_monitor_async as binance_monitor
@@ -718,30 +718,47 @@ def api_exchanges(request, symbol):
     from . import mexc_monitor_async as mexc_monitor
     from . import bitget_monitor_async as bitget_monitor
     
+    # Нормализуем списки мониторов к верхнему регистру для сравнения
+    def normalize_list(lst):
+        return set(s.upper().strip() for s in (lst or []))
+    
+    binance_fut = normalize_list(binance_monitor.futures_symbols)
+    binance_spot = normalize_list(binance_monitor.spot_symbols)
+    bybit_fut = normalize_list(bybit_monitor.bybit_futures_symbols)
+    bybit_spot = normalize_list(bybit_monitor.bybit_spot_symbols)
+    okx_fut = normalize_list(okx_monitor.okx_futures_symbols)
+    okx_spot = normalize_list(okx_monitor.okx_spot_symbols)
+    gate_fut = normalize_list(gate_monitor.gate_futures_symbols)
+    gate_spot = normalize_list(gate_monitor.gate_spot_symbols)
+    mexc_fut = normalize_list(mexc_monitor.mexc_futures_symbols)
+    mexc_spot = normalize_list(mexc_monitor.mexc_spot_symbols)
+    bitget_fut = normalize_list(bitget_monitor.bitget_futures_symbols)
+    bitget_spot = normalize_list(bitget_monitor.bitget_spot_symbols)
+    
     result = {
         'binance': {
-            'futures': symbol in (binance_monitor.futures_symbols or []),
-            'spot': symbol in (binance_monitor.spot_symbols or []),
+            'futures': symbol in binance_fut,
+            'spot': symbol in binance_spot,
         },
         'bybit': {
-            'futures': symbol in (bybit_monitor.bybit_futures_symbols or []),
-            'spot': symbol in (bybit_monitor.bybit_spot_symbols or []),
+            'futures': symbol in bybit_fut,
+            'spot': symbol in bybit_spot,
         },
         'okx': {
-            'futures': symbol in (okx_monitor.okx_futures_symbols or []),
-            'spot': symbol in (okx_monitor.okx_spot_symbols or []),
+            'futures': symbol in okx_fut,
+            'spot': symbol in okx_spot,
         },
         'gate': {
-            'futures': symbol in (gate_monitor.gate_futures_symbols or []),
-            'spot': symbol in (gate_monitor.gate_spot_symbols or []),
+            'futures': symbol in gate_fut,
+            'spot': symbol in gate_spot,
         },
         'mexc': {
-            'futures': symbol in (mexc_monitor.mexc_futures_symbols or []),
-            'spot': symbol in (mexc_monitor.mexc_spot_symbols or []),
+            'futures': symbol in mexc_fut,
+            'spot': symbol in mexc_spot,
         },
         'bitget': {
-            'futures': symbol in (bitget_monitor.bitget_futures_symbols or []),
-            'spot': symbol in (bitget_monitor.bitget_spot_symbols or []),
+            'futures': symbol in bitget_fut,
+            'spot': symbol in bitget_spot,
         },
     }
     
