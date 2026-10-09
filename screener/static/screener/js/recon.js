@@ -66,7 +66,7 @@ const RECON_EXCHANGES = [
     { id: 'gate',    label: 'GT',  color: '#f59e0b', domain: 'gate.io' },
     { id: 'mexc',    label: 'MEX', color: '#f59e0b', domain: 'mexc.com' },
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
-    { id: 'binance_alpha', label: 'BA', color: '#8b5cf6', domain: 'binance.com' },
+    { id: 'binance_alpha', label: 'BI', color: '#8b5cf6', domain: 'binance.com' },
 ];
 
 // ==========================================
@@ -338,7 +338,8 @@ async function loadReconDensities(symbol) {
         for (const r of results) {
             if (!r.data) continue;
             const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
-            const suffix = r.market === 'futures' ? 'F' : 'S';
+            const isAlpha = r.ex === 'binance_alpha';
+            const suffix = isAlpha ? 'A' : (r.market === 'futures' ? 'F' : 'S');
             const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
             top.forEach(d => {
                 const line = candleSeries.createPriceLine({
@@ -405,10 +406,10 @@ function renderReconPanel() {
                 </div>`;
         };
         
-        // Alpha: спотовая торговля, показываем галочку "S"
+        // Alpha: спотовая торговля, показываем галочку "A"
         const isAlpha = ex.id === 'binance_alpha';
         const togglesHtml = isAlpha
-            ? mkToggle('spot', 'S')
+            ? mkToggle('spot', 'A')
             : mkToggle('spot', 'S') + mkToggle('futures', 'F');
         
         return `<div style="display:flex;align-items:center;gap:5px;">
