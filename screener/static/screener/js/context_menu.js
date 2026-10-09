@@ -1,23 +1,20 @@
 // ==========================================
 // context_menu.js — КОНТЕКСТНОЕ МЕНЮ БИРЖ
-// Правый клик на монету -> "Торговые площадки"
+// Shift + наведение на монету -> "Торговые площадки"
 // ==========================================
 
 let contextMenuSymbol = null;
+let hoverTimeout = null;
+let isShiftPressed = false;
 
 function initContextMenu() {
-    document.addEventListener('contextmenu', (e) => {
-        const row = e.target.closest('.coin-row');
-        if (!row) return;
-        
-        e.preventDefault();
-        contextMenuSymbol = row.dataset.symbol;
-        showContextMenu(e.clientX, e.clientY, contextMenuSymbol);
+    // Отслеживаем Shift
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Shift') isShiftPressed = true;
     });
-    
-    // Закрытие по клику вне меню
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('#exchangesContextMenu')) {
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') {
+            isShiftPressed = false;
             hideContextMenu();
         }
     });
@@ -26,23 +23,63 @@ function initContextMenu() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') hideContextMenu();
     });
+    
+    // Делегирование для строк таблицы
+    document.addEventListener('mouseover', (e) => {
+        const row = e.target.closest('.coin-row');
+        if (!row) return;
+        
+        if (isShiftPressed) {
+            clearTimeout(hoverTimeout);
+            hoverTimeout = setTimeout(() => {
+                contextMenuSymbol = row.dataset.symbol;
+                const rect = row.getBoundingClientRect();
+                showContextMenu(rect.right + 8, rect.top, contextMenuSymbol);
+            }, 150); // задержка против дрожания
+        }
+    });
+    
+    document.addEventListener('mouseout', (e) => {
+        const row = e.target.closest('.coin-row');
+        if (!row) return;
+        clearTimeout(hoverTimeout);
+        // Скрываем с задержкой, чтобы успеть перевести мышь на меню
+        hoverTimeout = setTimeout(() => {
+            if (!isMenuHovered()) hideContextMenu();
+        }, 200);
+    });
+    
+    // Не скрывать если мышь на меню
+    document.addEventListener('mouseover', (e) => {
+        if (e.target.closest('#exchangesContextMenu')) {
+            clearTimeout(hoverTimeout);
+        }
+    });
+}
+
+function isMenuHovered() {
+    return document.querySelector('#exchangesContextMenu:hover') !== null;
 }
 
 function showContextMenu(x, y, symbol) {
     const menu = document.getElementById('exchangesContextMenu');
     menu.dataset.symbol = symbol;
     
-    // Показываем загрузку
     menu.innerHTML = `
         <div class="context-menu-header">📊 Торговые площадки: ${symbol}</div>
         <div class="context-menu-loading">Загрузка...</div>
     `;
     
+    // Ограничиваем чтобы не выходило за экран
+    const menuWidth = 220;
+    const menuHeight = 300;
+    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
+    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
+    
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
     menu.classList.add('active');
     
-    // Загружаем данные (кэшированные на сервере 5 мин)
     fetch(`/api/exchanges/${symbol}/`)
         .then(res => res.json())
         .then(data => renderExchangesMenu(data, symbol))
@@ -56,7 +93,7 @@ function showContextMenu(x, y, symbol) {
 
 function renderExchangesMenu(data, symbol) {
     const menu = document.getElementById('exchangesContextMenu');
-    if (menu.dataset.symbol !== symbol) return; // Уже закрыли/сменили
+    if (menu.dataset.symbol !== symbol) return;
     
     const exchanges = [
         { key: 'binance', name: 'Binance', color: '#F0B90B' },
@@ -94,9 +131,10 @@ function hideContextMenu() {
     const menu = document.getElementById('exchangesContextMenu');
     menu.classList.remove('active');
     contextMenuSymbol = null;
+    clearTimeout(hoverTimeout);
 }
 
-// Инициализация при загрузке
+// Инициализация
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initContextMenu);
 } else {
