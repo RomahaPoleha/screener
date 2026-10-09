@@ -34,8 +34,8 @@ urlpatterns = [
     path('api/impulse-alerts/', views.api_impulse_alerts, name='api_impulse_alerts'),
     path('api/trades-count/', views.api_trades_count, name='api_trades_count'),
     path('api/exchanges/<str:symbol>/', views.api_exchanges, name='api_exchanges'),
-    path('api/exchanges-debug/', views.api_exchanges_debug, name='api_exchanges_debug'),
     path('api/binance-check/<str:symbol>/', views.api_binance_check_symbol, name='api_binance_check_symbol'),
+    path('api/exchanges-cache-debug/', views.api_exchanges_cache_debug, name='api_exchanges_cache_debug'),
 
 
 
