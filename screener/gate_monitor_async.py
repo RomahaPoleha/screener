@@ -232,7 +232,14 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
 
-                volume = qty * price
+                # Gate.io futures: qty is in contracts, need to multiply by contractSize (quanto_multiplier)
+                if market == 'futures':
+                    # Extract base currency from symbol (e.g., "BTC_USDT" -> "BTC")
+                    base_currency = symbol.upper().replace('USDT', '').replace('_', '')
+                    multiplier = gate_contract_sizes.get(base_currency, 1.0)
+                    volume = qty * price * multiplier
+                else:
+                    volume = qty * price
 
                 # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)

@@ -461,15 +461,42 @@ function renderReconSettings() {
     container.innerHTML = RECON_EXCHANGES.map(ex => {
         const isAlpha = ex.id === 'binance_alpha';
         const minVal = isAlpha ? 1000 : 10000;
+        const stepVal = isAlpha ? 100 : 1000;
         return `<div style="display:flex;align-items:center;gap:6px;">
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
-            ${isAlpha ? '' : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`}
-            <span style="font-size:11px;color:#94a3b8;min-width:10px;">${isAlpha ? 'A' : 'F'}:</span>
-            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+            ${isAlpha
+                ? `<span style="font-size:11px;color:#94a3b8;min-width:10px;">A:</span>
+                <input type="number" id="reconMinA_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${minVal}" step="${stepVal}" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`
+                : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+                <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${minVal}" step="${stepVal}" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+                <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+                <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="${minVal}" step="${stepVal}" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`
+            }
         </div>`;
     }).join('');
+
+    // Add change listeners to save settings
+    RECON_EXCHANGES.forEach(ex => {
+        const isAlpha = ex.id === 'binance_alpha';
+        if (isAlpha) {
+            const input = document.getElementById(`reconMinA_${ex.id}`);
+            if (input) input.addEventListener('change', () => saveReconMinVolume(ex.id, 'spot', input.value));
+        } else {
+            const spotInput = document.getElementById(`reconMinS_${ex.id}`);
+            const futInput = document.getElementById(`reconMinF_${ex.id}`);
+            if (spotInput) spotInput.addEventListener('change', () => saveReconMinVolume(ex.id, 'spot', spotInput.value));
+            if (futInput) futInput.addEventListener('change', () => saveReconMinVolume(ex.id, 'futures', futInput.value));
+        }
+    });
+}
+
+function saveReconMinVolume(exId, market, value) {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 0) return;
+    reconMinVolumes[exId][market] = num;
+    localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
+    if (currentSymbol && reconEnabled) loadReconDensities(currentSymbol);
 }
 
 function toggleReconSettings() {

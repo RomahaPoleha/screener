@@ -91,7 +91,7 @@ async def ticker_processor():
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, process_ticker_batch, tickers, now_sec)
         except Exception as e:
-            _logger.warning(f"⚠️ Ticker processor error: {e}")
+            _logger.warning(f"[WARN] Ticker processor error: {e}")
             await asyncio.sleep(0.1)
 
 

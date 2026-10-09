@@ -116,7 +116,7 @@ if REDIS_URL:
             }
         }
     }
-    print(f"✅ Redis настроен: {REDIS_URL}")
+    print(f"[OK] Redis configured: {REDIS_URL}")
 else:
     CACHES = {
         'default': {
@@ -124,7 +124,7 @@ else:
             'LOCATION': '/app/data/django_cache',
         }
     }
-    print("⚠️ Redis не найден, используем FileCache")
+    print("[WARN] Redis not found, using FileCache")
 
 # ==========================================
 # DJANGO CHANNELS
