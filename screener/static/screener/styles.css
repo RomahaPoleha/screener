@@ -738,3 +738,112 @@ body {
 .collage-expand-btn svg {
     pointer-events: none;
 }
+
+/* ==========================================
+   CONTEXT MENU — ТОРГОВЫЕ ПЛОЩАДКИ
+   ========================================== */
+#exchangesContextMenu {
+    position: fixed;
+    z-index: 10000;
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: 8px 0;
+    min-width: 200px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    transform: scale(0.95);
+    pointer-events: none;
+    transition: all 0.12s ease;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+#exchangesContextMenu.active {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+}
+
+.context-menu-header {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #f59e0b;
+    border-bottom: 1px solid #333333;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.context-menu-loading,
+.context-menu-error {
+    padding: 12px;
+    text-align: center;
+    color: #999999;
+    font-size: 12px;
+}
+
+.context-menu-exchange {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    gap: 12px;
+    cursor: default;
+    transition: background 0.1s;
+    position: relative;
+}
+
+.context-menu-exchange::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--exchange-color, #f59e0b);
+    opacity: 0.3;
+}
+
+.context-menu-exchange:hover {
+    background: #1f1f1f;
+}
+
+.context-menu-exchange.unavailable {
+    opacity: 0.5;
+}
+
+.context-menu-exchange.unavailable::before {
+    background: #555555;
+}
+
+.exchange-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+    flex: 1;
+}
+
+.exchange-markets {
+    display: flex;
+    gap: 6px;
+}
+
+.market-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #2a2a2a;
+    color: #666666;
+    border: 1px solid #333333;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.market-tag.active {
+    background: var(--exchange-color, #f59e0b);
+    color: #000000;
+    border-color: var(--exchange-color, #f59e0b);
+}

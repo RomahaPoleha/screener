@@ -704,3 +704,46 @@ def api_impulse_alerts(request):
         'count': len(alerts),
     })
 
+
+@require_http_methods(["GET"])
+def api_exchanges(request, symbol):
+    """API: проверка доступности символа на биржах"""
+    symbol = symbol.upper()
+    
+    # Импортируем списки символов из всех мониторов
+    from . import binance_monitor_async as binance_monitor
+    from . import bybit_monitor_async as bybit_monitor
+    from . import okx_monitor_async as okx_monitor
+    from . import gate_monitor_async as gate_monitor
+    from . import mexc_monitor_async as mexc_monitor
+    from . import bitget_monitor_async as bitget_monitor
+    
+    result = {
+        'binance': {
+            'futures': symbol in (binance_monitor.futures_symbols or []),
+            'spot': symbol in (binance_monitor.spot_symbols or []),
+        },
+        'bybit': {
+            'futures': symbol in (bybit_monitor.bybit_futures_symbols or []),
+            'spot': symbol in (bybit_monitor.bybit_spot_symbols or []),
+        },
+        'okx': {
+            'futures': symbol in (okx_monitor.okx_futures_symbols or []),
+            'spot': symbol in (okx_monitor.okx_spot_symbols or []),
+        },
+        'gate': {
+            'futures': symbol in (gate_monitor.gate_futures_symbols or []),
+            'spot': symbol in (gate_monitor.gate_spot_symbols or []),
+        },
+        'mexc': {
+            'futures': symbol in (mexc_monitor.mexc_futures_symbols or []),
+            'spot': symbol in (mexc_monitor.mexc_spot_symbols or []),
+        },
+        'bitget': {
+            'futures': symbol in (bitget_monitor.bitget_futures_symbols or []),
+            'spot': symbol in (bitget_monitor.bitget_spot_symbols or []),
+        },
+    }
+    
+    return JsonResponse(result)
+

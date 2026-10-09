@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/logo/', views.api_logo),
     path('api/impulse-alerts/', views.api_impulse_alerts, name='api_impulse_alerts'),
     path('api/trades-count/', views.api_trades_count, name='api_trades_count'),
+    path('api/exchanges/<str:symbol>/', views.api_exchanges, name='api_exchanges'),
 
 
 
