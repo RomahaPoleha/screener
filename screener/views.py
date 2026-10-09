@@ -932,10 +932,24 @@ def _fetch_alpha_token_list():
         data = r.json()
         if data.get('code') != "000000":
             return []
-        return data.get('data', {}).get('tokens', [])
+        tokens = data.get('data', {}).get('tokens', [])
+        # DEBUG: print first token structure
+        if tokens:
+            print(f"Alpha token sample: {tokens[0]}")
+        return tokens
     except Exception as e:
         print(f"❌ Alpha token list error: {e}")
         return []
+
+
+@require_http_methods(["GET"])
+def api_alpha_token_list_debug(request):
+    """DEBUG: сырой ответ Alpha token list"""
+    try:
+        r = requests.get(ALPHA_TOKEN_LIST_URL, timeout=10)
+        return JsonResponse(r.json())
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 def _build_alpha_map():
     """Строит маппинг base_symbol -> ALPHA_{tokenId}USDT"""

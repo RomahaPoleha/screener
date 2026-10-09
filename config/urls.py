@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/exchange-raw-debug/', views.api_exchange_raw_debug, name='api_exchange_raw_debug'),
     path('api/clear-exchange-cache/', views.api_clear_exchange_cache, name='api_clear_exchange_cache'),
     path('api/exchange-alpha-map/', views.api_exchange_alpha_map, name='api_exchange_alpha_map'),
+    path('api/alpha-token-list-debug/', views.api_alpha_token_list_debug, name='api_alpha_token_list_debug'),
 
 
 
