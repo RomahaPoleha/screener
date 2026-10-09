@@ -59,18 +59,29 @@ async def close_http_client():
 
 
 # ==========================================
-# 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА (из Binance Futures)
+# 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА (из Binance Futures + маппинг Alpha)
 # ==========================================
 def _fetch_master_symbols_sync():
-    """Синхронное чтение мастер-списка фьючерсов из Redis и фильтрация Alpha символов."""
+    """Синхронное чтение мастер-списка фьючерсов из Redis и маппинг в Alpha символы."""
     try:
         key = 'scalp:master:futures'
         all_symbols = cache.get(key)
-        if isinstance(all_symbols, list) and len(all_symbols) > 0:
-            # Фильтруем только Alpha символы (начинаются на ALPHA_)
-            alpha_symbols = [s for s in all_symbols if s.startswith('ALPHA_')]
-            return alpha_symbols
-        return []
+        if not (isinstance(all_symbols, list) and len(all_symbols) > 0):
+            return []
+
+        # Получаем маппинг base_symbol -> ALPHA_XXXUSDT из кэша (views.py пишет его)
+        alpha_map = cache.get('exchange:alpha:map')
+        if not alpha_map:
+            return []
+
+        # Фильтруем: оставляем только те базовые символы, которые есть в Alpha маппинге
+        alpha_symbols = []
+        for base_symbol in all_symbols:
+            base = base_symbol.upper()
+            if base in alpha_map:
+                alpha_symbols.append(alpha_map[base])  # ALPHA_XXXUSDT
+
+        return alpha_symbols
     except Exception as e:
         print(f"❌ Ошибка чтения master-списка alpha: {e}")
         return []
