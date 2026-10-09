@@ -974,3 +974,37 @@ def api_exchanges_cache_debug(request):
         'bitget': {'futures': sorted(get_bitget_symbols()[0]), 'spot': sorted(get_bitget_symbols()[1])},
     })
 
+
+@require_http_methods(["GET"])
+def api_exchange_check_debug(request, symbol):
+    """DEBUG: детальная проверка символа на конкретной бирже"""
+    symbol = symbol.upper().strip()
+    
+    # Проверяем каждый парсер по отдельности
+    binance_fut, binance_spot = get_binance_symbols()
+    bybit_fut, bybit_spot = get_bybit_symbols()
+    okx_fut, okx_spot = get_okx_symbols()
+    gate_fut, gate_spot = get_gate_symbols()
+    mexc_fut, mexc_spot = get_mexc_symbols()
+    bitget_fut, bitget_spot = get_bitget_symbols()
+    
+    # Ищем похожие символы (substring match)
+    def find_similar(symbol_set, target):
+        return [s for s in symbol_set if target in s or s in target]
+    
+    return JsonResponse({
+        'symbol': symbol,
+        'exact_match': {
+            'binance': {'futures': symbol in binance_fut, 'spot': symbol in binance_spot},
+            'bybit': {'futures': symbol in bybit_fut, 'spot': symbol in bybit_spot},
+            'okx': {'futures': symbol in okx_fut, 'spot': symbol in okx_spot},
+            'gate': {'futures': symbol in gate_fut, 'spot': symbol in gate_spot},
+            'mexc': {'futures': symbol in mexc_fut, 'spot': symbol in mexc_spot},
+            'bitget': {'futures': symbol in bitget_fut, 'spot': symbol in bitget_spot},
+        },
+        'similar_in_bybit_futures': find_similar(bybit_fut, symbol),
+        'similar_in_bybit_spot': find_similar(bybit_spot, symbol),
+        'bybit_futures_sample': sorted(list(bybit_fut))[:20],
+        'bybit_spot_sample': sorted(list(bybit_spot))[:20],
+    })
+
