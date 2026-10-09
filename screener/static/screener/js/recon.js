@@ -29,7 +29,7 @@ let reconMinVolumes = {
     gate:    { spot: 10000, futures: 10000 },
     mexc:    { spot: 10000, futures: 10000 },
     bitget:  { spot: 10000, futures: 10000 },
-    binance_alpha: { spot: 10000, futures: 10000 }
+    binance_alpha: { spot: 1000, futures: 1000 }
 };
 
 // --- НОВОЕ: Кэш для мультипликаторов контрактов Gate.io Futures ---
