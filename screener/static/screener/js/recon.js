@@ -184,8 +184,8 @@ function getReconUrl(exId, symbol, market) {
     if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
     if (exId === 'binance_alpha') {
-        // Alpha только фьючерсы, символ в формате ALPHA_{tokenId}USDT
-        if (market !== 'futures') return null;
+        // Alpha — спотовая торговля на BSC/Base/Robinhood, символ ALPHA_{tokenId}USDT
+        if (market !== 'spot') return null;
         const alphaSym = getAlphaSymbol(symbol);
         if (!alphaSym) return null;
         return `https://www.binance.com/bapi/defi/v1/public/alpha-trade/fullDepth?symbol=${alphaSym}&limit=500`;
