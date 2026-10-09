@@ -17,6 +17,7 @@ const EXCHANGES_CONFIG = [
     { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
     { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
     { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
+    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BA', domain: 'binance.com', color: '#8b5cf6' },
 ];
 
 // Текущие настройки каждой биржи
@@ -27,6 +28,7 @@ let scalpExchanges = {
     gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
     mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
     bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
+    binance_alpha: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 50000 },
 };
 
 // Миграция любого старого формата + подхват сохранённых значений

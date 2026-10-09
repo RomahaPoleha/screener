@@ -20,14 +20,16 @@ let reconMarkets = {
     gate:    { spot: false, futures: false },
     mexc:    { spot: false, futures: false },
     bitget:  { spot: false, futures: false },
+    binance_alpha: { spot: false, futures: false },
 };
 let reconMinVolumes = {
     binance: { spot: 10000, futures: 10000 },
     bybit:   { spot: 10000, futures: 10000 },
     okx:     { spot: 10000, futures: 10000},
-    gate:    { spot: 10000, futures: 10000 }, // Рекомендуется снизить порог для Gate futures, так как раньше он был искусственно завышен
+    gate:    { spot: 10000, futures: 10000 },
     mexc:    { spot: 10000, futures: 10000 },
-    bitget:  { spot: 10000, futures: 10000 }
+    bitget:  { spot: 10000, futures: 10000 },
+    binance_alpha: { spot: 10000, futures: 10000 }
 };
 
 // --- НОВОЕ: Кэш для мультипликаторов контрактов Gate.io Futures ---
@@ -61,6 +63,7 @@ const RECON_EXCHANGES = [
     { id: 'gate',    label: 'GT',  color: '#f59e0b', domain: 'gate.io' },
     { id: 'mexc',    label: 'MEX', color: '#f59e0b', domain: 'mexc.com' },
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
+    { id: 'binance_alpha', label: 'BA', color: '#8b5cf6', domain: 'binance.com' },
 ];
 
 // ==========================================
@@ -136,6 +139,29 @@ function startDensityUpdates(symbol) {
     }, 3000);
 }
 
+// Кэш маппинга Alpha: baseSymbol -> ALPHA_{tokenId}USDT
+let alphaSymbolMap = null;
+
+async function fetchAlphaSymbolMap() {
+    if (alphaSymbolMap) return alphaSymbolMap;
+    try {
+        const res = await fetch('/api/exchange-alpha-map/');
+        if (res.ok) {
+            const data = await res.json();
+            alphaSymbolMap = data.map || {};
+        }
+    } catch (e) {
+        console.error('Alpha map fetch error:', e);
+        alphaSymbolMap = {};
+    }
+    return alphaSymbolMap;
+}
+
+function getAlphaSymbol(symbol) {
+    if (!alphaSymbolMap) return null;
+    return alphaSymbolMap[symbol.toUpperCase()] || null;
+}
+
 // ==========================================
 // RECON — НОВАЯ МУЛЬТИ-БИРЖЕВАЯ ЛОГИКА
 // ==========================================
@@ -154,6 +180,13 @@ function getReconUrl(exId, symbol, market) {
         : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
     if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
+    if (exId === 'binance_alpha') {
+        // Alpha только фьючерсы, символ в формате ALPHA_{tokenId}USDT
+        if (market !== 'futures') return null;
+        const alphaSym = getAlphaSymbol(symbol);
+        if (!alphaSym) return null;
+        return `https://www.binance.com/bapi/defi/v1/public/alpha-trade/fullDepth?symbol=${alphaSym}&limit=500`;
+    }
     return null;
 }
 
@@ -174,6 +207,11 @@ function parseReconLevels(exId, data) {
     } else if (exId === 'bitget') {
         const inner = data.data || {};
         rawBids = inner.bids || []; rawAsks = inner.asks || [];
+    } else if (exId === 'binance_alpha') {
+        // Alpha response: {code: "000000", data: {bids: [[price, qty],...], asks: [...]}}
+        const d = data.data || {};
+        rawBids = d.bids || [];
+        rawAsks = d.asks || [];
     }
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
@@ -388,6 +426,8 @@ function startReconUpdates(symbol) {
     if (!reconEnabled) return;
     ensureReconPanel();
     renderReconPanel();
+    // Загружаем маппинг Alpha для Recon
+    fetchAlphaSymbolMap();
     loadReconDensities(symbol);
     reconUpdateTimer = setInterval(() => {
         if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);

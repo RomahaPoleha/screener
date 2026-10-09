@@ -297,7 +297,7 @@ def api_scalp(request, symbol):
     now = time.time()
     symbol_upper = symbol.upper()
 
-    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget']
+    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
     result_by_exchange = {ex: [] for ex in EXCHANGES}
 
     for exchange in EXCHANGES:
@@ -917,6 +917,65 @@ def get_bitget_symbols():
     return _get_cached('exchange:bitget:all', _fetch_bitget_all)
 
 
+# --- Binance Alpha ---
+ALPHA_TOKEN_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list"
+
+# Глобальный кэш маппинга: base_symbol -> ALPHA_{tokenId}USDT
+_alpha_symbol_map = None
+
+def _fetch_alpha_token_list():
+    """Получает список Alpha токенов: [{symbol: 'BX', tokenId: 175, ...}]"""
+    try:
+        r = requests.get(ALPHA_TOKEN_LIST_URL, timeout=10)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        if data.get('code') != "000000":
+            return []
+        return data.get('data', {}).get('tokens', [])
+    except Exception as e:
+        print(f"❌ Alpha token list error: {e}")
+        return []
+
+def _build_alpha_map():
+    """Строит маппинг base_symbol -> ALPHA_{tokenId}USDT"""
+    global _alpha_symbol_map
+    tokens = _fetch_alpha_token_list()
+    mapping = {}
+    for token in tokens:
+        token_id = token.get('tokenId')
+        symbol = token.get('symbol', '').upper()
+        if token_id and symbol:
+            mapping[symbol] = f"ALPHA_{token_id}USDT"
+    _alpha_symbol_map = mapping
+    return mapping
+
+def get_alpha_symbol_map():
+    """Возвращает маппинг base_symbol -> ALPHA_{tokenId}USDT (кэшированный 24ч)"""
+    global _alpha_symbol_map
+    if _alpha_symbol_map is None:
+        cached = cache.get('exchange:alpha:map')
+        if cached:
+            _alpha_symbol_map = cached
+        else:
+            _alpha_symbol_map = _build_alpha_map()
+            cache.set('exchange:alpha:map', _alpha_symbol_map, 86400)
+    return _alpha_symbol_map
+
+def _fetch_alpha_all():
+    """Получает сет символов Alpha в формате ALPHA_{tokenId}USDT"""
+    try:
+        mapping = get_alpha_symbol_map()
+        alpha_fut = set(mapping.values())
+        return alpha_fut, set()
+    except Exception as e:
+        print(f"❌ Alpha token list error: {e}")
+        return set(), set()
+
+def get_alpha_symbols():
+    return _get_cached('exchange:alpha:all', _fetch_alpha_all)
+
+
 # --- Объединённый чек ---
 def check_symbol_all_exchanges(symbol):
     """Возвращает dict {exchange: {futures: bool, spot: bool}} для символа"""
@@ -927,7 +986,12 @@ def check_symbol_all_exchanges(symbol):
     okx_fut, okx_spot = get_okx_symbols()
     gate_fut, gate_spot = get_gate_symbols()
     mexc_fut, mexc_spot = get_mexc_symbols()
-    bitget_fut, bitget_spot = get_bitget_symbols()
+bitget_fut, bitget_spot = get_bitget_symbols()
+    alpha_fut, alpha_spot = get_alpha_symbols()
+    
+    # Alpha check через маппинг: base_symbol (например BX) -> ALPHA_{tokenId}USDT
+    alpha_map = get_alpha_symbol_map()
+    alpha_has = symbol in alpha_map
     
     return {
         'binance': {'futures': symbol in binance_fut, 'spot': symbol in binance_spot},
@@ -936,6 +1000,7 @@ def check_symbol_all_exchanges(symbol):
         'gate': {'futures': symbol in gate_fut, 'spot': symbol in gate_spot},
         'mexc': {'futures': symbol in mexc_fut, 'spot': symbol in mexc_spot},
         'bitget': {'futures': symbol in bitget_fut, 'spot': symbol in bitget_spot},
+        'binance_alpha': {'futures': alpha_has, 'spot': False},
     }
 
 
@@ -974,6 +1039,12 @@ def api_exchanges_cache_debug(request):
         'mexc': {'futures': sorted(get_mexc_symbols()[0]), 'spot': sorted(get_mexc_symbols()[1])},
         'bitget': {'futures': sorted(get_bitget_symbols()[0]), 'spot': sorted(get_bitget_symbols()[1])},
     })
+
+
+@require_http_methods(["GET"])
+def api_exchange_alpha_map(request):
+    """API: маппинг base_symbol -> ALPHA_{tokenId}USDT для Recon/Scalp"""
+    return JsonResponse({'map': get_alpha_symbol_map()})
 
 
 @require_http_methods(["GET"])

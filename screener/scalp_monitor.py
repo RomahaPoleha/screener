@@ -43,6 +43,7 @@ def start_scalp_monitor():
         from .bybit_monitor_async import start_bybit_async_monitor
         from .okx_monitor_async import start_okx_async_monitor
         from .mexc_monitor_async import start_mexc_async_monitor
+        from .binance_alpha_monitor_async import start_alpha_async_monitor
 
 
         bybit_async_thread = threading.Thread(
@@ -93,6 +94,14 @@ def start_scalp_monitor():
         )
         binance_async_thread.start()
         log("✅ Binance Async Monitor поток запущен")
+
+        alpha_async_thread = threading.Thread(
+            target=lambda: start_alpha_async_monitor(log),
+            name='Binance-Alpha-Async-Monitor',
+            daemon=True
+        )
+        alpha_async_thread.start()
+        log("✅ Binance Alpha Async Monitor поток запущен")
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")

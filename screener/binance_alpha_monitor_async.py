@@ -34,6 +34,10 @@ CACHE_TTL = 30
 SYNC_INTERVAL = 3
 _http_client = None
 
+# Ключ кэша для Alpha (используем стандартный формат: scalp:futures:binance_alpha:{symbol})
+ALPHA_CACHE_MARKET = 'futures'
+ALPHA_CACHE_EXCHANGE = 'binance_alpha'
+
 
 async def get_http_client():
     """Ленивая инициализация aiohttp клиента"""
@@ -155,7 +159,7 @@ async def sync_to_cache_async(symbol, log_func=print):
             if not book:
                 return 0
 
-        key = f"scalp:alpha:binance:{symbol}"
+        key = f"scalp:{ALPHA_CACHE_MARKET}:{ALPHA_CACHE_EXCHANGE}:{symbol}"
         now = time.time()
         densities = []
 
@@ -409,7 +413,7 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, log_func):
         alpha_volume_stats[symbol] = new_stats
 
     # Синхронизируем с кэшем
-    key = f"binance_alpha:{symbol}"
+    key = f"scalp:{ALPHA_CACHE_MARKET}:{ALPHA_CACHE_EXCHANGE}:{symbol}"
     now = time.time()
     if now - last_sync_time.get(key, 0.0) >= SYNC_INTERVAL:
         await sync_to_cache_async(symbol, log_func)

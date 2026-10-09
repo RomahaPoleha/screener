@@ -9,6 +9,7 @@ import websockets
 from django.core.cache import cache
 import ccxt
 from . import coin_selection
+import requests
 
 # ==========================================
 # ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
@@ -63,6 +64,58 @@ SYNC_INTERVAL = 3
 # Лёгкая статистика объёмов
 binance_futures_volume_stats = {}
 binance_spot_volume_stats = {}
+
+# ==========================================
+# 🔥 ALPHA TOKEN LIST FETCHING
+# ==========================================
+ALPHA_TOKEN_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list"
+
+def _fetch_alpha_token_list_sync():
+    """Получает список Alpha токенов с Binance API"""
+    try:
+        resp = requests.get(ALPHA_TOKEN_LIST_URL, timeout=10)
+        if resp.status_code != 200:
+            print(f"❌ Alpha token list HTTP {resp.status_code}")
+            return []
+        data = resp.json()
+        if data.get('code') != "000000":
+            print(f"❌ Alpha token list code={data.get('code')}")
+            return []
+        
+        tokens = data.get('data', {}).get('tokens', [])
+        alpha_symbols = []
+        for token in tokens:
+            token_id = token.get('tokenId')
+            symbol = token.get('symbol')
+            if token_id and symbol:
+                # Формат: ALPHA_<tokenId>USDT
+                alpha_symbol = f"ALPHA_{token_id}USDT"
+                alpha_symbols.append(alpha_symbol)
+        
+        print(f"✅ Alpha token list: {len(alpha_symbols)} токенов")
+        return alpha_symbols
+    except Exception as e:
+        print(f"❌ Ошибка Alpha token list: {e}")
+        return []
+
+
+async def fetch_and_publish_alpha_token_list_async(log_func=print):
+    """Периодически получает и публикует Alpha token list в Redis"""
+    while True:
+        try:
+            loop = asyncio.get_running_loop()
+            alpha_symbols = await loop.run_in_executor(None, _fetch_alpha_token_list_sync)
+            
+            if alpha_symbols:
+                # Публикуем в Redis с TTL 1 час
+                await loop.run_in_executor(None, cache.set, 'scalp:master:alpha', alpha_symbols, 3600)
+                log_func(f"📢 Alpha master-список опубликован: {len(alpha_symbols)} токенов")
+            else:
+                log_func("⚠️ Alpha token list пуст")
+        except Exception as e:
+            log_func(f"❌ Ошибка fetch_alpha_token_list: {e}")
+        
+        await asyncio.sleep(3600)  # Раз в час
 
 # ==========================================
 # НОВАЯ ФУНКЦИЯ: DYNAMIC ПО NATR
@@ -766,6 +819,7 @@ async def main_async(log_func=print):
         process_queue('futures', log_func),
         process_queue('spot', log_func),
         periodic_refresh(log_func),
+        fetch_and_publish_alpha_token_list_async(log_func),  # Alpha token list
     ]
 
     await asyncio.gather(*tasks)
