@@ -765,6 +765,203 @@ def api_exchanges(request, symbol):
     return JsonResponse(result)
 
 
+# ==========================================
+# КЭШИРОВАННЫЕ ПРОВЕРКИ СИМВОЛОВ НА ВСЕХ БИРЖАХ
+# ==========================================
+CACHE_TTL = 86400  # 24 часа (списки символов меняются редко)
+
+def _get_cached(key, fetch_func, ttl=CACHE_TTL):
+    """Универсальный хелпер: читает из кэша или вызывает fetch_func"""
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    data = fetch_func()
+    cache.set(key, data, ttl)
+    return data
+
+# --- Binance ---
+def _fetch_binance_all():
+    exchange = get_binance_exchange()
+    fut_tickers = exchange.fetch_tickers(params={'type': 'future'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if s.endswith(':USDT'):
+            c = s.split(':')[0].replace('/USDT', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = exchange.fetch_tickers(params={'type': 'spot'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if s.endswith('/USDT'):
+            c = s.replace('/USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_binance_symbols():
+    return _get_cached('exchange:binance:all', _fetch_binance_all)
+
+# --- Bybit ---
+def _fetch_bybit_all():
+    ex = ccxt.bybit({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'type': 'linear'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if ':USDT' in s:
+            c = s.split(':')[0].replace('/USDT', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers(params={'type': 'spot'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if '/USDT' in s:
+            c = s.replace('/USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_bybit_symbols():
+    return _get_cached('exchange:bybit:all', _fetch_bybit_all)
+
+# --- OKX ---
+def _fetch_okx_all():
+    ex = ccxt.okx({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'instType': 'SWAP'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if '-USDT-SWAP' in s:
+            c = s.replace('-USDT-SWAP', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers(params={'instType': 'SPOT'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if '-USDT' in s and '-SWAP' not in s:
+            c = s.replace('-USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_okx_symbols():
+    return _get_cached('exchange:okx:all', _fetch_okx_all)
+
+# --- Gate.io ---
+def _fetch_gate_all():
+    ex = ccxt.gate({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'settle': 'usdt'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if '_USDT' in s and not s.startswith('_'):
+            c = s.replace('_USDT', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers()
+    spot = set()
+    for s, d in spot_tickers.items():
+        if '_USDT' in s:
+            c = s.replace('_USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_gate_symbols():
+    return _get_cached('exchange:gate:all', _fetch_gate_all)
+
+# --- MEXC ---
+def _fetch_mexc_all():
+    import requests
+    fut = set()
+    spot = set()
+    try:
+        r = requests.get('https://contract.mexc.com/api/v1/contract/detail', timeout=10)
+        for item in r.json().get('data', []):
+            if item.get('quoteCoin') == 'USDT':
+                c = item.get('baseCoin', '').upper()
+                if c and '-' not in c:
+                    fut.add(c)
+    except: pass
+    try:
+        r = requests.get('https://api.mexc.com/api/v3/exchangeInfo', timeout=10)
+        for item in r.json().get('symbols', []):
+            if item.get('quoteAsset') == 'USDT' and item.get('status') == 'TRADING':
+                c = item.get('baseAsset', '').upper()
+                if c and '-' not in c:
+                    spot.add(c)
+    except: pass
+    return fut, spot
+
+def get_mexc_symbols():
+    return _get_cached('exchange:mexc:all', _fetch_mexc_all)
+
+# --- Bitget ---
+def _fetch_bitget_all():
+    ex = ccxt.bitget({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'productType': 'USDT-FUTURES'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if 'USDT' in s:
+            c = s.replace('USDT', '').replace('_', '').replace('/', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers(params={'productType': 'SPOT'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if 'USDT' in s:
+            c = s.replace('USDT', '').replace('_', '').replace('/', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_bitget_symbols():
+    return _get_cached('exchange:bitget:all', _fetch_bitget_all)
+
+
+# --- Объединённый чек ---
+def check_symbol_all_exchanges(symbol):
+    """Возвращает dict {exchange: {futures: bool, spot: bool}} для символа"""
+    symbol = symbol.upper().strip()
+    
+    binance_fut, binance_spot = get_binance_symbols()
+    bybit_fut, bybit_spot = get_bybit_symbols()
+    okx_fut, okx_spot = get_okx_symbols()
+    gate_fut, gate_spot = get_gate_symbols()
+    mexc_fut, mexc_spot = get_mexc_symbols()
+    bitget_fut, bitget_spot = get_bitget_symbols()
+    
+    return {
+        'binance': {'futures': symbol in binance_fut, 'spot': symbol in binance_spot},
+        'bybit': {'futures': symbol in bybit_fut, 'spot': symbol in bybit_spot},
+        'okx': {'futures': symbol in okx_fut, 'spot': symbol in okx_spot},
+        'gate': {'futures': symbol in gate_fut, 'spot': symbol in gate_spot},
+        'mexc': {'futures': symbol in mexc_fut, 'spot': symbol in mexc_spot},
+        'bitget': {'futures': symbol in bitget_fut, 'spot': symbol in bitget_spot},
+    }
+
+
+@require_http_methods(["GET"])
+def api_binance_check_symbol(request, symbol):
+    """API: проверка символа на Binance (кэшированная)"""
+    symbol = symbol.upper().strip()
+    binance_fut, binance_spot = get_binance_symbols()
+    return JsonResponse({
+        'symbol': symbol,
+        'binance': {
+            'futures': symbol in binance_fut,
+            'spot': symbol in binance_spot,
+            'futures_total': len(binance_fut),
+            'spot_total': len(binance_spot),
+        }
+    })
+
+
+@require_http_methods(["GET"])
+def api_exchanges(request, symbol):
+    """API: проверка символа на всех биржах (кэшированная)"""
+    symbol = symbol.upper().strip()
+    result = check_symbol_all_exchanges(symbol)
+    return JsonResponse(result)
+
+
 @require_http_methods(["GET"])
 def api_exchanges_debug(request):
     """DEBUG: сырой список символов из всех мониторов"""
@@ -801,43 +998,4 @@ def api_exchanges_debug(request):
             'spot': sorted(bitget_monitor.bitget_spot_symbols or []),
         },
     })
-
-
-@require_http_methods(["GET"])
-def api_binance_check_symbol(request, symbol):
-    """API: проверка символа на Binance (все фьючерсы/спот, не только монитор)"""
-    symbol = symbol.upper().strip()
-    
-    try:
-        exchange = get_binance_exchange()
-        
-        # Проверяем фьючерсы
-        fut_tickers = exchange.fetch_tickers(params={'type': 'future'})
-        fut_symbols = set()
-        for s, data in fut_tickers.items():
-            if s.endswith(':USDT'):
-                clean = s.split(':')[0].replace('/USDT', '')
-                if clean and '-' not in clean:
-                    fut_symbols.add(clean)
-        
-        # Проверяем спот
-        spot_tickers = exchange.fetch_tickers(params={'type': 'spot'})
-        spot_symbols = set()
-        for s, data in spot_tickers.items():
-            if s.endswith('/USDT'):
-                clean = s.replace('/USDT', '')
-                if clean and '-' not in clean:
-                    spot_symbols.add(clean)
-        
-        return JsonResponse({
-            'symbol': symbol,
-            'binance': {
-                'futures': symbol in fut_symbols,
-                'spot': symbol in spot_symbols,
-                'futures_total': len(fut_symbols),
-                'spot_total': len(spot_symbols),
-            }
-        })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
 

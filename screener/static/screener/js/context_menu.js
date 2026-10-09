@@ -42,22 +42,16 @@ function showContextMenu(x, y, symbol) {
     menu.style.top = `${y}px`;
     menu.classList.add('active');
     
-    // Загружаем данные: Binance — полная проверка, остальные — из мониторов
-    Promise.all([
-        fetch(`/api/binance-check/${symbol}/`).then(r => r.json()).catch(() => null),
-        fetch(`/api/exchanges/${symbol}/`).then(r => r.json()).catch(() => null)
-    ]).then(([binanceData, monitorData]) => {
-        const merged = { ...monitorData };
-        if (binanceData?.binance) {
-            merged.binance = binanceData.binance;
-        }
-        renderExchangesMenu(merged, symbol);
-    }).catch(err => {
-        menu.innerHTML = `
-            <div class="context-menu-header">📊 Торговые площадки: ${symbol}</div>
-            <div class="context-menu-error">Ошибка загрузки</div>
-        `;
-    });
+    // Загружаем данные (кэшированные на сервере 5 мин)
+    fetch(`/api/exchanges/${symbol}/`)
+        .then(res => res.json())
+        .then(data => renderExchangesMenu(data, symbol))
+        .catch(err => {
+            menu.innerHTML = `
+                <div class="context-menu-header">📊 Торговые площадки: ${symbol}</div>
+                <div class="context-menu-error">Ошибка загрузки</div>
+            `;
+        });
 }
 
 function renderExchangesMenu(data, symbol) {
