@@ -38,6 +38,7 @@ urlpatterns = [
     path('api/exchanges-cache-debug/', views.api_exchanges_cache_debug, name='api_exchanges_cache_debug'),
     path('api/exchange-check-debug/<str:symbol>/', views.api_exchange_check_debug, name='api_exchange_check_debug'),
     path('api/exchange-raw-debug/', views.api_exchange_raw_debug, name='api_exchange_raw_debug'),
+    path('api/clear-exchange-cache/', views.api_clear_exchange_cache, name='api_clear_exchange_cache'),
 
 
 

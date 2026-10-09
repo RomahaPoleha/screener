@@ -829,15 +829,15 @@ def _fetch_okx_all():
     fut_tickers = ex.fetch_tickers(params={'instType': 'SWAP'})
     fut = set()
     for s, d in fut_tickers.items():
-        if '-USDT-SWAP' in s:
-            c = s.replace('-USDT-SWAP', '')
+        if '/USDT:USDT' in s:
+            c = s.replace('/USDT:USDT', '')
             if c and '-' not in c:
                 fut.add(c)
     spot_tickers = ex.fetch_tickers(params={'instType': 'SPOT'})
     spot = set()
     for s, d in spot_tickers.items():
-        if '-USDT' in s and '-SWAP' not in s:
-            c = s.replace('-USDT', '')
+        if '/USDT' in s and ':USDT' not in s:
+            c = s.replace('/USDT', '')
             if c and '-' not in c:
                 spot.add(c)
     return fut, spot
@@ -851,15 +851,15 @@ def _fetch_gate_all():
     fut_tickers = ex.fetch_tickers(params={'settle': 'usdt'})
     fut = set()
     for s, d in fut_tickers.items():
-        if '_USDT' in s and not s.startswith('_'):
-            c = s.replace('_USDT', '')
+        if '/USDT' in s and not s.startswith('_'):
+            c = s.replace('/USDT', '')
             if c and '-' not in c:
                 fut.add(c)
     spot_tickers = ex.fetch_tickers()
     spot = set()
     for s, d in spot_tickers.items():
-        if '_USDT' in s:
-            c = s.replace('_USDT', '')
+        if '/USDT' in s:
+            c = s.replace('/USDT', '')
             if c and '-' not in c:
                 spot.add(c)
     return fut, spot
@@ -1033,6 +1033,22 @@ def api_exchange_raw_debug(request):
         fut_gate = ex_gate.fetch_tickers(params={'settle': 'usdt'})
         spot_gate = ex_gate.fetch_tickers()
         
+        # MEXC
+        mexc_fut = {}
+        mexc_spot = {}
+        try:
+            import requests
+            r = requests.get('https://contract.mexc.com/api/v1/contract/detail', timeout=10)
+            mexc_fut = {item.get('symbol', ''): item for item in r.json().get('data', [])}
+            r = requests.get('https://api.mexc.com/api/v3/exchangeInfo', timeout=10)
+            mexc_spot = {item.get('symbol', ''): item for item in r.json().get('symbols', [])}
+        except: pass
+        
+        # Bitget
+        ex_bg = ccxt.bitget({'enableRateLimit': True, 'timeout': 10000})
+        fut_bg = ex_bg.fetch_tickers(params={'productType': 'USDT-FUTURES'})
+        spot_bg = ex_bg.fetch_tickers(params={'productType': 'SPOT'})
+        
         return JsonResponse({
             'binance': {
                 'futures_keys': list(fut_b.keys())[:20],
@@ -1050,7 +1066,32 @@ def api_exchange_raw_debug(request):
                 'futures_keys': list(fut_gate.keys())[:20],
                 'spot_keys': list(spot_gate.keys())[:20],
             },
+            'mexc': {
+                'futures_keys': list(mexc_fut.keys())[:20],
+                'spot_keys': list(mexc_spot.keys())[:20],
+            },
+            'bitget': {
+                'futures_keys': list(fut_bg.keys())[:20],
+                'spot_keys': list(spot_bg.keys())[:20],
+            },
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+def api_clear_exchange_cache(request):
+    """Очистить кэш символов всех бирж"""
+    from django.core.cache import cache
+    keys = [
+        'exchange:binance:all',
+        'exchange:bybit:all',
+        'exchange:okx:all',
+        'exchange:gate:all',
+        'exchange:mexc:all',
+        'exchange:bitget:all',
+    ]
+    for key in keys:
+        cache.delete(key)
+    return JsonResponse({'cleared': keys})
 
