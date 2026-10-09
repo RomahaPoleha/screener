@@ -287,6 +287,9 @@ async function fetchReconMarket(exId, symbol, market) {
             if (data.code !== undefined && data.code !== '00000' && data.code !== 0) return [];
         } else if (exId === 'bybit') {
             if (data.retCode !== undefined && data.retCode !== 0) return [];
+        } else if (exId === 'binance_alpha') {
+            // Alpha возвращает code: "000000"
+            if (data.code !== undefined && data.code !== '000000') return [];
         } else {
             if (data.code !== undefined && data.code !== 0 && data.code !== '0') return [];
             if (data.retCode !== undefined && data.retCode !== 0) return [];
