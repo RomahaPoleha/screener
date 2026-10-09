@@ -924,7 +924,7 @@ ALPHA_TOKEN_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direc
 _alpha_symbol_map = None
 
 def _fetch_alpha_token_list():
-    """Получает список Alpha токенов: [{symbol: 'BX', tokenId: 175, ...}]"""
+    """Получает список Alpha токенов: [{symbol: 'CT', alphaId: 'ALPHA_1228', ...}]"""
     try:
         r = requests.get(ALPHA_TOKEN_LIST_URL, timeout=10)
         if r.status_code != 200:
@@ -932,7 +932,7 @@ def _fetch_alpha_token_list():
         data = r.json()
         if data.get('code') != "000000":
             return []
-        tokens = data.get('data', {}).get('tokens', [])
+        tokens = data.get('data', [])
         # DEBUG: print first token structure
         if tokens:
             print(f"Alpha token sample: {tokens[0]}")
@@ -951,16 +951,18 @@ def api_alpha_token_list_debug(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
 def _build_alpha_map():
-    """Строит маппинг base_symbol -> ALPHA_{tokenId}USDT"""
+    """Строит маппинг base_symbol -> ALPHA_{id}USDT"""
     global _alpha_symbol_map
     tokens = _fetch_alpha_token_list()
     mapping = {}
     for token in tokens:
-        token_id = token.get('tokenId')
+        alpha_id = token.get('alphaId')  # e.g., "ALPHA_1228"
         symbol = token.get('symbol', '').upper()
-        if token_id and symbol:
-            mapping[symbol] = f"ALPHA_{token_id}USDT"
+        if alpha_id and symbol:
+            # alpha_id уже в формате ALPHA_1228, добавляем USDT для fullDepth API
+            mapping[symbol] = f"{alpha_id}USDT"
     _alpha_symbol_map = mapping
     return mapping
 

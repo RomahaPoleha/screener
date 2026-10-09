@@ -59,16 +59,17 @@ async def close_http_client():
 
 
 # ==========================================
-# 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА
+# 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА (из Binance Futures)
 # ==========================================
 def _fetch_master_symbols_sync():
-    """Синхронное чтение мастер-списка из Redis."""
+    """Синхронное чтение мастер-списка фьючерсов из Redis и фильтрация Alpha символов."""
     try:
-        # ВАЖНО: Убедитесь, что ключ совпадает с тем, куда мастер-нода Binance пишет список Alpha
-        key = 'scalp:master:alpha'
-        symbols = cache.get(key)
-        if isinstance(symbols, list) and len(symbols) > 0:
-            return symbols
+        key = 'scalp:master:futures'
+        all_symbols = cache.get(key)
+        if isinstance(all_symbols, list) and len(all_symbols) > 0:
+            # Фильтруем только Alpha символы (начинаются на ALPHA_)
+            alpha_symbols = [s for s in all_symbols if s.startswith('ALPHA_')]
+            return alpha_symbols
         return []
     except Exception as e:
         print(f"❌ Ошибка чтения master-списка alpha: {e}")
