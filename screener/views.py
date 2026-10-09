@@ -1,6 +1,7 @@
 import ccxt
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.core.cache import cache
 from django.shortcuts import render
 from django.http import FileResponse, Http404
@@ -1079,6 +1080,7 @@ def api_exchange_raw_debug(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def api_clear_exchange_cache(request):
     """Очистить кэш символов всех бирж"""
