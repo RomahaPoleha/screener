@@ -802,3 +802,42 @@ def api_exchanges_debug(request):
         },
     })
 
+
+@require_http_methods(["GET"])
+def api_binance_check_symbol(request, symbol):
+    """API: проверка символа на Binance (все фьючерсы/спот, не только монитор)"""
+    symbol = symbol.upper().strip()
+    
+    try:
+        exchange = get_binance_exchange()
+        
+        # Проверяем фьючерсы
+        fut_tickers = exchange.fetch_tickers(params={'type': 'future'})
+        fut_symbols = set()
+        for s, data in fut_tickers.items():
+            if s.endswith(':USDT'):
+                clean = s.split(':')[0].replace('/USDT', '')
+                if clean and '-' not in clean:
+                    fut_symbols.add(clean)
+        
+        # Проверяем спот
+        spot_tickers = exchange.fetch_tickers(params={'type': 'spot'})
+        spot_symbols = set()
+        for s, data in spot_tickers.items():
+            if s.endswith('/USDT'):
+                clean = s.replace('/USDT', '')
+                if clean and '-' not in clean:
+                    spot_symbols.add(clean)
+        
+        return JsonResponse({
+            'symbol': symbol,
+            'binance': {
+                'futures': symbol in fut_symbols,
+                'spot': symbol in spot_symbols,
+                'futures_total': len(fut_symbols),
+                'spot_total': len(spot_symbols),
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
