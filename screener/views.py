@@ -986,7 +986,7 @@ def check_symbol_all_exchanges(symbol):
     okx_fut, okx_spot = get_okx_symbols()
     gate_fut, gate_spot = get_gate_symbols()
     mexc_fut, mexc_spot = get_mexc_symbols()
-bitget_fut, bitget_spot = get_bitget_symbols()
+    bitget_fut, bitget_spot = get_bitget_symbols()
     alpha_fut, alpha_spot = get_alpha_symbols()
     
     # Alpha check через маппинг: base_symbol (например BX) -> ALPHA_{tokenId}USDT
