@@ -401,7 +401,7 @@ function renderReconPanel() {
             const border = on ? `1px solid ${ex.color}` : '1px solid #475569';
             const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:11px;font-weight:bold;">✓</span>` : '';
             return `<span style="font-size:10px;color:#94a3b8;">${letter}</span>
-                <div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}" style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
+                <div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Click: toggle ${letter} ${ex.label}" style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
                     ${checkmark}
                 </div>`;
         };

@@ -17,7 +17,7 @@ const EXCHANGES_CONFIG = [
     { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
     { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
     { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
-    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BI', domain: 'binance.com', color: '#8b5cf6' },
+    { id: 'binance_alpha', name: 'Block A', label: 'BI', domain: 'binance.com', color: '#8b5cf6' },
 ];
 
 // Текущие настройки каждой биржи
@@ -184,7 +184,7 @@ function openScalpSettingsModal() {
                         <input type="checkbox" id="scalpAlpha_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
                         <span>A (Alpha)</span>
                     </label>
-                    <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                    <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
                     <input type="number" id="scalpMinAlpha_${ex.id}" value="${cfg.minVolumeFutures}" min="50000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                 </div>`
             : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -193,7 +193,7 @@ function openScalpSettingsModal() {
                             <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
                             <span>Futures</span>
                         </label>
-                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
                         <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="200000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                     </div>
                     <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
@@ -201,7 +201,7 @@ function openScalpSettingsModal() {
                             <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
                             <span>Spot</span>
                         </label>
-                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
                         <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="100000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
                     </div>
                 </div>`;
@@ -216,7 +216,7 @@ function openScalpSettingsModal() {
                 </div>
                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0;">
                     <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} style="accent-color:${ex.color}; width:16px; height:16px;">
-                    <span>Включить</span>
+                    <span>Enable</span>
                 </label>
             </div>
             ${marketsHtml}
