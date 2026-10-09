@@ -1008,3 +1008,49 @@ def api_exchange_check_debug(request, symbol):
         'bybit_spot_sample': sorted(list(bybit_spot))[:20],
     })
 
+
+@require_http_methods(["GET"])
+def api_exchange_raw_debug(request):
+    """DEBUG: сырой формат тикеров с каждой биржи (первые 20)"""
+    try:
+        # Binance
+        ex_b = get_binance_exchange()
+        fut_b = ex_b.fetch_tickers(params={'type': 'future'})
+        spot_b = ex_b.fetch_tickers(params={'type': 'spot'})
+        
+        # Bybit
+        ex_by = ccxt.bybit({'enableRateLimit': True, 'timeout': 10000})
+        fut_by = ex_by.fetch_tickers(params={'type': 'linear'})
+        spot_by = ex_by.fetch_tickers(params={'type': 'spot'})
+        
+        # OKX
+        ex_okx = ccxt.okx({'enableRateLimit': True, 'timeout': 10000})
+        fut_okx = ex_okx.fetch_tickers(params={'instType': 'SWAP'})
+        spot_okx = ex_okx.fetch_tickers(params={'instType': 'SPOT'})
+        
+        # Gate
+        ex_gate = ccxt.gate({'enableRateLimit': True, 'timeout': 10000})
+        fut_gate = ex_gate.fetch_tickers(params={'settle': 'usdt'})
+        spot_gate = ex_gate.fetch_tickers()
+        
+        return JsonResponse({
+            'binance': {
+                'futures_keys': list(fut_b.keys())[:20],
+                'spot_keys': list(spot_b.keys())[:20],
+            },
+            'bybit': {
+                'futures_keys': list(fut_by.keys())[:20],
+                'spot_keys': list(spot_by.keys())[:20],
+            },
+            'okx': {
+                'futures_keys': list(fut_okx.keys())[:20],
+                'spot_keys': list(spot_okx.keys())[:20],
+            },
+            'gate': {
+                'futures_keys': list(fut_gate.keys())[:20],
+                'spot_keys': list(spot_gate.keys())[:20],
+            },
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+

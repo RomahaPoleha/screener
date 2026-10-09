@@ -37,6 +37,7 @@ urlpatterns = [
     path('api/binance-check/<str:symbol>/', views.api_binance_check_symbol, name='api_binance_check_symbol'),
     path('api/exchanges-cache-debug/', views.api_exchanges_cache_debug, name='api_exchanges_cache_debug'),
     path('api/exchange-check-debug/<str:symbol>/', views.api_exchange_check_debug, name='api_exchange_check_debug'),
+    path('api/exchange-raw-debug/', views.api_exchange_raw_debug, name='api_exchange_raw_debug'),
 
 
 
