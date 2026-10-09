@@ -92,8 +92,10 @@ function applySettings() {
         for (const ex of RECON_EXCHANGES) {
             const f = document.getElementById(`reconMinF_${ex.id}`);
             const s = document.getElementById(`reconMinS_${ex.id}`);
-            if (f) reconMinVolumes[ex.id].futures = Math.max(10000, parseInt(f.value) || 10000);
-            if (s) reconMinVolumes[ex.id].spot = Math.max(10000, parseInt(s.value) || 10000);
+            const isAlpha = ex.id === 'binance_alpha';
+            const minAllowed = isAlpha ? 1000 : 10000;
+            if (f) reconMinVolumes[ex.id].futures = Math.max(minAllowed, parseInt(f.value) || minAllowed);
+            if (s) reconMinVolumes[ex.id].spot = Math.max(minAllowed, parseInt(s.value) || minAllowed);
         }
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
