@@ -735,13 +735,6 @@ def api_exchanges(request, symbol):
     bitget_fut = normalize_list(bitget_monitor.bitget_futures_symbols)
     bitget_spot = normalize_list(bitget_monitor.bitget_spot_symbols)
     
-    # DEBUG: логируем для проверки
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"api_exchanges: symbol={symbol}")
-    logger.info(f"  binance_fut: {sorted(binance_fut)[:10]}... (total={len(binance_fut)})")
-    logger.info(f"  binance_fut contains BZ: {'BZ' in binance_fut}")
-    
     result = {
         'binance': {
             'futures': symbol in binance_fut,
@@ -770,4 +763,42 @@ def api_exchanges(request, symbol):
     }
     
     return JsonResponse(result)
+
+
+@require_http_methods(["GET"])
+def api_exchanges_debug(request):
+    """DEBUG: сырой список символов из всех мониторов"""
+    from . import binance_monitor_async as binance_monitor
+    from . import bybit_monitor_async as bybit_monitor
+    from . import okx_monitor_async as okx_monitor
+    from . import gate_monitor_async as gate_monitor
+    from . import mexc_monitor_async as mexc_monitor
+    from . import bitget_monitor_async as bitget_monitor
+    
+    return JsonResponse({
+        'binance': {
+            'futures': sorted(binance_monitor.futures_symbols or []),
+            'spot': sorted(binance_monitor.spot_symbols or []),
+        },
+        'bybit': {
+            'futures': sorted(bybit_monitor.bybit_futures_symbols or []),
+            'spot': sorted(bybit_monitor.bybit_spot_symbols or []),
+        },
+        'okx': {
+            'futures': sorted(okx_monitor.okx_futures_symbols or []),
+            'spot': sorted(okx_monitor.okx_spot_symbols or []),
+        },
+        'gate': {
+            'futures': sorted(gate_monitor.gate_futures_symbols or []),
+            'spot': sorted(gate_monitor.gate_spot_symbols or []),
+        },
+        'mexc': {
+            'futures': sorted(mexc_monitor.mexc_futures_symbols or []),
+            'spot': sorted(mexc_monitor.mexc_spot_symbols or []),
+        },
+        'bitget': {
+            'futures': sorted(bitget_monitor.bitget_futures_symbols or []),
+            'spot': sorted(bitget_monitor.bitget_spot_symbols or []),
+        },
+    })
 
