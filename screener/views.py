@@ -735,6 +735,13 @@ def api_exchanges(request, symbol):
     bitget_fut = normalize_list(bitget_monitor.bitget_futures_symbols)
     bitget_spot = normalize_list(bitget_monitor.bitget_spot_symbols)
     
+    # DEBUG: логируем для проверки
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"api_exchanges: symbol={symbol}")
+    logger.info(f"  binance_fut: {sorted(binance_fut)[:10]}... (total={len(binance_fut)})")
+    logger.info(f"  binance_fut contains BZ: {'BZ' in binance_fut}")
+    
     result = {
         'binance': {
             'futures': symbol in binance_fut,
