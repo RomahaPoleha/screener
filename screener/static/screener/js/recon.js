@@ -54,6 +54,9 @@ try {
             if (Number(savedVol[id].futures) > 0) reconMinVolumes[id].futures = Number(savedVol[id].futures);
         }
     }
+    // Сброс дефолта для Alpha если сохранено старое значение 10000
+    if (reconMinVolumes.binance_alpha.spot === 10000) reconMinVolumes.binance_alpha.spot = 1000;
+    if (reconMinVolumes.binance_alpha.futures === 10000) reconMinVolumes.binance_alpha.futures = 1000;
 } catch (e) {}
 
 const RECON_EXCHANGES = [
