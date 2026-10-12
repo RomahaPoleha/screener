@@ -124,7 +124,7 @@ else:
             'LOCATION': 'django-default-cache',
         }
     }
-    print("⚠️ REDIS_URL не найден. Используется локальный кэш.")
+    print("️ REDIS_URL не найден. Используется локальный кэш.")
 
 # ==========================================
 # DJANGO CHANNELS
