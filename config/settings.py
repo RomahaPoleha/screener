@@ -106,13 +106,6 @@ STORAGES = {
 # ==========================================
 REDIS_URL = os.getenv('REDIS_URL')
 
-# Настраиваем параметры пула соединений
-pool_kwargs = {}
-
-# Если используется SSL (rediss://), отключаем строгую проверку сертификатов
-if REDIS_URL and REDIS_URL.startswith('rediss://'):
-    pool_kwargs['ssl_cert_reqs'] = None
-
 if REDIS_URL:
     CACHES = {
         'default': {
@@ -120,7 +113,6 @@ if REDIS_URL:
             'LOCATION': REDIS_URL,
             'OPTIONS': {
                 'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-                'CONNECTION_POOL_KWARGS': pool_kwargs,
             }
         }
     }
