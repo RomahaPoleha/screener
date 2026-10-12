@@ -104,8 +104,14 @@ STORAGES = {
 # ==========================================
 # REDIS & CACHING
 # ==========================================
-# Если переменной нет, возвращаем None, чтобы сработал fallback
 REDIS_URL = os.getenv('REDIS_URL')
+
+# Настраиваем параметры пула соединений
+pool_kwargs = {}
+
+# Если используется SSL (rediss://), отключаем строгую проверку сертификатов
+if REDIS_URL and REDIS_URL.startswith('rediss://'):
+    pool_kwargs['ssl_cert_reqs'] = None
 
 if REDIS_URL:
     CACHES = {
@@ -114,22 +120,19 @@ if REDIS_URL:
             'LOCATION': REDIS_URL,
             'OPTIONS': {
                 'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-                # Если при подключении в Amvera возникают ошибки SSL-сертификатов, 
-                # раскомментируйте строку ниже для игнорирования строгой проверки:
-                # 'CONNECTION_POOL_KWARGS': {'ssl_cert_reqs': None},
+                'CONNECTION_POOL_KWARGS': pool_kwargs,
             }
         }
     }
     print(f"✅ Redis настроен: {REDIS_URL}")
 else:
-    # LocMemCache надежнее для локальной разработки, чем FileBasedCache
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
             'LOCATION': 'django-default-cache',
         }
     }
-    print("⚠️ Переменная REDIS_URL не найдена. Используется локальный кэш (LocMemCache).")
+    print("⚠️ REDIS_URL не найден. Используется локальный кэш.")
 
 # ==========================================
 # DJANGO CHANNELS
