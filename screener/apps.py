@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+import os
 
 
 class ScreenerConfig(AppConfig):
@@ -6,6 +7,11 @@ class ScreenerConfig(AppConfig):
     name = 'screener'
 
     def ready(self):
+        # Пропускаем reloader-процесс при runserver (RUN_MAIN != 'true' и DJANGO_AUTORELOAD == 'true')
+        # На продакшене (gunicorn) DJANGO_AUTORELOAD не установлен — запускаем
+        if os.environ.get('RUN_MAIN') != 'true' and os.environ.get('DJANGO_AUTORELOAD') == 'true':
+            return
+
         try:
             from .natr_updater import start_natr_updater
             start_natr_updater()
