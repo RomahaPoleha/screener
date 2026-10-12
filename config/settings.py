@@ -104,27 +104,26 @@ STORAGES = {
 # ==========================================
 # REDIS & CACHING
 # ==========================================
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
+# Amvera injects: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD (optional)
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = os.getenv('REDIS_PORT', '6379')
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
 
-if REDIS_URL:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django_redis.cache.RedisCache',
-            'LOCATION': REDIS_URL,
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            }
-        }
-    }
-    print(f"✅ Redis настроен: {REDIS_URL}")
+if REDIS_PASSWORD:
+    REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
 else:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-            'LOCATION': '/app/data/django_cache',
+    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': REDIS_URL,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
     }
-    print("⚠️ Redis не найден, используем FileCache")
+}
+print(f"✅ Redis настроен: {REDIS_URL}")
 
 # ==========================================
 # DJANGO CHANNELS
