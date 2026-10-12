@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+# --- ХАРДКОД ДЛЯ AMVERA ---
+os.environ.setdefault('REDIS_URL', 'redis://redis:6379/1')
+# --------------------------
+
 load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
