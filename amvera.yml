@@ -13,6 +13,8 @@ run:
   command: python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 config.asgi:application
   containerPort: 8000
   persistenceMount: /app/data
+  env:
+    REDIS_URL: redis://redis:6379/1
 
 services:
   redis:
