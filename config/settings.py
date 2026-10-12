@@ -5,10 +5,6 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# --- ХАРДКОД ДЛЯ AMVERA ---
-os.environ.setdefault('REDIS_URL', 'redis://run-redis:6379/1')
-# --------------------------
-
 load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -120,7 +116,7 @@ if REDIS_URL:
             }
         }
     }
-    print(f"[OK] Redis configured: {REDIS_URL}")
+    print(f"✅ Redis настроен: {REDIS_URL}")
 else:
     CACHES = {
         'default': {
@@ -128,7 +124,7 @@ else:
             'LOCATION': '/app/data/django_cache',
         }
     }
-    print("[WARN] Redis not found, using FileCache")
+    print("⚠️ Redis не найден, используем FileCache")
 
 # ==========================================
 # DJANGO CHANNELS
