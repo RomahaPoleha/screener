@@ -104,10 +104,16 @@ STORAGES = {
 # ==========================================
 # REDIS & CACHING
 # ==========================================
-# Amvera internal Redis hostname
+# Amvera internal Redis
 REDIS_HOST = os.getenv('REDIS_HOST', 'run-bd')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')
-REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
+# Amvera may inject password under different names
+REDIS_PASSWORD = (
+    os.getenv('REDIS_PASSWORD')
+    or os.getenv('REDIS_PASS')
+    or os.getenv('REDIS_AUTH')
+    or None
+)
 
 if REDIS_PASSWORD:
     REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
@@ -120,6 +126,10 @@ CACHES = {
         'LOCATION': REDIS_URL,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {
+                'decode_responses': True,
+                'protocol': 3,  # RESP3 for HELLO auth
+            },
         }
     }
 }
