@@ -232,7 +232,12 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         loop = asyncio.get_running_loop()
         if loop.is_closed():
             return 0
-        bids, asks = await loop.run_in_executor(None, _init_order_book_sync, symbol, market)
+        try:
+            bids, asks = await loop.run_in_executor(None, _init_order_book_sync, symbol, market)
+        except RuntimeError as e:
+            if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
+                return 0
+            raise
 
         if not bids and not asks:
             log_func(f"⚠️ binance {market} {symbol}: пустой стакан")

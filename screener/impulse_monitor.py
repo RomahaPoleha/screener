@@ -90,7 +90,12 @@ async def ticker_processor():
             tickers, now_sec = await ticker_queue.get()
             if loop.is_closed():
                 break
-            await loop.run_in_executor(None, process_ticker_batch, tickers, now_sec)
+            try:
+                await loop.run_in_executor(None, process_ticker_batch, tickers, now_sec)
+            except RuntimeError as e:
+                if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
+                    break
+                raise
         except asyncio.CancelledError:
             break
         except Exception as e:
