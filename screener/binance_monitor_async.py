@@ -134,15 +134,8 @@ def _fetch_dynamic_by_natr_sync(market='futures', limit=40):
 
 async def get_top_symbols_async(market='futures'):
     """Асинхронная обёртка для отбора по NATR"""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_closed():
-            return []
-        return await loop.run_in_executor(None, _fetch_dynamic_by_natr_sync, market, 40)
-    except RuntimeError as e:
-        if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-            return []
-        raise
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _fetch_dynamic_by_natr_sync, market, 40)
 
 # ==========================================
 # БЕЛЫЙ СПИСОК (без изменений)
@@ -187,15 +180,8 @@ def _fetch_stable_coins_sync(market='futures', limit=10):
         return []
 
 async def get_stable_coins_async(market='futures', limit=10):
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_closed():
-            return []
-        return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
-    except RuntimeError as e:
-        if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-            return []
-        raise
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _fetch_stable_coins_sync, market, limit)
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ СТАКАНА (без изменений)
@@ -230,14 +216,7 @@ def _init_order_book_sync(symbol, market):
 async def init_order_book_async(symbol, market='futures', log_func=print):
     try:
         loop = asyncio.get_running_loop()
-        if loop.is_closed():
-            return 0
-        try:
-            bids, asks = await loop.run_in_executor(None, _init_order_book_sync, symbol, market)
-        except RuntimeError as e:
-            if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-                return 0
-            raise
+        bids, asks = await loop.run_in_executor(None, _init_order_book_sync, symbol, market)
 
         if not bids and not asks:
             log_func(f"⚠️ binance {market} {symbol}: пустой стакан")
@@ -650,14 +629,8 @@ async def periodic_refresh(log_func=print):
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
-                if not loop.is_closed():
-                    await loop.run_in_executor(None, cache.set, 'scalp:master:futures', new_active, 3600)
-                    log_func(f"📢 binance futures: master-список опубликован ({len(new_active)} монет)")
-            except RuntimeError as e:
-                if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-                    pass
-                else:
-                    log_func(f"⚠️ binance futures: не удалось опубликовать master-список: {e}")
+                await loop.run_in_executor(None, cache.set, 'scalp:master:futures', new_active, 3600)
+                log_func(f"📢 binance futures: master-список опубликован ({len(new_active)} монет)")
             except Exception as e:
                 log_func(f"⚠️ binance futures: не удалось опубликовать master-список: {e}")
 
@@ -712,14 +685,8 @@ async def periodic_refresh(log_func=print):
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
-                if not loop.is_closed():
-                    await loop.run_in_executor(None, cache.set, 'scalp:master:spot', new_active, 3600)
-                    log_func(f"📢 binance spot: master-список опубликован ({len(new_active)} монет)")
-            except RuntimeError as e:
-                if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-                    pass
-                else:
-                    log_func(f"⚠️ binance spot: не удалось опубликовать master-список: {e}")
+                await loop.run_in_executor(None, cache.set, 'scalp:master:spot', new_active, 3600)
+                log_func(f"📢 binance spot: master-список опубликован ({len(new_active)} монет)")
             except Exception as e:
                 log_func(f"⚠️ binance spot: не удалось опубликовать master-список: {e}")
 
@@ -787,15 +754,9 @@ async def main_async(log_func=print):
     # 🔥 НОВОЕ: Публикуем master-списки при старте
     try:
         loop = asyncio.get_running_loop()
-        if not loop.is_closed():
-            await loop.run_in_executor(None, cache.set, 'scalp:master:futures', active_futures, 600)
-            await loop.run_in_executor(None, cache.set, 'scalp:master:spot', active_spot, 600)
-            log_func(f"📢 Master-списки опубликованы: futures={len(active_futures)}, spot={len(active_spot)}")
-    except RuntimeError as e:
-        if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-            log_func(f"⚠️ Loop closed, skipping master-списки publish")
-        else:
-            log_func(f"⚠️ Не удалось опубликовать master-списки при старте: {e}")
+        await loop.run_in_executor(None, cache.set, 'scalp:master:futures', active_futures, 600)
+        await loop.run_in_executor(None, cache.set, 'scalp:master:spot', active_spot, 600)
+        log_func(f"📢 Master-списки опубликованы: futures={len(active_futures)}, spot={len(active_spot)}")
     except Exception as e:
         log_func(f"⚠️ Не удалось опубликовать master-списки при старте: {e}")
 

@@ -80,15 +80,8 @@ def _fetch_master_symbols_sync(market='futures'):
 
 async def get_master_symbols_async(market='futures'):
     """Асинхронная обёртка для чтения мастер-списка"""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_closed():
-            return []
-        return await loop.run_in_executor(None, _fetch_master_symbols_sync, market)
-    except RuntimeError as e:
-        if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-            return []
-        raise
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _fetch_master_symbols_sync, market)
 
 
 # ==========================================

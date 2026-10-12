@@ -104,7 +104,7 @@ STORAGES = {
 # ==========================================
 # REDIS & CACHING
 # ==========================================
-REDIS_URL = os.getenv('REDIS_URL')
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
 
 if REDIS_URL:
     CACHES = {
@@ -120,27 +120,20 @@ if REDIS_URL:
 else:
     CACHES = {
         'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'django-default-cache',
+            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+            'LOCATION': '/app/data/django_cache',
         }
     }
-    print("️ REDIS_URL не найден. Используется локальный кэш.")
+    print("⚠️ Redis не найден, используем FileCache")
 
 # ==========================================
 # DJANGO CHANNELS
 # ==========================================
-if REDIS_URL:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [REDIS_URL],
-            },
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
         },
-    }
-else:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
+    },
+}

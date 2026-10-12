@@ -84,22 +84,14 @@ def process_ticker_batch(tickers, now_sec):
 async def ticker_processor():
     """Фоновая задача — обрабатывает тикеры из очереди"""
     global ticker_queue
-    loop = asyncio.get_event_loop()
     while True:
         try:
             tickers, now_sec = await ticker_queue.get()
-            if loop.is_closed():
-                break
-            try:
-                await loop.run_in_executor(None, process_ticker_batch, tickers, now_sec)
-            except RuntimeError as e:
-                if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
-                    break
-                raise
-        except asyncio.CancelledError:
-            break
+            # Выполняем синхронную обработку в executor, чтобы не блокировать event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, process_ticker_batch, tickers, now_sec)
         except Exception as e:
-            _logger.warning(f"[WARN] Ticker processor error: {e}")
+            _logger.warning(f"⚠️ Ticker processor error: {e}")
             await asyncio.sleep(0.1)
 
 
@@ -205,19 +197,11 @@ async def impulse_checker():
 async def main():
     _logger.info("🚀 Запуск Impulse Monitor (Amplitude Mode)...")
     # ✅ Запускаем 3 задачи параллельно: WS, обработчик очереди, чекер алертов
-    tasks = [
-        asyncio.create_task(impulse_ws_listener()),
-        asyncio.create_task(ticker_processor()),
-        asyncio.create_task(impulse_checker())
-    ]
-    try:
-        await asyncio.gather(*tasks)
-    except asyncio.CancelledError:
-        # Отменяем все задачи при завершении
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.gather(
+        impulse_ws_listener(),
+        ticker_processor(),
+        impulse_checker()
+    )
 
 
 def start_impulse_monitor():
