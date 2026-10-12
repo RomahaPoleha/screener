@@ -104,8 +104,8 @@ STORAGES = {
 # ==========================================
 # REDIS & CACHING
 # ==========================================
-# Amvera injects: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD (optional)
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+# Amvera internal Redis hostname
+REDIS_HOST = os.getenv('REDIS_HOST', 'run-bd')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
 
