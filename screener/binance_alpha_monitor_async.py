@@ -89,8 +89,15 @@ def _fetch_master_symbols_sync():
 
 async def get_master_symbols_async():
     """Асинхронная обёртка для чтения мастер-списка"""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_master_symbols_sync)
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_closed():
+            return []
+        return await loop.run_in_executor(None, _fetch_master_symbols_sync)
+    except RuntimeError as e:
+        if 'cannot schedule new futures after' in str(e) or 'shutdown' in str(e).lower():
+            return []
+        raise
 
 
 # ==========================================
