@@ -9,6 +9,6 @@ build:
   useCache: false
 
 run:
-  command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec daphne -b 0.0.0.0 -p 8000 config.asgi:application"
+  command: sh /app/start.sh
   persistenceMount: /app/data
   containerPort: 8000
