@@ -17,7 +17,6 @@ const EXCHANGES_CONFIG = [
     { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
     { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
     { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
-    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BI', domain: 'binance.com', color: '#8b5cf6' },
 ];
 
 // Текущие настройки каждой биржи
@@ -28,7 +27,6 @@ let scalpExchanges = {
     gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
     mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
     bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-    binance_alpha: { enabled: false, markets: { futures: true, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 50000 },
 };
 
 // Миграция любого старого формата + подхват сохранённых значений
@@ -132,9 +130,9 @@ async function loadScalpDensities(symbol) {
         for (const key in allNewData) {
             const [exchange, market] = key.split('|');
             const densities = allNewData[key];
-            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG', binance_alpha: 'BI' };
+            const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG' };
             const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
-            const marketSuffix = exchange === 'binance_alpha' ? 'A' : (market === 'futures' ? 'F' : 'S');
+            const marketSuffix = market === 'futures' ? 'F' : 'S';
             const prefix = `${exchangePrefix}-${marketSuffix}`;
             densities.forEach(d => {
                 const ageSeconds = d.age_seconds || 0;
@@ -177,34 +175,6 @@ function openScalpSettingsModal() {
     const container = document.getElementById('scalpExchangesContainer');
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
         const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
-        const isAlpha = ex.id === 'binance_alpha';
-        const marketsHtml = isAlpha
-            ? `<div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px; opacity:0.5;">
-                    <label style="display:flex; align-items:center; gap:6px; cursor:not-allowed; font-size:12px; color:#888; margin-bottom:8px;">
-                        <input type="checkbox" id="scalpAlpha_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} disabled style="accent-color:${ex.color}; width:14px; height:14px;">
-                        <span>A (Alpha) — unavailable</span>
-                    </label>
-                    <label style="font-size:10px; color:#666; display:block; margin-bottom:4px;">Min volume (USDT):</label>
-                    <input type="number" id="scalpMinAlpha_${ex.id}" value="${cfg.minVolumeFutures}" min="50000" step="10000" disabled style="width:100%; background:#1e293b; border:1px solid #475569; color:#666; padding:5px 8px; border-radius:3px; font-size:12px;">
-                </div>`
-            : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                    <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
-                            <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
-                            <span>Futures</span>
-                        </label>
-                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
-                        <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="200000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
-                    </div>
-                    <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
-                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
-                            <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
-                            <span>Spot</span>
-                        </label>
-                        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
-                        <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="100000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
-                    </div>
-                </div>`;
         return `<div class="exchange-card" style="background:#3b4252; border:1px solid #475569; border-radius:6px; padding:14px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -214,12 +184,29 @@ function openScalpSettingsModal() {
                     </span>
                     <span style="font-weight:600; color:${ex.color}; font-size:14px; min-width:90px;">${ex.label || ex.name}</span>
                 </div>
-                <label style="display:flex; align-items:center; gap:6px; cursor:not-allowed; font-size:12px; color:#888;">
-                    <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} disabled style="accent-color:${ex.color}; width:16px; height:16px;">
-                    <span>Enable — unavailable</span>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0;">
+                    <input type="checkbox" id="scalpEnabled_${ex.id}" ${cfg.enabled ? 'checked' : ''} style="accent-color:${ex.color}; width:16px; height:16px;">
+                    <span>Включить</span>
                 </label>
             </div>
-            ${marketsHtml}
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
+                        <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                        <span>Futures</span>
+                    </label>
+                    <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                    <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}" min="200000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                </div>
+                <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
+                        <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''} style="accent-color:${ex.color}; width:14px; height:14px;">
+                        <span>Spot</span>
+                    </label>
+                    <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Мин. объём (USDT):</label>
+                    <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}" min="100000" step="10000" style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+                </div>
+            </div>
         </div>`;
     }).join('');
     const modal = new bootstrap.Modal(document.getElementById('scalpSettingsModal'));
@@ -228,27 +215,19 @@ function openScalpSettingsModal() {
 
 function applyScalpSettings() {
     EXCHANGES_CONFIG.forEach(ex => {
-        const toggle = document.getElementById(`scalpEnabled_${ex.id}`);
-        const isAlpha = ex.id === 'binance_alpha';
+        const toggle = document.getElementById(`scalp-${ex.id}-toggle`);
+        const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
+        const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
+        const fInput = document.getElementById(`scalp-${ex.id}-fv`);
+        const sInput = document.getElementById(`scalp-${ex.id}-sv`);
         if (!scalpExchanges[ex.id]) {
             scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
-        // Force Alpha disabled
-        if (isAlpha) {
-            scalpExchanges[ex.id].enabled = false;
-            scalpExchanges[ex.id].markets.futures = false;
-            scalpExchanges[ex.id].markets.spot = false;
-        } else {
-            scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
-            const fCheckbox = document.getElementById(`scalpFutures_${ex.id}`);
-            const sCheckbox = document.getElementById(`scalpSpot_${ex.id}`);
-            const fInput = document.getElementById(`scalpMinFutures_${ex.id}`);
-            const sInput = document.getElementById(`scalpMinSpot_${ex.id}`);
-            scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
-            scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-            scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 200000 : 200000;
-            scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 100000 : 100000;
-        }
+        scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
+        scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
+        scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
+        scalpExchanges[ex.id].minVolumeFutures = fInput ? parseInt(fInput.value) || 200000 : 200000;
+        scalpExchanges[ex.id].minVolumeSpot = sInput ? parseInt(sInput.value) || 100000 : 100000;
     });
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
     scalpEnabled = Object.values(scalpExchanges).some(cfg =>

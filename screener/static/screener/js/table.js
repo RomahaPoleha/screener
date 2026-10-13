@@ -30,16 +30,12 @@ function renderTable(data) {
         const isActive = coin.symbol === currentSymbol;
         const activeClass = isActive ? ' active' : '';
 
-        // Добавляем столбец "Сделки" (формат как объём: 1M, 100K)
-        const dealsTxt = (coin.deals !== undefined && coin.deals !== null) ? formatVolumeText(coin.deals) : '-';
         return `<div class="coin-row${activeClass}" data-symbol="${coin.symbol}" onclick="openChart('${coin.symbol}')">
             <div class="coin-color-dot" style="background:${colorHex || 'transparent'};"
                  onclick="event.stopPropagation(); openColorPicker(event, '${coin.symbol}')"
                  title="Цвет группы"></div>
             <div class="coin-symbol">${coin.symbol}</div>
             <div class="coin-change ${isUp ? 'text-up' : 'text-down'}">${isUp ? '+' : ''}${coin.change}%</div>
-            <div class="coin-gap"></div>
-            <div class="coin-deals" title="Сделок за 24ч">${dealsTxt}</div>
             <div class="coin-volume">$${fmt(coin.volume)}</div>
             <div class="coin-natr ${n1 ? getNatrClass(n1) : 'empty'}">${n1Txt}</div>
             <div class="coin-natr ${n5 ? getNatrClass(n5) : 'empty'}">${n5Txt}</div>
@@ -83,7 +79,7 @@ function applyLocalFilters() {
     if (sortState.field) {
         filtered.sort((a, b) => {
             let valA, valB;
-            if (['change', 'volume', 'deals'].includes(sortState.field)) {
+            if (['change', 'volume'].includes(sortState.field)) {
                 valA = a[sortState.field]; valB = b[sortState.field];
             }
             else if (sortState.field === 'natr_1m') {

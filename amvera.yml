@@ -2,13 +2,21 @@ meta:
   environment: python
   toolchain:
     name: pip
-    version: "3.12"
+    version: "3.11"
 
 build:
   requirementsPath: requirements.txt
-  useCache: false
+  useCache: true
 
 run:
-  command: sh /app/start.sh
-  persistenceMount: /app/data
+  # ВАЖНО: Сначала собираем статику (&&), потом запускаем сервер
+  command: python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 config.asgi:application
   containerPort: 8000
+  persistenceMount: /app/data
+
+services:
+  redis:
+    image: redis:alpine
+    resources:
+      memory: 128M
+      cpu: 0.25

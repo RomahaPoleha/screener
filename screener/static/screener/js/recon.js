@@ -20,16 +20,14 @@ let reconMarkets = {
     gate:    { spot: false, futures: false },
     mexc:    { spot: false, futures: false },
     bitget:  { spot: false, futures: false },
-    binance_alpha: { spot: true, futures: false },
 };
 let reconMinVolumes = {
     binance: { spot: 10000, futures: 10000 },
     bybit:   { spot: 10000, futures: 10000 },
     okx:     { spot: 10000, futures: 10000},
-    gate:    { spot: 10000, futures: 10000 },
+    gate:    { spot: 10000, futures: 10000 }, // Рекомендуется снизить порог для Gate futures, так как раньше он был искусственно завышен
     mexc:    { spot: 10000, futures: 10000 },
-    bitget:  { spot: 10000, futures: 10000 },
-    binance_alpha: { spot: 1000, futures: 1000 }
+    bitget:  { spot: 10000, futures: 10000 }
 };
 
 // --- НОВОЕ: Кэш для мультипликаторов контрактов Gate.io Futures ---
@@ -54,9 +52,6 @@ try {
             if (Number(savedVol[id].futures) > 0) reconMinVolumes[id].futures = Number(savedVol[id].futures);
         }
     }
-    // Сброс дефолта для Alpha если сохранено старое значение 10000
-    if (reconMinVolumes.binance_alpha.spot === 10000) reconMinVolumes.binance_alpha.spot = 1000;
-    if (reconMinVolumes.binance_alpha.futures === 10000) reconMinVolumes.binance_alpha.futures = 1000;
 } catch (e) {}
 
 const RECON_EXCHANGES = [
@@ -66,7 +61,6 @@ const RECON_EXCHANGES = [
     { id: 'gate',    label: 'GT',  color: '#f59e0b', domain: 'gate.io' },
     { id: 'mexc',    label: 'MEX', color: '#f59e0b', domain: 'mexc.com' },
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
-    { id: 'binance_alpha', label: 'BI', color: '#8b5cf6', domain: 'binance.com' },
 ];
 
 // ==========================================
@@ -142,29 +136,6 @@ function startDensityUpdates(symbol) {
     }, 3000);
 }
 
-// Кэш маппинга Alpha: baseSymbol -> ALPHA_{tokenId}USDT
-let alphaSymbolMap = null;
-
-async function fetchAlphaSymbolMap() {
-    if (alphaSymbolMap) return alphaSymbolMap;
-    try {
-        const res = await fetch('/api/exchange-alpha-map/');
-        if (res.ok) {
-            const data = await res.json();
-            alphaSymbolMap = data.map || {};
-        }
-    } catch (e) {
-        console.error('Alpha map fetch error:', e);
-        alphaSymbolMap = {};
-    }
-    return alphaSymbolMap;
-}
-
-function getAlphaSymbol(symbol) {
-    if (!alphaSymbolMap) return null;
-    return alphaSymbolMap[symbol.toUpperCase()] || null;
-}
-
 // ==========================================
 // RECON — НОВАЯ МУЛЬТИ-БИРЖЕВАЯ ЛОГИКА
 // ==========================================
@@ -183,13 +154,6 @@ function getReconUrl(exId, symbol, market) {
         : `https://api.bitget.com/api/v2/spot/market/merge-depth?symbol=${symbol}USDT&limit=100`;
     if (exId === 'gate') return `/api/gate-depth/?market=${market}&symbol=${symbol}`;
     if (exId === 'mexc') return `/api/mexc-depth/?market=${market}&symbol=${symbol}`;
-    if (exId === 'binance_alpha') {
-        // Alpha — спотовая торговля на BSC/Base/Robinhood, символ ALPHA_{tokenId}USDT
-        if (market !== 'spot') return null;
-        const alphaSym = getAlphaSymbol(symbol);
-        if (!alphaSym) return null;
-        return `https://www.binance.com/bapi/defi/v1/public/alpha-trade/fullDepth?symbol=${alphaSym}&limit=500`;
-    }
     return null;
 }
 
@@ -210,11 +174,6 @@ function parseReconLevels(exId, data) {
     } else if (exId === 'bitget') {
         const inner = data.data || {};
         rawBids = inner.bids || []; rawAsks = inner.asks || [];
-    } else if (exId === 'binance_alpha') {
-        // Alpha response: {code: "000000", data: {bids: [[price, qty],...], asks: [...]}}
-        const d = data.data || {};
-        rawBids = d.bids || [];
-        rawAsks = d.asks || [];
     }
     const toLevel = (row) => {
         if (Array.isArray(row)) return [parseFloat(row[0]), Math.abs(parseFloat(row[1]))];
@@ -267,9 +226,7 @@ async function fetchReconMarket(exId, symbol, market) {
             const url = getReconUrl(exId, symbol, market);
             if (!url) return [];
             const res = await fetch(url);
-            if (!res.ok) {
-                return [];
-            }
+            if (!res.ok) return [];
             data = await res.json();
         }
     } catch (e) { return []; }
@@ -281,9 +238,6 @@ async function fetchReconMarket(exId, symbol, market) {
             if (data.code !== undefined && data.code !== '00000' && data.code !== 0) return [];
         } else if (exId === 'bybit') {
             if (data.retCode !== undefined && data.retCode !== 0) return [];
-        } else if (exId === 'binance_alpha') {
-            // Alpha возвращает code: "000000"
-            if (data.code !== undefined && data.code !== '000000') return [];
         } else {
             if (data.code !== undefined && data.code !== 0 && data.code !== '0') return [];
             if (data.retCode !== undefined && data.retCode !== 0) return [];
@@ -338,8 +292,7 @@ async function loadReconDensities(symbol) {
         for (const r of results) {
             if (!r.data) continue;
             const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
-            const isAlpha = r.ex === 'binance_alpha';
-            const suffix = isAlpha ? 'A' : (r.market === 'futures' ? 'F' : 'S');
+            const suffix = r.market === 'futures' ? 'F' : 'S';
             const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
             top.forEach(d => {
                 const line = candleSeries.createPriceLine({
@@ -401,23 +354,17 @@ function renderReconPanel() {
             const border = on ? `1px solid ${ex.color}` : '1px solid #475569';
             const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:11px;font-weight:bold;">✓</span>` : '';
             return `<span style="font-size:10px;color:#94a3b8;">${letter}</span>
-                <div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Click: toggle ${letter} ${ex.label}" style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
+                <div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Клик: вкл/выкл ${letter} ${ex.label}" style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
                     ${checkmark}
                 </div>`;
         };
-        
-        // Alpha: спотовая торговля, показываем галочку "A"
-        const isAlpha = ex.id === 'binance_alpha';
-        const togglesHtml = isAlpha
-            ? mkToggle('spot', 'A')
-            : mkToggle('spot', 'S') + mkToggle('futures', 'F');
-        
         return `<div style="display:flex;align-items:center;gap:5px;">
             <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:22px;">
                 <span style="font-weight:600;font-size:11px;color:${ex.color};line-height:1;">${ex.label}</span>
                 <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:12px;height:12px;border-radius:2px;display:block;">
             </div>
-            ${togglesHtml}
+            ${mkToggle('spot', 'S')}
+            ${mkToggle('futures', 'F')}
         </div>`;
     }).join('');
 }
@@ -441,8 +388,6 @@ function startReconUpdates(symbol) {
     if (!reconEnabled) return;
     ensureReconPanel();
     renderReconPanel();
-    // Загружаем маппинг Alpha для Recon
-    fetchAlphaSymbolMap();
     loadReconDensities(symbol);
     reconUpdateTimer = setInterval(() => {
         if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
@@ -458,18 +403,14 @@ function stopReconUpdates() {
 function renderReconSettings() {
     const container = document.getElementById('reconSettingsContainer');
     if (!container) return;
-    container.innerHTML = RECON_EXCHANGES.map(ex => {
-        const isAlpha = ex.id === 'binance_alpha';
-        const minVal = isAlpha ? 1000 : 10000;
-        return `<div style="display:flex;align-items:center;gap:6px;">
-            <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
-            ${isAlpha ? '' : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`}
-            <span style="font-size:11px;color:#94a3b8;min-width:10px;">${isAlpha ? 'A' : 'F'}:</span>
-            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
-        </div>`;
-    }).join('');
+    container.innerHTML = RECON_EXCHANGES.map(ex => `<div style="display:flex;align-items:center;gap:6px;">
+        <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
+        <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
+        <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+        <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="10000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+        <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+        <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="10000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+    </div>`).join('');
 }
 
 function toggleReconSettings() {
