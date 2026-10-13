@@ -104,36 +104,27 @@ STORAGES = {
 # ==========================================
 # REDIS & CACHING
 # ==========================================
-# Amvera internal Redis
-REDIS_HOST = os.getenv('REDIS_HOST', 'run-bd')
-REDIS_PORT = os.getenv('REDIS_PORT', '6379')
-# Amvera may inject password under different names
-REDIS_PASSWORD = (
-    os.getenv('REDIS_PASSWORD')
-    or os.getenv('REDIS_PASS')
-    or os.getenv('REDIS_AUTH')
-    or None
-)
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
 
-if REDIS_PASSWORD:
-    REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
-else:
-    REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
-
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': REDIS_URL,
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'CONNECTION_POOL_KWARGS': {
-                'decode_responses': True,
-                'protocol': 3,  # RESP3 for HELLO auth
-            },
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            }
         }
     }
-}
-print(f"✅ Redis настроен: {REDIS_URL}")
+    print(f"✅ Redis настроен: {REDIS_URL}")
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+            'LOCATION': '/app/data/django_cache',
+        }
+    }
+    print("⚠️ Redis не найден, используем FileCache")
 
 # ==========================================
 # DJANGO CHANNELS
