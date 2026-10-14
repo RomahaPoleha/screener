@@ -46,18 +46,30 @@ function openSettingsModal() {
     renderScalpCards();
 
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-    if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
+    if (priceImpulseThr) {
+        const saved = localStorage.getItem('priceImpulseThreshold');
+        priceImpulseThr.value = saved !== null ? saved : '1.5';
+    }
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
-    if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
+    if (priceImpulseWin) {
+        const saved = localStorage.getItem('priceImpulseWindow');
+        priceImpulseWin.value = saved !== null ? saved : '300';
+    }
 
     const soundCheckbox = document.getElementById('soundToggleModal');
     if (soundCheckbox) soundCheckbox.checked = soundEnabled;
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
     const beepSlider = document.getElementById('alertBeepVolume');
-    if (beepSlider) beepSlider.value = alertBeepVolume;
+    if (beepSlider) {
+        const saved = localStorage.getItem('alertBeepVolume');
+        beepSlider.value = saved !== null ? saved : '0.5';
+    }
     const hourSlider = document.getElementById('hourSoundVolume');
-    if (hourSlider) hourSlider.value = hourSoundVolume;
+    if (hourSlider) {
+        const saved = localStorage.getItem('hourSoundVolume');
+        hourSlider.value = saved !== null ? saved : '0.5';
+    }
 
     initSettingsTabs();
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
@@ -106,27 +118,43 @@ function applySettings() {
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
 
-    // 🔥 Синхронизация настроек с сервером и сохранение в localStorage (ОБЪЕДИНЕНО)
-const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-const priceImpulseWin = document.getElementById('priceImpulseWindow');
-if (priceImpulseThr || priceImpulseWin) {
-    const settingsPayload = {};
-    if (priceImpulseThr) {
-        const thr = parseFloat(priceImpulseThr.value);
-        settingsPayload.threshold = thr;
-        if (thr > 0) {
-            priceImpulseThreshold = thr;
-            localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
+    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+    const priceImpulseWin = document.getElementById('priceImpulseWindow');
+    if (priceImpulseThr || priceImpulseWin) {
+        const settingsPayload = {};
+        if (priceImpulseThr) {
+            const saved = localStorage.getItem('priceImpulseThreshold');
+            priceImpulseThr.value = saved !== null ? saved : '1.5';
+            priceImpulseThr.addEventListener('input', () => {
+                const val = parseFloat(priceImpulseThr.value);
+                if (!isNaN(val) && val > 0) {
+                    priceImpulseThreshold = val;
+                    localStorage.setItem('priceImpulseThreshold', val);
+                }
+            });
+            const thr = parseFloat(priceImpulseThr.value);
+            settingsPayload.threshold = thr;
+            if (thr > 0) {
+                priceImpulseThreshold = thr;
+                localStorage.setItem('priceImpulseThreshold', thr);
+            }
+        }
+        if (priceImpulseWin) {
+            const saved = localStorage.getItem('priceImpulseWindow');
+            priceImpulseWin.value = saved !== null ? saved : '300';
+            priceImpulseWin.addEventListener('input', () => {
+                const val = parseInt(priceImpulseWin.value);
+                const safeWin = (val >= 120) ? 300 : 60;
+                priceImpulseWindow = safeWin;
+                localStorage.setItem('priceImpulseWindow', safeWin);
+            });
+            const win = parseInt(priceImpulseWin.value);
+            const safeWin = (win >= 120) ? 300 : 60;
+            settingsPayload.window = safeWin;
+            priceImpulseWindow = safeWin;
+            localStorage.setItem('priceImpulseWindow', safeWin);
         }
     }
-    if (priceImpulseWin) {
-        const win = parseInt(priceImpulseWin.value);
-        const safeWin = (win >= 120) ? 300 : 60;
-        settingsPayload.window = safeWin;
-        priceImpulseWindow = safeWin;
-        localStorage.setItem('priceImpulseWindow', safeWin);
-    }
-}
 
     // Применяем настройки скальпа
     EXCHANGES_CONFIG.forEach(ex => {
@@ -175,12 +203,30 @@ if (priceImpulseThr || priceImpulseWin) {
     // Добавлена безопасная проверка на существование элементов перед чтением .value
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) {
+        const saved = localStorage.getItem('alertBeepVolume');
+        beepSlider.value = saved !== null ? saved : '0.5';
+        beepSlider.addEventListener('input', () => {
+            const val = parseFloat(beepSlider.value);
+            if (!isNaN(val)) {
+                alertBeepVolume = val;
+                localStorage.setItem('alertBeepVolume', val);
+            }
+        });
         alertBeepVolume = parseFloat(beepSlider.value);
         localStorage.setItem('alertBeepVolume', alertBeepVolume);
     }
 
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) {
+        const saved = localStorage.getItem('hourSoundVolume');
+        hourSlider.value = saved !== null ? saved : '0.5';
+        hourSlider.addEventListener('input', () => {
+            const val = parseFloat(hourSlider.value);
+            if (!isNaN(val)) {
+                hourSoundVolume = val;
+                localStorage.setItem('hourSoundVolume', val);
+            }
+        });
         hourSoundVolume = parseFloat(hourSlider.value);
         localStorage.setItem('hourSoundVolume', hourSoundVolume);
     }
