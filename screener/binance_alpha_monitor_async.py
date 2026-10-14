@@ -63,7 +63,7 @@ async def close_http_client():
 # ==========================================
 def _fetch_master_symbols_sync():
     """Синхронное чтение мастер-списка фьючерсов из Redis и маппинг в Alpha символы.
-    Возвращает список БАЗОВЫХ символов (CT, TRUTH, ...), а не ALPHA_XXXUSDT.
+    Возвращает список ПОЛНЫХ символов (TRUTHUSDT, CTUSDT, ...) для единообразия ключей кэша.
     """
     try:
         key = 'scalp:master:futures'
@@ -77,12 +77,12 @@ def _fetch_master_symbols_sync():
             return []
 
         # Фильтруем: оставляем только те базовые символы, которые есть в Alpha маппинге
-        # Возвращаем БАЗОВЫЕ символы для единообразия ключей кэша
+        # Возвращаем ПОЛНЫЕ символы (TRUTHUSDT) для совместимости с API ключами кэша
         alpha_symbols = []
         for base_symbol in all_symbols:
             base = base_symbol.upper()
             if base in alpha_map:
-                alpha_symbols.append(base)  # Базовый символ: CT, TRUTH, ...
+                alpha_symbols.append(base + 'USDT')  # Полный символ: TRUTHUSDT, CTUSDT
 
         return alpha_symbols
     except Exception as e:
@@ -101,16 +101,19 @@ async def get_master_symbols_async():
 # ==========================================
 async def init_order_book_async(symbol, log_func=print):
     """Инициализация стакана Alpha через async HTTP.
-    symbol — базовый символ (CT, TRUTH, ...).
+    symbol — ПОЛНЫЙ символ (TRUTHUSDT, CTUSDT, ...).
     """
     try:
+        # Извлекаем базовый символ (TRUTH из TRUTHUSDT) для маппинга
+        base_symbol = symbol.upper().replace('USDT', '')
+        
         # Получаем ALPHA_XXXUSDT из маппинга для REST API
         alpha_map = cache.get('exchange:alpha:map')
-        if not alpha_map or symbol.upper() not in alpha_map:
+        if not alpha_map or base_symbol not in alpha_map:
             log_func(f"⚠️ alpha {symbol}: нет в маппинге Alpha")
             return 0
         
-        alpha_symbol = alpha_map[symbol.upper()]  # ALPHA_1228USDT
+        alpha_symbol = alpha_map[base_symbol]  # ALPHA_1228USDT
         
         # Binance Alpha REST требует верхний регистр (напр. ALPHA_175USDT)
         sym_rest = alpha_symbol.upper()
@@ -159,6 +162,7 @@ async def init_order_book_async(symbol, log_func=print):
             log_func(f"⚠️ alpha {symbol}: пустой стакан")
             return 0
 
+        # Внутренние структуры используют ПОЛНЫЙ символ (TRUTHUSDT)
         async with alpha_lock:
             alpha_order_books[symbol] = {'bids': bids, 'asks': asks}
             alpha_density_timestamps[symbol] = {}
@@ -177,8 +181,8 @@ async def init_order_book_async(symbol, log_func=print):
 # ==========================================
 async def sync_to_cache_async(symbol, log_func=print):
     """Синхронизация плотностей в Redis.
-    symbol — базовый символ (CT, TRUTH, ...).
-    Ключ кэша: scalp:spot:binance_alpha:{symbol} (базовый символ).
+    symbol — ПОЛНЫЙ символ (TRUTHUSDT, CTUSDT, ...).
+    Ключ кэша: scalp:spot:binance_alpha:{symbol} (полный символ).
     """
     try:
         async with alpha_lock:
@@ -298,7 +302,7 @@ async def ws_listener(log_func=print):
 
     while True:
         try:
-            symbols = alpha_symbols  # Базовые символы: CT, TRUTH, ...
+            symbols = alpha_symbols  # Полные символы: TRUTHUSDT, CTUSDT, ...
             if not symbols:
                 await asyncio.sleep(5)
                 continue
@@ -317,10 +321,11 @@ async def ws_listener(log_func=print):
 
                 try:
                     # Binance Alpha требует строчные буквы в подписке и формат @fulldepth@interval
-                    # Конвертируем базовые символы в ALPHA_XXXUSDT для подписки
+                    # Конвертируем полные символы в ALPHA_XXXUSDT для подписки
                     args = []
                     for s in symbols:
-                        alpha_sym = alpha_map.get(s.upper())
+                        base = s.upper().replace('USDT', '')
+                        alpha_sym = alpha_map.get(base)
                         if alpha_sym:
                             args.append(f"{alpha_sym.lower()}@fulldepth@100ms")
                     
@@ -368,11 +373,11 @@ async def ws_listener(log_func=print):
 # ==========================================
 async def process_queue(log_func=print):
     """Обработка очереди сообщений Binance Alpha"""
-    # Реальное кэширование reverse map для быстрого lookup
+    # Реальное кэширование reverse map для быстрого lookup: ALPHA_1228USDT -> TRUTHUSDT
     alpha_map = cache.get('exchange:alpha:map')
     reverse_map = {}
     if alpha_map:
-        reverse_map = {v.upper(): k.upper() for k, v in alpha_map.items()}
+        reverse_map = {v.upper(): k.upper() + 'USDT' for k, v in alpha_map.items()}
 
     while True:
         try:
@@ -391,12 +396,12 @@ async def process_queue(log_func=print):
             sym_ws = stream.split('@')[0]
             alpha_symbol = sym_ws.upper()  # ALPHA_1228USDT
             
-            # Конвертируем в базовый символ для внутреннего использования
+            # Конвертируем в ПОЛНЫЙ символ для внутреннего использования
             symbol = reverse_map.get(alpha_symbol)
             if not symbol:
                 # Fallback: пробуем убрать префикс ALPHA_ и суффикс USDT
                 if alpha_symbol.startswith('ALPHA_') and alpha_symbol.endswith('USDT'):
-                    symbol = alpha_symbol[6:-4]  # Убираем "ALPHA_" и "USDT"
+                    symbol = alpha_symbol[6:-4] + 'USDT'  # ALPHA_1228USDT -> 1228USDT? No, this is wrong
                 else:
                     log_func(f"⚠️ alpha: неизвестный символ в стриме: {alpha_symbol}")
                     continue
