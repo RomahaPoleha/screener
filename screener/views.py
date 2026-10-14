@@ -39,6 +39,7 @@ _volume_poller_started = False
 
 
 
+
 def get_binance_exchange():
     """Ленивая инициализация exchange (экономит 50-100мс на запрос)"""
     global _binance_exchange_future
