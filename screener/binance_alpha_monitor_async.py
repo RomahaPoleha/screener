@@ -8,7 +8,6 @@ import time
 import aiohttp
 import websockets
 from django.core.cache import cache
-from .views import _fetch_alpha_token_list
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — BINANCE ALPHA
@@ -60,30 +59,43 @@ async def close_http_client():
 
 
 # ==========================================
-# 🔥 ЧТЕНЕЕ СИМВОЛОВ ALPHA (из exchange:alpha:map)
+# 🔥 ЧТЕНЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE (как Bybit)
 # ==========================================
 def _fetch_master_symbols_sync():
-    """Синхронное чтение символов Alpha из кэша (exchange:alpha:map).
-    Возвращает список ПОЛНЫХ символов (TRUTHUSDT, CTUSDT, ...).
-    Не зависит от мастер-листа Binance Futures.
+    """Синхронное чтение мастер-списка SPOT из Redis (scalp:master:spot).
+    Фильтрует: оставляет только те символы, которые есть в alpha_map.
+    Возвращает список базовых символов (BTCUSDT, ETHUSDT, ...).
     """
     try:
-        # Получаем маппинг base_symbol -> ALPHA_XXXUSDT из кэша
+        # 1. Читаем мастер-лист от Binance (SPOT)
+        master_symbols = cache.get('scalp:master:spot')
+        if not isinstance(master_symbols, list) or not master_symbols:
+            print(f"⚠️ alpha: scalp:master:spot пуст или не список")
+            return []
+
+        # 2. Читаем маппинг Alpha: base_symbol -> ALPHA_XXXUSDT
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map:
             print(f"⚠️ alpha: exchange:alpha:map пуст")
             return []
 
-        # Возвращаем ВСЕ символы из маппинга (init_order_book отфильтрует пустые)
-        alpha_symbols = [base_symbol.upper() + 'USDT' for base_symbol in alpha_map.keys()]
+        # 3. Фильтруем: оставляем только те, что есть в alpha_map
+        # master_symbols приходят как BTCUSDT, ETHUSDT...
+        # alpha_map ключи — базовые: BTC, ETH, TRUTH...
+        filtered = []
+        for symbol in master_symbols:
+            base = symbol.upper().replace('USDT', '')
+            if base in alpha_map:
+                filtered.append(symbol)  # храним базовый формат BTCUSDT
 
-        print(f"🔍 alpha: alpha_map={len(alpha_map)}, символов={len(alpha_symbols)}: {alpha_symbols[:10]}")
-        return alpha_symbols
+        print(f"🔍 alpha: master={len(master_symbols)}, alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
+        return filtered
     except Exception as e:
-        print(f"❌ Ошибка чтения alpha символов: {e}")
+        print(f"❌ Ошибка чтения master-списка для alpha: {e}")
         import traceback
         print(traceback.format_exc())
         return []
+
 async def get_master_symbols_async():
     """Асинхронная обёртка для чтения мастер-списка"""
     loop = asyncio.get_running_loop()
@@ -95,10 +107,12 @@ async def get_master_symbols_async():
 # ==========================================
 async def init_order_book_async(symbol, log_func=print):
     """Инициализация стакана Alpha через async HTTP.
-    symbol — ПОЛНЫЙ символ (TRUTHUSDT, CTUSDT, ...).
+    symbol — БАЗОВЫЙ символ из мастер-листа (BTCUSDT, ETHUSDT, ...).
+    Внутри разрешаем через alpha_map -> ALPHA_XXXUSDT.
+    Внутренние структуры и кэш используют БАЗОВЫЙ символ (BTCUSDT).
     """
     try:
-        # Извлекаем базовый символ (TRUTH из TRUTHUSDT) для маппинга
+        # Извлекаем базовый символ (BTC из BTCUSDT) для маппинга
         base_symbol = symbol.upper().replace('USDT', '')
         
         # Получаем ALPHA_XXXUSDT из маппинга для REST API
@@ -157,7 +171,7 @@ async def init_order_book_async(symbol, log_func=print):
             log_func(f"⚠️ alpha {symbol}: пустой стакан")
             return 0
 
-        # Внутренние структуры используют ПОЛНЫЙ символ (TRUTHUSDT)
+        # Внутренние структуры используют БАЗОВЫЙ символ (BTCUSDT) — как мастер-лист
         async with alpha_lock:
             alpha_order_books[symbol] = {'bids': bids, 'asks': asks}
             alpha_density_timestamps[symbol] = {}
@@ -178,8 +192,8 @@ async def init_order_book_async(symbol, log_func=print):
 # ==========================================
 async def sync_to_cache_async(symbol, log_func=print):
     """Синхронизация плотностей в Redis.
-    symbol — ПОЛНЫЙ символ (TRUTHUSDT, CTUSDT, ...).
-    Ключ кэша: scalp:spot:binance_alpha:{symbol} (полный символ).
+    symbol — БАЗОВЫЙ символ из мастер-листа (BTCUSDT, ETHUSDT, ...).
+    Ключ кэша: scalp:spot:binance_alpha:{symbol} (базовый символ).
     """
     try:
         async with alpha_lock:
@@ -302,7 +316,7 @@ async def ws_listener(log_func=print):
 
     while True:
         try:
-            symbols = alpha_symbols  # Полные символы: TRUTHUSDT, CTUSDT, ...
+            symbols = alpha_symbols  # Символы в формате мастер-листа: BTCUSDT, ETHUSDT, ...
             if not symbols:
                 log_func("⚠️ alpha: alpha_symbols пуст, жду 5 сек")
                 await asyncio.sleep(5)
@@ -382,7 +396,7 @@ async def ws_listener(log_func=print):
 # ==========================================
 async def process_queue(log_func=print):
     """Обработка очереди сообщений Binance Alpha"""
-    # Реальное кэширование reverse map для быстрого lookup: ALPHA_1228USDT -> TRUTHUSDT
+    # Reverse map: ALPHA_1228USDT -> BTCUSDT (базовый символ из мастер-листа)
     alpha_map = cache.get('exchange:alpha:map')
     reverse_map = {}
     if alpha_map:
