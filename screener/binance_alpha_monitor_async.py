@@ -62,7 +62,9 @@ async def close_http_client():
 # 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА (из Binance Futures + маппинг Alpha)
 # ==========================================
 def _fetch_master_symbols_sync():
-    """Синхронное чтение мастер-списка фьючерсов из Redis и маппинг в Alpha символы."""
+    """Синхронное чтение мастер-списка фьючерсов из Redis и маппинг в Alpha символы.
+    Возвращает список БАЗОВЫХ символов (CT, TRUTH, ...), а не ALPHA_XXXUSDT.
+    """
     try:
         key = 'scalp:master:futures'
         all_symbols = cache.get(key)
@@ -75,11 +77,12 @@ def _fetch_master_symbols_sync():
             return []
 
         # Фильтруем: оставляем только те базовые символы, которые есть в Alpha маппинге
+        # Возвращаем БАЗОВЫЕ символы для единообразия ключей кэша
         alpha_symbols = []
         for base_symbol in all_symbols:
             base = base_symbol.upper()
             if base in alpha_map:
-                alpha_symbols.append(alpha_map[base])  # ALPHA_XXXUSDT
+                alpha_symbols.append(base)  # Базовый символ: CT, TRUTH, ...
 
         return alpha_symbols
     except Exception as e:
@@ -97,10 +100,20 @@ async def get_master_symbols_async():
 # ИНИЦИАЛИЗАЦИЯ СТАКАНОВ (async HTTP)
 # ==========================================
 async def init_order_book_async(symbol, log_func=print):
-    """Инициализация стакана Alpha через async HTTP"""
+    """Инициализация стакана Alpha через async HTTP.
+    symbol — базовый символ (CT, TRUTH, ...).
+    """
     try:
+        # Получаем ALPHA_XXXUSDT из маппинга для REST API
+        alpha_map = cache.get('exchange:alpha:map')
+        if not alpha_map or symbol.upper() not in alpha_map:
+            log_func(f"⚠️ alpha {symbol}: нет в маппинге Alpha")
+            return 0
+        
+        alpha_symbol = alpha_map[symbol.upper()]  # ALPHA_1228USDT
+        
         # Binance Alpha REST требует верхний регистр (напр. ALPHA_175USDT)
-        sym_rest = symbol.upper()
+        sym_rest = alpha_symbol.upper()
         url = ALPHA_REST_URL.format(sym_rest)
 
         client = await get_http_client()
@@ -163,6 +176,10 @@ async def init_order_book_async(symbol, log_func=print):
 # СИНХРОНИЗАЦИЯ В REDIS (async)
 # ==========================================
 async def sync_to_cache_async(symbol, log_func=print):
+    """Синхронизация плотностей в Redis.
+    symbol — базовый символ (CT, TRUTH, ...).
+    Ключ кэша: scalp:spot:binance_alpha:{symbol} (базовый символ).
+    """
     try:
         async with alpha_lock:
             book = alpha_order_books.get(symbol, {})
@@ -171,6 +188,7 @@ async def sync_to_cache_async(symbol, log_func=print):
             if not book:
                 return 0
 
+        # Ключ кэша использует БАЗОВЫЙ символ для единообразия с API
         key = f"scalp:{ALPHA_CACHE_MARKET}:{ALPHA_CACHE_EXCHANGE}:{symbol}"
         now = time.time()
         densities = []
@@ -280,8 +298,14 @@ async def ws_listener(log_func=print):
 
     while True:
         try:
-            symbols = alpha_symbols
+            symbols = alpha_symbols  # Базовые символы: CT, TRUTH, ...
             if not symbols:
+                await asyncio.sleep(5)
+                continue
+
+            # Получаем маппинг для конвертации в ALPHA_XXXUSDT
+            alpha_map = cache.get('exchange:alpha:map')
+            if not alpha_map:
                 await asyncio.sleep(5)
                 continue
 
@@ -293,15 +317,20 @@ async def ws_listener(log_func=print):
 
                 try:
                     # Binance Alpha требует строчные буквы в подписке и формат @fulldepth@interval
-                    # interval: 0ms, 100ms, 500ms
-                    args = [f"{s.lower()}@fulldepth@100ms" for s in symbols]
+                    # Конвертируем базовые символы в ALPHA_XXXUSDT для подписки
+                    args = []
+                    for s in symbols:
+                        alpha_sym = alpha_map.get(s.upper())
+                        if alpha_sym:
+                            args.append(f"{alpha_sym.lower()}@fulldepth@100ms")
+                    
                     subscribe_msg = {
                         "method": "SUBSCRIBE",
                         "params": args,
                         "id": int(time.time() * 1000)
                     }
                     await ws.send(json.dumps(subscribe_msg))
-                    log_func(f"✅ alpha WS подписан на {len(symbols)} символов")
+                    log_func(f"✅ alpha WS подписан на {len(args)} символов")
 
                     while True:
                         if alpha_reconnect_event.is_set():
@@ -339,6 +368,12 @@ async def ws_listener(log_func=print):
 # ==========================================
 async def process_queue(log_func=print):
     """Обработка очереди сообщений Binance Alpha"""
+    # Реальное кэширование reverse map для быстрого lookup
+    alpha_map = cache.get('exchange:alpha:map')
+    reverse_map = {}
+    if alpha_map:
+        reverse_map = {v.upper(): k.upper() for k, v in alpha_map.items()}
+
     while True:
         try:
             message = await alpha_message_queue.get()
@@ -352,9 +387,19 @@ async def process_queue(log_func=print):
             if not stream or '@fulldepth@' not in stream:
                 continue
 
-            # Извлекаем символ из имени стрима (напр. "alpha_175usdt@fulldepth@100ms" -> "ALPHA_175USDT")
+            # Извлекаем символ из имени стрима (напр. "alpha_1228usdt@fulldepth@100ms" -> "ALPHA_1228USDT")
             sym_ws = stream.split('@')[0]
-            symbol = sym_ws.upper()
+            alpha_symbol = sym_ws.upper()  # ALPHA_1228USDT
+            
+            # Конвертируем в базовый символ для внутреннего использования
+            symbol = reverse_map.get(alpha_symbol)
+            if not symbol:
+                # Fallback: пробуем убрать префикс ALPHA_ и суффикс USDT
+                if alpha_symbol.startswith('ALPHA_') and alpha_symbol.endswith('USDT'):
+                    symbol = alpha_symbol[6:-4]  # Убираем "ALPHA_" и "USDT"
+                else:
+                    log_func(f"⚠️ alpha: неизвестный символ в стриме: {alpha_symbol}")
+                    continue
 
             payload_data = data.get('data', {})
             raw_bids = payload_data.get('bids', [])
