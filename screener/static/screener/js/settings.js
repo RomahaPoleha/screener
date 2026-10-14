@@ -240,4 +240,14 @@ const controlsHtml = isAlpha
       </label>`;
 
 return `<div style="display:flex;align-items:center;gap:6px;">
-  <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:
+  <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
+  <span style="font-weight:600;color:${ex.color};font-size:13px;min-width:70px;">${ex.label || ex.name}</span>
+  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
+    <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
+      style="accent-color:${ex.color};width:16px;height:16px;">
+    <span>Enable</span>
+  </label>
+  <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">${controlsHtml}</div>
+</div>`;
+}).join('');
+}
