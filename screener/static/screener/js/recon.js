@@ -346,7 +346,7 @@ async function loadReconDensities(symbol) {
                     price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
                     lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
                     axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
-                    title: `${ex.label}-${suffix} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
+                    title: `${ex.label}-${suffix} ${formatVolumeText(d.volume)}`
                 });
                 newLines.push(line);
             });
