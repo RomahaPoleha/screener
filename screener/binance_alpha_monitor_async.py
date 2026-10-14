@@ -110,10 +110,11 @@ async def init_order_book_async(symbol, log_func=print):
         # Получаем ALPHA_XXXUSDT из маппинга для REST API
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map or base_symbol not in alpha_map:
-            log_func(f"⚠️ alpha {symbol}: нет в маппинге Alpha")
+            log_func(f"⚠️ alpha {symbol}: нет в маппинге Alpha (base={base_symbol})")
             return 0
         
         alpha_symbol = alpha_map[base_symbol]  # ALPHA_1228USDT
+        log_func(f"🔍 alpha {symbol}: alpha_symbol={alpha_symbol}")
         
         # Binance Alpha REST требует верхний регистр (напр. ALPHA_175USDT)
         sym_rest = alpha_symbol.upper()
@@ -128,7 +129,7 @@ async def init_order_book_async(symbol, log_func=print):
 
         # Binance Alpha возвращает code "000000" при успехе
         if data.get('code') != "000000":
-            # log_func(f"⚠️ alpha {symbol}: code={data.get('code')} msg={data.get('message')}")
+            log_func(f"⚠️ alpha {symbol}: code={data.get('code')} msg={data.get('message')}")
             return 0
 
         result = data.get('data') or {}
@@ -173,6 +174,8 @@ async def init_order_book_async(symbol, log_func=print):
 
     except Exception as e:
         log_func(f"❌ init_order_book_async(alpha {symbol}): {e}")
+        import traceback
+        log_func(traceback.format_exc())
         return 0
 
 
@@ -261,6 +264,7 @@ async def sync_to_cache_async(symbol, log_func=print):
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
+            log_func(f"💾 alpha {symbol}: сохранено {len(densities)} плотностей в {key}")
         except RuntimeError:
             pass
 
@@ -272,6 +276,8 @@ async def sync_to_cache_async(symbol, log_func=print):
 
     except Exception as e:
         log_func(f"❌ sync_to_cache_async(alpha {symbol}): {e}")
+        import traceback
+        log_func(traceback.format_exc())
         return 0
 
 
@@ -304,16 +310,18 @@ async def ws_listener(log_func=print):
         try:
             symbols = alpha_symbols  # Полные символы: TRUTHUSDT, CTUSDT, ...
             if not symbols:
+                log_func("⚠️ alpha: alpha_symbols пуст, жду 5 сек")
                 await asyncio.sleep(5)
                 continue
 
             # Получаем маппинг для конвертации в ALPHA_XXXUSDT
             alpha_map = cache.get('exchange:alpha:map')
             if not alpha_map:
+                log_func("⚠️ alpha: exchange:alpha:map пуст, жду 5 сек")
                 await asyncio.sleep(5)
                 continue
 
-            log_func(f"🔌 alpha WS подключение: {len(symbols)} символов")
+            log_func(f"🔌 alpha WS подключение: {len(symbols)} символов: {symbols[:5]}...")
 
             # ping_interval=None, чтобы контролировать heartbeat вручную или полагаться на websockets
             async with websockets.connect(ALPHA_WS_URL, ping_interval=30, ping_timeout=10) as ws:
@@ -328,6 +336,13 @@ async def ws_listener(log_func=print):
                         alpha_sym = alpha_map.get(base)
                         if alpha_sym:
                             args.append(f"{alpha_sym.lower()}@fulldepth@100ms")
+                        else:
+                            log_func(f"⚠️ alpha: {s} не в alpha_map")
+                    
+                    if not args:
+                        log_func("⚠️ alpha: нет валидных символов для подписки")
+                        await asyncio.sleep(30)
+                        continue
                     
                     subscribe_msg = {
                         "method": "SUBSCRIBE",
@@ -335,7 +350,7 @@ async def ws_listener(log_func=print):
                         "id": int(time.time() * 1000)
                     }
                     await ws.send(json.dumps(subscribe_msg))
-                    log_func(f"✅ alpha WS подписан на {len(args)} символов")
+                    log_func(f"✅ alpha WS подписан на {len(args)} символов: {args[:5]}...")
 
                     while True:
                         if alpha_reconnect_event.is_set():
@@ -378,6 +393,9 @@ async def process_queue(log_func=print):
     reverse_map = {}
     if alpha_map:
         reverse_map = {v.upper(): k.upper() + 'USDT' for k, v in alpha_map.items()}
+        log_func(f"🔍 alpha reverse_map built: {len(reverse_map)} entries, sample: {list(reverse_map.items())[:3]}")
+    else:
+        log_func("⚠️ alpha: exchange:alpha:map cache is EMPTY!")
 
     while True:
         try:
@@ -399,12 +417,12 @@ async def process_queue(log_func=print):
             # Конвертируем в ПОЛНЫЙ символ для внутреннего использования
             symbol = reverse_map.get(alpha_symbol)
             if not symbol:
+                log_func(f"⚠️ alpha: unknown stream symbol: {alpha_symbol}, reverse_map keys: {list(reverse_map.keys())[:5]}")
                 # Fallback: пробуем убрать префикс ALPHA_ и суффикс USDT
                 if alpha_symbol.startswith('ALPHA_') and alpha_symbol.endswith('USDT'):
-                    symbol = alpha_symbol[6:-4] + 'USDT'  # ALPHA_1228USDT -> 1228USDT? No, this is wrong
-                else:
-                    log_func(f"⚠️ alpha: неизвестный символ в стриме: {alpha_symbol}")
-                    continue
+                    # Need base symbol from alpha_map values... skip fallback for now
+                    pass
+                continue
 
             payload_data = data.get('data', {})
             raw_bids = payload_data.get('bids', [])
@@ -479,6 +497,7 @@ async def periodic_refresh(log_func=print):
 
         try:
             master_symbols = await get_master_symbols_async()
+            log_func(f"🔍 alpha periodic_refresh: master_symbols={master_symbols}")
 
             if not master_symbols:
                 log_func("⚠️ alpha: мастер-список пуст, пропускаем ротацию")
@@ -517,6 +536,8 @@ async def periodic_refresh(log_func=print):
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(alpha): {e}")
+            import traceback
+            log_func(traceback.format_exc())
 
 
 # ==========================================
