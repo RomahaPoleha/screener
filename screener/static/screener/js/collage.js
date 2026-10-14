@@ -5,16 +5,19 @@
 window.collageState = null;
 let collageCharts = [];
 
+// Переменные для умного обновления скальпа в коллаже
+let collageScalpTimer = null;
+let collageScalpCache = {};
+
 function openCollage(colorId) {
     const symbols = Object.keys(coinColors).filter(s => coinColors[s] === colorId).sort();
     if (symbols.length < 2) return;
     window.collageState = { colorId, symbols, page: 0 };
     els.chartWrapper.style.display = 'none';
-    // Скрываем кнопку загрузки истории при открытии коллажа
+
     const historyBtn = document.getElementById('loadHistoryBtn');
-    if (historyBtn) {
-        historyBtn.style.display = 'none';
-    }
+    if (historyBtn) historyBtn.style.display = 'none';
+
     els.chartHint.style.display = 'none';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'none';
@@ -24,24 +27,27 @@ function openCollage(colorId) {
     els.chartWatermark.style.display = 'none';
     els.pencilCanvas.style.display = 'none';
     els.rulerMeasurement.style.display = 'none';
+
     const wrap = document.getElementById('collageWrap');
     if (wrap) wrap.style.display = 'grid';
+
     renderCollagePage();
 }
 
 function exitCollage() {
     if (!window.collageState) return;
+
+    // 🔹 Останавливаем умное обновление скальпа
+    stopCollageScalpUpdates();
+
     destroyCollageCharts();
     window.collageState = null;
-    // Показываем кнопку загрузки истории при закрытии коллажа
-    const historyBtn = document.getElementById('loadHistoryBtn');
-    if (historyBtn) {
-        historyBtn.style.display = '';
-    }
+
     const wrap = document.getElementById('collageWrap');
     if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
     const controls = document.getElementById('collageControls');
     if (controls) controls.style.display = 'none';
+
     els.chartWrapper.style.display = '';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'flex';
@@ -49,6 +55,10 @@ function exitCollage() {
     if (resetBtn) resetBtn.style.display = '';
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
     els.pencilCanvas.style.display = '';
+
+    const historyBtn = document.getElementById('loadHistoryBtn');
+    if (historyBtn) historyBtn.style.display = '';
+
     if (chart) {
         chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
 
@@ -112,14 +122,17 @@ function renderCollagePage() {
     const wrap = document.getElementById('collageWrap');
     if (!wrap || !window.collageState) return;
     wrap.innerHTML = '';
+
     const perPage = 4;
     const pages = Math.ceil(window.collageState.symbols.length / perPage);
     const pageSymbols = window.collageState.symbols.slice(window.collageState.page * perPage, window.collageState.page * perPage + perPage);
     const count = pageSymbols.length;
+
     let cols, rows;
     if (count === 1) { cols = 1; rows = 1; }
     else if (count === 2) { cols = 2; rows = 1; }
     else { cols = 2; rows = 2; }
+
     wrap.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     wrap.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
     wrap.style.gap = '2px';
@@ -153,6 +166,10 @@ function renderCollagePage() {
         if (sym) initCollageChart(i, sym);
     }
     updateCollageControls(pages);
+
+    // 🔹 ЗАПУСК УМНОГО ОБНОВЛЕНИЯ СКАЛЬПА ТОЛЬКО ДЛЯ ТЕКУЩИХ ВИДИМЫХ МОНЕТ
+    const activeSymbols = collageCharts.map(e => e.symbol);
+    startCollageScalpUpdates(activeSymbols);
 }
 
 function initCollageChart(index, symbol) {
@@ -167,32 +184,19 @@ function initCollageChart(index, symbol) {
         timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#222222', rightOffset: 6, barSpacing: 4 },
         rightPriceScale: { borderColor: '#222222', scaleMargins: { top: 0.1, bottom: 0.2 } },
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        handleScroll: {
-            mouseWheel: true,
-            pressedMouseMove: true,
-            horzTouchDrag: true,
-            vertTouchDrag: false
-        },
-        handleScale: {
-            mouseWheel: true,
-            pinch: true,
-            axisPressedMouseMove: true,
-            axisDoubleClickReset: true
-        },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+        handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
     });
 
     const candleSeries = chart.addCandlestickSeries({
-        upColor: '#22c55e', downColor: '#ef4444',
-        borderVisible: false,
+        upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
         wickUpColor: '#22c55e', wickDownColor: '#ef4444'
     });
-    const volumeSeries = chart.addHistogramSeries({
-        priceFormat: { type: 'volume' },
-        priceScaleId: 'volume'
-    });
+    const volumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'volume' });
     chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
 
-    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null };
+    // 🔹 Добавлен массив scalpLines для отслеживания и очистки линий
+    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null, scalpLinesMap: new Map() };
     collageCharts.push(entry);
 
     const coin = allCoins.find(c => c.symbol === symbol);
@@ -215,41 +219,37 @@ function initCollageChart(index, symbol) {
             candleSeries.applyOptions({ priceFormat: { type: 'price', precision, minMove } });
             candleSeries.setData(data);
             volumeSeries.setData(data.map(c => ({
-                time: c.time,
-                value: c.volume,
+                time: c.time, value: c.volume,
                 color: c.close >= c.open ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.6)'
             })));
             chart.timeScale().fitContent();
 
-            // 🔹 Горизонтальные линии — создаём ОДИН РАЗ через встроенный API
+            // 🔹 1. Загрузка плотностей скальпа
+            drawScalpOnCollageChart(symbol, candleSeries, entry);
+
+            // 🔹 2. Горизонтальные линии
             const hLines = (window.savedHorizontalLines && window.savedHorizontalLines[symbol]) || [];
             hLines.forEach(hl => {
                 try {
                     candleSeries.createPriceLine({
-                        price: hl.price,
-                        color: (hl.color && typeof hl.color === 'string') ? hl.color : '#f59e0b80',
-                        lineWidth: 1,
-                        lineStyle: LightweightCharts.LineStyle.Dashed,
-                        axisLabelVisible: false
+                        price: hl.price, color: (hl.color && typeof hl.color === 'string') ? hl.color : '#f59e0b80',
+                        lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false
                     });
                 } catch(e) {}
             });
 
-            // 🔹 Алерты — создаём ОДИН РАЗ через встроенный API
+            // 🔹 3. Алерты
             const alerts = (window.savedAlerts && window.savedAlerts[symbol]) || [];
             alerts.forEach(alert => {
                 try {
                     candleSeries.createPriceLine({
-                        price: alert.price,
-                        color: '#ef444480',
-                        lineWidth: 1,
-                        lineStyle: LightweightCharts.LineStyle.Dotted,
-                        axisLabelVisible: false
+                        price: alert.price || alert.value, color: '#ef444480',
+                        lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: false
                     });
                 } catch(e) {}
             });
 
-            // 🔹 Canvas-рисунки (трендовые + карандаш) — с перерисовкой при скролле
+            // 🔹 4. Canvas-рисунки (трендовые + карандаш)
             requestAnimationFrame(() => {
                 drawCollageDrawings(chart, candleSeries, container, symbol, entry.data);
             });
@@ -270,26 +270,221 @@ function initCollageChart(index, symbol) {
             if (!d.k) return;
             const k = d.k;
             const candle = {
-                time: Math.floor(k.t / 1000),
-                open: parseFloat(k.o),
-                high: parseFloat(k.h),
-                low: parseFloat(k.l),
-                close: parseFloat(k.c),
-                volume: parseFloat(k.v)
+                time: Math.floor(k.t / 1000), open: parseFloat(k.o), high: parseFloat(k.h),
+                low: parseFloat(k.l), close: parseFloat(k.c), volume: parseFloat(k.v)
             };
             candleSeries.update(candle);
             volumeSeries.update({
-                time: candle.time,
-                value: candle.volume,
+                time: candle.time, value: candle.volume,
                 color: candle.close >= candle.open ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.6)'
             });
         } catch (err) {}
     };
 }
 
+// ==========================================
+// Принудительная очистка скальпа на всех графиках коллажа
+// ==========================================
+function clearAllCollageScalpLines() {
+    for (const entry of collageCharts) {
+        if (entry && entry.scalpLinesMap && entry.scalpLinesMap.size > 0) {
+            for (const [key, line] of entry.scalpLinesMap) {
+                try { entry.candleSeries.removePriceLine(line); } catch(e) {}
+            }
+            entry.scalpLinesMap.clear();
+        }
+    }
+    collageScalpCache = {};
+}
+
+
+// ==========================================
+// УМНОЕ ОБНОВЛЕНИЕ СКАЛЬПА В КОЛЛАЖЕ
+// ==========================================
+function startCollageScalpUpdates(symbols) {
+    if (collageScalpTimer) clearInterval(collageScalpTimer);
+    collageScalpCache = {};
+
+    collageScalpTimer = setInterval(async () => {
+        if (!window.collageState) {
+            stopCollageScalpUpdates();
+            return;
+        }
+
+        // 🔹 Если скальп выключен — очищаем линии и выходим
+        if (typeof scalpEnabled !== 'undefined' && !scalpEnabled) {
+            clearAllCollageScalpLines();
+            return;
+        }
+
+        for (const sym of symbols) {
+            try {
+                // 🔹 ВАЖНО: Используем ТОТ ЖЕ запрос, что и при первой отрисовке
+                // (те же настройки бирж из scalpExchanges)
+                const loadList = [];
+                for (const exId in scalpExchanges) {
+                    const ex = scalpExchanges[exId];
+                    if (!ex || !ex.enabled) continue;
+                    if (ex.markets && ex.markets.futures) {
+                        loadList.push({ exchange: exId, minVol: ex.minVolumeFutures });
+                    }
+                }
+
+                if (loadList.length === 0) continue;
+
+                // Собираем плотности со всех бирж (как в drawScalpOnCollageChart)
+                let allDensities = [];
+                for (const item of loadList) {
+                    try {
+                        const res = await fetch(`/api/scalp/${sym}/?min_volume=${item.minVol}&market=futures&limit=20`);
+                        if (!res.ok) continue;
+                        const data = await res.json();
+
+                        const filtered = (data.densities || []).filter(d => {
+                            if ((d.exchange || 'binance') !== item.exchange) return false;
+                            if ((d.age_seconds || 0) < 180) return false;
+                            return true;
+                        });
+                        allDensities = allDensities.concat(filtered);
+                    } catch (e) {}
+                }
+
+                // Сортируем и берём топ-15 (как в drawScalpOnCollageChart)
+                allDensities.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume));
+                const topDensities = allDensities.slice(0, 15);
+
+                // 🔹 ВАЖНО: Сигнатура теперь по ВСЕМ топ-15, а не только по 10
+                const signature = topDensities
+                    .map(d => `${d.exchange}-${d.price}-${d.volume}`)
+                    .join('|');
+
+                // Если данные не изменились, пропускаем перерисовку
+                if (collageScalpCache[sym] === signature) continue;
+
+                // Данные изменились! Обновляем кэш и перерисовываем
+                collageScalpCache[sym] = signature;
+
+                const entry = collageCharts.find(e => e.symbol === sym);
+                if (entry && entry.candleSeries) {
+                    await drawScalpOnCollageChart(sym, entry.candleSeries, entry);
+                }
+            } catch (e) {
+                // Игнорируем ошибки сети для отдельных монет
+            }
+        }
+    }, 5000); // Обновление каждые 5 секунд
+}
+
+function stopCollageScalpUpdates() {
+    if (collageScalpTimer) {
+        clearInterval(collageScalpTimer);
+        collageScalpTimer = null;
+    }
+    collageScalpCache = {};
+}
+
+// ==========================================
+// ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ
+// ==========================================
+// ==========================================
+// ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ (БЕЗ МЕРЦАНИЯ)
+// ==========================================
+async function drawScalpOnCollageChart(symbol, candleSeries, entry) {
+    if (typeof scalpExchanges === 'undefined' || typeof scalpEnabled === 'undefined' || !scalpEnabled) return;
+    if (!entry || !entry.scalpLinesMap) return;
+
+    // 1. СНАЧАЛА загружаем новые данные (старые линии остаются на месте!)
+    const loadList = [];
+    for (const exId in scalpExchanges) {
+        const ex = scalpExchanges[exId];
+        if (!ex || !ex.enabled) continue;
+        if (ex.markets && ex.markets.futures) {
+            loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
+        }
+    }
+
+    if (loadList.length === 0) return;
+
+    let allDensities = [];
+    for (const item of loadList) {
+        try {
+            const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=20`);
+            if (!res.ok) continue;
+            const data = await res.json();
+
+            const filtered = (data.densities || []).filter(d => {
+                if ((d.exchange || 'binance') !== item.exchange) return false;
+                if ((d.age_seconds || 0) < 180) return false;
+                return true;
+            });
+            allDensities = allDensities.concat(filtered);
+        } catch (e) {}
+    }
+
+    // Сортируем и берём топ-15
+    allDensities.sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume));
+    const topDensities = allDensities.slice(0, 15);
+
+    const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG' };
+
+    // 2. Строим набор новых ключей
+    const newKeys = new Set();
+    const newDataMap = new Map();
+
+    topDensities.forEach(d => {
+        const priceKey = `${d.exchange}-${d.price}`;
+        newKeys.add(priceKey);
+        newDataMap.set(priceKey, d);
+    });
+
+    // 3. Удаляем ТОЛЬКО те линии, которых больше нет в новых данных
+    for (const [key, line] of entry.scalpLinesMap) {
+        if (!newKeys.has(key)) {
+            try { candleSeries.removePriceLine(line); } catch(e) {}
+            entry.scalpLinesMap.delete(key);
+        }
+    }
+
+    // 4. Для каждой новой плотности: обновляем существующую или создаём новую
+    for (const [key, d] of newDataMap) {
+        const volumeNum = parseFloat(d.volume) || 0;
+        let volumeText = volumeNum >= 1000000
+            ? (volumeNum / 1000000).toFixed(1) + 'M'
+            : (volumeNum / 1000).toFixed(0) + 'K';
+        const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
+        const exchangePrefix = PREFIX[d.exchange] || d.exchange.slice(0, 2).toUpperCase();
+        const title = `${exchangePrefix} ${volumeText}`;
+
+        if (entry.scalpLinesMap.has(key)) {
+            // 🔹 Линия уже существует — просто обновляем цвет и заголовок (БЕЗ пересоздания!)
+            try {
+                entry.scalpLinesMap.get(key).applyOptions({
+                    color: lineColor,
+                    title: title
+                });
+            } catch(e) {}
+        } else {
+            // 🔹 Новая линия — создаём
+            try {
+                const line = candleSeries.createPriceLine({
+                    price: d.price,
+                    color: lineColor,
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid,
+                    axisLabelVisible: true,
+                    title: title
+                });
+                entry.scalpLinesMap.set(key, line);
+            } catch (e) {}
+        }
+    }
+}
+
+// ==========================================
+// ОТРИСОВКА КАРАНДАША И ТРЕНДОВЫХ ЛИНИЙ
+// ==========================================
 function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) {
-    if (typeof window.savedTrendLines === 'undefined' ||
-        typeof window.savedPencilDrawings === 'undefined') return;
+    if (typeof window.savedTrendLines === 'undefined' || typeof window.savedPencilDrawings === 'undefined') return;
 
     const trendLines = window.savedTrendLines[symbol] || [];
     const pencilStrokes = window.savedPencilDrawings[symbol] || [];
@@ -317,7 +512,7 @@ function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) 
 
         if (x !== null && y !== null) return { x, y };
 
-        // Fallback для X через видимый диапазон
+        // Fallback для X через видимый диапазон (если timeToCoordinate вернул null)
         if (x === null && chartData && chartData.length > 1) {
             const visibleRange = chart.timeScale().getVisibleLogicalRange();
             if (visibleRange && visibleRange.to !== visibleRange.from) {
@@ -333,7 +528,6 @@ function drawCollageDrawings(chart, candleSeries, container, symbol, chartData) 
                 }
             }
         }
-
         return { x, y };
     };
 

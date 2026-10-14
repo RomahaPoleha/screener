@@ -8,9 +8,22 @@
 // ==========================================
 async function loadAllData() {
     try {
+        // Загружаем данные монет
         const res = await fetch(`/api/data/`);
         if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
         allCoins = await res.json();
+        
+        // Загружаем точные count сделок
+        const tradesRes = await fetch(`/api/trades-count/`);
+        if (tradesRes.ok) {
+            const tradesData = await tradesRes.json();
+            // Добавляем точные count сделок в все монеты
+            allCoins = allCoins.map(coin => {
+                const exactDeals = tradesData[coin.symbol] || 0;
+                return {...coin, deals: exactDeals};
+            });
+        }
+        
         applyLocalFilters();
         updateChartStats();
     } catch (err) {

@@ -92,8 +92,16 @@ function applySettings() {
         for (const ex of RECON_EXCHANGES) {
             const f = document.getElementById(`reconMinF_${ex.id}`);
             const s = document.getElementById(`reconMinS_${ex.id}`);
-            if (f) reconMinVolumes[ex.id].futures = Math.max(10000, parseInt(f.value) || 10000);
-            if (s) reconMinVolumes[ex.id].spot = Math.max(10000, parseInt(s.value) || 10000);
+            const isAlpha = ex.id === 'binance_alpha';
+            const minAllowed = isAlpha ? 1000 : 10000;
+            if (isAlpha) {
+                // Alpha only has one input (reconMinF), used for spot market
+                if (f) reconMinVolumes[ex.id].spot = Math.max(minAllowed, parseInt(f.value) || minAllowed);
+                reconMinVolumes[ex.id].futures = 0;
+            } else {
+                if (f) reconMinVolumes[ex.id].futures = Math.max(minAllowed, parseInt(f.value) || minAllowed);
+                if (s) reconMinVolumes[ex.id].spot = Math.max(minAllowed, parseInt(s.value) || minAllowed);
+            }
         }
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
@@ -118,29 +126,31 @@ if (priceImpulseThr || priceImpulseWin) {
         priceImpulseWindow = safeWin;
         localStorage.setItem('priceImpulseWindow', safeWin);
     }
-    fetch('/api/impulse-settings/update/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsPayload)
-    }).catch(err => console.warn('Impulse settings sync failed:', err));
 }
 
     // Применяем настройки скальпа
     EXCHANGES_CONFIG.forEach(ex => {
         const enabledCheckbox = document.getElementById(`scalp-${ex.id}-toggle`);
-        const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
-        const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
-        const fInput = document.getElementById(`scalp-${ex.id}-fv`);
-        const sInput = document.getElementById(`scalp-${ex.id}-sv`);
-
+        const isAlpha = ex.id === 'binance_alpha';
         if (!scalpExchanges[ex.id]) {
             scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         }
-        scalpExchanges[ex.id].enabled = enabledCheckbox ? enabledCheckbox.checked : false;
-        scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
-        scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-        scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(200000, parseInt(fInput.value) || 200000) : 200000;
-        scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(100000, parseInt(sInput.value) || 100000) : 100000;
+        // Force Alpha disabled
+        if (isAlpha) {
+            scalpExchanges[ex.id].enabled = false;
+            scalpExchanges[ex.id].markets.futures = false;
+            scalpExchanges[ex.id].markets.spot = false;
+        } else {
+            scalpExchanges[ex.id].enabled = enabledCheckbox ? enabledCheckbox.checked : false;
+            const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
+            const sCheckbox = document.getElementById(`scalp-${ex.id}-s`);
+            const fInput = document.getElementById(`scalp-${ex.id}-fv`);
+            const sInput = document.getElementById(`scalp-${ex.id}-sv`);
+            scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
+            scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
+            scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(200000, parseInt(fInput.value) || 200000) : 200000;
+            scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(100000, parseInt(sInput.value) || 100000) : 100000;
+        }
     });
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
     scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
@@ -219,27 +229,39 @@ function renderScalpCards() {
     container.innerHTML = EXCHANGES_CONFIG.map(ex => {
         const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
         const isEnabled = cfg.enabled !== false;
+        const isAlpha = ex.id === 'binance_alpha';
         const fEnabled = cfg.markets && cfg.markets.futures;
         const sEnabled = cfg.markets && cfg.markets.spot;
         const fVol = cfg.minVolumeFutures || 300000;
         const sVol = cfg.minVolumeSpot || 200000;
+        const alphaEnabled = fEnabled; // Alpha uses futures checkbox
+        const alphaVol = fVol;
         return `<div style="display:flex;align-items:center;gap:6px;">
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
-            <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
-            <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="200000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!fEnabled || !isEnabled ? 'disabled' : ''}>
-            <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-            <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="100000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!sEnabled || !isEnabled ? 'disabled' : ''}>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-                <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-                <span>F</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-                <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
-                <span>S</span>
-            </label>
-            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">
-                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} style="opacity:0;width:0;height:0;" onchange="toggleScalpExchange('${ex.id}', this.checked)">
+            ${isAlpha ? `
+                <span style="font-size:11px;color:#666;min-width:10px;">A:</span>
+                <input type="number" id="scalp-${ex.id}-fv" value="${alphaVol}" min="50000" step="10000" disabled style="width:70px;background:#1e293b;border:1px solid #475569;color:#666;padding:4px 6px;border-radius:3px;font-size:12px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:not-allowed;font-size:12px;color:#888;">
+                    <input type="checkbox" id="scalp-${ex.id}-f" ${alphaEnabled ? 'checked' : ''} disabled style="accent-color:#f59e0b;width:14px;height:14px;">
+                    <span>A — unavailable</span>
+                </label>
+            ` : `
+                <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+                <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="200000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!fEnabled || !isEnabled ? 'disabled' : ''}>
+                <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+                <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="100000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;" ${!sEnabled || !isEnabled ? 'disabled' : ''}>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
+                    <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
+                    <span>F</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
+                    <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
+                    <span>S</span>
+                </label>
+            `}
+            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:not-allowed;opacity:0.5;">
+                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} disabled style="opacity:0;width:0;height:0;">
                 <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? '#f59e0b' : '#475569'};border-radius:20px;transition:.3s;">
                     <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
                 </span>
@@ -249,15 +271,19 @@ function renderScalpCards() {
 }
 
 function toggleScalpExchange(exchangeId, enabled) {
+    // Prevent enabling Binance Alpha (not ready yet)
+    if (exchangeId === 'binance_alpha') return;
+    
     if (!scalpExchanges[exchangeId]) {
         scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
     }
     scalpExchanges[exchangeId].enabled = enabled;
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
 
+    const isAlpha = exchangeId === 'binance_alpha';
     const fCheckbox = document.getElementById(`scalp-${exchangeId}-f`);
-    const sCheckbox = document.getElementById(`scalp-${exchangeId}-s`);
     const fInput = document.getElementById(`scalp-${exchangeId}-fv`);
+    const sCheckbox = document.getElementById(`scalp-${exchangeId}-s`);
     const sInput = document.getElementById(`scalp-${exchangeId}-sv`);
 
     if (fCheckbox) fCheckbox.disabled = !enabled;
@@ -266,8 +292,8 @@ function toggleScalpExchange(exchangeId, enabled) {
         if (fInput) fInput.disabled = true;
         if (sInput) sInput.disabled = true;
     } else {
-        if (fInput) fInput.disabled = !fCheckbox.checked;
-        if (sInput) sInput.disabled = !sCheckbox.checked;
+        if (fInput) fInput.disabled = isAlpha ? false : !fCheckbox.checked;
+        if (sInput) sInput.disabled = false;
     }
 
     renderScalpCards();

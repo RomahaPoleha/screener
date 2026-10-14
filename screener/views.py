@@ -1,6 +1,7 @@
 import ccxt
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.core.cache import cache
 from django.shortcuts import render
 from django.http import FileResponse, Http404
@@ -104,13 +105,18 @@ def get_symbols_from_tickers():
                 rvol = 0.0
 
             price = float(data.get('last') or data.get('close') or 0)
+            # ✅ НОВОЕ: Оценка количества сделок за 24ч
+            # Приблизительно: deals ≈ volume / (price * 10)
+            # Предполагаем средний размер сделки ~10 USDT
+            estimated_deals = int(volume / max(price, 1) / 10) if price > 0 else 0
 
             symbols_with_volume.append({
                 'symbol': clean_symbol,
                 'volume': volume,
                 'change': round(data.get('percentage') or 0, 2),
                 'rvol': round(rvol, 2),
-                'price': price
+                'price': price,
+                'deals': estimated_deals  # 💡 Количество сделок за 24ч (оценка)
             })
 
         symbols_with_volume.sort(key=lambda x: x['volume'], reverse=True)
@@ -146,6 +152,43 @@ def api_data(request):
     cache.set(cache_key, coins, 60)
 
     return JsonResponse(coins, safe=False)
+
+
+@require_http_methods(["GET"])
+def api_trades_count(request):
+    """API: точный count сделок за 24ч для топ монет"""
+    global _volume_poller_started
+    
+    # Ленивый старт - запускаем один раз
+    if not _volume_poller_started:
+        _volume_poller_started = True
+    
+    exchange = get_binance_exchange()
+    
+    # Берем только топ монет для экономии запросов
+    # Получаем тикеры
+    tickers = exchange.fetch_tickers(params={'type': 'future'})
+    
+    trades_data = {}
+    for symbol, data in tickers.items():
+        if not symbol.endswith(':USDT'):
+            continue
+        
+        # Получаем count сделок из ticker info
+        # у Binance есть поле 'count' в дополнительных данных (количество сделок за 24ч)
+        info = data.get('info', {})
+        trade_count = info.get('count', 0) if info else 0
+        
+        # Также можно использовать len(ticker['trades']) но это дорого
+        # trade_count = len(data.get('trades', []))  # Too expensive
+        
+        if trade_count > 0:
+            #_clean symbol
+            clean_symbol = symbol.split(':')[0].replace('/USDT', '')
+            if '-' not in clean_symbol and len(clean_symbol) <= 15:
+                trades_data[clean_symbol] = trade_count
+    
+    return JsonResponse(trades_data)
 
 
 # ==========================================
@@ -254,7 +297,7 @@ def api_scalp(request, symbol):
     now = time.time()
     symbol_upper = symbol.upper()
 
-    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget']
+    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
     result_by_exchange = {ex: [] for ex in EXCHANGES}
 
     for exchange in EXCHANGES:
@@ -339,34 +382,6 @@ def api_logo(request):
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
-
-@require_http_methods(["GET"])
-def api_scalp_debug(request, symbol):
-    """Временная диагностика кэша для scalp"""
-    symbol_upper = symbol.upper()
-
-    keys = {
-        'binance_futures': f"scalp:futures:binance:{symbol_upper}",
-        'bybit_futures': f"scalp:futures:bybit:{symbol_upper}",
-        'okx_futures': f"scalp:futures:okx:{symbol_upper}",
-        'binance_spot': f"scalp:spot:binance:{symbol_upper}",
-        'bybit_spot': f"scalp:spot:bybit:{symbol_upper}",
-        'okx_spot': f"scalp:spot:okx:{symbol_upper}",
-    }
-
-    result = {}
-
-    for name, key in keys.items():
-        data = cache.get(key)
-
-        result[name] = {
-            'key': key,
-            'exists': data is not None,
-            'count': len(data) if data else 0,
-            'sample': data[:3] if data else []
-        }
-
-    return JsonResponse(result)
 
 @require_http_methods(["GET"])
 def api_candles_history(request, symbol):
@@ -661,4 +676,356 @@ def api_impulse_alerts(request):
         'server_time': time.time(),
         'count': len(alerts),
     })
+
+
+@require_http_methods(["GET"])
+def api_exchanges(request, symbol):
+    """API: проверка доступности символа на биржах"""
+    symbol = symbol.upper().strip()
+    
+    # Импортируем списки символов из всех мониторов
+    from . import binance_monitor_async as binance_monitor
+    from . import bybit_monitor_async as bybit_monitor
+    from . import okx_monitor_async as okx_monitor
+    from . import gate_monitor_async as gate_monitor
+    from . import mexc_monitor_async as mexc_monitor
+    from . import bitget_monitor_async as bitget_monitor
+    
+    # Нормализуем списки мониторов к верхнему регистру для сравнения
+    def normalize_list(lst):
+        return set(s.upper().strip() for s in (lst or []))
+    
+    binance_fut = normalize_list(binance_monitor.futures_symbols)
+    binance_spot = normalize_list(binance_monitor.spot_symbols)
+    bybit_fut = normalize_list(bybit_monitor.bybit_futures_symbols)
+    bybit_spot = normalize_list(bybit_monitor.bybit_spot_symbols)
+    okx_fut = normalize_list(okx_monitor.okx_futures_symbols)
+    okx_spot = normalize_list(okx_monitor.okx_spot_symbols)
+    gate_fut = normalize_list(gate_monitor.gate_futures_symbols)
+    gate_spot = normalize_list(gate_monitor.gate_spot_symbols)
+    mexc_fut = normalize_list(mexc_monitor.mexc_futures_symbols)
+    mexc_spot = normalize_list(mexc_monitor.mexc_spot_symbols)
+    bitget_fut = normalize_list(bitget_monitor.bitget_futures_symbols)
+    bitget_spot = normalize_list(bitget_monitor.bitget_spot_symbols)
+    
+    result = {
+        'binance': {
+            'futures': symbol in binance_fut,
+            'spot': symbol in binance_spot,
+        },
+        'bybit': {
+            'futures': symbol in bybit_fut,
+            'spot': symbol in bybit_spot,
+        },
+        'okx': {
+            'futures': symbol in okx_fut,
+            'spot': symbol in okx_spot,
+        },
+        'gate': {
+            'futures': symbol in gate_fut,
+            'spot': symbol in gate_spot,
+        },
+        'mexc': {
+            'futures': symbol in mexc_fut,
+            'spot': symbol in mexc_spot,
+        },
+        'bitget': {
+            'futures': symbol in bitget_fut,
+            'spot': symbol in bitget_spot,
+        },
+    }
+    
+    return JsonResponse(result)
+
+
+# ==========================================
+# КЭШИРОВАННЫЕ ПРОВЕРКИ СИМВОЛОВ НА ВСЕХ БИРЖАХ
+# ==========================================
+CACHE_TTL = 86400  # 24 часа (списки символов меняются редко)
+
+def _get_cached(key, fetch_func, ttl=CACHE_TTL):
+    """Универсальный хелпер: читает из кэша или вызывает fetch_func"""
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    data = fetch_func()
+    cache.set(key, data, ttl)
+    return data
+
+# --- Binance ---
+def _fetch_binance_all():
+    exchange = get_binance_exchange()
+    fut_tickers = exchange.fetch_tickers(params={'type': 'future'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if s.endswith(':USDT'):
+            c = s.split(':')[0].replace('/USDT', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = exchange.fetch_tickers(params={'type': 'spot'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if s.endswith('/USDT'):
+            c = s.replace('/USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_binance_symbols():
+    return _get_cached('exchange:binance:all', _fetch_binance_all)
+
+# --- Bybit ---
+def _fetch_bybit_all():
+    ex = ccxt.bybit({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'type': 'linear'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if ':USDT' in s:
+            c = s.split(':')[0].replace('/USDT', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers(params={'type': 'spot'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if '/USDT' in s:
+            c = s.replace('/USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_bybit_symbols():
+    return _get_cached('exchange:bybit:all', _fetch_bybit_all)
+
+# --- OKX ---
+def _fetch_okx_all():
+    ex = ccxt.okx({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'instType': 'SWAP'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if '/USDT:USDT' in s:
+            c = s.replace('/USDT:USDT', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers(params={'instType': 'SPOT'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if '/USDT' in s and ':USDT' not in s:
+            c = s.replace('/USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_okx_symbols():
+    return _get_cached('exchange:okx:all', _fetch_okx_all)
+
+# --- Gate.io ---
+def _fetch_gate_all():
+    ex = ccxt.gate({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'settle': 'usdt'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if '/USDT' in s and not s.startswith('_'):
+            c = s.replace('/USDT', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers()
+    spot = set()
+    for s, d in spot_tickers.items():
+        if '/USDT' in s:
+            c = s.replace('/USDT', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_gate_symbols():
+    return _get_cached('exchange:gate:all', _fetch_gate_all)
+
+# --- MEXC ---
+def _fetch_mexc_all():
+    import requests
+    fut = set()
+    spot = set()
+    try:
+        r = requests.get('https://contract.mexc.com/api/v1/contract/detail', timeout=10)
+        for item in r.json().get('data', []):
+            if item.get('quoteCoin') == 'USDT':
+                c = item.get('baseCoin', '').upper()
+                if c and '-' not in c:
+                    fut.add(c)
+    except: pass
+    try:
+        r = requests.get('https://api.mexc.com/api/v3/exchangeInfo', timeout=10)
+        for item in r.json().get('symbols', []):
+            if item.get('quoteAsset') == 'USDT' and item.get('status') == 'TRADING':
+                c = item.get('baseAsset', '').upper()
+                if c and '-' not in c:
+                    spot.add(c)
+    except: pass
+    return fut, spot
+
+def get_mexc_symbols():
+    return _get_cached('exchange:mexc:all', _fetch_mexc_all)
+
+# --- Bitget ---
+def _fetch_bitget_all():
+    ex = ccxt.bitget({'enableRateLimit': True, 'timeout': 10000})
+    fut_tickers = ex.fetch_tickers(params={'productType': 'USDT-FUTURES'})
+    fut = set()
+    for s, d in fut_tickers.items():
+        if 'USDT' in s:
+            c = s.replace('USDT', '').replace('_', '').replace('/', '')
+            if c and '-' not in c:
+                fut.add(c)
+    spot_tickers = ex.fetch_tickers(params={'productType': 'SPOT'})
+    spot = set()
+    for s, d in spot_tickers.items():
+        if 'USDT' in s:
+            c = s.replace('USDT', '').replace('_', '').replace('/', '')
+            if c and '-' not in c:
+                spot.add(c)
+    return fut, spot
+
+def get_bitget_symbols():
+    return _get_cached('exchange:bitget:all', _fetch_bitget_all)
+
+
+# --- Binance Alpha ---
+ALPHA_TOKEN_LIST_URL = "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list"
+
+# Глобальный кэш маппинга: base_symbol -> ALPHA_{tokenId}USDT
+_alpha_symbol_map = None
+
+def _fetch_alpha_token_list():
+    """Получает список Alpha токенов: [{symbol: 'CT', alphaId: 'ALPHA_1228', ...}]"""
+    try:
+        r = requests.get(ALPHA_TOKEN_LIST_URL, timeout=10)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        if data.get('code') != "000000":
+            return []
+        tokens = data.get('data', [])
+        # DEBUG: print first token structure
+        if tokens:
+            print(f"Alpha token sample: {tokens[0]}")
+        return tokens
+    except Exception as e:
+        print(f"❌ Alpha token list error: {e}")
+        return []
+
+
+def _build_alpha_map():
+    """Строит маппинг base_symbol -> ALPHA_{id}USDT"""
+    global _alpha_symbol_map
+    tokens = _fetch_alpha_token_list()
+    mapping = {}
+    for token in tokens:
+        alpha_id = token.get('alphaId')  # e.g., "ALPHA_1228"
+        symbol = token.get('symbol', '').upper()
+        if alpha_id and symbol:
+            # alpha_id уже в формате ALPHA_1228, добавляем USDT для fullDepth API
+            mapping[symbol] = f"{alpha_id}USDT"
+    _alpha_symbol_map = mapping
+    return mapping
+
+def get_alpha_symbol_map():
+    """Возвращает маппинг base_symbol -> ALPHA_{tokenId}USDT (кэшированный 24ч)"""
+    global _alpha_symbol_map
+    if _alpha_symbol_map is None:
+        cached = cache.get('exchange:alpha:map')
+        if cached:
+            _alpha_symbol_map = cached
+        else:
+            _alpha_symbol_map = _build_alpha_map()
+            cache.set('exchange:alpha:map', _alpha_symbol_map, 86400)
+    return _alpha_symbol_map
+
+def _fetch_alpha_all():
+    """Получает сет символов Alpha в формате ALPHA_{tokenId}USDT"""
+    try:
+        mapping = get_alpha_symbol_map()
+        alpha_fut = set(mapping.values())
+        return alpha_fut, set()
+    except Exception as e:
+        print(f"❌ Alpha token list error: {e}")
+        return set(), set()
+
+def get_alpha_symbols():
+    return _get_cached('exchange:alpha:all', _fetch_alpha_all)
+
+
+# --- Объединённый чек ---
+def check_symbol_all_exchanges(symbol):
+    """Возвращает dict {exchange: {futures: bool, spot: bool}} для символа"""
+    symbol = symbol.upper().strip()
+    
+    binance_fut, binance_spot = get_binance_symbols()
+    bybit_fut, bybit_spot = get_bybit_symbols()
+    okx_fut, okx_spot = get_okx_symbols()
+    gate_fut, gate_spot = get_gate_symbols()
+    mexc_fut, mexc_spot = get_mexc_symbols()
+    bitget_fut, bitget_spot = get_bitget_symbols()
+    alpha_fut, alpha_spot = get_alpha_symbols()
+    
+    # Alpha check через маппинг: base_symbol (например BX) -> ALPHA_{tokenId}USDT
+    alpha_map = get_alpha_symbol_map()
+    alpha_has = symbol in alpha_map
+    
+    return {
+        'binance': {'futures': symbol in binance_fut, 'spot': symbol in binance_spot},
+        'bybit': {'futures': symbol in bybit_fut, 'spot': symbol in bybit_spot},
+        'okx': {'futures': symbol in okx_fut, 'spot': symbol in okx_spot},
+        'gate': {'futures': symbol in gate_fut, 'spot': symbol in gate_spot},
+        'mexc': {'futures': symbol in mexc_fut, 'spot': symbol in mexc_spot},
+        'bitget': {'futures': symbol in bitget_fut, 'spot': symbol in bitget_spot},
+        'binance_alpha': {'futures': alpha_has, 'spot': False},
+    }
+
+
+@require_http_methods(["GET"])
+def api_binance_check_symbol(request, symbol):
+    """API: проверка символа на Binance (кэшированная)"""
+    symbol = symbol.upper().strip()
+    binance_fut, binance_spot = get_binance_symbols()
+    return JsonResponse({
+        'symbol': symbol,
+        'binance': {
+            'futures': symbol in binance_fut,
+            'spot': symbol in binance_spot,
+            'futures_total': len(binance_fut),
+            'spot_total': len(binance_spot),
+        }
+    })
+
+
+@require_http_methods(["GET"])
+def api_exchanges(request, symbol):
+    """API: проверка символа на всех биржах (кэшированная)"""
+    symbol = symbol.upper().strip()
+    result = check_symbol_all_exchanges(symbol)
+    return JsonResponse(result)
+
+
+@require_http_methods(["GET"])
+def api_exchange_alpha_map(request):
+    """API: маппинг base_symbol -> ALPHA_{tokenId}USDT для Recon/Scalp"""
+    return JsonResponse({'map': get_alpha_symbol_map()})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_clear_exchange_cache(request):
+    """Очистить кэш символов всех бирж"""
+    from django.core.cache import cache
+    keys = [
+        'exchange:binance:all',
+        'exchange:bybit:all',
+        'exchange:okx:all',
+        'exchange:gate:all',
+        'exchange:mexc:all',
+        'exchange:bitget:all',
+    ]
+    for key in keys:
+        cache.delete(key)
+    return JsonResponse({'cleared': keys})
 
