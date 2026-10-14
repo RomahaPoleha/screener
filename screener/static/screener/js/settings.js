@@ -46,30 +46,18 @@ function openSettingsModal() {
     renderScalpCards();
 
     const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-    if (priceImpulseThr) {
-        const saved = localStorage.getItem('priceImpulseThreshold');
-        priceImpulseThr.value = saved !== null ? saved : '1.5';
-    }
+    if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
     const priceImpulseWin = document.getElementById('priceImpulseWindow');
-    if (priceImpulseWin) {
-        const saved = localStorage.getItem('priceImpulseWindow');
-        priceImpulseWin.value = saved !== null ? saved : '300';
-    }
+    if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
 
     const soundCheckbox = document.getElementById('soundToggleModal');
     if (soundCheckbox) soundCheckbox.checked = soundEnabled;
     const volAlertToggle = document.getElementById('volumeAlertToggle');
     if (volAlertToggle) volAlertToggle.checked = volumeAlertEnabled;
     const beepSlider = document.getElementById('alertBeepVolume');
-    if (beepSlider) {
-        const saved = localStorage.getItem('alertBeepVolume');
-        beepSlider.value = saved !== null ? saved : '0.5';
-    }
+    if (beepSlider) beepSlider.value = alertBeepVolume;
     const hourSlider = document.getElementById('hourSoundVolume');
-    if (hourSlider) {
-        const saved = localStorage.getItem('hourSoundVolume');
-        hourSlider.value = saved !== null ? saved : '0.5';
-    }
+    if (hourSlider) hourSlider.value = hourSoundVolume;
 
     initSettingsTabs();
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
@@ -118,43 +106,27 @@ function applySettings() {
         localStorage.setItem('reconMinVolumes', JSON.stringify(reconMinVolumes));
     }
 
-    const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-    const priceImpulseWin = document.getElementById('priceImpulseWindow');
-    if (priceImpulseThr || priceImpulseWin) {
-        const settingsPayload = {};
-        if (priceImpulseThr) {
-            const saved = localStorage.getItem('priceImpulseThreshold');
-            priceImpulseThr.value = saved !== null ? saved : '1.5';
-            priceImpulseThr.addEventListener('input', () => {
-                const val = parseFloat(priceImpulseThr.value);
-                if (!isNaN(val) && val > 0) {
-                    priceImpulseThreshold = val;
-                    localStorage.setItem('priceImpulseThreshold', val);
-                }
-            });
-            const thr = parseFloat(priceImpulseThr.value);
-            settingsPayload.threshold = thr;
-            if (thr > 0) {
-                priceImpulseThreshold = thr;
-                localStorage.setItem('priceImpulseThreshold', thr);
-            }
-        }
-        if (priceImpulseWin) {
-            const saved = localStorage.getItem('priceImpulseWindow');
-            priceImpulseWin.value = saved !== null ? saved : '300';
-            priceImpulseWin.addEventListener('input', () => {
-                const val = parseInt(priceImpulseWin.value);
-                const safeWin = (val >= 120) ? 300 : 60;
-                priceImpulseWindow = safeWin;
-                localStorage.setItem('priceImpulseWindow', safeWin);
-            });
-            const win = parseInt(priceImpulseWin.value);
-            const safeWin = (win >= 120) ? 300 : 60;
-            settingsPayload.window = safeWin;
-            priceImpulseWindow = safeWin;
-            localStorage.setItem('priceImpulseWindow', safeWin);
+    // 🔥 Синхронизация настроек с сервером и сохранение в localStorage (ОБЪЕДИНЕНО)
+const priceImpulseThr = document.getElementById('priceImpulseThreshold');
+const priceImpulseWin = document.getElementById('priceImpulseWindow');
+if (priceImpulseThr || priceImpulseWin) {
+    const settingsPayload = {};
+    if (priceImpulseThr) {
+        const thr = parseFloat(priceImpulseThr.value);
+        settingsPayload.threshold = thr;
+        if (thr > 0) {
+            priceImpulseThreshold = thr;
+            localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
         }
     }
+    if (priceImpulseWin) {
+        const win = parseInt(priceImpulseWin.value);
+        const safeWin = (win >= 120) ? 300 : 60;
+        settingsPayload.window = safeWin;
+        priceImpulseWindow = safeWin;
+        localStorage.setItem('priceImpulseWindow', safeWin);
+    }
+}
 
     // Применяем настройки скальпа
     EXCHANGES_CONFIG.forEach(ex => {
@@ -203,30 +175,12 @@ function applySettings() {
     // Добавлена безопасная проверка на существование элементов перед чтением .value
     const beepSlider = document.getElementById('alertBeepVolume');
     if (beepSlider) {
-        const saved = localStorage.getItem('alertBeepVolume');
-        beepSlider.value = saved !== null ? saved : '0.5';
-        beepSlider.addEventListener('input', () => {
-            const val = parseFloat(beepSlider.value);
-            if (!isNaN(val)) {
-                alertBeepVolume = val;
-                localStorage.setItem('alertBeepVolume', val);
-            }
-        });
         alertBeepVolume = parseFloat(beepSlider.value);
         localStorage.setItem('alertBeepVolume', alertBeepVolume);
     }
 
     const hourSlider = document.getElementById('hourSoundVolume');
     if (hourSlider) {
-        const saved = localStorage.getItem('hourSoundVolume');
-        hourSlider.value = saved !== null ? saved : '0.5';
-        hourSlider.addEventListener('input', () => {
-            const val = parseFloat(hourSlider.value);
-            if (!isNaN(val)) {
-                hourSoundVolume = val;
-                localStorage.setItem('hourSoundVolume', val);
-            }
-        });
         hourSoundVolume = parseFloat(hourSlider.value);
         localStorage.setItem('hourSoundVolume', hourSoundVolume);
     }
@@ -287,10 +241,10 @@ function renderScalpCards() {
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label || ex.name.substring(0, 2).toUpperCase()}</span>
             ${isAlpha ? `
                 <span style="font-size:11px;color:#666;min-width:10px;">A:</span>
-                <input type="number" id="scalp-${ex.id}-fv" value="${alphaVol}" min="50000" step="10000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-                    <input type="checkbox" id="scalp-${ex.id}-f" ${alphaEnabled ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''} style="accent-color:#f59e0b;width:14px;height:14px;" onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-                    <span>F</span>
+                <input type="number" id="scalp-${ex.id}-fv" value="${alphaVol}" min="50000" step="10000" disabled style="width:70px;background:#1e293b;border:1px solid #475569;color:#666;padding:4px 6px;border-radius:3px;font-size:12px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:not-allowed;font-size:12px;color:#888;">
+                    <input type="checkbox" id="scalp-${ex.id}-f" ${alphaEnabled ? 'checked' : ''} disabled style="accent-color:#f59e0b;width:14px;height:14px;">
+                    <span>A — unavailable</span>
                 </label>
             ` : `
                 <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
@@ -306,8 +260,8 @@ function renderScalpCards() {
                     <span>S</span>
                 </label>
             `}
-            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;opacity:1;">
-                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} style="opacity:0;width:0;height:0;">
+            <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:not-allowed;opacity:0.5;">
+                <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''} disabled style="opacity:0;width:0;height:0;">
                 <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? '#f59e0b' : '#475569'};border-radius:20px;transition:.3s;">
                     <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
                 </span>
