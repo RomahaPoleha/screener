@@ -34,8 +34,8 @@ CACHE_TTL = 30
 SYNC_INTERVAL = 3
 _http_client = None
 
-# Ключ кэша для Alpha (используем стандартный формат: scalp:futures:binance_alpha:{symbol})
-ALPHA_CACHE_MARKET = 'futures'
+# Ключ кэша для Alpha (используем стандартный формат: scalp:spot:binance_alpha:{symbol})
+ALPHA_CACHE_MARKET = 'spot'
 ALPHA_CACHE_EXCHANGE = 'binance_alpha'
 
 
@@ -184,24 +184,22 @@ async def sync_to_cache_async(symbol, log_func=print):
         # ШАГ 1: Собираем все цены, которые реально есть в стакане ПРЯМО СЕЙЧАС
         current_prices = set(book.get('bids', {}).keys()) | set(book.get('asks', {}).keys())
 
-        # Порог для Alpha можно настроить. По умолчанию 50000 (как фьючерсы),
-        # так как Alpha-токены часто имеют высокую волатильность и номинал.
-        TARGET_MIN_VOLUME = 50000
-
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
 
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
 
-                # Для "несозревшей" делаем порог чуть выше (на 20%), чтобы отсечь мгновенный шум
-                min_volume = TARGET_MIN_VOLUME if is_mature else int(TARGET_MIN_VOLUME * 1.2)
-
-                if volume < min_volume:
-                    if price in ts:
-                        ts.pop(price, None)
+                # Проверяем возраст плотности (MIN_AGE_SECONDS = 180 сек)
+                if not is_mature:
+                    # Для несозревших: инициализируем timestamp, но не добавляем в densities
+                    if is_first_load:
+                        ts[price] = now - MIN_AGE_SECONDS
+                    else:
+                        ts[price] = now
                     continue
 
+                # Плотность созрела - проверяем стабильность
                 prev_stat = stats.get(price, {'min': volume, 'max': volume, 'sum': 0, 'count': 0})
                 new_stat = {
                     'min': min(prev_stat['min'], volume),
@@ -211,27 +209,14 @@ async def sync_to_cache_async(symbol, log_func=print):
                 }
                 new_stats[price] = new_stat
 
-                if price in ts:
-                    age = now - ts[price]
-                    if age < MIN_AGE_SECONDS:
-                        continue
+                if new_stat['count'] >= 3:
+                    avg = new_stat['sum'] / new_stat['count']
+                    spread = new_stat['max'] - new_stat['min']
+                    stability_ratio = spread / avg if avg > 0 else 0
 
-                    # Проверка стабильности (порог 0.5)
-                    if new_stat['count'] >= 3:
-                        avg = new_stat['sum'] / new_stat['count']
-                        spread = new_stat['max'] - new_stat['min']
-                        stability_ratio = spread / avg if avg > 0 else 0
-
-                        if stability_ratio > 0.5:
-                            ts[price] = now
-                            new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
-                            continue
-                else:
-                    # Если это первый запуск символа — даем фору, иначе заставляем ждать
-                    if is_first_load:
-                        ts[price] = now - MIN_AGE_SECONDS
-                    else:
+                    if stability_ratio > 0.5:
                         ts[price] = now
+                        new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                         continue
 
                 age_seconds = int(now - ts[price])

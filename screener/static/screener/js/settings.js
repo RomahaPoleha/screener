@@ -129,7 +129,7 @@ EXCHANGES_CONFIG.forEach(ex => {
     scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
     scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
     const minF = isAlpha ? 10000 : 200000;
-    const minS = 100000;
+    const minS = isAlpha ? 10000 : 100000;
     scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
     scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
 });
@@ -204,19 +204,19 @@ const isAlpha = ex.id === 'binance_alpha';
 const fEnabled = cfg.markets && cfg.markets.futures;
 const sEnabled = cfg.markets && cfg.markets.spot;
 const fVol = cfg.minVolumeFutures || (isAlpha ? 10000 : 300000);
-const sVol = cfg.minVolumeSpot || 200000;
+const sVol = cfg.minVolumeSpot || (isAlpha ? 10000 : 200000);
 
-// Alpha — только один рынок (A), остальные — S + F (как в Recon)
+// Alpha — только один рынок (Spot), остальные — S + F (как в Recon)
 const controlsHtml = isAlpha
-  ? `<span style="font-size:11px;color:#94a3b8;min-width:10px;">A:</span>
-      <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="1000"
+  ? `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+      <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="1000"
         style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
-        ${!fEnabled ? 'disabled' : ''}>
+        ${!sEnabled ? 'disabled' : ''}>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-        <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''}
+        <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''}
           style="accent-color:#f59e0b;width:14px;height:14px;"
-          onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-        <span>A</span>
+          onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
+        <span>S</span>
       </label>`
   : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
       <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="100000" step="10000"
@@ -274,7 +274,7 @@ function toggleScalpExchange(exchangeId, enabled) {
         if (fInput) fInput.disabled = true;
         if (sInput) sInput.disabled = true;
     } else {
-        if (fInput) fInput.disabled = isAlpha ? false : !fCheckbox.checked;
+        if (fInput) fInput.disabled = isAlpha ? true : !fCheckbox.checked;
         if (sInput) sInput.disabled = false;
     }
 

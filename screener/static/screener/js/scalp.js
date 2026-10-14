@@ -25,7 +25,7 @@ okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutu
 gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-binance_alpha: { enabled: false, markets: { futures: true, spot: false }, minVolumeFutures: 10000, minVolumeSpot: 50000 },
+binance_alpha: { enabled: false, markets: { futures: false, spot: true }, minVolumeFutures: 10000, minVolumeSpot: 10000 },
 };
 // Миграция любого старого формата + подхват сохранённых значений
 try {
@@ -172,16 +172,16 @@ const isAlpha = ex.id === 'binance_alpha';
 // Единый UI для всех бирж — всё активно
 const marketsHtml = isAlpha
   ? `<div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
-       <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
-         <input type="checkbox" id="scalpFutures_${ex.id}" ${cfg.markets.futures ? 'checked' : ''}
-           style="accent-color:${ex.color}; width:14px; height:14px;">
-         <span>A (Alpha)</span>
-       </label>
-       <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
-<input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}"
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
+          <input type="checkbox" id="scalpSpot_${ex.id}" ${cfg.markets.spot ? 'checked' : ''}
+            style="accent-color:${ex.color}; width:14px; height:14px;">
+          <span>Spot</span>
+        </label>
+        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
+        <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}"
           min="10000" step="1000"
-         style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
-     </div>`
+          style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
+      </div>`
   : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
        <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#e2e8f0; margin-bottom:8px;">
@@ -244,9 +244,9 @@ const sInput = document.getElementById( `scalpMinSpot_${ex.id}` );
 scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
 scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
 const minF = isAlpha ? 10000 : 200000;
-const minS = 100000;
-scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
-scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
+    const minS = isAlpha ? 10000 : 100000;
+    scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
+    scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
 });
 localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
 scalpEnabled = Object.values(scalpExchanges).some(cfg =>
