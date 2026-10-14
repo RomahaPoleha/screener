@@ -128,7 +128,7 @@ EXCHANGES_CONFIG.forEach(ex => {
     const sInput = document.getElementById(`scalp-${ex.id}-sv`);
     scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
     scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-    const minF = isAlpha ? 50000 : 200000;
+    const minF = isAlpha ? 10000 : 200000;
     const minS = 100000;
     scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
     scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
@@ -203,13 +203,13 @@ const isEnabled = cfg.enabled !== false;
 const isAlpha = ex.id === 'binance_alpha';
 const fEnabled = cfg.markets && cfg.markets.futures;
 const sEnabled = cfg.markets && cfg.markets.spot;
-const fVol = cfg.minVolumeFutures || (isAlpha ? 50000 : 300000);
+const fVol = cfg.minVolumeFutures || (isAlpha ? 10000 : 300000);
 const sVol = cfg.minVolumeSpot || 200000;
 
 // Alpha — только один рынок (A), остальные — S + F (как в Recon)
 const controlsHtml = isAlpha
   ? `<span style="font-size:11px;color:#94a3b8;min-width:10px;">A:</span>
-      <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="50000" step="10000"
+      <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="10000" step="1000"
         style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
         ${!fEnabled ? 'disabled' : ''}>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">

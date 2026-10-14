@@ -25,7 +25,7 @@ okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutu
 gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-binance_alpha: { enabled: false, markets: { futures: true, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 50000 },
+binance_alpha: { enabled: false, markets: { futures: true, spot: false }, minVolumeFutures: 10000, minVolumeSpot: 50000 },
 };
 // Миграция любого старого формата + подхват сохранённых значений
 try {
@@ -178,8 +178,8 @@ const marketsHtml = isAlpha
          <span>A (Alpha)</span>
        </label>
        <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
-       <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}"
-         min="50000" step="10000"
+<input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}"
+          min="10000" step="1000"
          style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
      </div>`
   : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -243,7 +243,7 @@ const fInput = document.getElementById( `scalpMinFutures_${ex.id}` );
 const sInput = document.getElementById( `scalpMinSpot_${ex.id}` );
 scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
 scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-const minF = isAlpha ? 50000 : 200000;
+const minF = isAlpha ? 10000 : 200000;
 const minS = 100000;
 scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
 scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
