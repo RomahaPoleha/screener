@@ -241,8 +241,8 @@ const controlsHtml = isAlpha
 
 return `<div style="display:flex;align-items:center;gap:6px;">
   <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-  <span style="font-weight:600;color:${ex.color};font-size:13px;min-width:70px;">${ex.label || ex.name}</span>
-  <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">${controlsHtml}</div>
+  <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
+  <div style="display:flex;align-items:center;gap:6px;">${controlsHtml}</div>
   <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;" title="Enable/Disable ${ex.name}">
     <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
       style="opacity:0;width:0;height:0;"
