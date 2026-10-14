@@ -25,7 +25,7 @@ okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutu
 gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
 bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-binance_alpha: { enabled: false, markets: { futures: false, spot: true }, minVolumeFutures: 10000, minVolumeSpot: 10000 },
+binance_alpha: { enabled: true, markets: { futures: false, spot: true }, minVolumeFutures: 10000, minVolumeSpot: 1000 },
 };
 // Миграция любого старого формата + подхват сохранённых значений
 try {

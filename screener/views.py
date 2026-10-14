@@ -502,6 +502,12 @@ def api_scalp_active(request):
     all_symbols.update(binance_monitor.spot_symbols or [])
     all_symbols.update(bybit_monitor.bybit_futures_symbols or [])
     all_symbols.update(bybit_monitor.bybit_spot_symbols or [])
+    # Alpha symbols из alpha_monitor
+    try:
+        from . import binance_alpha_monitor_async as alpha_monitor
+        all_symbols.update(alpha_monitor.alpha_symbols or [])
+    except Exception:
+        pass
 
     for symbol in all_symbols:
         keys = [
@@ -511,6 +517,7 @@ def api_scalp_active(request):
             f"scalp:spot:binance:{symbol}",
             f"scalp:spot:bybit:{symbol}",
             f"scalp:spot:okx:{symbol}",
+            f"scalp:spot:binance_alpha:{symbol}",
         ]
 
         total_count = 0
