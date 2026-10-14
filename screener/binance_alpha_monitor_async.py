@@ -8,6 +8,7 @@ import time
 import aiohttp
 import websockets
 from django.core.cache import cache
+from .views import _fetch_alpha_token_list
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — BINANCE ALPHA
@@ -59,41 +60,27 @@ async def close_http_client():
 
 
 # ==========================================
-# 🔥 ЧТЕНИЕ МАСТЕР-СПИСКА (из Binance Futures + маппинг Alpha)
+# 🔥 ЧТЕНЕЕ СИМВОЛОВ ALPHA (из exchange:alpha:map)
 # ==========================================
 def _fetch_master_symbols_sync():
-    """Синхронное чтение мастер-списка фьючерсов из Redis и маппинг в Alpha символы.
-    Возвращает список ПОЛНЫХ символов (TRUTHUSDT, CTUSDT, ...) для единообразия ключей кэша.
+    """Синхронное чтение символов Alpha из кэша (exchange:alpha:map).
+    Возвращает список ПОЛНЫХ символов (TRUTHUSDT, CTUSDT, ...).
+    Не зависит от мастер-листа Binance Futures.
     """
     try:
-        key = 'scalp:master:futures'
-        all_symbols = cache.get(key)
-        if not (isinstance(all_symbols, list) and len(all_symbols) > 0):
-            print(f"⚠️ alpha: мастер-лист пуст или не список: {all_symbols}")
-            return []
-
-        # Получаем маппинг base_symbol -> ALPHA_XXXUSDT из кэша (views.py пишет его)
+        # Получаем маппинг base_symbol -> ALPHA_XXXUSDT из кэша
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map:
             print(f"⚠️ alpha: exchange:alpha:map пуст")
             return []
 
-        # Фильтруем: оставляем только те базовые символы, которые есть в Alpha маппинге
-        # Возвращаем ПОЛНЫЕ символы (TRUTHUSDT) для совместимости с API ключей кэша
-        alpha_symbols = []
-        for base_symbol in all_symbols:
-            base = base_symbol.upper()
-            if base in alpha_map:
-                alpha_symbols.append(base + 'USDT')  # Полный символ: TRUTHUSDT, CTUSDT
-            else:
-                # Debug: логируем первые 10 отсутствующих
-                if len(alpha_symbols) == 0:
-                    print(f"🔍 alpha: '{base}' НЕТ в alpha_map (примеры ключей: {list(alpha_map.keys())[:5]})")
-        
-        print(f"🔍 alpha: мастер-лист={len(all_symbols)} симв: {all_symbols}, alpha_map={len(alpha_map)}, пересечение={len(alpha_symbols)}: {alpha_symbols[:10]}")
+        # Возвращаем ВСЕ символы из маппинга (init_order_book отфильтрует пустые)
+        alpha_symbols = [base_symbol.upper() + 'USDT' for base_symbol in alpha_map.keys()]
+
+        print(f"🔍 alpha: alpha_map={len(alpha_map)}, символов={len(alpha_symbols)}: {alpha_symbols[:10]}")
         return alpha_symbols
     except Exception as e:
-        print(f"❌ Ошибка чтения master-списка alpha: {e}")
+        print(f"❌ Ошибка чтения alpha символов: {e}")
         import traceback
         print(traceback.format_exc())
         return []
