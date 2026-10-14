@@ -242,12 +242,68 @@ const controlsHtml = isAlpha
 return `<div style="display:flex;align-items:center;gap:6px;">
   <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
   <span style="font-weight:600;color:${ex.color};font-size:13px;min-width:70px;">${ex.label || ex.name}</span>
-  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-    <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
-      style="accent-color:${ex.color};width:16px;height:16px;">
-    <span>Enable</span>
-  </label>
   <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">${controlsHtml}</div>
+  <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;" title="Enable/Disable ${ex.name}">
+    <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}
+      style="opacity:0;width:0;height:0;"
+      onchange="toggleScalpExchange('${ex.id}', this.checked)">
+    <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${isEnabled ? '#f59e0b' : '#475569'};border-radius:20px;transition:.3s;">
+      <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#ffffff;border-radius:50%;transition:.3s;transform:${isEnabled ? 'translateX(16px)' : 'translateX(0)'};"></span>
+    </span>
+  </label>
 </div>`;
 }).join('');
+}
+
+function toggleScalpExchange(exchangeId, enabled) {
+    if (!scalpExchanges[exchangeId]) {
+        scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+    }
+    scalpExchanges[exchangeId].enabled = enabled;
+    localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));
+
+    const isAlpha = exchangeId === 'binance_alpha';
+    const fCheckbox = document.getElementById(`scalp-${exchangeId}-f`);
+    const fInput = document.getElementById(`scalp-${exchangeId}-fv`);
+    const sCheckbox = document.getElementById(`scalp-${exchangeId}-s`);
+    const sInput = document.getElementById(`scalp-${exchangeId}-sv`);
+
+    if (fCheckbox) fCheckbox.disabled = !enabled;
+    if (sCheckbox) sCheckbox.disabled = !enabled;
+    if (!enabled) {
+        if (fInput) fInput.disabled = true;
+        if (sInput) sInput.disabled = true;
+    } else {
+        if (fInput) fInput.disabled = isAlpha ? false : !fCheckbox.checked;
+        if (sInput) sInput.disabled = false;
+    }
+
+    renderScalpCards();
+    applyScalpSettingsSilent();
+}
+
+function applyScalpSettingsSilent() {
+    scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.markets.futures || cfg.markets.spot));
+
+    if (currentSymbol && candleSeries) {
+        clearScalpLines();
+        previousScalpData = {};
+    }
+    if (currentSymbol) {
+        if (scalpEnabled) startScalpUpdates(currentSymbol);
+        else {
+            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+        }
+    }
+
+    const btn = document.getElementById('settingsBtn');
+    if (btn) {
+        if (densityEnabled || scalpEnabled || reconEnabled) {
+            btn.style.background = '#f59e0b';
+            btn.style.color = '#000000';
+        } else {
+            btn.style.background = '#2a2a2a';
+            btn.style.color = '#ffffff';
+        }
+    }
 }
