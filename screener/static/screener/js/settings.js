@@ -206,7 +206,7 @@ const sEnabled = cfg.markets && cfg.markets.spot;
 const fVol = cfg.minVolumeFutures || (isAlpha ? 50000 : 300000);
 const sVol = cfg.minVolumeSpot || 200000;
 
-// Alpha — только один рынок (A), остальные — F + S
+// Alpha — только один рынок (A), остальные — S + F (как в Recon)
 const controlsHtml = isAlpha
   ? `<span style="font-size:11px;color:#94a3b8;min-width:10px;">A:</span>
       <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="50000" step="10000"
@@ -218,25 +218,25 @@ const controlsHtml = isAlpha
           onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
         <span>A</span>
       </label>`
-  : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
-      <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="200000" step="10000"
-        style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
-        ${!fEnabled ? 'disabled' : ''}>
-      <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+  : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
       <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="100000" step="10000"
         style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
         ${!sEnabled ? 'disabled' : ''}>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
-        <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''}
-          style="accent-color:#f59e0b;width:14px;height:14px;"
-          onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
-        <span>F</span>
-      </label>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
         <input type="checkbox" id="scalp-${ex.id}-s" ${sEnabled ? 'checked' : ''}
           style="accent-color:#f59e0b;width:14px;height:14px;"
           onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
         <span>S</span>
+      </label>
+      <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+      <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="200000" step="10000"
+        style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
+        ${!fEnabled ? 'disabled' : ''}>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
+        <input type="checkbox" id="scalp-${ex.id}-f" ${fEnabled ? 'checked' : ''}
+          style="accent-color:#f59e0b;width:14px;height:14px;"
+          onchange="document.getElementById('scalp-${ex.id}-fv').disabled = !this.checked">
+        <span>F</span>
       </label>`;
 
 return `<div style="display:flex;align-items:center;gap:6px;">
