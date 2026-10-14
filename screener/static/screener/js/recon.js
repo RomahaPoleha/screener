@@ -467,7 +467,7 @@ function renderReconSettings() {
             ${isAlpha ? '' : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
             <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`}
             <span style="font-size:11px;color:#94a3b8;min-width:10px;">${isAlpha ? 'A' : 'F'}:</span>
-            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+            <input type="number" id="reconMinF_${ex.id}" value="${isAlpha ? reconMinVolumes[ex.id].spot : reconMinVolumes[ex.id].futures}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
         </div>`;
     }).join('');
 }
