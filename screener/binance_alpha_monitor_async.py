@@ -69,27 +69,34 @@ def _fetch_master_symbols_sync():
         key = 'scalp:master:futures'
         all_symbols = cache.get(key)
         if not (isinstance(all_symbols, list) and len(all_symbols) > 0):
+            print(f"⚠️ alpha: мастер-лист пуст или не список: {all_symbols}")
             return []
 
         # Получаем маппинг base_symbol -> ALPHA_XXXUSDT из кэша (views.py пишет его)
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map:
+            print(f"⚠️ alpha: exchange:alpha:map пуст")
             return []
 
         # Фильтруем: оставляем только те базовые символы, которые есть в Alpha маппинге
-        # Возвращаем ПОЛНЫЕ символы (TRUTHUSDT) для совместимости с API ключами кэша
+        # Возвращаем ПОЛНЫЕ символы (TRUTHUSDT) для совместимости с API ключей кэша
         alpha_symbols = []
         for base_symbol in all_symbols:
             base = base_symbol.upper()
             if base in alpha_map:
                 alpha_symbols.append(base + 'USDT')  # Полный символ: TRUTHUSDT, CTUSDT
-
+            else:
+                # Debug: логируем первые 10 отсутствующих
+                if len(alpha_symbols) == 0:
+                    print(f"🔍 alpha: '{base}' НЕТ в alpha_map (примеры ключей: {list(alpha_map.keys())[:5]})")
+        
+        print(f"🔍 alpha: мастер-лист={len(all_symbols)} симв: {all_symbols}, alpha_map={len(alpha_map)}, пересечение={len(alpha_symbols)}: {alpha_symbols[:10]}")
         return alpha_symbols
     except Exception as e:
         print(f"❌ Ошибка чтения master-списка alpha: {e}")
+        import traceback
+        print(traceback.format_exc())
         return []
-
-
 async def get_master_symbols_async():
     """Асинхронная обёртка для чтения мастер-списка"""
     loop = asyncio.get_running_loop()
