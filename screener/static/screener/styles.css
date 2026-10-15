@@ -392,6 +392,14 @@ body {
     cursor: pointer; font-size: 11px; align-items: center;
     transition: background 0.1s;
 }
+.coin-row .coin-correlation,
+.coin-row .coin-deals,
+.coin-row .coin-volume,
+.coin-row .coin-natr {
+    text-align: center;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 10px;
+}
 .coin-row:hover { background: #1f1f1f; }
 .coin-symbol { font-weight: 700; color: #ffffff; }
 .coin-change { text-align: right; font-weight: 700; }
@@ -403,19 +411,25 @@ body {
 .natr-low { color: #22c55e; }
 .natr-mid { color: #f59e0b; }
 .natr-high { color: #ef4444; }
-.coin-correlation { text-align: right; font-weight: 700; font-size: 11px; font-family: 'JetBrains Mono', 'Consolas', monospace; }
+.coin-correlation { font-weight: 700; font-size: 11px; }
 .coin-correlation.empty { color: #444444; }
 .corr-high { color: #22c55e; }
 .corr-mid { color: #f59e0b; }
 .corr-low { color: #fb923c; }
 .corr-neg { color: #ef4444; }
-.coin-deals, .coin-volume, .coin-natr { font-family: 'JetBrains Mono', 'Consolas', monospace; }
 .coin-gap { /* пустая колонка-разделитель */ }
 .coins-header {
     display: grid; grid-template-columns: 16px 55px 1fr 8px 42px 42px 48px 42px 42px; gap: 4px;
     padding: 6px 12px; background: #0f0f0f; font-size: 10px; color: #999999;
     border-bottom: 2px solid #333333; position: sticky; top: 0;
     font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+.coins-header > div:nth-child(5),
+.coins-header > div:nth-child(6),
+.coins-header > div:nth-child(7),
+.coins-header > div:nth-child(8),
+.coins-header > div:nth-child(9) {
+    text-align: center;
 }
 .coins-header > div { cursor: pointer; user-select: none; }
 .coins-header > div:hover { color: #f59e0b; }
