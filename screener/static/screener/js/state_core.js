@@ -35,7 +35,6 @@ let currentSymbol = '', currentTF = '1m', currentPrecision = 2, lastCandlePrice 
 // Данные
 let allCoins = [];
 let natrData = {};
-let correlationData = {};
 
 // WebSocket'ы
 let wsTrades = null, wsCandles = null;

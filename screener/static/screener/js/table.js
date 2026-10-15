@@ -26,11 +26,6 @@ function renderTable(data) {
         const colorId = coinColors[coin.symbol];
         const colorHex = colorId ? (COIN_COLOR_OPTIONS.find(c => c.id === colorId) || {}).hex : null;
 
-         // Корреляция с BTC
-         const corr = correlationData[coin.symbol];
-         const corrTxt = (corr !== undefined && corr !== null) ? corr.toFixed(2) : '-';
-         const corrClass = corr !== undefined && corr !== null ? getCorrelationClass(corr) : 'empty';
-
         // Подсветка активной монеты
         const isActive = coin.symbol === currentSymbol;
         const activeClass = isActive ? ' active' : '';
@@ -44,21 +39,12 @@ function renderTable(data) {
             <div class="coin-symbol">${coin.symbol}</div>
             <div class="coin-change ${isUp ? 'text-up' : 'text-down'}">${isUp ? '+' : ''}${coin.change}%</div>
             <div class="coin-gap"></div>
-             <div class="coin-correlation ${corrClass}" title="Корреляция с BTC">${corrTxt}</div>
             <div class="coin-deals" title="Сделок за 24ч">${dealsTxt}</div>
             <div class="coin-volume">$${fmt(coin.volume)}</div>
             <div class="coin-natr ${n1 ? getNatrClass(n1) : 'empty'}">${n1Txt}</div>
             <div class="coin-natr ${n5 ? getNatrClass(n5) : 'empty'}">${n5Txt}</div>
         </div>`;
     }).join('');
-}
-
-// Класс для подсветки корреляции
-function getCorrelationClass(corr) {
-    if (corr >= 0.7) return 'corr-high';      // Зеленый - высокая корреляция
-    if (corr >= 0.3) return 'corr-mid';       // Желтый - средняя
-    if (corr >= -0.3) return 'corr-low';      // Оранжевый - низкая
-    return 'corr-neg';                        // Красный - отрицательная
 }
 
 // Функция быстрого обновления подсветки (без перерисовки таблицы)
@@ -74,7 +60,7 @@ function updateActiveCoinHighlight() {
 
 function sortBy(field) {
     if (sortState.field === field) sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-     else { sortState.field = field; sortState.direction = (field === 'natr_1m' || field === 'natr_5m' || field === 'correlation') ? 'desc' : 'asc'; }
+    else { sortState.field = field; sortState.direction = (field === 'natr_1m' || field === 'natr_5m') ? 'desc' : 'asc'; }
 
     document.querySelectorAll('.coins-header span').forEach(el => el.textContent = '');
     const arrow = document.getElementById(`sort-${field}`);
@@ -108,10 +94,6 @@ function applyLocalFilters() {
                 valA = natrData[a.symbol]?.natr_5m14 ?? -1;
                 valB = natrData[b.symbol]?.natr_5m14 ?? -1;
             }
-             else if (sortState.field === 'correlation') {
-                 valA = correlationData[a.symbol] ?? -2;
-                 valB = correlationData[b.symbol] ?? -2;
-             }
             return sortState.direction === 'asc' ? valA - valB : valB - valA;
         });
     } else {
