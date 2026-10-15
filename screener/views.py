@@ -192,12 +192,34 @@ def api_trades_count(request):
 # ==========================================
 # КОРРЕЛЯЦИЯ С BTC
 # ==========================================
-import numpy as np
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.core.cache import cache
+import math
 
 BINANCE_API = "https://api.binance.com/api/v3"
+
+
+def log_returns(closes):
+    """Лог-доходности (чистый Python)"""
+    return [math.log(closes[i] / closes[i-1]) for i in range(1, len(closes))]
+
+
+def correlation(a, b):
+    """Корреляция Пирсона (чистый Python)"""
+    n = min(len(a), len(b))
+    if n < 2:
+        return 0.0
+    a = a[:n]
+    b = b[:n]
+    mean_a = sum(a) / n
+    mean_b = sum(b) / n
+    cov = sum((a[i] - mean_a) * (b[i] - mean_b) for i in range(n))
+    std_a = math.sqrt(sum((x - mean_a) ** 2 for x in a))
+    std_b = math.sqrt(sum((x - mean_b) ** 2 for x in b))
+    if std_a == 0 or std_b == 0:
+        return 0.0
+    return cov / (std_a * std_b)
 
 
 def fetch_btc_correlations():
@@ -213,8 +235,8 @@ def fetch_btc_correlations():
     btc_data = btc_resp.json()
     if len(btc_data) < 100:
         return {}
-    btc_closes = np.array([float(k[4]) for k in btc_data])
-    btc_returns = np.diff(np.log(btc_closes))
+    btc_closes = [float(k[4]) for k in btc_data]
+    btc_returns = log_returns(btc_closes)
 
     # Получаем все USDT пары
     info = requests.get(f"{BINANCE_API}/exchangeInfo", timeout=10).json()
@@ -229,10 +251,9 @@ def fetch_btc_correlations():
         data = resp.json()
         if len(data) < 100:
             return None
-        closes = np.array([float(k[4]) for k in data])
-        returns = np.diff(np.log(closes))
-        min_len = min(len(returns), len(btc_returns))
-        corr = np.corrcoef(returns[:min_len], btc_returns[:min_len])[0, 1]
+        closes = [float(k[4]) for k in data]
+        returns = log_returns(closes)
+        corr = correlation(returns, btc_returns)
         clean = symbol.replace("USDT", "")
         return (clean, round(corr, 3))
 
