@@ -62,15 +62,25 @@ async def close_http_client():
 # 🔥 ЧТЕНЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE (как Bybit)
 # ==========================================
 def _fetch_master_symbols_sync():
-    """Синхронное чтение мастер-списка SPOT из Redis (scalp:master:spot).
+    """Синхронное чтение мастер-листов SPOT + FUTURES из Redis.
     Фильтрует: оставляет только те символы, которые есть в alpha_map.
     Возвращает список базовых символов (BTCUSDT, ETHUSDT, ...).
     """
     try:
-        # 1. Читаем мастер-лист от Binance (SPOT)
-        master_symbols = cache.get('scalp:master:spot')
-        if not isinstance(master_symbols, list) or not master_symbols:
-            print(f"⚠️ alpha: scalp:master:spot пуст или не список")
+        # 1. Читаем ОБА мастер-листа от Binance
+        spot_symbols = cache.get('scalp:master:spot') or []
+        futures_symbols = cache.get('scalp:master:futures') or []
+        
+        if not isinstance(spot_symbols, list):
+            spot_symbols = []
+        if not isinstance(futures_symbols, list):
+            futures_symbols = []
+        
+        # Объединяем уникальные символы
+        all_symbols = list(set(spot_symbols) | set(futures_symbols))
+        
+        if not all_symbols:
+            print(f"⚠️ alpha: оба мастер-листа пусты")
             return []
 
         # 2. Читаем маппинг Alpha: base_symbol -> ALPHA_XXXUSDT
@@ -83,12 +93,12 @@ def _fetch_master_symbols_sync():
         # master_symbols приходят как BTCUSDT, ETHUSDT...
         # alpha_map ключи — базовые: BTC, ETH, TRUTH...
         filtered = []
-        for symbol in master_symbols:
+        for symbol in all_symbols:
             base = symbol.upper().replace('USDT', '')
             if base in alpha_map:
                 filtered.append(symbol)  # храним базовый формат BTCUSDT
 
-        print(f"🔍 alpha: master={len(master_symbols)}, alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
+        print(f"🔍 alpha: spot={len(spot_symbols)}, futures={len(futures_symbols)}, объединено={len(all_symbols)}, alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
         return filtered
     except Exception as e:
         print(f"❌ Ошибка чтения master-списка для alpha: {e}")
