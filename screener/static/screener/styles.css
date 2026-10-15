@@ -396,7 +396,7 @@ body {
 .coin-row .coin-deals,
 .coin-row .coin-volume,
 .coin-row .coin-natr {
-    text-align: center;
+    text-align: left;
     font-family: 'JetBrains Mono', 'Consolas', monospace;
     font-size: 10px;
 }
@@ -429,7 +429,7 @@ body {
 .coins-header > div:nth-child(7),
 .coins-header > div:nth-child(8),
 .coins-header > div:nth-child(9) {
-    text-align: center;
+    text-align: left;
 }
 .coins-header > div { cursor: pointer; user-select: none; }
 .coins-header > div:hover { color: #f59e0b; }
