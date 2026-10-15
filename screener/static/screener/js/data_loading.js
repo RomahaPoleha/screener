@@ -51,10 +51,34 @@ async function loadNatrData() {
 // ==========================================
 function startNatrAutoUpdate() {
     if (natrAutoUpdateTimer) return;
-    loadNatrData();
-    loadAllData();   // ← первая загрузка allCoins
+    
+    // Первая загрузка: NATR → затем монеты → затем корреляция (последовательно)
+    loadNatrData()
+        .then(() => loadAllData())
+        .then(() => loadCorrelationData());
+    
     natrAutoUpdateTimer = setInterval(() => {
-        loadNatrData();
-        loadAllData();   // ← обновляем allCoins вместе с NATR
+        // Каждые 15 сек: NATR → монеты (корреляция НЕ загружаем тут, только раз в час)
+        loadNatrData().then(() => loadAllData());
     }, 15000);
+    
+    // Корреляция обновляется раз в час, с задержкой после старта
+    setTimeout(() => {
+        loadCorrelationData();
+        setInterval(loadCorrelationData, 3600000);
+    }, 5000); // стартует через 5 сек после NATR+монет
+}
+
+// ==========================================
+// ЗАГРУЗКА КОРРЕЛЯЦИИ С BTC
+// ==========================================
+async function loadCorrelationData() {
+    try {
+        const res = await fetch(`/api/btc-correlation/`);
+        if (!res.ok) throw new Error('Ошибка корреляции');
+        correlationData = await res.json();
+        applyLocalFilters();
+    } catch (err) {
+        console.error('Ошибка загрузки корреляции:', err);
+    }
 }

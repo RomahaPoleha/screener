@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/logo/', views.api_logo),
     path('api/impulse-alerts/', views.api_impulse_alerts, name='api_impulse_alerts'),
     path('api/trades-count/', views.api_trades_count, name='api_trades_count'),
+    path('api/btc-correlation/', views.api_btc_correlation, name='api_btc_correlation'),
     path('api/exchanges/<str:symbol>/', views.api_exchanges, name='api_exchanges'),
     path('api/binance-check/<str:symbol>/', views.api_binance_check_symbol, name='api_binance_check_symbol'),
     path('api/clear-exchange-cache/', views.api_clear_exchange_cache, name='api_clear_exchange_cache'),

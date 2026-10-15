@@ -190,6 +190,84 @@ def api_trades_count(request):
 
 
 # ==========================================
+# КОРРЕЛЯЦИЯ С BTC
+# ==========================================
+import numpy as np
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from django.core.cache import cache
+
+BINANCE_API = "https://api.binance.com/api/v3"
+
+
+def fetch_btc_correlations():
+    """Рассчитывает корреляцию всех пар с BTCUSDT"""
+    interval = "1h"
+    limit = 720
+    max_workers = 15
+
+    # Загружаем BTC
+    btc_resp = requests.get(f"{BINANCE_API}/klines", params={"symbol": "BTCUSDT", "interval": interval, "limit": limit}, timeout=10)
+    if btc_resp.status_code != 200:
+        return {}
+    btc_data = btc_resp.json()
+    if len(btc_data) < 100:
+        return {}
+    btc_closes = np.array([float(k[4]) for k in btc_data])
+    btc_returns = np.diff(np.log(btc_closes))
+
+    # Получаем все USDT пары
+    info = requests.get(f"{BINANCE_API}/exchangeInfo", timeout=10).json()
+    pairs = [s["symbol"] for s in info["symbols"] if s["symbol"].endswith("USDT") and s["status"] == "TRADING"]
+
+    def calc_one(symbol):
+        if symbol == "BTCUSDT":
+            return ("BTC", 1.0)
+        resp = requests.get(f"{BINANCE_API}/klines", params={"symbol": symbol, "interval": interval, "limit": limit}, timeout=10)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if len(data) < 100:
+            return None
+        closes = np.array([float(k[4]) for k in data])
+        returns = np.diff(np.log(closes))
+        min_len = min(len(returns), len(btc_returns))
+        corr = np.corrcoef(returns[:min_len], btc_returns[:min_len])[0, 1]
+        clean = symbol.replace("USDT", "")
+        return (clean, round(corr, 3))
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(calc_one, sym): sym for sym in pairs if sym != "BTCUSDT"}
+        for future in as_completed(futures):
+            res = future.result()
+            if res:
+                results[res[0]] = res[1]
+    
+    return results
+
+
+@require_http_methods(["GET"])
+def api_btc_correlation(request):
+    """API: корреляция всех монет с BTC (кэш в Redis на 1 час)"""
+    cached = cache.get('btc_correlations')
+    if cached:
+        return JsonResponse(cached)
+    
+    try:
+        correlations = fetch_btc_correlations()
+        cache.set('btc_correlations', correlations, 3600)  # 1 час в Redis
+        return JsonResponse(correlations)
+    except Exception as e:
+        print(f"❌ Ошибка корреляции BTC: {e}")
+        # Если есть в кэше — отдаём, иначе пустой
+        cached = cache.get('btc_correlations')
+        if cached:
+            return JsonResponse(cached)
+        return JsonResponse({})
+
+
+# ==========================================
 # API ФУНКЦИЯ
 # ==========================================
 @require_http_methods(["GET"])
