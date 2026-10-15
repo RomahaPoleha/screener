@@ -1020,6 +1020,17 @@ def api_exchange_alpha_map(request):
     return JsonResponse({'map': get_alpha_symbol_map()})
 
 
+@require_http_methods(["GET"])
+def api_debug_master_list(request):
+    """DEBUG: мастер-листы Binance (spot/futures)"""
+    from django.core.cache import cache
+    return JsonResponse({
+        'spot': cache.get('scalp:master:spot') or [],
+        'futures': cache.get('scalp:master:futures') or [],
+        'alpha_map_keys': list(cache.get('exchange:alpha:map') or {}).keys()[:10],
+    })
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_clear_exchange_cache(request):
