@@ -1025,11 +1025,20 @@ def api_exchange_alpha_map(request):
 def api_debug_master_list(request):
     """DEBUG: мастер-листы Binance (spot/futures)"""
     from django.core.cache import cache
-    return JsonResponse({
-        'spot': cache.get('scalp:master:spot') or [],
-        'futures': cache.get('scalp:master:futures') or [],
-        'alpha_map_keys': list(cache.get('exchange:alpha:map') or {}).keys()[:10],
-    })
+    try:
+        spot = cache.get('scalp:master:spot') or []
+        fut = cache.get('scalp:master:futures') or []
+        alpha_map = cache.get('exchange:alpha:map') or {}
+        return JsonResponse({
+            'spot': spot,
+            'futures': fut,
+            'alpha_map_keys': list(alpha_map.keys())[:10],
+            'spot_count': len(spot) if isinstance(spot, list) else 'not list',
+            'futures_count': len(fut) if isinstance(fut, list) else 'not list',
+        })
+    except Exception as e:
+        import traceback
+        return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
 
 
 @csrf_exempt
