@@ -110,6 +110,7 @@ async def init_order_book_async(symbol, log_func=print):
     symbol — БАЗОВЫЙ символ из мастер-листа (BTCUSDT, ETHUSDT, ...).
     Внутри разрешаем через alpha_map -> ALPHA_XXXUSDT.
     Внутренние структуры и кэш используют БАЗОВЫЙ символ (BTCUSDT).
+    Возвращает: (success: bool, saved_count: int)
     """
     try:
         # Извлекаем базовый символ (BTC из BTCUSDT) для маппинга
@@ -119,7 +120,7 @@ async def init_order_book_async(symbol, log_func=print):
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map or base_symbol not in alpha_map:
             log_func(f"⚠️ alpha {symbol}: нет в маппинге Alpha (base={base_symbol})")
-            return 0
+            return False, 0
         
         alpha_symbol = alpha_map[base_symbol]  # ALPHA_1228USDT
         log_func(f"🔍 alpha {symbol}: alpha_symbol={alpha_symbol}")
@@ -132,13 +133,13 @@ async def init_order_book_async(symbol, log_func=print):
         async with client.get(url) as resp:
             if resp.status != 200:
                 log_func(f"⚠️ alpha {symbol}: HTTP {resp.status}")
-                return 0
+                return False, 0
             data = await resp.json()
 
         # Binance Alpha возвращает code "000000" при успехе
         if data.get('code') != "000000":
             log_func(f"⚠️ alpha {symbol}: code={data.get('code')} msg={data.get('message')}")
-            return 0
+            return False, 0
 
         result = data.get('data') or {}
         raw_bids = result.get('bids') or []
@@ -167,24 +168,24 @@ async def init_order_book_async(symbol, log_func=print):
             except Exception:
                 continue
 
-        if not bids and not asks:
-            log_func(f"⚠️ alpha {symbol}: пустой стакан")
-            return 0
-
-        # Внутренние структуры используют БАЗОВЫЙ символ (BTCUSDT) — как мастер-лист
+        # Инициализируем структуры ВСЕГДА (даже для пустого стакана)
+        # чтобы WebSocket апдейты могли обрабатываться
         async with alpha_lock:
             alpha_order_books[symbol] = {'bids': bids, 'asks': asks}
             alpha_density_timestamps[symbol] = {}
 
+        if not bids and not asks:
+            log_func(f"⚠️ alpha {symbol}: пустой стакан (ожидаем WS апдейты)")
+
         saved_count = await sync_to_cache_async(symbol, log_func)
         log_func(f"✅ alpha Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
-        return saved_count
+        return True, saved_count
 
     except Exception as e:
         log_func(f"❌ init_order_book_async(alpha {symbol}): {e}")
         import traceback
         log_func(traceback.format_exc())
-        return 0
+        return False, 0
 
 
 # ==========================================
@@ -518,8 +519,8 @@ async def periodic_refresh(log_func=print):
 
             for symbol in master_symbols:
                 if symbol not in old_symbols:
-                    saved_count = await init_order_book_async(symbol, log_func)
-                    if saved_count > 0:
+                    success, saved_count = await init_order_book_async(symbol, log_func)
+                    if success:
                         new_active.append(symbol)
                         added.append(symbol)
                         log_func(f"✅ alpha {symbol}: добавлен (плотностей: {saved_count})")
@@ -597,12 +598,12 @@ async def main_async(log_func=print):
 
     active_symbols = []
     for symbol in master_symbols:
-        saved_count = await init_order_book_async(symbol, log_func)
-        if saved_count > 0:
+        success, saved_count = await init_order_book_async(symbol, log_func)
+        if success:
             active_symbols.append(symbol)
             log_func(f"✅ alpha {symbol}: принят (плотностей: {saved_count})")
         else:
-            log_func(f"⚠️ alpha {symbol}: пропущен (не поддерживается или пустой стакан)")
+            log_func(f"⚠️ alpha {symbol}: пропущен (не поддерживается или ошибка API)")
 
     alpha_symbols = active_symbols
     log_func(f"✅ Binance Alpha Async Monitor инициализирован: {len(active_symbols)} символов")
