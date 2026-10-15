@@ -411,12 +411,12 @@ body {
 .natr-low { color: #22c55e; }
 .natr-mid { color: #f59e0b; }
 .natr-high { color: #ef4444; }
-.coin-correlation { font-weight: 700; font-size: 11px; }
-.coin-correlation.empty { color: #444444; }
-.corr-high { color: #22c55e; }
-.corr-mid { color: #f59e0b; }
-.corr-low { color: #fb923c; }
-.corr-neg { color: #ef4444; }
+# .coin-correlation { font-weight: 700; font-size: 11px; }
+# .coin-correlation.empty { color: #444444; }
+# .corr-high { color: #22c55e; }
+# .corr-mid { color: #f59e0b; }
+# .corr-low { color: #fb923c; }
+# .corr-neg { color: #ef4444; }
 .coin-gap { /* пустая колонка-разделитель */ }
 .coins-header {
     display: grid; grid-template-columns: 16px 55px 1fr 8px 42px 42px 48px 42px 42px; gap: 4px;
