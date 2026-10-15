@@ -340,11 +340,8 @@ function startCollageScalpUpdates(symbols) {
                         if (!res.ok) continue;
                         const data = await res.json();
 
-                        const filtered = (data.densities || []).filter(d => {
-                            if ((d.exchange || 'binance') !== item.exchange) return false;
-                            if ((d.age_seconds || 0) < 180) return false;
-                            return true;
-                        });
+                        const exchangeData = data.by_exchange?.[item.exchange] || [];
+                        const filtered = exchangeData.filter(d => (d.age_seconds || 0) >= 180);
                         allDensities = allDensities.concat(filtered);
                     } catch (e) {}
                 }
@@ -412,11 +409,8 @@ async function drawScalpOnCollageChart(symbol, candleSeries, entry) {
             if (!res.ok) continue;
             const data = await res.json();
 
-            const filtered = (data.densities || []).filter(d => {
-                if ((d.exchange || 'binance') !== item.exchange) return false;
-                if ((d.age_seconds || 0) < 180) return false;
-                return true;
-            });
+            const exchangeData = data.by_exchange?.[item.exchange] || [];
+            const filtered = exchangeData.filter(d => (d.age_seconds || 0) >= 180);
             allDensities = allDensities.concat(filtered);
         } catch (e) {}
     }

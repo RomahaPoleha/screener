@@ -92,16 +92,14 @@ let hasChanges = false;
 for (const item of loadList) {
 const key =  `${item.exchange}|${item.market}` ;
 try {
-const res = await fetch( `/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50` );
-if (!res.ok) continue;
-const data = await res.json();
-// Фильтруем по бирже И по возрасту  >= 180 сек
-const filtered = (data.densities || []).filter(d => {
-if ((d.exchange || 'binance') !== item.exchange) return false;
-if ((d.age_seconds || 0)  < 180) return false;
-return true;
-});
-allNewData[key] = filtered;
+        const res = await fetch( `/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50` );
+        if (!res.ok) continue;
+        const data = await res.json();
+        // Фильтруем по бирже И по возрасту  >= 180 сек
+        // Используем data.by_exchange[exchange] — там уже отфильтровано по бирже
+        const exchangeData = data.by_exchange?.[item.exchange] || [];
+        const filtered = exchangeData.filter(d => (d.age_seconds || 0) >= 180);
+        allNewData[key] = filtered;
 } catch (e) {
 console.error( `Scalp load error (${key}):` , e);
 allNewData[key] = previousScalpData[key] || [];
