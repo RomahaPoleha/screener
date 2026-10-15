@@ -88,7 +88,7 @@ def _fetch_dynamic_by_natr_sync(market='futures', limit=40):
                 continue
 
             volume = data.get('quoteVolume') or 0
-            if volume < 100000:
+            if volume < 10000:
                 continue
 
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
@@ -738,7 +738,7 @@ async def main_async(log_func=print):
             active_futures.append(symbol)
             log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
 
-    for symbol in spot_candidates[:20]:
+    for symbol in spot_candidates[:40]:
         if symbol in active_spot:
             continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)

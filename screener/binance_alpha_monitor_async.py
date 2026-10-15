@@ -574,6 +574,15 @@ async def main_async(log_func=print):
 
     log_func("🚀 Запуск Binance Alpha Async Monitor (WORKER NODE)...")
 
+    # Гарантируем заполнение кэша exchange:alpha:map
+    try:
+        from screener.views import get_alpha_symbol_map
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, get_alpha_symbol_map)
+        log_func("✅ Alpha map кэш заполнен/проверен")
+    except Exception as e:
+        log_func(f"⚠️ Не удалось заполнить alpha map кэш: {e}")
+
     master_symbols = await get_master_symbols_async()
     attempts = 0
 
