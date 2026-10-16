@@ -472,12 +472,12 @@ body {
 .trade-buy { color: #22c55e; font-weight: 700; }
 .trade-sell { color: #ef4444; font-weight: 700; }
 
-/* ==========================================
-   DENSITIES OVERLAY — ТАБЛИЦА ПЛОТНОСТЕЙ
+/* DENSITIES OVERLAY — ТАБЛИЦА ПЛОТНОСТЕЙ
    ========================================== */
 .densities-overlay {
     position: absolute; top: 0; left: 0; right: 0; bottom: 0;
     background: #1a1a1a; z-index: 100; display: none; flex-direction: column;
+    padding: 20px; box-sizing: border-box;
 }
 .densities-overlay.active { display: flex; }
 .densities-overlay-header {
