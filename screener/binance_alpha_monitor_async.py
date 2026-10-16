@@ -82,10 +82,6 @@ def _fetch_alpha_symbols_by_natr_sync(limit=40):
         try:
             # Получаем все ключи, соответствующие паттерну
             # Для django-redis используем keys() или scan_iter
-            from django.core.cache import cache
-            import redis
-            
-            # Получаем raw redis клиент для scan_iter
             redis_client = cache.client.get_client()
             if hasattr(redis_client, 'scan_iter'):
                 keys_iter = redis_client.scan_iter(match=pattern, count=500)
