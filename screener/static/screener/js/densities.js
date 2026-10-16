@@ -57,6 +57,19 @@ function fmtAge(sec) {
     return (sec / 3600).toFixed(1) + 'h';
 }
 
+function getExchangeShort(exchange) {
+    const map = {
+        'binance': 'BI',
+        'bybit': 'BY',
+        'okx': 'OKX',
+        'gate': 'GT',
+        'mexc': 'MEX',
+        'bitget': 'BGB',
+        'binance_alpha': 'BI-A',
+    };
+    return map[exchange] || exchange.slice(0, 2).toUpperCase();
+}
+
 function getSideClass(side) {
     return side === 'buy' ? 'densities-buy' : 'densities-sell';
 }
@@ -164,7 +177,7 @@ function renderDensitiesTable(data) {
             html += `
                 <div class="densities-row">
                     <div class="densities-col densities-col-symbol">${symbol}</div>
-                    <div class="densities-col densities-col-exchange">${d.exchange}</div>
+                    <div class="densities-col densities-col-exchange">${getExchangeShort(d.exchange)}</div>
                     <div class="densities-col densities-col-price ${sideClass}">${d.price.toLocaleString()}</div>
                     <div class="densities-col densities-col-volume">$${fmtVolume(d.volume)}</div>
                     <div class="densities-col densities-col-age">${fmtAge(d.age_seconds)}</div>

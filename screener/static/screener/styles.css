@@ -503,7 +503,7 @@ body {
 .densities-overlay-body::-webkit-scrollbar-thumb { background: #333333; border-radius: 0; }
 .densities-table-header {
     display: grid;
-    grid-template-columns: 65px 65px 75px 80px 65px;
+    grid-template-columns: 75px 40px 75px 80px 65px;
     gap: 4px;
     padding: 6px 8px;
     background: #0f0f0f;
@@ -519,7 +519,7 @@ body {
 .densities-table-body { font-size: 12px; font-family: 'JetBrains Mono', 'Consolas', monospace; }
 .densities-row {
     display: grid;
-    grid-template-columns: 65px 65px 75px 80px 65px;
+    grid-template-columns: 75px 40px 75px 80px 65px;
     gap: 4px;
     padding: 4px 8px;
     border-bottom: 1px solid #1f1f1f;
