@@ -514,13 +514,13 @@ async def periodic_refresh(log_func=print):
             alpha_symbols = new_active
 
             if removed:
-            async with alpha_lock:
+                async with alpha_lock:
                     for sym in removed:
                         alpha_order_books.pop(sym, None)
                         alpha_density_timestamps.pop(sym, None)
                         alpha_volume_stats.pop(sym, None)
                         alpha_first_load_done.discard(sym)
-                log_func(f"🗑️ alpha удалены: {', '.join(sorted(removed))}")
+                    log_func(f"🗑️ alpha удалены: {', '.join(sorted(removed))}")
 
             if added or removed:
                 alpha_reconnect_event.set()
