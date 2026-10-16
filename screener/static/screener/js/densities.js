@@ -65,7 +65,7 @@ function getExchangeShort(exchange) {
         'gate': 'GT',
         'mexc': 'MEX',
         'bitget': 'BGB',
-        'binance_alpha': 'BI-A',
+        'binance_alpha': 'BI -A -S',
     };
     return map[exchange] || exchange.slice(0, 2).toUpperCase();
 }
