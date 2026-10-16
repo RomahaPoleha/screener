@@ -409,7 +409,7 @@ function renderReconPanel() {
         // Alpha: спотовая торговля, показываем галочку "A"
         const isAlpha = ex.id === 'binance_alpha';
         const togglesHtml = isAlpha
-            ? mkToggle('spot', 'A')
+            ? mkToggle('spot', 'S')
             : mkToggle('spot', 'S') + mkToggle('futures', 'F');
         
         return `<div style="display:flex;align-items:center;gap:5px;">
@@ -466,7 +466,7 @@ function renderReconSettings() {
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
             ${isAlpha ? '' : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
             <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`}
-            <span style="font-size:11px;color:#94a3b8;min-width:10px;">${isAlpha ? 'A' : 'F'}:</span>
+             <span style="font-size:11px;color:#94a3b8;min-width:10px;">${isAlpha ? 'S' : 'F'}:</span>
             <input type="number" id="reconMinF_${ex.id}" value="${isAlpha ? reconMinVolumes[ex.id].spot : reconMinVolumes[ex.id].futures}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
         </div>`;
     }).join('');
