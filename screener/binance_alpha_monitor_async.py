@@ -32,6 +32,7 @@ last_sync_time = {}
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
 SYNC_INTERVAL = 3
+_alpha_min_volume = 1000  # Мин. объём для Alpha (низкая ликвидность)
 _http_client = None
 
 # Ключ кэша для Alpha (используем стандартный формат: scalp:spot:binance_alpha:{symbol})
@@ -268,6 +269,10 @@ async def sync_to_cache_async(symbol, log_func=print):
                         continue
 
                 age_seconds = int(now - ts[price])
+
+                # 🔥 Фильтр по мин. объёму для Alpha (низкая ликвидность)
+                if volume < _alpha_min_volume:
+                    continue
 
                 densities.append({
                     'price': price,
