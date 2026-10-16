@@ -66,7 +66,7 @@ const RECON_EXCHANGES = [
     { id: 'gate',    label: 'GT',  color: '#f59e0b', domain: 'gate.io' },
     { id: 'mexc',    label: 'MEX', color: '#f59e0b', domain: 'mexc.com' },
     { id: 'bitget',  label: 'BGB', color: '#f59e0b', domain: 'bitget.com' },
-    { id: 'binance_alpha', label: 'BI -A -S', color: '#8b5cf6', domain: 'binance.com' },
+    { id: 'binance_alpha', label: 'BI-A', color: '#8b5cf6', domain: 'binance.com' },
 ];
 
 // ==========================================
