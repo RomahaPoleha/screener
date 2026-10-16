@@ -63,8 +63,8 @@ async def close_http_client():
 # 🔥 НОВАЯ ЛОГИКА: ТОП-40 ПО NATR ИЗ BINANCE, КОТОРЫЕ ЕСТЬ В ALPHA
 # ==========================================
 def _fetch_alpha_symbols_by_natr_sync(limit=40):
-    """Берём топ-N по NATR из Binance (futures), которые есть в Alpha map.
-    Читает natr_*_future ключи из Redis для всех символов в alpha_map.
+    """Берём глобальный топ по NATR из Binance (futures), фильтруем через Alpha map.
+    Читает ВСЕ natr_*_future ключи из Redis, сортирует по NATR desc, фильтрует по alpha_map.
     Возвращает список базовых символов в формате BTCUSDT, ETHUSDT...
     """
     try:
@@ -74,34 +74,64 @@ def _fetch_alpha_symbols_by_natr_sync(limit=40):
             print(f"⚠️ alpha: exchange:alpha:map пуст")
             return []
 
-        # 2. Для каждого base_symbol в alpha_map читаем NATR из Redis
-        # Ключ NATR: natr_{SYMBOL}_future (SYMBOL = base, например BTC)
-        natr_keys = [f"natr_{base}_future" for base in alpha_map.keys()]
-        
+        # 2. Сканируем ВСЕ natr_*_future ключи в Redis
+        # Используем scan_iter для избежания блокировки
         natr_data = {}
-        for key in natr_keys:
-            data = cache.get(key)
-            if data and isinstance(data, dict):
-                natr_1m = data.get('natr_1m30')
-                if natr_1m is not None:
-                    # Извлекаем base symbol из ключа: natr_BTC_future -> BTC
-                    base = key.replace('natr_', '').replace('_future', '')
-                    natr_data[base] = float(natr_1m)
+        pattern = "natr_*_future"
+        
+        try:
+            # Получаем все ключи, соответствующие паттерну
+            # Для django-redis используем keys() или scan_iter
+            from django.core.cache import cache
+            import redis
+            
+            # Получаем raw redis клиент для scan_iter
+            redis_client = cache.client.get_client()
+            if hasattr(redis_client, 'scan_iter'):
+                keys_iter = redis_client.scan_iter(match=pattern, count=500)
+            else:
+                # Fallback на keys (может быть медленным на больших базах)
+                keys_iter = redis_client.keys(pattern)
+            
+            for key in keys_iter:
+                if isinstance(key, bytes):
+                    key = key.decode('utf-8')
+                # key = "natr_BTC_future" -> base = "BTC"
+                base = key.replace('natr_', '').replace('_future', '')
+                
+                data = cache.get(key)
+                if data and isinstance(data, dict):
+                    natr_1m = data.get('natr_1m30')
+                    if natr_1m is not None:
+                        natr_data[base] = float(natr_1m)
+        except Exception as e:
+            print(f"⚠️ alpha: ошибка сканирования NATR ключей: {e}")
+            # Fallback: пробуем через alpha_map (старая логика)
+            natr_keys = [f"natr_{base}_future" for base in alpha_map.keys()]
+            for key in natr_keys:
+                data = cache.get(key)
+                if data and isinstance(data, dict):
+                    natr_1m = data.get('natr_1m30')
+                    if natr_1m is not None:
+                        base = key.replace('natr_', '').replace('_future', '')
+                        natr_data[base] = float(natr_1m)
 
         if not natr_data:
-            print(f"⚠️ alpha: нет NATR данных для символов из alpha_map")
+            print(f"⚠️ alpha: нет NATR данных в Redis")
             return []
 
-        # 3. Сортируем по NATR по убыванию
+        # 3. Сортируем ВСЕ символы по NATR по убыванию (глобальный топ)
         sorted_by_natr = sorted(natr_data.items(), key=lambda x: x[1], reverse=True)
         
-        # 4. Берём топ-N
-        top_bases = [base for base, natr in sorted_by_natr[:limit]]
+        # 4. Проходим по глобальному топу, фильтруем через alpha_map
+        result = []
+        for base, natr in sorted_by_natr:
+            if base in alpha_map:
+                result.append(f"{base}USDT")
+                if len(result) >= limit:
+                    break
         
-        # 5. Возвращаем в формате BASEUSDT для совместимости с остальным кодом
-        result = [f"{base}USDT" for base in top_bases]
-        
-        print(f"🔥 alpha: NATR топ-{len(result)} из {len(natr_data)} доступных: {result[:10]}...")
+        print(f"🔥 alpha: NATR топ-{len(result)} (из {len(natr_data)} всего, alpha_map={len(alpha_map)}): {result[:10]}...")
         return result
 
     except Exception as e:
