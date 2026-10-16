@@ -175,11 +175,6 @@ function renderDensitiesTable(data) {
     }
 
     const symbols = Object.keys(bySymbol).sort();
-    const sortedDensities = [];
-    for (const symbol of symbols) {
-        bySymbol[symbol].sort((a, b) => Number(b.volume) - Number(a.volume));
-        sortedDensities.push(...bySymbol[symbol]);
-    }
 
     let maxVolume = 0;
     for (const d of densities) {
@@ -193,59 +188,45 @@ function renderDensitiesTable(data) {
         return Math.max(20, Math.min(100, percent));
     };
 
+    const marketLabel = market === 'spot' ? 'Спот' : 'Фьючерс';
+
     let html = '<div class="densities-grid">';
 
-    for (const d of sortedDensities) {
-        const sideColor = getSideColor(d.side);
-        const volumePercent = getVolumePercent(d.volume);
-        const exchangeShort = getExchangeShort(d.exchange);
-        const ageFormatted = fmtAge(d.age_seconds);
-        const volumeFormatted = fmtVolume(d.volume);
-        const priceFormatted = d.price.toLocaleString();
-        const marketType = d.symbol.includes('USDT') ? 'S' : 'F';
+    for (const symbol of symbols) {
+        const densList = bySymbol[symbol];
+        // densList already sorted by volume descending due to earlier sort? We'll sort again to be sure.
+        densList.sort((a, b) => Number(b.volume) - Number(a.volume));
 
         html += `
             <div class="density-card">
-                <div class="density-card-top">
-                    <div class="density-symbol-block">
-                        <span class="density-symbol">${d.symbol}</span>
-                        <span class="density-market-type">${marketType}</span>
-                    </div>
-                    <div class="density-top-icons">
-                        <span class="density-icon-text">B</span>
-                        <svg class="density-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                        <svg class="density-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
-                        </svg>
-                        <svg class="density-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-                        </svg>
-                    </div>
+                <div class="density-card-header">
+                    <div class="density-symbol">${symbol}</div>
+                    <div class="density-market-label">${marketLabel}</div>
                 </div>
-                
-                <div class="density-volume-bar">
-                    <div class="density-volume-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}cc 50%, ${sideColor}66 100%);">
-                        <span class="density-volume-text">$${volumeFormatted}</span>
+                <div class="density-bars">
+        `;
+
+        for (const d of densList) {
+            const sideColor = getSideColor(d.side);
+            const volumePercent = getVolumePercent(d.volume);
+            const exchangeShort = getExchangeShort(d.exchange);
+            const volumeFormatted = fmtVolume(d.volume);
+            // price not needed per bar, but we could show if wanted
+            html += `
+                <div class="density-bar-item" style="margin-bottom:8px;">
+                    <div class="density-bar-left" style="display:flex;align-items:center;gap:6px;">
+                        <div class="density-side-dot" style="width:10px;height:10px;border-radius:50%;background:${sideColor};"></div>
+                        <span class="density-exchange">${exchangeShort}</span>
                     </div>
+                    <div class="density-bar-bg" style="height:8px;background:#1e293b;border-radius:4px;overflow:hidden;margin-top:4px;">
+                        <div class="density-bar-fill" style="width:${volumePercent}%;height:100%;background:linear-gradient(90deg, ${sideColor} 0%, ${sideColor}cc 100%);"></div>
+                    </div>
+                    <span class="density-volume">$${volumeFormatted}</span>
                 </div>
-                
-                <div class="density-card-bottom">
-                    <div class="density-bottom-left">
-                        <span class="density-side-icon" style="color: ${sideColor};">${d.side === 'buy' ? 'C' : '×'}</span>
-                        <span class="density-age">${ageFormatted}</span>
-                        <span class="density-price">${priceFormatted}</span>
-                        <span class="density-change" style="color: ${sideColor};">${(Math.random() * 4 - 2).toFixed(1)}%</span>
-                    </div>
-                    <div class="density-bottom-right">
-                        <span class="density-exchange-icon">◇</span>
-                        <span class="density-exchange-name">${exchangeShort}</span>
-                        <span class="density-secondary-value">${(d.price * 0.001).toFixed(4)}</span>
-                        <span class="density-secondary-change" style="color: ${sideColor};">${(Math.random() * 2).toFixed(1)}%</span>
-                    </div>
+            `;
+        }
+
+        html += `
                 </div>
             </div>
         `;
