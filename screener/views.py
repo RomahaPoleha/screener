@@ -299,8 +299,13 @@ def api_scalp(request, symbol):
     result_by_exchange = {ex: [] for ex in EXCHANGES}
 
     for exchange in EXCHANGES:
+        # Binance Alpha хранит ключи С USDT (BTCUSDT), остальные БЕЗ USDT (BTC)
+        if exchange == 'binance_alpha' and market == 'spot':
+            cache_key_symbol = symbol_upper + 'USDT'
+        else:
+            cache_key_symbol = symbol_upper
         # Единый формат ключей для ВСЕХ бирж: scalp:{market}:{exchange}:{symbol}
-        key = f"scalp:{market}:{exchange}:{symbol_upper}"
+        key = f"scalp:{market}:{exchange}:{cache_key_symbol}"
 
         data = cache.get(key)
         if not data:
@@ -515,8 +520,12 @@ def api_scalp_active(request):
             f"scalp:spot:binance:{symbol}",
             f"scalp:spot:bybit:{symbol}",
             f"scalp:spot:okx:{symbol}",
-            f"scalp:spot:binance_alpha:{symbol}",
         ]
+        # Binance Alpha: ключ С USDT
+        if symbol.endswith('USDT'):
+            keys.append(f"scalp:spot:binance_alpha:{symbol}")
+        else:
+            keys.append(f"scalp:spot:binance_alpha:{symbol}USDT")
 
         total_count = 0
         for key in keys:
@@ -1079,7 +1088,12 @@ def api_densities_table(request):
         symbol_densities = []
 
         for exchange in EXCHANGES:
-            key = f"scalp:{market}:{exchange}:{symbol_upper}"
+            # Binance Alpha хранит ключи С USDT (BTCUSDT), остальные БЕЗ USDT (BTC)
+            if exchange == 'binance_alpha' and market == 'spot':
+                cache_key_symbol = symbol_upper + 'USDT'
+            else:
+                cache_key_symbol = symbol_upper
+            key = f"scalp:{market}:{exchange}:{cache_key_symbol}"
             data = cache.get(key)
             if not data:
                 continue
