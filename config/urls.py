@@ -38,7 +38,7 @@ urlpatterns = [
     path('api/clear-exchange-cache/', views.api_clear_exchange_cache, name='api_clear_exchange_cache'),
     path('api/exchange-alpha-map/', views.api_exchange_alpha_map, name='api_exchange_alpha_map'),
     path('api/debug/master-list/', views.api_debug_master_list, name='api_debug_master_list'),
-
+    path('api/densities/', views.api_densities_table, name='api_densities_table'),
 
 
 ]

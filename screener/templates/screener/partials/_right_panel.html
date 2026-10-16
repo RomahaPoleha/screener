@@ -16,6 +16,30 @@
         </div>
     </div>
 
+    <div class="densities-overlay" id="densitiesOverlay">
+        <div class="densities-overlay-header">
+            <div class="densities-overlay-header-top">
+                <h5>📊 Таблица плотностей</h5>
+                <button class="densities-overlay-close" onclick="closeDensitiesOverlay()">✕</button>
+            </div>
+            <div class="densities-controls-row">
+                <label>Маркет:</label>
+                <select id="densitiesMarketSelect" onchange="loadDensitiesTable()">
+                    <option value="futures">Futures</option>
+                    <option value="spot">Spot</option>
+                </select>
+                <label>Мин. объём ($):</label>
+                <input type="number" id="densitiesMinVolume" value="10000" min="1000" step="1000" style="width:100px;">
+                <label>Лимит на символ:</label>
+                <input type="number" id="densitiesLimit" value="20" min="1" max="50" step="1" style="width:70px;">
+                <button class="sound-toggle" onclick="loadDensitiesTable()" style="font-size:12px; padding:4px 12px;">Обновить</button>
+            </div>
+        </div>
+        <div class="densities-overlay-body" id="densitiesOverlayBody">
+            <div style="color:#6b7280; text-align:center; padding:20px;">Нажмите «Обновить» для загрузки...</div>
+        </div>
+    </div>
+
     <div class="filters-panel">
         <div class="filter-section">
             <label class="filter-label">Поиск монеты</label>

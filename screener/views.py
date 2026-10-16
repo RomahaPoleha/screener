@@ -1037,6 +1037,95 @@ def api_debug_master_list(request):
         return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
 
 
+@require_http_methods(["GET"])
+def api_densities_table(request):
+    """API: таблица плотностей для всех активных символов (мастер-лист)"""
+    import time
+    from django.core.cache import cache
+
+    try:
+        min_volume = int(request.GET.get('min_volume', 10000))
+    except ValueError:
+        min_volume = 10000
+
+    try:
+        limit_per_symbol = int(request.GET.get('limit', 20))
+    except ValueError:
+        limit_per_symbol = 20
+
+    limit_per_symbol = max(1, min(limit_per_symbol, 50))
+
+    market = request.GET.get('market', 'futures')
+    if market not in ['futures', 'spot']:
+        market = 'futures'
+
+    # Берём мастер-лист из Redis (публикуется binance_monitor_async)
+    master_key = f'scalp:master:{market}'
+    symbols = cache.get(master_key) or []
+
+    # Fallback: если мастер-лист пуст, пробуем собрать из активных ключей scalp:*:market:*
+    if not symbols:
+        # Это запасной вариант, нормально не должен срабатывать
+        from . import binance_monitor_async as binance_monitor
+        symbols = (binance_monitor.futures_symbols or []) if market == 'futures' else (binance_monitor.spot_symbols or [])
+
+    now = time.time()
+    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
+
+    result = []
+
+    for symbol in symbols:
+        symbol_upper = symbol.upper()
+        symbol_densities = []
+
+        for exchange in EXCHANGES:
+            key = f"scalp:{market}:{exchange}:{symbol_upper}"
+            data = cache.get(key)
+            if not data:
+                continue
+
+            for item in data:
+                try:
+                    price = item['price']
+                    volume = item['volume']
+                    timestamp = item['timestamp']
+                    side = item['side']
+                except (KeyError, TypeError):
+                    continue
+
+                if volume < min_volume:
+                    continue
+
+                symbol_densities.append({
+                    'price': price,
+                    'volume': volume,
+                    'side': side,
+                    'age_seconds': round(now - timestamp, 1),
+                    'exchange': item.get('exchange', exchange)
+                })
+
+        # Сортируем по объёму и берём топ-N на символ
+        symbol_densities.sort(key=lambda x: x['volume'], reverse=True)
+        top_densities = symbol_densities[:limit_per_symbol]
+
+        if top_densities:
+            # Добавляем символ к каждой плотности для удобства фронта
+            for d in top_densities:
+                d['symbol'] = symbol_upper
+            result.extend(top_densities)
+
+    # Итоговая сортировка: объём DESC
+    result.sort(key=lambda x: x['volume'], reverse=True)
+
+    return JsonResponse({
+        'market': market,
+        'server_time': now,
+        'count': len(result),
+        'symbols_count': len(symbols),
+        'densities': result,
+    })
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_clear_exchange_cache(request):
