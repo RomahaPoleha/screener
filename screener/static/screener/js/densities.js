@@ -102,6 +102,15 @@ function getSideBgGradient(side, volume) {
     }
 }
 
+function getMarketType(symbol) {
+    return 'S';
+}
+
+function getVolumePercent(volume, maxVolume) {
+    const percent = (Number(volume) / maxVolume) * 100;
+    return Math.max(15, Math.min(100, percent));
+}
+
 async function loadDensitiesTable() {
     if (!densitiesOverlayBody) initDensitiesElements();
 
