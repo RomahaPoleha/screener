@@ -59,57 +59,61 @@ async def close_http_client():
 
 
 # ==========================================
-# 🔥 ЧТЕНЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE (как Bybit)
+# 🔥 НОВАЯ ЛОГИКА: ТОП-40 ПО NATR ИЗ BINANCE, КОТОРЫЕ ЕСТЬ В ALPHA
 # ==========================================
-def _fetch_master_symbols_sync():
-    """Синхронное чтение мастер-листов SPOT + FUTURES из Redis.
-    Фильтрует: оставляет только те символы, которые есть в alpha_map.
-    Возвращает список базовых символов (BTCUSDT, ETHUSDT, ...).
+def _fetch_alpha_symbols_by_natr_sync(limit=40):
+    """Берём топ-N по NATR из Binance (futures), которые есть в Alpha map.
+    Читает natr_*_future ключи из Redis для всех символов в alpha_map.
+    Возвращает список базовых символов в формате BTCUSDT, ETHUSDT...
     """
     try:
-        # 1. Читаем ОБА мастер-листа от Binance
-        spot_symbols = cache.get('scalp:master:spot') or []
-        futures_symbols = cache.get('scalp:master:futures') or []
-        
-        if not isinstance(spot_symbols, list):
-            spot_symbols = []
-        if not isinstance(futures_symbols, list):
-            futures_symbols = []
-        
-        # Объединяем уникальные символы
-        all_symbols = list(set(spot_symbols) | set(futures_symbols))
-        
-        if not all_symbols:
-            print(f"⚠️ alpha: оба мастер-листа пусты")
-            return []
-
-        # 2. Читаем маппинг Alpha: base_symbol -> ALPHA_XXXUSDT
+        # 1. Читаем маппинг Alpha: base_symbol -> ALPHA_XXXUSDT
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map:
             print(f"⚠️ alpha: exchange:alpha:map пуст")
             return []
 
-        # 3. Фильтруем: оставляем только те, что есть в alpha_map
-        # master_symbols приходят как BTCUSDT, ETHUSDT...
-        # alpha_map ключи — базовые: BTC, ETH, TRUTH...
-        filtered = []
-        for symbol in all_symbols:
-            base = symbol.upper().replace('USDT', '')
-            if base in alpha_map:
-                filtered.append(symbol)  # храним базовый формат BTCUSDT
+        # 2. Для каждого base_symbol в alpha_map читаем NATR из Redis
+        # Ключ NATR: natr_{SYMBOL}_future (SYMBOL = base, например BTC)
+        natr_keys = [f"natr_{base}_future" for base in alpha_map.keys()]
+        
+        natr_data = {}
+        for key in natr_keys:
+            data = cache.get(key)
+            if data and isinstance(data, dict):
+                natr_1m = data.get('natr_1m30')
+                if natr_1m is not None:
+                    # Извлекаем base symbol из ключа: natr_BTC_future -> BTC
+                    base = key.replace('natr_', '').replace('_future', '')
+                    natr_data[base] = float(natr_1m)
 
-        print(f"🔍 alpha: spot={len(spot_symbols)}, futures={len(futures_symbols)}, объединено={len(all_symbols)}, alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
-        return filtered
+        if not natr_data:
+            print(f"⚠️ alpha: нет NATR данных для символов из alpha_map")
+            return []
+
+        # 3. Сортируем по NATR по убыванию
+        sorted_by_natr = sorted(natr_data.items(), key=lambda x: x[1], reverse=True)
+        
+        # 4. Берём топ-N
+        top_bases = [base for base, natr in sorted_by_natr[:limit]]
+        
+        # 5. Возвращаем в формате BASEUSDT для совместимости с остальным кодом
+        result = [f"{base}USDT" for base in top_bases]
+        
+        print(f"🔥 alpha: NATR топ-{len(result)} из {len(natr_data)} доступных: {result[:10]}...")
+        return result
+
     except Exception as e:
-        print(f"❌ Ошибка чтения master-списка для alpha: {e}")
+        print(f"❌ Ошибка _fetch_alpha_symbols_by_natr: {e}")
         import traceback
         print(traceback.format_exc())
         return []
 
+
 async def get_master_symbols_async():
-    """Асинхронная обёртка для чтения мастер-списка"""
+    """Асинхронная обёртка для нового отбора по NATR"""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_master_symbols_sync)
+    return await loop.run_in_executor(None, _fetch_alpha_symbols_by_natr_sync, 40)
 
 
 # ==========================================
