@@ -587,9 +587,8 @@ async def periodic_refresh(log_func=print):
                     new_active.append(symbol)
                 else:
                     saved_count = await init_order_book_async(symbol, 'futures', log_func)
-                    if saved_count > 0:
-                        new_active.append(symbol)
-                        log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+                    new_active.append(symbol)
+                    log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
             # ШАГ 2: Добавляем топ по NATR
             for symbol in candidates_f:
@@ -601,11 +600,8 @@ async def periodic_refresh(log_func=print):
                     new_active.append(symbol)
                     continue
                 saved_count = await init_order_book_async(symbol, 'futures', log_func)
-                if saved_count > 0:
-                    new_active.append(symbol)
-                    log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count})")
-                else:
-                    log_func(f"⚠️ binance futures {symbol}: пропущен")
+                new_active.append(symbol)
+                log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count})")
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -644,9 +640,8 @@ async def periodic_refresh(log_func=print):
                     new_active.append(symbol)
                 else:
                     saved_count = await init_order_book_async(symbol, 'spot', log_func)
-                    if saved_count > 0:
-                        new_active.append(symbol)
-                        log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+                    new_active.append(symbol)
+                    log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
 
             for symbol in candidates_s:
                 if len(new_active) >= 50:
@@ -657,11 +652,8 @@ async def periodic_refresh(log_func=print):
                     new_active.append(symbol)
                     continue
                 saved_count = await init_order_book_async(symbol, 'spot', log_func)
-                if saved_count > 0:
-                    new_active.append(symbol)
-                    log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count})")
-                else:
-                    log_func(f"⚠️ binance spot {symbol}: пропущен")
+                new_active.append(symbol)
+                log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count})")
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -718,33 +710,29 @@ async def main_async(log_func=print):
     active_futures = []
     for symbol in stable_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
-            active_futures.append(symbol)
-            log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+        active_futures.append(symbol)
+        log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
     active_spot = []
     for symbol in stable_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if saved_count > 0:
-            active_spot.append(symbol)
-            log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+        active_spot.append(symbol)
+        log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
 
     # --- Шаг 4: Добавляем топ по NATR ---
     for symbol in futures_candidates[:40]:
         if symbol in active_futures:
             continue
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
-            active_futures.append(symbol)
-            log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
+        active_futures.append(symbol)
+        log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
 
     for symbol in spot_candidates[:40]:
         if symbol in active_spot:
             continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if saved_count > 0:
-            active_spot.append(symbol)
-            log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count})")
+        active_spot.append(symbol)
+        log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count})")
 
     futures_symbols = active_futures
     spot_symbols = active_spot

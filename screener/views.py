@@ -295,15 +295,19 @@ def api_scalp(request, symbol):
     now = time.time()
     symbol_upper = symbol.upper()
 
+    # Нормализуем символ: убираем суффикс USDT для единообразия
+    # (внутри хранится как BTCUSDT для Alpha, BTC для остальных)
+    symbol_base = symbol_upper.replace('USDT', '') if symbol_upper.endswith('USDT') else symbol_upper
+
     EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
     result_by_exchange = {ex: [] for ex in EXCHANGES}
 
     for exchange in EXCHANGES:
         # Binance Alpha хранит ключи С USDT (BTCUSDT), остальные БЕЗ USDT (BTC)
         if exchange == 'binance_alpha' and market == 'spot':
-            cache_key_symbol = symbol_upper + 'USDT'
+            cache_key_symbol = symbol_base + 'USDT'
         else:
-            cache_key_symbol = symbol_upper
+            cache_key_symbol = symbol_base
         # Единый формат ключей для ВСЕХ бирж: scalp:{market}:{exchange}:{symbol}
         key = f"scalp:{market}:{exchange}:{cache_key_symbol}"
 
@@ -1078,6 +1082,15 @@ def api_densities_table(request):
         from . import binance_monitor_async as binance_monitor
         symbols = (binance_monitor.futures_symbols or []) if market == 'futures' else (binance_monitor.spot_symbols or [])
 
+    # 🔥 Добавляем Alpha-символы из alpha_map (источник истины для Binance Alpha)
+    # alpha_map: base_symbol (BTC) -> ALPHA_{tokenId}USDT
+    # Для таблицы плотностей используем полные символы с USDT (BTCUSDT)
+    if market == 'spot':
+        alpha_map = cache.get('exchange:alpha:map') or {}
+        if alpha_map:
+            alpha_symbols = [base.upper() + 'USDT' for base in alpha_map.keys()]
+            symbols = list(set(symbols) | set(alpha_symbols))
+
     now = time.time()
     EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
 
@@ -1085,14 +1098,17 @@ def api_densities_table(request):
 
     for symbol in symbols:
         symbol_upper = symbol.upper()
+        # Нормализуем: убираем суффикс USDT для единообразия
+        # (внутри хранится как BTCUSDT для Alpha, BTC для остальных)
+        symbol_base = symbol_upper.replace('USDT', '') if symbol_upper.endswith('USDT') else symbol_upper
         symbol_densities = []
 
         for exchange in EXCHANGES:
             # Binance Alpha хранит ключи С USDT (BTCUSDT), остальные БЕЗ USDT (BTC)
             if exchange == 'binance_alpha' and market == 'spot':
-                cache_key_symbol = symbol_upper + 'USDT'
+                cache_key_symbol = symbol_base + 'USDT'
             else:
-                cache_key_symbol = symbol_upper
+                cache_key_symbol = symbol_base
             key = f"scalp:{market}:{exchange}:{cache_key_symbol}"
             data = cache.get(key)
             if not data:

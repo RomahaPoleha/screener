@@ -634,12 +634,9 @@ async def periodic_refresh(market='futures', log_func=print):
             for symbol in master_symbols:
                 if symbol not in old_symbols:
                     saved_count = await init_order_book_async(symbol, market, log_func)
-                    if saved_count > 0:
-                        new_active.append(symbol)
-                        added.append(symbol)
-                        log_func(f"✅ gate {market} {symbol}: добавлен (плотностей: {saved_count})")
-                    else:
-                        log_func(f"⚠️ gate {market} {symbol}: пропущен (не поддерживается или пустой стакан)")
+                    new_active.append(symbol)
+                    added.append(symbol)
+                    log_func(f"✅ gate {market} {symbol}: добавлен (плотностей: {saved_count})")
                 else:
                     new_active.append(symbol)
 
@@ -758,20 +755,14 @@ async def main_async(log_func=print):
     active_futures = []
     for symbol in master_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
-        if saved_count > 0:
-            active_futures.append(symbol)
-            log_func(f"✅ gate futures {symbol}: принят (плотностей: {saved_count})")
-        else:
-            log_func(f"⚠️ gate futures {symbol}: пропущен (не поддерживается или пустой стакан)")
+        active_futures.append(symbol)
+        log_func(f"✅ gate futures {symbol}: принят (плотностей: {saved_count})")
 
     active_spot = []
     for symbol in master_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
-        if saved_count > 0:
-            active_spot.append(symbol)
-            log_func(f"✅ gate spot {symbol}: принят (плотностей: {saved_count})")
-        else:
-            log_func(f"⚠️ gate spot {symbol}: пропущен (не поддерживается или пустой стакан)")
+        active_spot.append(symbol)
+        log_func(f"✅ gate spot {symbol}: принят (плотностей: {saved_count})")
 
     gate_futures_symbols = active_futures
     gate_spot_symbols = active_spot

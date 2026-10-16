@@ -62,43 +62,17 @@ async def close_http_client():
 # 🔥 ЧТЕНЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE (как Bybit)
 # ==========================================
 def _fetch_master_symbols_sync():
-    """Синхронное чтение мастер-листов SPOT + FUTURES из Redis.
-    Фильтрует: оставляет только те символы, которые есть в alpha_map.
-    Возвращает список базовых символов (BTCUSDT, ETHUSDT, ...).
+    """Читает alpha_map из Redis и возвращает список базовых символов (BTC, ETH, ...).
+    alpha_map — единственный источник истины для Binance Alpha.
     """
     try:
-        # 1. Читаем ОБА мастер-листа от Binance
-        spot_symbols = cache.get('scalp:master:spot') or []
-        futures_symbols = cache.get('scalp:master:futures') or []
-        
-        if not isinstance(spot_symbols, list):
-            spot_symbols = []
-        if not isinstance(futures_symbols, list):
-            futures_symbols = []
-        
-        # Объединяем уникальные символы
-        all_symbols = list(set(spot_symbols) | set(futures_symbols))
-        
-        if not all_symbols:
-            print(f"⚠️ alpha: оба мастер-листа пусты")
-            return []
-
-        # 2. Читаем маппинг Alpha: base_symbol -> ALPHA_XXXUSDT
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map:
             print(f"⚠️ alpha: exchange:alpha:map пуст")
             return []
 
-        # 3. Фильтруем: оставляем только те, что есть в alpha_map
-        # master_symbols приходят как BTCUSDT, ETHUSDT...
-        # alpha_map ключи — базовые: BTC, ETH, TRUTH...
-        filtered = []
-        for symbol in all_symbols:
-            base = symbol.upper().replace('USDT', '')
-            if base in alpha_map:
-                filtered.append(symbol)  # храним базовый формат BTCUSDT
-
-        print(f"🔍 alpha: spot={len(spot_symbols)}, futures={len(futures_symbols)}, объединено={len(all_symbols)}, alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
+        filtered = [base.upper() + 'USDT' for base in alpha_map.keys()]
+        print(f"🔍 alpha: alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
         return filtered
     except Exception as e:
         print(f"❌ Ошибка чтения master-списка для alpha: {e}")
@@ -540,12 +514,11 @@ async def periodic_refresh(log_func=print):
             alpha_symbols = new_active
 
             if removed:
-                async with alpha_lock:
+            async with alpha_lock:
                     for sym in removed:
                         alpha_order_books.pop(sym, None)
                         alpha_density_timestamps.pop(sym, None)
                         alpha_volume_stats.pop(sym, None)
-                        last_sync_time.pop(f"binance_alpha:{sym}", None)
                         alpha_first_load_done.discard(sym)
                 log_func(f"🗑️ alpha удалены: {', '.join(sorted(removed))}")
 
