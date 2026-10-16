@@ -587,6 +587,8 @@ body {
 .settings-nav-item:hover { color: #ffffff; background: #1f1f1f; }
 .settings-nav-item.active { color: #f59e0b; border-left-color: #f59e0b; background: #1a1a1a; }
 .settings-content { flex: 1; padding: 12px 14px; overflow-y: auto; max-height: 65vh; }
+.settings-tab-content { display: none; }
+.settings-tab-content.active { display: block; }
 
 .tf-slider { width: 130px; flex: none; }
 .collage-label {
