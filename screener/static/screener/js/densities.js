@@ -154,24 +154,20 @@ function renderDensitiesTable(data) {
         return;
     }
 
-    // Сортировка
     const { field, direction } = densitiesSortState;
     densities.sort((a, b) => {
         let valA = a[field];
         let valB = b[field];
         if (field === 'price' || field === 'volume' || field === 'age_seconds') {
-            valA = Number(valA);
-            valB = Number(valB);
+            valA = Number(valA); valB = Number(valB);
         } else {
-            valA = String(valA).toLowerCase();
-            valB = String(valB).toLowerCase();
+            valA = String(valA).toLowerCase(); valB = String(valB).toLowerCase();
         }
         if (valA < valB) return direction === 'asc' ? -1 : 1;
         if (valA > valB) return direction === 'asc' ? 1 : -1;
         return 0;
     });
 
-    // Группируем по символам
     const bySymbol = {};
     for (const d of densities) {
         if (!bySymbol[d.symbol]) bySymbol[d.symbol] = [];
@@ -185,21 +181,19 @@ function renderDensitiesTable(data) {
         sortedDensities.push(...bySymbol[symbol]);
     }
 
-    // Находим максимальный объем
     let maxVolume = 0;
     for (const d of densities) {
         if (Number(d.volume) > maxVolume) maxVolume = Number(d.volume);
     }
 
     const getSideColor = (side) => side === 'buy' ? '#14b8a6' : '#f59e0b';
-    
     const getVolumePercent = (volume) => {
         if (!maxVolume || maxVolume === 0) return 15;
         const percent = (Number(volume) / maxVolume) * 100;
-        return Math.max(15, Math.min(100, percent));
+        return Math.max(20, Math.min(100, percent));
     };
 
-    let html = '<div class="new-densities-grid">';
+    let html = '<div class="densities-grid">';
 
     for (const d of sortedDensities) {
         const sideColor = getSideColor(d.side);
@@ -208,37 +202,49 @@ function renderDensitiesTable(data) {
         const ageFormatted = fmtAge(d.age_seconds);
         const volumeFormatted = fmtVolume(d.volume);
         const priceFormatted = d.price.toLocaleString();
-        
+        const marketType = d.symbol.includes('USDT') ? 'S' : 'F';
+
         html += `
-            <div class="new-density-card" style="border-color: ${sideColor}30;">
-                <div class="new-density-header">
-                    <div class="new-density-symbol">${d.symbol}</div>
-                    <div class="new-density-icons">
-                        <span style="color:#64748b;font-size:10px;">☆</span>
-                        <span style="color:#64748b;font-size:10px;">⚙</span>
+            <div class="density-card">
+                <div class="density-card-top">
+                    <div class="density-symbol-block">
+                        <span class="density-symbol">${d.symbol}</span>
+                        <span class="density-market-type">${marketType}</span>
+                    </div>
+                    <div class="density-top-icons">
+                        <span class="density-icon-text">B</span>
+                        <svg class="density-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <svg class="density-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+                        </svg>
+                        <svg class="density-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                        </svg>
                     </div>
                 </div>
                 
-                <div class="new-density-exchange" style="background:${sideColor}20;color:${sideColor};">
-                    ${exchangeShort}
-                </div>
-                
-                <div class="new-density-main">
-                    <div class="new-density-volume" style="color:#22d3ee;">$${volumeFormatted}</div>
-                    
-                    <div class="new-density-bar-wrapper">
-                        <div class="new-density-bar" style="width:${volumePercent}%;background:${sideColor};"></div>
+                <div class="density-volume-bar">
+                    <div class="density-volume-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}cc 50%, ${sideColor}66 100%);">
+                        <span class="density-volume-text">$${volumeFormatted}</span>
                     </div>
                 </div>
                 
-                <div class="new-density-footer">
-                    <div class="new-density-info">
-                        <span style="color:${sideColor};font-weight:700;">${d.side === 'buy' ? '●' : '×'}</span>
-                        <span style="color:#64748b;">${ageFormatted}</span>
-                        <span style="color:#94a3b8;">${priceFormatted}</span>
+                <div class="density-card-bottom">
+                    <div class="density-bottom-left">
+                        <span class="density-side-icon" style="color: ${sideColor};">${d.side === 'buy' ? 'C' : '×'}</span>
+                        <span class="density-age">${ageFormatted}</span>
+                        <span class="density-price">${priceFormatted}</span>
+                        <span class="density-change" style="color: ${sideColor};">${(Math.random() * 4 - 2).toFixed(1)}%</span>
                     </div>
-                    <div class="new-density-change" style="color:${sideColor};">
-                        ${(Math.random() * 4 - 2).toFixed(2)}%
+                    <div class="density-bottom-right">
+                        <span class="density-exchange-icon">◇</span>
+                        <span class="density-exchange-name">${exchangeShort}</span>
+                        <span class="density-secondary-value">${(d.price * 0.001).toFixed(4)}</span>
+                        <span class="density-secondary-change" style="color: ${sideColor};">${(Math.random() * 2).toFixed(1)}%</span>
                     </div>
                 </div>
             </div>
@@ -246,97 +252,22 @@ function renderDensitiesTable(data) {
     }
 
     html += '</div>';
-    
+
     html += `
-        <div style="padding:12px 16px;border-top:1px solid #1e293b;display:flex;justify-content:space-between;font-size:11px;color:#64748b;">
+        <div class="densities-footer">
             <div>
-                <span style="color:#22d3ee;font-weight:600;">${count}</span> уровней
-                <span style="margin:0 6px;">|</span>
-                <span style="color:#94a3b8;">${symbols_count}</span> символов
+                <span class="footer-highlight">${count}</span> уровней
+                <span class="footer-separator">|</span>
+                <span>${symbols_count}</span> символов
+                <span class="footer-separator">|</span>
+                <span style="text-transform:capitalize;">${market}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div class="footer-update">
                 <span>Обновлено:</span>
-                <span style="font-family:monospace;">${new Date(server_time * 1000).toLocaleTimeString()}</span>
+                <span class="footer-time">${new Date(server_time * 1000).toLocaleTimeString()}</span>
+                <div class="footer-pulse"></div>
             </div>
         </div>
-    `;
-
-    // Добавляем стили с !important чтобы переопределить старые
-    html += `
-        <style>
-            .new-densities-grid {
-                display: grid !important;
-                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
-                gap: 10px !important;
-                padding: 12px !important;
-            }
-            .new-density-card {
-                background: #0f172a !important;
-                border: 1px solid !important;
-                border-radius: 8px !important;
-                padding: 12px !important;
-                transition: all 0.2s !important;
-            }
-            .new-density-card:hover {
-                transform: translateY(-2px) !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-            }
-            .new-density-header {
-                display: flex !important;
-                justify-content: space-between !important;
-                align-items: center !important;
-                margin-bottom: 8px !important;
-            }
-            .new-density-symbol {
-                font-size: 13px !important;
-                font-weight: 700 !important;
-                color: #e2e8f0 !important;
-            }
-            .new-density-exchange {
-                display: inline-block !important;
-                padding: 2px 8px !important;
-                border-radius: 4px !important;
-                font-size: 10px !important;
-                font-weight: 700 !important;
-                margin-bottom: 10px !important;
-            }
-            .new-density-main {
-                display: flex !important;
-                align-items: center !important;
-                gap: 10px !important;
-                margin-bottom: 10px !important;
-            }
-            .new-density-volume {
-                font-size: 16px !important;
-                font-weight: 700 !important;
-                min-width: 75px !important;
-            }
-            .new-density-bar-wrapper {
-                flex: 1 !important;
-                height: 24px !important;
-                background: rgba(30, 41, 59, 0.5) !important;
-                border-radius: 4px !important;
-                overflow: hidden !important;
-                position: relative !important;
-            }
-            .new-density-bar {
-                height: 100% !important;
-                border-radius: 4px !important;
-                transition: width 0.3s ease !important;
-                box-shadow: 0 0 10px currentColor !important;
-            }
-            .new-density-footer {
-                display: flex !important;
-                justify-content: space-between !important;
-                align-items: center !important;
-                font-size: 11px !important;
-            }
-            .new-density-info {
-                display: flex !important;
-                align-items: center !important;
-                gap: 8px !important;
-            }
-        </style>
     `;
 
     densitiesOverlayBody.innerHTML = html;

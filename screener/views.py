@@ -1068,15 +1068,21 @@ def api_densities_table(request):
     if market not in ['futures', 'spot']:
         market = 'futures'
 
-    # Берём мастер-лист из Redis (публикуется binance_monitor_async)
-    master_key = f'scalp:master:{market}'
-    symbols = cache.get(master_key) or []
-
-    # Fallback: если мастер-лист пуст, пробуем собрать из активных ключей scalp:*:market:*
-    if not symbols:
-        # Это запасной вариант, нормально не должен срабатывать
+    # Для отслеживания используем объединённый список спот и фьючерс мастера Binance
+    # чтобы иметь больше монет для проверки (особенно для Alpha)
+    spot_master = cache.get('scalp:master:spot') or []
+    futures_master = cache.get('scalp:master:futures') or []
+    if not isinstance(spot_master, list):
+        spot_master = []
+    if not isinstance(futures_master, list):
+        futures_master = []
+    # Основной список символов — объединение спот и фьючерс мастер-листов
+    base_symbols = list(set(spot_master) | set(futures_master))
+    # Fallback: если оба пусты, берём из binance_monitor
+    if not base_symbols:
         from . import binance_monitor_async as binance_monitor
-        symbols = (binance_monitor.futures_symbols or []) if market == 'futures' else (binance_monitor.spot_symbols or [])
+        base_symbols = list(set((binance_monitor.spot_symbols or []) | set(binance_monitor.futures_symbols or [])))
+    symbols = base_symbols
 
     now = time.time()
     EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
@@ -1088,12 +1094,21 @@ def api_densities_table(request):
         symbol_densities = []
 
         for exchange in EXCHANGES:
-            # Binance Alpha хранит ключи С USDT (BTCUSDT), остальные БЕЗ USDT (BTC)
-            if exchange == 'binance_alpha' and market == 'spot':
-                cache_key_symbol = symbol_upper + 'USDT'
+            # Binance Alpha показываем только в споте
+            if market == 'futures' and exchange == 'binance_alpha':
+                continue
+            if exchange == 'binance_alpha':
+                # Binance Alpha всегда берётся из spot рынка
+                cache_market = 'spot'
+                if symbol_upper.endswith('USDT'):
+                    cache_key_symbol = symbol_upper
+                else:
+                    cache_key_symbol = symbol_upper + 'USDT'
+                key = f"scalp:{cache_market}:binance_alpha:{cache_key_symbol}"
             else:
+                # Обычные биржи используют выбранный market
                 cache_key_symbol = symbol_upper
-            key = f"scalp:{market}:{exchange}:{cache_key_symbol}"
+                key = f"scalp:{market}:{exchange}:{cache_key_symbol}"
             data = cache.get(key)
             if not data:
                 continue
