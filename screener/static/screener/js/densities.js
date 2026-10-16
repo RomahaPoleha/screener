@@ -1,5 +1,7 @@
-// Добавим стили для densities-overlay чтобы оно перекрывало весь chart-area
-// Добавим это в файл styles.css
+// ==========================================
+// densities.js — ТАБЛИЦА ПЛОТНОСТЕЙ
+// Загрузка и отображение плотностей из мастер-листа
+// ==========================================
 
 let densitiesOverlay = null;
 let densitiesOverlayBody = null;
@@ -18,30 +20,6 @@ function initDensitiesElements() {
     densitiesMarketSelect = document.getElementById('densitiesMarketSelect');
     densitiesMinVolume = document.getElementById('densitiesMinVolume');
     densitiesLimit = document.getElementById('densitiesLimit');
-}
-
-function toggleDensitiesOverlay() {
-    if (!densitiesOverlay) initDensitiesElements();
-    if (densitiesOverlay.classList.contains('active')) {
-        // Закрыть: убрать класс active
-        densitiesOverlay.classList.remove('active');
-        densitiesBtn.classList.remove('active');
-        // Вернуть chart-container в исходное состояние (если нужно)
-        const chartContainer = document.getElementById('chart-container');
-        if (chartContainer) {
-            chartContainer.style.zIndex = 'auto';
-        }
-    } else {
-        // Открыть: добавить класс active и установить z-index для chart-container
-        densitiesOverlay.classList.add('active');
-        densitiesBtn.classList.add('active');
-        const chartContainer = document.getElementById('chart-container');
-        if (chartContainer) {
-            // Сделать chart-container не видимым, чтобы densities overlay был поверх
-            chartContainer.style.zIndex = '99';
-        }
-        loadDensitiesTable();
-    }
 }
 
 function toggleDensitiesOverlay() {
@@ -111,6 +89,19 @@ function getSideClass(side) {
     return side === 'buy' ? 'densities-buy' : 'densities-sell';
 }
 
+function getSideColor(side) {
+    return side === 'buy' ? '#14b8a6' : '#f59e0b';
+}
+
+function getSideBgGradient(side, volume) {
+    const intensity = Math.min(volume / 100000, 1);
+    if (side === 'buy') {
+        return `linear-gradient(135deg, rgba(20, 184, 166, ${0.1 + intensity * 0.3}) 0%, rgba(20, 184, 166, ${0.05 + intensity * 0.15}) 100%)`;
+    } else {
+        return `linear-gradient(135deg, rgba(245, 158, 11, ${0.1 + intensity * 0.3}) 0%, rgba(245, 158, 11, ${0.05 + intensity * 0.15}) 100%)`;
+    }
+}
+
 async function loadDensitiesTable() {
     if (!densitiesOverlayBody) initDensitiesElements();
 
@@ -146,19 +137,6 @@ function sortDensities(field) {
         densitiesSortState.direction = field === 'symbol' ? 'asc' : 'desc';
     }
     renderDensitiesTable({ densities: densitiesData });
-}
-
-function getSideColor(side) {
-    return side === 'buy' ? '#14b8a6' : '#f59e0b';
-}
-
-function getSideBgGradient(side, volume) {
-    const intensity = Math.min(volume / 100000, 1);
-    if (side === 'buy') {
-        return `linear-gradient(135deg, rgba(20, 184, 166, ${0.1 + intensity * 0.3}) 0%, rgba(20, 184, 166, ${0.05 + intensity * 0.15}) 100%)`;
-    } else {
-        return `linear-gradient(135deg, rgba(245, 158, 11, ${0.1 + intensity * 0.3}) 0%, rgba(245, 158, 11, ${0.05 + intensity * 0.15}) 100%)`;
-    }
 }
 
 function renderDensitiesTable(data) {
@@ -206,20 +184,6 @@ function renderDensitiesTable(data) {
 
     const symbols = Object.keys(bySymbol).sort();
 
-    // Цвет для buy/sell
-    const getSideColor = (side) => {
-        return side === 'buy' ? '#14b8a6' : '#f59e0b';
-    };
-
-    const getSideBgGradient = (side, volume) => {
-        const intensity = Math.min(volume / 100000, 1);
-        if (side === 'buy') {
-            return `linear-gradient(135deg, rgba(20, 184, 166, ${0.1 + intensity * 0.3}) 0%, rgba(20, 184, 166, ${0.05 + intensity * 0.15}) 100%)`;
-        } else {
-            return `linear-gradient(135deg, rgba(245, 158, 11, ${0.1 + intensity * 0.3}) 0%, rgba(245, 158, 11, ${0.05 + intensity * 0.15}) 100%)`;
-        }
-    };
-
     let html = `
         <style>
             .densities-grid {
@@ -250,7 +214,7 @@ function renderDensitiesTable(data) {
                 left: 0;
                 right: 0;
                 height: 3px;
-                background: ${side} => getSideColor(side);
+                background: var(--density-side-color);
             }
             .density-header {
                 display: flex;
@@ -417,6 +381,7 @@ function renderDensitiesTable(data) {
     densitiesOverlayBody.innerHTML = html;
 }
 
+// Инициализация при DOMContentLoaded
 document.addEventListener('DOMContentLoaded', () => {
     initDensitiesElements();
 });
