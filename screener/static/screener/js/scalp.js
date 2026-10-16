@@ -15,7 +15,7 @@ const EXCHANGES_CONFIG = [
 { id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
 { id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
 { id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
-{ id: 'binance_alpha', name: 'Binance Alpha', label: 'BI', domain: 'binance.com', color: '#8b5cf6' },
+{ id: 'binance_alpha', name: 'Binance Alpha', label: 'BI-A', domain: 'binance.com', color: '#8b5cf6' },
 ];
 // Текущие настройки каждой биржи
 let scalpExchanges = {
@@ -124,7 +124,7 @@ clearScalpLines();
 for  (const key in allNewData) {
 const [exchange, market] = key.split('|');
 const densities = allNewData[key];
-const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG', binance_alpha: 'BI' };
+const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG', binance_alpha: 'S' };
 const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
 const marketSuffix = exchange === 'binance_alpha' ? 'A' : ( market === 'futures' ? 'F' : 'S');
 const prefix =  `${exchangePrefix}-${marketSuffix}` ;

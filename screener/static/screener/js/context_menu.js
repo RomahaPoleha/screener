@@ -109,18 +109,16 @@ function renderExchangesMenu(data, symbol) {
     
     exchanges.forEach(ex => {
         const exData = data[ex.key] || { futures: false, spot: false };
-        const isAlpha = ex.key === 'binance_alpha';
+    const isAlpha = ex.key === 'binance_alpha';
         const hasFutures = exData.futures;
         const hasSpot = exData.spot;
         const hasAny = hasFutures || hasSpot;
         
         let marketTags = '';
         if (isAlpha) {
-            marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Alpha" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};">A</span>`;
+            marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Spot" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};">S</span>`;
         } else {
-            marketTags = `
-                <span class="market-tag ${hasFutures ? 'active' : ''}" title="Futures" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};">F</span>
-                <span class="market-tag ${hasSpot ? 'active' : ''}" title="Spot" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};">S</span>
+            marketTags = `\n                <span class="market-tag ${hasFutures ? 'active' : ''}" title="Futures" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};">F</span>\n                <span class="market-tag ${hasSpot ? 'active' : ''}" title="Spot" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};">S</span>
             `;
         }
         

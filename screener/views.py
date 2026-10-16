@@ -992,7 +992,7 @@ def check_symbol_all_exchanges(symbol):
         'gate': {'futures': symbol in gate_fut, 'spot': symbol in gate_spot},
         'mexc': {'futures': symbol in mexc_fut, 'spot': symbol in mexc_spot},
         'bitget': {'futures': symbol in bitget_fut, 'spot': symbol in bitget_spot},
-        'binance_alpha': {'futures': alpha_has, 'spot': False},
+        'binance_alpha': {'futures': alpha_has, 'spot': True},
     }
 
 
