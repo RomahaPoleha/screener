@@ -10,6 +10,9 @@ let densitiesMarketSelect = null;
 let densitiesMinVolume = null;
 let densitiesLimit = null;
 
+let densitiesData = [];
+let densitiesSortState = { field: 'volume', direction: 'desc' };
+
 function initDensitiesElements() {
     densitiesOverlay = document.getElementById('densitiesOverlay');
     densitiesOverlayBody = document.getElementById('densitiesOverlayBody');
@@ -58,10 +61,6 @@ function getSideClass(side) {
     return side === 'buy' ? 'densities-buy' : 'densities-sell';
 }
 
-function getSideLabel(side) {
-    return side === 'buy' ? 'B' : 'S';
-}
-
 async function loadDensitiesTable() {
     if (!densitiesOverlayBody) initDensitiesElements();
 
@@ -81,6 +80,7 @@ async function loadDensitiesTable() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
+        densitiesData = data.densities || [];
         renderDensitiesTable(data);
     } catch (err) {
         console.error('loadDensitiesTable error:', err);
@@ -88,10 +88,21 @@ async function loadDensitiesTable() {
     }
 }
 
+function sortDensities(field) {
+    if (densitiesSortState.field === field) {
+        densitiesSortState.direction = densitiesSortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        densitiesSortState.field = field;
+        densitiesSortState.direction = field === 'symbol' ? 'asc' : 'desc';
+    }
+    renderDensitiesTable({ densities: densitiesData });
+}
+
 function renderDensitiesTable(data) {
     if (!densitiesOverlayBody) return;
 
-    const { densities, count, symbols_count, market, server_time } = data;
+    const { count, symbols_count, market, server_time } = data;
+    let densities = data.densities || [];
 
     if (!densities || densities.length === 0) {
         densitiesOverlayBody.innerHTML = `
@@ -102,7 +113,24 @@ function renderDensitiesTable(data) {
         return;
     }
 
-    // Группируем по символам для удобства
+    // Сортировка
+    const { field, direction } = densitiesSortState;
+    densities.sort((a, b) => {
+        let valA = a[field];
+        let valB = b[field];
+        if (field === 'price' || field === 'volume' || field === 'age_seconds') {
+            valA = Number(valA);
+            valB = Number(valB);
+        } else {
+            valA = String(valA).toLowerCase();
+            valB = String(valB).toLowerCase();
+        }
+        if (valA < valB) return direction === 'asc' ? -1 : 1;
+        if (valA > valB) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    // Группируем по символам
     const bySymbol = {};
     for (const d of densities) {
         if (!bySymbol[d.symbol]) bySymbol[d.symbol] = [];
@@ -111,13 +139,18 @@ function renderDensitiesTable(data) {
 
     const symbols = Object.keys(bySymbol).sort();
 
+    // Иконка сортировки
+    const getSortIcon = (colField) => {
+        if (densitiesSortState.field !== colField) return '';
+        return densitiesSortState.direction === 'asc' ? ' ▲' : ' ▼';
+    };
+
     let html = `
         <div class="densities-table-header">
-            <div class="densities-col densities-col-symbol">Символ</div>
-            <div class="densities-col densities-col-exchange">Биржа</div>
-            <div class="densities-col densities-col-side">Сторона</div>
-            <div class="densities-col densities-col-price">Цена</div>
-            <div class="densities-col densities-col-volume">Объём</div>
+            <div class="densities-col densities-col-symbol" onclick="sortDensities('symbol')" style="cursor:pointer;">Символ${getSortIcon('symbol')}</div>
+            <div class="densities-col densities-col-exchange" onclick="sortDensities('exchange')" style="cursor:pointer;">Биржа${getSortIcon('exchange')}</div>
+            <div class="densities-col densities-col-price" onclick="sortDensities('price')" style="cursor:pointer;">Цена${getSortIcon('price')}</div>
+            <div class="densities-col densities-col-volume" onclick="sortDensities('volume')" style="cursor:pointer;">Объём${getSortIcon('volume')}</div>
             <div class="densities-col densities-col-age">Возраст</div>
         </div>
         <div class="densities-table-body">
@@ -127,13 +160,12 @@ function renderDensitiesTable(data) {
         const items = bySymbol[symbol];
         for (const d of items) {
             const sideClass = getSideClass(d.side);
-            const sideLabel = getSideLabel(d.side);
+            // Показываем сторону через цвет цены
             html += `
                 <div class="densities-row">
                     <div class="densities-col densities-col-symbol">${symbol}</div>
                     <div class="densities-col densities-col-exchange">${d.exchange}</div>
-                    <div class="densities-col densities-col-side ${sideClass}">${sideLabel}</div>
-                    <div class="densities-col densities-col-price">${d.price.toLocaleString()}</div>
+                    <div class="densities-col densities-col-price ${sideClass}">${d.price.toLocaleString()}</div>
                     <div class="densities-col densities-col-volume">$${fmtVolume(d.volume)}</div>
                     <div class="densities-col densities-col-age">${fmtAge(d.age_seconds)}</div>
                 </div>
@@ -143,7 +175,6 @@ function renderDensitiesTable(data) {
 
     html += `</div>`;
 
-    // Добавляем инфо внизу
     html += `
         <div class="densities-table-footer">
             Всего: ${count} уровней | Символов: ${symbols_count} | Маркет: ${market} | Обновлено: ${new Date(server_time * 1000).toLocaleTimeString()}
@@ -153,7 +184,6 @@ function renderDensitiesTable(data) {
     densitiesOverlayBody.innerHTML = html;
 }
 
-// Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
     initDensitiesElements();
 });
