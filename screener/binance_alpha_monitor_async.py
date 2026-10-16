@@ -32,7 +32,6 @@ last_sync_time = {}
 MIN_AGE_SECONDS = 180
 CACHE_TTL = 30
 SYNC_INTERVAL = 3
-_alpha_min_volume = 1000  # Мин. объём для Alpha (низкая ликвидность)
 _http_client = None
 
 # Ключ кэша для Alpha (используем стандартный формат: scalp:spot:binance_alpha:{symbol})
@@ -60,87 +59,57 @@ async def close_http_client():
 
 
 # ==========================================
-# 🔥 НОВАЯ ЛОГИКА: ТОП-40 ПО NATR ИЗ BINANCE, КОТОРЫЕ ЕСТЬ В ALPHA
+# 🔥 ЧТЕНЕНИЕ МАСТЕР-СПИСКА ОТ BINANCE (как Bybit)
 # ==========================================
-def _fetch_alpha_symbols_by_natr_sync(limit=40):
-    """Берём глобальный топ по NATR из Binance (futures), фильтруем через Alpha map.
-    Читает ВСЕ natr_*_future ключи из Redis, сортирует по NATR desc, фильтрует по alpha_map.
-    Возвращает список базовых символов в формате BTCUSDT, ETHUSDT...
+def _fetch_master_symbols_sync():
+    """Синхронное чтение мастер-листов SPOT + FUTURES из Redis.
+    Фильтрует: оставляет только те символы, которые есть в alpha_map.
+    Возвращает список базовых символов (BTCUSDT, ETHUSDT, ...).
     """
     try:
-        # 1. Читаем маппинг Alpha: base_symbol -> ALPHA_XXXUSDT
+        # 1. Читаем ОБА мастер-листа от Binance
+        spot_symbols = cache.get('scalp:master:spot') or []
+        futures_symbols = cache.get('scalp:master:futures') or []
+        
+        if not isinstance(spot_symbols, list):
+            spot_symbols = []
+        if not isinstance(futures_symbols, list):
+            futures_symbols = []
+        
+        # Объединяем уникальные символы
+        all_symbols = list(set(spot_symbols) | set(futures_symbols))
+        
+        if not all_symbols:
+            print(f"⚠️ alpha: оба мастер-листа пусты")
+            return []
+
+        # 2. Читаем маппинг Alpha: base_symbol -> ALPHA_XXXUSDT
         alpha_map = cache.get('exchange:alpha:map')
         if not alpha_map:
             print(f"⚠️ alpha: exchange:alpha:map пуст")
             return []
 
-        # 2. Сканируем ВСЕ natr_*_future ключи в Redis
-        # Используем scan_iter для избежания блокировки
-        natr_data = {}
-        pattern = "natr_*_future"
-        
-        try:
-            # Получаем все ключи, соответствующие паттерну
-            # Для django-redis используем keys() или scan_iter
-            redis_client = cache.client.get_client()
-            if hasattr(redis_client, 'scan_iter'):
-                keys_iter = redis_client.scan_iter(match=pattern, count=500)
-            else:
-                # Fallback на keys (может быть медленным на больших базах)
-                keys_iter = redis_client.keys(pattern)
-            
-            for key in keys_iter:
-                if isinstance(key, bytes):
-                    key = key.decode('utf-8')
-                # key = "natr_BTC_future" -> base = "BTC"
-                base = key.replace('natr_', '').replace('_future', '')
-                
-                data = cache.get(key)
-                if data and isinstance(data, dict):
-                    natr_1m = data.get('natr_1m30')
-                    if natr_1m is not None:
-                        natr_data[base] = float(natr_1m)
-        except Exception as e:
-            print(f"⚠️ alpha: ошибка сканирования NATR ключей: {e}")
-            # Fallback: пробуем через alpha_map (старая логика)
-            natr_keys = [f"natr_{base}_future" for base in alpha_map.keys()]
-            for key in natr_keys:
-                data = cache.get(key)
-                if data and isinstance(data, dict):
-                    natr_1m = data.get('natr_1m30')
-                    if natr_1m is not None:
-                        base = key.replace('natr_', '').replace('_future', '')
-                        natr_data[base] = float(natr_1m)
-
-        if not natr_data:
-            print(f"⚠️ alpha: нет NATR данных в Redis")
-            return []
-
-        # 3. Сортируем ВСЕ символы по NATR по убыванию (глобальный топ)
-        sorted_by_natr = sorted(natr_data.items(), key=lambda x: x[1], reverse=True)
-        
-        # 4. Проходим по глобальному топу, фильтруем через alpha_map
-        result = []
-        for base, natr in sorted_by_natr:
+        # 3. Фильтруем: оставляем только те, что есть в alpha_map
+        # master_symbols приходят как BTCUSDT, ETHUSDT...
+        # alpha_map ключи — базовые: BTC, ETH, TRUTH...
+        filtered = []
+        for symbol in all_symbols:
+            base = symbol.upper().replace('USDT', '')
             if base in alpha_map:
-                result.append(f"{base}USDT")
-                if len(result) >= limit:
-                    break
-        
-        print(f"🔥 alpha: NATR топ-{len(result)} (из {len(natr_data)} всего, alpha_map={len(alpha_map)}): {result[:10]}...")
-        return result
+                filtered.append(symbol)  # храним базовый формат BTCUSDT
 
+        print(f"🔍 alpha: spot={len(spot_symbols)}, futures={len(futures_symbols)}, объединено={len(all_symbols)}, alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
+        return filtered
     except Exception as e:
-        print(f"❌ Ошибка _fetch_alpha_symbols_by_natr: {e}")
+        print(f"❌ Ошибка чтения master-списка для alpha: {e}")
         import traceback
         print(traceback.format_exc())
         return []
 
-
 async def get_master_symbols_async():
-    """Асинхронная обёртка для нового отбора по NATR"""
+    """Асинхронная обёртка для чтения мастер-списка"""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _fetch_alpha_symbols_by_natr_sync, 40)
+    return await loop.run_in_executor(None, _fetch_master_symbols_sync)
 
 
 # ==========================================
@@ -295,10 +264,6 @@ async def sync_to_cache_async(symbol, log_func=print):
                         continue
 
                 age_seconds = int(now - ts[price])
-
-                # 🔥 Фильтр по мин. объёму для Alpha (низкая ликвидность)
-                if volume < _alpha_min_volume:
-                    continue
 
                 densities.append({
                     'price': price,
