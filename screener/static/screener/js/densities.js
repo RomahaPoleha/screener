@@ -1,5 +1,5 @@
 // ==========================================
-// densities.js — ТАБЛИЦА ПЛОТНОСТЕЙ (полноэкранное окно)
+// densities.js — ТАБЛИЦА ПЛОТНОСТЕЙ (полноэкранное окно, без мерцания)
 // Загрузка и отображение плотностей из мастер-листа
 // ==========================================
 
@@ -18,7 +18,9 @@ const state = {
   searchQuery: '',
   isLive: true,
   serverTime: Date.now(),
-  intervals: []
+  intervals: [],
+  globalMaxVolume: 1,
+  rowMap: new Map()  // id -> {rowEl, volEl, ageEl, barEl}
 };
 
 function initDensitiesElements() {
@@ -49,6 +51,13 @@ function createFullscreenOverlay() {
     document.body.appendChild(overlay);
     densitiesOverlay = overlay;
     densitiesOverlayBody = document.getElementById('densitiesFullscreenBody');
+
+    // Delegated search input listener — added once, lives for overlay lifetime
+    densitiesOverlayBody.addEventListener('input', (e) => {
+        if (e.target && e.target.id === 'search-input') {
+            handleSearch(e.target.value);
+        }
+    });
 }
 
 function toggleDensitiesOverlay() {
@@ -58,11 +67,7 @@ function toggleDensitiesOverlay() {
         closeDensitiesOverlay();
     }
     if (densitiesBtn) {
-        if (densitiesOverlay.classList.contains('active')) {
-            densitiesBtn.classList.add('active');
-        } else {
-            densitiesBtn.classList.remove('active');
-        }
+        densitiesBtn.classList.toggle('active', densitiesOverlay.classList.contains('active'));
     }
 }
 
@@ -70,6 +75,7 @@ function openDensitiesOverlay() {
     createFullscreenOverlay();
     densitiesOverlay.classList.add('active');
     document.body.style.overflow = 'hidden';
+    renderShell();
     loadDensitiesTable();
 }
 
@@ -117,73 +123,45 @@ function getVolumeTier(volume) {
 }
 
 // ==========================================
-// API LOADING
+// SHELL (статическая оболочка — заголовок + фильтры)
 // ==========================================
-async function loadDensitiesTable() {
-    if (!densitiesOverlayBody) initDensitiesElements();
+function renderShell() {
+    if (!densitiesOverlayBody) return;
 
-    const market = densitiesMarketSelect?.value || 'futures';
-    const minVolume = parseInt(densitiesMinVolume?.value) || 10000;
-    const limit = parseInt(densitiesLimit?.value) || 20;
+    const uniqueSymbols = new Set(state.densities.map(d => d.symbol)).size;
 
-    densitiesOverlayBody.innerHTML = '<div style="color:#6b7280; text-align:center; padding:20px;">Загрузка...</div>';
-
-    try {
-        const params = new URLSearchParams({
-            market: market,
-            min_volume: minVolume,
-            limit: limit,
-        });
-        const res = await fetch(`/api/densities/?${params.toString()}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        state.densities = data.densities || [];
-        state.serverTime = data.server_time || Date.now();
-        render();
-    } catch (err) {
-        console.error('loadDensitiesTable error:', err);
-        densitiesOverlayBody.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Ошибка: ${err.message}</div>`;
-    }
+    densitiesOverlayBody.innerHTML = `
+        <div class="dashboard-header">
+            <div class="header-title">
+                <span class="icon">📊</span>
+                <span>Таблица плотностей</span>
+            </div>
+            <div class="header-subtitle">
+                Real-time liquidity density monitor • ${state.densities.length} levels across ${uniqueSymbols} coins
+            </div>
+        </div>
+        <div class="filter-bar">
+            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
+                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-right:6px;">Поиск:</label>
+                <input type="text" id="search-input" class="search-input" placeholder="BTC, ETH..." value="${state.searchQuery}">
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <button class="filter-btn ${state.sideFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="handleSideFilter('all')">Все</button>
+                <button class="filter-btn ${state.sideFilter === 'buy' ? 'active-buy' : ''}" data-filter="buy" onclick="handleSideFilter('buy')">BUY</button>
+                <button class="filter-btn ${state.sideFilter === 'sell' ? 'active-sell' : ''}" data-filter="sell" onclick="handleSideFilter('sell')">SELL</button>
+                <button class="live-btn ${state.isLive ? 'active' : ''}" onclick="toggleLive()">
+                    <div class="live-btn-dot ${state.isLive ? '' : 'paused'}"></div>
+                    ${state.isLive ? 'LIVE' : 'PAUSED'}
+                </button>
+            </div>
+        </div>
+        <div id="densities-grid" class="densities-grid"></div>
+        <div id="stats-container"></div>
+    `;
 }
 
 // ==========================================
-// GROUPING LOGIC (symbol + exchange)
-// ==========================================
-function groupBySymbolAndExchange(densities) {
-    const groups = {};
-    for (const d of densities) {
-        const key = `${d.symbol}_${d.exchange}`;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(d);
-    }
-
-    const result = [];
-    for (const key of Object.keys(groups)) {
-        const [symbol, exchange] = key.split('_');
-        const items = groups[key].sort((a, b) => b.volume - a.volume);
-        const totalVolume = items.reduce((sum, d) => sum + d.volume, 0);
-        const buyCount = items.filter(d => d.side === 'buy').length;
-        const sellCount = items.filter(d => d.side === 'sell').length;
-
-        result.push({
-            symbol,
-            exchange,
-            exchangeShort: getExchangeShort(exchange),
-            densities: items,
-            totalVolume,
-            count: items.length,
-            buyCount,
-            sellCount
-        });
-    }
-
-    result.sort((a, b) => b.totalVolume - a.totalVolume);
-    return result;
-}
-
-// ==========================================
-// RENDER FUNCTIONS
+// CONTENT (динамическое содержимое — сетка + статистика)
 // ==========================================
 function renderGroupCard(group, index, globalMaxVolume) {
     const rows = group.densities.map((d, rowIdx) => {
@@ -195,11 +173,15 @@ function renderGroupCard(group, index, globalMaxVolume) {
         const isWhale = tier === 'high';
 
         return `
-            <div class="group-density-row ${d.side}-row ${isWhale ? 'whale-row' : ''}" style="animation-delay: ${index * 40 + rowIdx * 20}ms">
+            <div class="group-density-row ${d.side}-row ${isWhale ? 'whale-row' : ''}"
+                 data-id="${d.id}"
+                 data-age="${d.age_seconds}"
+                 data-volume="${d.volume}"
+                 style="animation-delay: ${index * 40 + rowIdx * 20}ms">
                 <div class="row-side-icon ${d.side}">${d.side === 'buy' ? 'B' : 'S'}</div>
                 <div class="row-volume">$${fmtVolume(d.volume)}</div>
                 <div class="row-bar-container">
-                    <div class="row-bar-fill animate-bar-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}bb 60%, ${sideColor}33 100%);"></div>
+                    <div class="row-bar-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}bb 60%, ${sideColor}33 100%);"></div>
                 </div>
                 <div class="row-meta">
                     ${isWhale ? '<span class="whale-tag">⚡</span>' : ''}
@@ -259,14 +241,14 @@ function renderStatsFooter(densities, serverTime) {
                 </div>
                 <div style="display:flex; align-items:center; gap:6px;">
                     <div style="width:60px; height:4px; border-radius:2px; background:rgba(30,41,59,0.5); overflow:hidden;">
-                        <div style="width:${buyRatio}%; height:100%; background:linear-gradient(90deg, #14b8a6, #22d3ee); border-radius:2px; transition:width 0.5s;"></div>
+                        <div id="buy-ratio-bar" style="width:${buyRatio}%; height:100%; background:linear-gradient(90deg, #14b8a6, #22d3ee); border-radius:2px; transition:width 0.5s;"></div>
                     </div>
-                    <span style="font-size:10px; color:#14b8a6; font-family:'JetBrains Mono',monospace;">${buyRatio}%</span>
+                    <span id="buy-ratio-text" style="font-size:10px; color:#14b8a6; font-family:'JetBrains Mono',monospace;">${buyRatio}%</span>
                     <span style="font-size:9px; color:#64748b;">BUY</span>
                 </div>
             </div>
             <div class="live-indicator">
-                <span style="color:#94a3b8; font-family:'JetBrains Mono',monospace; font-size:11px;">
+                <span id="live-time" style="color:#94a3b8; font-family:'JetBrains Mono',monospace; font-size:11px;">
                     ${new Date(serverTime).toLocaleTimeString()}
                 </span>
                 <div class="live-dot"></div>
@@ -274,6 +256,116 @@ function renderStatsFooter(densities, serverTime) {
             </div>
         </div>
     `;
+}
+
+function renderContent() {
+    const grid = document.getElementById('densities-grid');
+    const statsContainer = document.getElementById('stats-container');
+    if (!grid || !statsContainer) return;
+
+    const processed = getProcessedDensities();
+    const groups = groupBySymbolAndExchange(processed);
+    state.globalMaxVolume = getMaxVolume();
+
+    if (groups.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column: 1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; color:#6b7280;">
+                <div style="font-size:48px; margin-bottom:16px; opacity:0.5;">📊</div>
+                <div style="font-size:14px; font-weight:500;">Плотностей не найдено</div>
+                <div style="margin-top:8px; font-size:12px; opacity:0.7;">Попробуйте изменить фильтры</div>
+            </div>
+        `;
+        state.rowMap.clear();
+    } else {
+        grid.innerHTML = groups.map((group, index) =>
+            renderGroupCard(group, index, state.globalMaxVolume)
+        ).join('');
+
+        // Собираем ссылки на DOM-элементы строк для быстрого in-place обновления
+        state.rowMap.clear();
+        const allRows = grid.querySelectorAll('.group-density-row[data-id]');
+        allRows.forEach(row => {
+            const id = row.dataset.id;
+            state.rowMap.set(id, {
+                rowEl: row,
+                volEl: row.querySelector('.row-volume'),
+                ageEl: row.querySelector('.row-age'),
+                barEl: row.querySelector('.row-bar-fill')
+            });
+        });
+    }
+
+    statsContainer.innerHTML = renderStatsFooter(processed, state.serverTime);
+}
+
+// ==========================================
+// LIVE DOM UPDATE (in-place, без innerHTML — нет мерцания)
+// ==========================================
+function updateLiveDOM() {
+    if (!densitiesOverlayBody) return;
+
+    // Обновляем возраст и объём в данных
+    state.densities.forEach(d => { d.age_seconds += 3; });
+    state.serverTime = Date.now();
+
+    // In-place обновление через кэш ссылок — без поиска по DOM
+    state.densities.forEach(d => {
+        const entry = state.rowMap.get(d.id);
+        if (!entry) return;
+
+        let age = d.age_seconds;
+        if (entry.ageEl) entry.ageEl.textContent = fmtAge(age);
+
+        let vol = d.volume;
+        if (entry.volEl) entry.volEl.textContent = '$' + fmtVolume(vol);
+
+        const barEl = entry.barEl;
+        if (barEl && state.globalMaxVolume > 0) {
+            const pct = Math.max(12, Math.min(100, (vol / state.globalMaxVolume) * 100));
+            barEl.style.width = pct + '%';
+        }
+    });
+
+    // Update live time in stats footer
+    const timeEl = document.getElementById('live-time');
+    if (timeEl) {
+        timeEl.textContent = new Date(state.serverTime).toLocaleTimeString();
+    }
+}
+
+// ==========================================
+// GROUPING LOGIC (symbol + exchange)
+// ==========================================
+function groupBySymbolAndExchange(densities) {
+    const groups = {};
+    for (const d of densities) {
+        const key = `${d.symbol}_${d.exchange}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(d);
+    }
+
+    const result = [];
+    for (const key of Object.keys(groups)) {
+        const [symbol, exchange] = key.split('_');
+        const items = groups[key].sort((a, b) => b.volume - a.volume);
+        const totalVolume = items.reduce((sum, d) => sum + d.volume, 0);
+        const buyCount = items.filter(d => d.side === 'buy').length;
+        const sellCount = items.filter(d => d.side === 'sell').length;
+
+        result.push({
+            symbol,
+            exchange,
+            exchangeShort: getExchangeShort(exchange),
+            densities: items,
+            totalVolume,
+            count: items.length,
+            buyCount,
+            sellCount
+        });
+    }
+
+    result.sort((a, b) => b.totalVolume - a.totalVolume);
+    return result;
 }
 
 function getProcessedDensities() {
@@ -296,68 +388,34 @@ function getMaxVolume() {
 }
 
 // ==========================================
-// MAIN RENDER
+// API LOADING
 // ==========================================
-function render() {
-    if (!densitiesOverlayBody) return;
+async function loadDensitiesTable() {
+    if (!densitiesOverlayBody) initDensitiesElements();
 
-    const processed = getProcessedDensities();
-    const globalMaxVolume = getMaxVolume();
-    const groups = groupBySymbolAndExchange(processed);
-    const uniqueSymbols = new Set(state.densities.map(d => d.symbol)).size;
+    const market = densitiesMarketSelect?.value || 'futures';
+    const minVolume = parseInt(densitiesMinVolume?.value) || 10000;
+    const limit = parseInt(densitiesLimit?.value) || 20;
 
-    // Build header with filters
-    let headerHtml = `
-        <div class="dashboard-header">
-            <div class="header-title">
-                <span class="icon">📊</span>
-                <span>Таблица плотностей</span>
-            </div>
-            <div class="header-subtitle">
-                Real-time liquidity density monitor • ${state.densities.length} levels across ${uniqueSymbols} coins
-            </div>
-        </div>
-        <div class="filter-bar">
-            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
-                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-right:6px;">Поиск:</label>
-                <input type="text" id="search-input" class="search-input" placeholder="BTC, ETH..." value="${state.searchQuery}">
-            </div>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <button class="filter-btn ${state.sideFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="handleSideFilter('all')">Все</button>
-                <button class="filter-btn ${state.sideFilter === 'buy' ? 'active-buy' : ''}" data-filter="buy" onclick="handleSideFilter('buy')">BUY</button>
-                <button class="filter-btn ${state.sideFilter === 'sell' ? 'active-sell' : ''}" data-filter="sell" onclick="handleSideFilter('sell')">SELL</button>
-                <button class="live-btn ${state.isLive ? 'active' : ''}" onclick="toggleLive()">
-                    <div class="live-btn-dot ${state.isLive ? '' : 'paused'}"></div>
-                    ${state.isLive ? 'LIVE' : 'PAUSED'}
-                </button>
-            </div>
-        </div>
-    `;
+    const grid = document.getElementById('densities-grid');
+    if (grid) grid.innerHTML = '<div style="grid-column: 1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; color:#6b7280;">Загрузка...</div>';
 
-    // Render grouped grid
-    let gridHtml = '';
-    if (groups.length === 0) {
-        gridHtml = `
-            <div style="grid-column: 1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; color:#6b7280;">
-                <div style="font-size:48px; margin-bottom:16px; opacity:0.5;">📊</div>
-                <div style="font-size:14px; font-weight:500;">Плотностей не найдено</div>
-                <div style="margin-top:8px; font-size:12px; opacity:0.7;">Попробуйте изменить фильтры</div>
-            </div>
-        `;
-    } else {
-        gridHtml = groups.map((group, index) =>
-            renderGroupCard(group, index, globalMaxVolume)
-        ).join('');
-    }
+    try {
+        const params = new URLSearchParams({
+            market: market,
+            min_volume: minVolume,
+            limit: limit,
+        });
+        const res = await fetch(`/api/densities/?${params.toString()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
-    densitiesOverlayBody.innerHTML = headerHtml +
-        `<div id="densities-grid" class="densities-grid">${gridHtml}</div>` +
-        `<div id="stats-container">${renderStatsFooter(processed, state.serverTime)}</div>`;
-
-    // Bind search input
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => handleSearch(e.target.value));
+        state.densities = data.densities || [];
+        state.serverTime = data.server_time || Date.now();
+        renderContent();
+    } catch (err) {
+        console.error('loadDensitiesTable error:', err);
+        densitiesOverlayBody.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Ошибка: ${err.message}</div>`;
     }
 }
 
@@ -371,52 +429,39 @@ function handleSort(field) {
         state.sortField = field;
         state.sortDirection = 'desc';
     }
-    render();
+    renderContent();
 }
 
 function handleSideFilter(filter) {
     state.sideFilter = filter;
-    render();
+    renderShell(); // filter bar state changed
+    renderContent();
 }
 
 function handleSearch(query) {
     state.searchQuery = query;
-    render();
+    renderContent();
 }
 
 function toggleLive() {
     state.isLive = !state.isLive;
-    render();
+    renderShell(); // live button state changed
 }
 
 // ==========================================
-// LIVE UPDATE LOOP (без мигания)
+// LIVE UPDATE LOOP (только in-place обновления, нет innerHTML)
 // ==========================================
 function startLiveUpdates() {
     const interval = setInterval(() => {
         if (!state.isLive) return;
 
-        // Update ages
+        // Обновляем возраст в данных
         state.densities.forEach(d => { d.age_seconds += 3; });
-
-        // Randomly replace some densities
-        const replaceCount = Math.floor(Math.random() * 3) + 1;
-        for (let i = 0; i < replaceCount; i++) {
-            if (state.densities.length > 0) {
-                const idx = Math.floor(Math.random() * state.densities.length);
-                const d = state.densities[idx];
-                state.densities[idx] = {
-                    ...d,
-                    age_seconds: Math.floor(Math.random() * 300),
-                    volume: d.volume * (0.8 + Math.random() * 0.4),
-                    timestamp: Date.now()
-                };
-            }
-        }
-
         state.serverTime = Date.now();
-        render();
-    }, 3000);
+
+        // In-place DOM обновление — без мерцания
+        updateLiveDOM();
+    }, 5000);
 
     state.intervals.push(interval);
 }
@@ -426,7 +471,6 @@ function startLiveUpdates() {
 // ==========================================
 function initApp() {
     state.serverTime = Date.now();
-    render();
     startLiveUpdates();
 }
 
