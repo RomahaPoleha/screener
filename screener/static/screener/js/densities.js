@@ -286,7 +286,7 @@ function renderContent() {
 
     const processed = getProcessedDensities();
     const groups = groupBySymbolAndExchange(processed);
-    state.globalMaxVolume = getMaxVolume();
+    state.globalMaxVolume = getProcessedMaxVolume();
 
     if (groups.length === 0) {
         grid.innerHTML = `
@@ -328,6 +328,9 @@ function updateLiveDOM() {
     // Обновляем возраст и объём в данных
     state.densities.forEach(d => { d.age_seconds += 3; });
     state.serverTime = Date.now();
+
+    // Пересчитываем максимум по отфильтрованным данным для корректных пропорций баров
+    state.globalMaxVolume = getProcessedMaxVolume();
 
     // In-place обновление через кэш ссылок — без поиска по DOM
     state.densities.forEach(d => {
@@ -406,6 +409,11 @@ function getProcessedDensities() {
 
 function getMaxVolume() {
     return Math.max(...state.densities.map(d => d.volume), 1);
+}
+
+function getProcessedMaxVolume() {
+    const processed = getProcessedDensities();
+    return Math.max(...processed.map(d => d.volume), 1);
 }
 
 // ==========================================
