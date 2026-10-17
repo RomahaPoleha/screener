@@ -171,7 +171,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 okx_spot_density_timestamps[symbol] = {}
 
         saved_count = await sync_to_cache_async(symbol, market, log_func)
-        log_func(f"✅ okx {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
+        
         return saved_count
 
     except Exception as e:
@@ -349,12 +349,12 @@ async def ws_listener(market='futures', log_func=print):
                 try:
                     args = [{"channel": "books", "instId": f"{s}{inst_id_suffix}"} for s in symbols]
                     await ws.send(json.dumps({"op": "subscribe", "args": args}))
-                    log_func(f"✅ okx {market} WS подписан на {len(symbols)} символов")
+                    
 
                     while True:
                         if reconnect_event.is_set():
                             reconnect_event.clear()
-                            log_func(f"🔄 okx {market}: сигнал переподключения получен")
+                            
                             break
 
                         try:
@@ -611,7 +611,7 @@ async def periodic_refresh(market='futures', log_func=print):
                     saved_count = await init_order_book_async(symbol, market, log_func)
                     new_active.append(symbol)
                     added.append(symbol)
-                    log_func(f"✅ okx {market} {symbol}: добавлен (плотностей: {saved_count})")
+                    
                 else:
                     new_active.append(symbol)
 
@@ -624,11 +624,11 @@ async def periodic_refresh(market='futures', log_func=print):
                             okx_futures_density_timestamps.pop(sym, None)
                             okx_futures_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"okx:futures:{sym}", None)
-                    log_func(f"🗑️ okx futures удалены: {', '.join(sorted(removed))}")
+                    
 
                 if added or removed:
                     okx_futures_reconnect_event.set()
-                    log_func(f"🔄 okx futures: список синхронизирован (+{len(added)} -{len(removed)})")
+                    
             else:
                 okx_spot_symbols = new_active
                 if removed:
@@ -638,11 +638,11 @@ async def periodic_refresh(market='futures', log_func=print):
                             okx_spot_density_timestamps.pop(sym, None)
                             okx_spot_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"okx:spot:{sym}", None)
-                    log_func(f"🗑️ okx spot удалены: {', '.join(sorted(removed))}")
+                    
 
                 if added or removed:
                     okx_spot_reconnect_event.set()
-                    log_func(f"🔄 okx spot: список синхронизирован (+{len(added)} -{len(removed)})")
+                    
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(okx {market}): {e}")
@@ -699,18 +699,18 @@ async def main_async(log_func=print):
     for symbol in master_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         active_futures.append(symbol)
-        log_func(f"✅ okx futures {symbol}: принят (плотностей: {saved_count})")
+        
 
     active_spot = []
     for symbol in master_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         active_spot.append(symbol)
-        log_func(f"✅ okx spot {symbol}: принят (плотностей: {saved_count})")
+        
 
     okx_futures_symbols = active_futures
     okx_spot_symbols = active_spot
 
-    log_func(f"✅ OKX Async Monitor инициализирован: {len(active_futures)} futures, {len(active_spot)} spot")
+    
 
     tasks = [
         ws_listener('futures', log_func),

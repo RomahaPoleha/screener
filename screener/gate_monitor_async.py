@@ -183,7 +183,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 gate_spot_density_timestamps[symbol] = {}
 
         saved_count = await sync_to_cache_async(symbol, market, log_func)
-        log_func(f"✅ gate {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
+        
         return saved_count
 
     except Exception as e:
@@ -382,12 +382,12 @@ async def ws_listener(market='futures', log_func=print):
                             }
                             await ws.send(json.dumps(msg))
 
-                    log_func(f"✅ gate {market} WS подписан на {len(symbols)} символов")
+                    
 
                     while True:
                         if reconnect_event.is_set():
                             reconnect_event.clear()
-                            log_func(f"🔄 gate {market}: сигнал переподключения получен")
+                            
                             break
 
                         try:
@@ -636,7 +636,7 @@ async def periodic_refresh(market='futures', log_func=print):
                     saved_count = await init_order_book_async(symbol, market, log_func)
                     new_active.append(symbol)
                     added.append(symbol)
-                    log_func(f"✅ gate {market} {symbol}: добавлен (плотностей: {saved_count})")
+                    
                 else:
                     new_active.append(symbol)
 
@@ -649,11 +649,11 @@ async def periodic_refresh(market='futures', log_func=print):
                             gate_futures_density_timestamps.pop(sym, None)
                             gate_futures_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"gate:futures:{sym}", None)
-                    log_func(f"🗑️ gate futures удалены: {', '.join(sorted(removed))}")
+                    
 
                 if added or removed:
                     gate_futures_reconnect_event.set()
-                    log_func(f"🔄 gate futures: список синхронизирован (+{len(added)} -{len(removed)})")
+                    
             else:
                 gate_spot_symbols = new_active
                 if removed:
@@ -663,11 +663,11 @@ async def periodic_refresh(market='futures', log_func=print):
                             gate_spot_density_timestamps.pop(sym, None)
                             gate_spot_volume_stats.pop(sym, None)
                             gate_spot_last_sync_time.pop(f"gate:spot:{sym}", None)
-                    log_func(f"🗑️ gate spot удалены: {', '.join(sorted(removed))}")
+                    
 
                 if added or removed:
                     gate_spot_reconnect_event.set()
-                    log_func(f"🔄 gate spot: список синхронизирован (+{len(added)} -{len(removed)})")
+                    
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(gate {market}): {e}")
@@ -700,7 +700,7 @@ async def load_gate_contract_sizes(log_func=print):
     """Загружает актуальные размеры контрактов (contract_size) через CCXT"""
     global gate_contract_sizes
     try:
-        log_func("🔄 Загрузка спецификаций контрактов Gate.io Futures...")
+        
 
         # ✅ ИСПРАВЛЕНИЕ 1: Убираем await, так как load_markets() синхронный
         markets = ccxt_futures_exchange.load_markets()
@@ -713,11 +713,12 @@ async def load_gate_contract_sizes(log_func=print):
                 # ✅ Сохраняем в верхнем регистре для надежного поиска
                 gate_contract_sizes[base_currency.upper()] = float(contract_size)
 
-        log_func(f"✅ Загружены размеры контрактов для {len(gate_contract_sizes)} монет.")
+        
 
         # 🔍 Отладка: проверяем, загрузился ли BTC
         if 'BTC' in gate_contract_sizes:
-            log_func(f"🔍 Тест: BTC contract_size = {gate_contract_sizes['BTC']}")
+                pass
+
 
     except Exception as e:
         log_func(f"❌ Ошибка загрузки спецификаций Gate.io: {e}")
@@ -756,18 +757,18 @@ async def main_async(log_func=print):
     for symbol in master_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         active_futures.append(symbol)
-        log_func(f"✅ gate futures {symbol}: принят (плотностей: {saved_count})")
+        
 
     active_spot = []
     for symbol in master_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         active_spot.append(symbol)
-        log_func(f"✅ gate spot {symbol}: принят (плотностей: {saved_count})")
+        
 
     gate_futures_symbols = active_futures
     gate_spot_symbols = active_spot
 
-    log_func(f"✅ Gate Async Monitor инициализирован: {len(active_futures)} futures, {len(active_spot)} spot")
+    
 
     tasks = [
         ws_listener('futures', log_func),

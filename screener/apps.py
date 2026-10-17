@@ -27,6 +27,6 @@ class ScreenerConfig(AppConfig):
                 daemon=True
             )
             impulse_thread.start()
-            print("✅ Impulse Monitor поток запущен")
+            
         except Exception as e:
             print(f"⚠️ Impulse monitor не запущен: {e}")

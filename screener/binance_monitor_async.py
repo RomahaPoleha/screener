@@ -124,7 +124,7 @@ def _fetch_dynamic_by_natr_sync(market='futures', limit=40):
         coins_with_natr.sort(key=lambda x: x[1], reverse=True)
 
         result = [s for s, natr, vol in coins_with_natr[:limit]]
-        print(f"✅ binance {market} dynamic (по NATR): {len(result)} монет, топ-5: {result[:5]}")
+        
         return result
 
     except Exception as e:
@@ -232,7 +232,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 binance_spot_density_timestamps[symbol] = {}
 
         saved_count = await sync_to_cache_async(symbol, market, log_func)
-        log_func(f"✅ binance {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
+        
         return saved_count
 
     except Exception as e:
@@ -393,12 +393,12 @@ async def ws_listener(market='futures', log_func=print):
                         "id": 1
                     }
                     await ws.send(json.dumps(subscribe_msg))
-                    log_func(f"✅ binance {market} WS подписан на {len(symbols)} символов")
+                    
 
                     while True:
                         if reconnect_event.is_set():
                             reconnect_event.clear()
-                            log_func(f"🔄 binance {market}: сигнал переподключения получен")
+                            
                             break
 
                         try:
@@ -588,7 +588,7 @@ async def periodic_refresh(log_func=print):
                 else:
                     saved_count = await init_order_book_async(symbol, 'futures', log_func)
                     new_active.append(symbol)
-                    log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+                    
 
             # ШАГ 2: Добавляем топ по NATR
             for symbol in candidates_f:
@@ -601,7 +601,7 @@ async def periodic_refresh(log_func=print):
                     continue
                 saved_count = await init_order_book_async(symbol, 'futures', log_func)
                 new_active.append(symbol)
-                log_func(f"✅ binance futures {symbol}: добавлен (плотностей: {saved_count})")
+                
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -614,19 +614,18 @@ async def periodic_refresh(log_func=print):
                         binance_futures_density_timestamps.pop(sym, None)
                         binance_futures_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:futures:{sym}", None)
-                log_func(f"🗑️ binance futures удалены: {', '.join(sorted(removed))}")
+                
 
             if removed or added:
                 binance_futures_reconnect_event.set()
-                log_func(f"🔄 binance futures: список изменился (+{len(added)} -{len(removed)}), переподключение")
             else:
-                log_func(f"✅ binance futures: список не изменился ({len(new_active)} монет)")
+                pass
 
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, cache.set, 'scalp:master:futures', new_active, 3600)
-                log_func(f"📢 binance futures: master-список опубликован ({len(new_active)} монет)")
+                
             except Exception as e:
                 log_func(f"⚠️ binance futures: не удалось опубликовать master-список: {e}")
 
@@ -641,7 +640,7 @@ async def periodic_refresh(log_func=print):
                 else:
                     saved_count = await init_order_book_async(symbol, 'spot', log_func)
                     new_active.append(symbol)
-                    log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count}) [стабильная]")
+                    
 
             for symbol in candidates_s:
                 if len(new_active) >= 50:
@@ -653,7 +652,7 @@ async def periodic_refresh(log_func=print):
                     continue
                 saved_count = await init_order_book_async(symbol, 'spot', log_func)
                 new_active.append(symbol)
-                log_func(f"✅ binance spot {symbol}: добавлен (плотностей: {saved_count})")
+                
 
             removed = old_symbols - set(new_active)
             added = set(new_active) - old_symbols
@@ -666,19 +665,18 @@ async def periodic_refresh(log_func=print):
                         binance_spot_density_timestamps.pop(sym, None)
                         binance_spot_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"binance:spot:{sym}", None)
-                log_func(f"🗑️ binance spot удалены: {', '.join(sorted(removed))}")
+                
 
             if removed or added:
                 binance_spot_reconnect_event.set()
-                log_func(f"🔄 binance spot: список изменился (+{len(added)} -{len(removed)}), переподключение")
             else:
-                log_func(f"✅ binance spot: список не изменился ({len(new_active)} монет)")
+                pass
 
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, cache.set, 'scalp:master:spot', new_active, 3600)
-                log_func(f"📢 binance spot: master-список опубликован ({len(new_active)} монет)")
+                
             except Exception as e:
                 log_func(f"⚠️ binance spot: не удалось опубликовать master-список: {e}")
 
@@ -711,13 +709,13 @@ async def main_async(log_func=print):
     for symbol in stable_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         active_futures.append(symbol)
-        log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+        
 
     active_spot = []
     for symbol in stable_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         active_spot.append(symbol)
-        log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count}) [стабильная]")
+        
 
     # --- Шаг 4: Добавляем топ по NATR ---
     for symbol in futures_candidates[:40]:
@@ -725,26 +723,26 @@ async def main_async(log_func=print):
             continue
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         active_futures.append(symbol)
-        log_func(f"✅ binance futures {symbol}: принят (плотностей: {saved_count})")
+        
 
     for symbol in spot_candidates[:40]:
         if symbol in active_spot:
             continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         active_spot.append(symbol)
-        log_func(f"✅ binance spot {symbol}: принят (плотностей: {saved_count})")
+        
 
     futures_symbols = active_futures
     spot_symbols = active_spot
 
-    log_func(f"✅ Binance Async Monitor инициализирован: {len(active_futures)} futures, {len(active_spot)} spot")
+    
 
     # 🔥 НОВОЕ: Публикуем master-списки при старте
     try:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, cache.set, 'scalp:master:futures', active_futures, 600)
         await loop.run_in_executor(None, cache.set, 'scalp:master:spot', active_spot, 600)
-        log_func(f"📢 Master-списки опубликованы: futures={len(active_futures)}, spot={len(active_spot)}")
+        
     except Exception as e:
         log_func(f"⚠️ Не удалось опубликовать master-списки при старте: {e}")
 

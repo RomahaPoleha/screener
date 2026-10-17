@@ -144,22 +144,22 @@ async def impulse_ws_listener():
     while True:
         try:
             _logger.info("🔌 Impulse WS: подключение к Binance...")
-            # ✅ УВЕЛИЧЕНЫ ping параметры: 30с интервал, 30с таймаут
+            
             async with websockets.connect(
                 BINANCE_TICKER_WS,
                 ping_interval=30,
                 ping_timeout=30,
                 close_timeout=10
             ) as ws:
-                _logger.info("✅ Impulse WS: подключен")
+                
                 while True:
                     try:
-                        # ✅ Уменьшен timeout приёма — быстрее реагируем на ошибки
+                        
                         msg = await asyncio.wait_for(ws.recv(), timeout=20)
                         tickers = json.loads(msg)
                         now_sec = time.time()
 
-                        # ✅ КЛАДЁМ В ОЧЕРЕДЬ, а не обрабатываем сразу
+                        
                         try:
                             ticker_queue.put_nowait((tickers, now_sec))
                         except asyncio.QueueFull:
@@ -196,7 +196,7 @@ async def impulse_checker():
 
 async def main():
     _logger.info("🚀 Запуск Impulse Monitor (Amplitude Mode)...")
-    # ✅ Запускаем 3 задачи параллельно: WS, обработчик очереди, чекер алертов
+    
     await asyncio.gather(
         impulse_ws_listener(),
         ticker_processor(),

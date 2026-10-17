@@ -151,7 +151,7 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 bybit_spot_density_timestamps[symbol] = {}
 
         saved_count = await sync_to_cache_async(symbol, market, log_func)
-        log_func(f"✅ bybit {market} Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
+        
         return saved_count
 
     except Exception as e:
@@ -330,12 +330,12 @@ async def ws_listener(market='futures', log_func=print):
                 try:
                     args = [f"orderbook.200.{s}USDT" for s in symbols]
                     await ws.send(json.dumps({"op": "subscribe", "args": args}))
-                    log_func(f"✅ bybit {market} WS подписан на {len(symbols)} символов")
+                    
 
                     while True:
                         if reconnect_event.is_set():
                             reconnect_event.clear()
-                            log_func(f"🔄 bybit {market}: сигнал переподключения получен")
+                            
                             break
 
                         try:
@@ -593,7 +593,7 @@ async def periodic_refresh(market='futures', log_func=print):
                     saved_count = await init_order_book_async(symbol, market, log_func)
                     new_active.append(symbol)
                     added.append(symbol)
-                    log_func(f"✅ bybit {market} {symbol}: добавлен (плотностей: {saved_count})")
+                    
                 else:
                     # Монета уже есть и валидна, оставляем её
                     new_active.append(symbol)
@@ -607,11 +607,11 @@ async def periodic_refresh(market='futures', log_func=print):
                             bybit_futures_density_timestamps.pop(sym, None)
                             bybit_futures_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"bybit:futures:{sym}", None)
-                    log_func(f"🗑️ bybit futures удалены: {', '.join(sorted(removed))}")
+                    
 
                 if added or removed:
                     bybit_futures_reconnect_event.set()
-                    log_func(f"🔄 bybit futures: список синхронизирован (+{len(added)} -{len(removed)})")
+                    
             else:
                 bybit_spot_symbols = new_active
                 if removed:
@@ -621,11 +621,11 @@ async def periodic_refresh(market='futures', log_func=print):
                             bybit_spot_density_timestamps.pop(sym, None)
                             bybit_spot_volume_stats.pop(sym, None)
                             last_sync_time.pop(f"bybit:spot:{sym}", None)
-                    log_func(f"🗑️ bybit spot удалены: {', '.join(sorted(removed))}")
+                    
 
                 if added or removed:
                     bybit_spot_reconnect_event.set()
-                    log_func(f"🔄 bybit spot: список синхронизирован (+{len(added)} -{len(removed)})")
+                    
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(bybit {market}): {e}")
@@ -684,18 +684,18 @@ async def main_async(log_func=print):
     for symbol in master_f:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         active_futures.append(symbol)
-        log_func(f"✅ bybit futures {symbol}: принят (плотностей: {saved_count})")
+        
 
     active_spot = []
     for symbol in master_s:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         active_spot.append(symbol)
-        log_func(f"✅ bybit spot {symbol}: принят (плотностей: {saved_count})")
+        
 
     bybit_futures_symbols = active_futures
     bybit_spot_symbols = active_spot
 
-    log_func(f"✅ Bybit Async Monitor инициализирован: {len(active_futures)} futures, {len(active_spot)} spot")
+    
 
     tasks = [
         ws_listener('futures', log_func),

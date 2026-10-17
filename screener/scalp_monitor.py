@@ -52,7 +52,7 @@ def start_scalp_monitor():
             daemon=True
         )
         bybit_async_thread.start()
-        log("✅ Bybit Async Monitor поток запущен")
+        
 
         bitget_async_thread = threading.Thread(
             target=lambda: start_bitget_async_monitor(log),
@@ -60,7 +60,7 @@ def start_scalp_monitor():
             daemon=True
         )
         bitget_async_thread.start()
-        log("✅ Bitget Async Monitor поток запущен")
+        
 
 
         okx_async_thread = threading.Thread(
@@ -69,7 +69,7 @@ def start_scalp_monitor():
             daemon=True
         )
         okx_async_thread.start()
-        log("✅ OKX Async Monitor поток запущен")
+        
 
         gate_async_thread = threading.Thread(
             target=lambda: start_gate_async_monitor(log),
@@ -77,7 +77,7 @@ def start_scalp_monitor():
             daemon=True
         )
         gate_async_thread.start()
-        log("✅ Gate Async Monitor поток запущен")
+        
 
         mexc_async_thread = threading.Thread(
             target=lambda: start_mexc_async_monitor(log),
@@ -85,7 +85,7 @@ def start_scalp_monitor():
             daemon=True
         )
         mexc_async_thread.start()
-        log("✅ MEXC Async Monitor поток запущен")
+        
 
         binance_async_thread = threading.Thread(
             target=lambda: start_binance_async_monitor(log),
@@ -93,7 +93,7 @@ def start_scalp_monitor():
             daemon=True
         )
         binance_async_thread.start()
-        log("✅ Binance Async Monitor поток запущен")
+        
 
         alpha_async_thread = threading.Thread(
             target=lambda: start_alpha_async_monitor(log),
@@ -101,7 +101,7 @@ def start_scalp_monitor():
             daemon=True
         )
         alpha_async_thread.start()
-        log("✅ Binance Alpha Async Monitor поток запущен")
+        
 
     except Exception as e:
         log(f"❌ Ошибка запуска мониторов: {e}")

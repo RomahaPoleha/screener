@@ -72,7 +72,7 @@ def _fetch_master_symbols_sync():
             return []
 
         filtered = [base.upper() + 'USDT' for base in alpha_map.keys()]
-        print(f"🔍 alpha: alpha_map={len(alpha_map)}, после фильтра={len(filtered)}: {filtered[:10]}")
+        
         return filtered
     except Exception as e:
         print(f"❌ Ошибка чтения master-списка для alpha: {e}")
@@ -107,7 +107,7 @@ async def init_order_book_async(symbol, log_func=print):
             return False, 0
         
         alpha_symbol = alpha_map[base_symbol]  # ALPHA_1228USDT
-        log_func(f"🔍 alpha {symbol}: alpha_symbol={alpha_symbol}")
+        
         
         # Binance Alpha REST требует верхний регистр (напр. ALPHA_175USDT)
         sym_rest = alpha_symbol.upper()
@@ -162,7 +162,7 @@ async def init_order_book_async(symbol, log_func=print):
             log_func(f"⚠️ alpha {symbol}: пустой стакан (ожидаем WS апдейты)")
 
         saved_count = await sync_to_cache_async(symbol, log_func)
-        log_func(f"✅ alpha Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
+        
         return True, saved_count
 
     except Exception as e:
@@ -343,12 +343,12 @@ async def ws_listener(log_func=print):
                         "id": int(time.time() * 1000)
                     }
                     await ws.send(json.dumps(subscribe_msg))
-                    log_func(f"✅ alpha WS подписан на {len(args)} символов: {args[:5]}...")
+                    
 
                     while True:
                         if alpha_reconnect_event.is_set():
                             alpha_reconnect_event.clear()
-                            log_func("🔄 alpha: сигнал переподключения получен")
+                            
                             break
 
                         try:
@@ -386,7 +386,7 @@ async def process_queue(log_func=print):
     reverse_map = {}
     if alpha_map:
         reverse_map = {v.upper(): k.upper() + 'USDT' for k, v in alpha_map.items()}
-        log_func(f"🔍 alpha reverse_map built: {len(reverse_map)} entries, sample: {list(reverse_map.items())[:3]}")
+        
     else:
         log_func("⚠️ alpha: exchange:alpha:map cache is EMPTY!")
 
@@ -490,7 +490,7 @@ async def periodic_refresh(log_func=print):
 
         try:
             master_symbols = await get_master_symbols_async()
-            log_func(f"🔍 alpha periodic_refresh: master_symbols={master_symbols}")
+            
 
             if not master_symbols:
                 log_func("⚠️ alpha: мастер-список пуст, пропускаем ротацию")
@@ -507,7 +507,7 @@ async def periodic_refresh(log_func=print):
                     if success:
                         new_active.append(symbol)
                         added.append(symbol)
-                        log_func(f"✅ alpha {symbol}: добавлен (плотностей: {saved_count})")
+                        
                 else:
                     new_active.append(symbol)
 
@@ -520,11 +520,11 @@ async def periodic_refresh(log_func=print):
                         alpha_density_timestamps.pop(sym, None)
                         alpha_volume_stats.pop(sym, None)
                         alpha_first_load_done.discard(sym)
-                    log_func(f"🗑️ alpha удалены: {', '.join(sorted(removed))}")
+                    
 
             if added or removed:
                 alpha_reconnect_event.set()
-                log_func(f"🔄 alpha: список синхронизирован (+{len(added)} -{len(removed)})")
+                
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(alpha): {e}")
@@ -563,7 +563,7 @@ async def main_async(log_func=print):
         from screener.views import get_alpha_symbol_map
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, get_alpha_symbol_map)
-        log_func("✅ Alpha map кэш заполнен/проверен")
+        
     except Exception as e:
         log_func(f"⚠️ Не удалось заполнить alpha map кэш: {e}")
 
@@ -584,12 +584,12 @@ async def main_async(log_func=print):
         success, saved_count = await init_order_book_async(symbol, log_func)
         if success:
             active_symbols.append(symbol)
-            log_func(f"✅ alpha {symbol}: принят (плотностей: {saved_count})")
+            
         else:
             log_func(f"⚠️ alpha {symbol}: пропущен (не поддерживается или ошибка API)")
 
     alpha_symbols = active_symbols
-    log_func(f"✅ Binance Alpha Async Monitor инициализирован: {len(active_symbols)} символов")
+    
 
     tasks = [
         ws_listener(log_func),
