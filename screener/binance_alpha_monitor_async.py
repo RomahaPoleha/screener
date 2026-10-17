@@ -257,7 +257,6 @@ async def sync_to_cache_async(symbol, log_func=print):
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
-            log_func(f"💾 alpha {symbol}: сохранено {len(densities)} плотностей в {key}")
         except RuntimeError:
             pass
 
@@ -556,8 +555,6 @@ async def main_async(log_func=print):
     """Главная асинхронная функция — запускает все задачи"""
     global alpha_symbols
 
-    log_func("🚀 Запуск Binance Alpha Async Monitor (WORKER NODE)...")
-
     # Гарантируем заполнение кэша exchange:alpha:map
     try:
         from screener.views import get_alpha_symbol_map
@@ -571,7 +568,6 @@ async def main_async(log_func=print):
     attempts = 0
 
     while not master_symbols and attempts < 12:
-        log_func("⏳ Alpha ожидает мастер-список из Redis...")
         await asyncio.sleep(5)
         attempts += 1
         master_symbols = await get_master_symbols_async()
