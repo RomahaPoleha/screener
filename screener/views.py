@@ -1134,15 +1134,29 @@ def api_densities_table(request):
                     'exchange': item.get('exchange', exchange)
                 })
 
-        # Сортируем по объёму и берём топ-N на символ
-        symbol_densities.sort(key=lambda x: x['volume'], reverse=True)
-        top_densities = symbol_densities[:limit_per_symbol]
+        # Лимит делим поровну между биржами, чтобы одна не забирала все слоты.
+        # Каждая биржа с плотностями получает минимум 1 запись,
+        # остаток (limit - n) распределяется по биржам с наибольшим объёмом.
+        by_exchange = {}
+        for d in symbol_densities:
+            by_exchange.setdefault(d['exchange'], []).append(d)
 
-        if top_densities:
-            # Добавляем символ к каждой плотности для удобства фронта
-            for d in top_densities:
-                d['symbol'] = symbol_upper
-            result.extend(top_densities)
+        exchange_order = sorted(
+            by_exchange.keys(),
+            key=lambda ex: max((x['volume'] for x in by_exchange[ex]), default=0),
+            reverse=True,
+        )
+        n = len(exchange_order)
+        if n:
+            base = limit_per_symbol // n
+            remainder = limit_per_symbol % n
+            for i, ex in enumerate(exchange_order):
+                items = by_exchange[ex]
+                items.sort(key=lambda x: x['volume'], reverse=True)
+                take = max(1, base + (1 if i < remainder else 0)) if limit_per_symbol >= n else 1
+                for d in items[:take]:
+                    d['symbol'] = symbol_upper
+                result.extend(items[:take])
 
     # Итоговая сортировка: объём DESC
     result.sort(key=lambda x: x['volume'], reverse=True)
