@@ -142,7 +142,16 @@ function renderShell() {
         </div>
         <div class="filter-bar">
             <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
-                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-right:6px;">Поиск:</label>
+                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-right:6px;">Маркет:</label>
+                <select id="densitiesMarketSelect" style="font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;">
+                    <option value="futures">Futures</option>
+                    <option value="spot">Spot</option>
+                </select>
+                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Мин. объём:</label>
+                <input type="number" id="densitiesMinVolume" value="10000" min="1000" step="1000" style="width:80px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;">
+                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Лимит:</label>
+                <input type="number" id="densitiesLimit" value="20" min="1" max="50" step="1" style="width:60px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;">
+                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Поиск:</label>
                 <input type="text" id="search-input" class="search-input" placeholder="BTC, ETH..." value="${state.searchQuery}">
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
@@ -153,11 +162,23 @@ function renderShell() {
                     <div class="live-btn-dot ${state.isLive ? '' : 'paused'}"></div>
                     ${state.isLive ? 'LIVE' : 'PAUSED'}
                 </button>
+                <button class="densities-refresh-btn" onclick="loadDensitiesTable()">Обновить</button>
             </div>
         </div>
         <div id="densities-grid" class="densities-grid"></div>
         <div id="stats-container"></div>
     `;
+
+    // Bind controls from overlay body (scoped, not document-wide)
+    densitiesMarketSelect = densitiesOverlayBody.querySelector('#densitiesMarketSelect');
+    densitiesMinVolume = densitiesOverlayBody.querySelector('#densitiesMinVolume');
+    densitiesLimit = densitiesOverlayBody.querySelector('#densitiesLimit');
+
+    // Market select change handler
+    if (densitiesMarketSelect) {
+        densitiesMarketSelect.value = state.sideFilter === 'all' ? 'futures' : densitiesMarketSelect.value;
+        densitiesMarketSelect.addEventListener('change', () => loadDensitiesTable());
+    }
 }
 
 // ==========================================
@@ -415,7 +436,8 @@ async function loadDensitiesTable() {
         renderContent();
     } catch (err) {
         console.error('loadDensitiesTable error:', err);
-        densitiesOverlayBody.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Ошибка: ${err.message}</div>`;
+        const grid = document.getElementById('densities-grid');
+        if (grid) grid.innerHTML = `<div style="grid-column: 1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; color:#ef4444;">Ошибка: ${err.message}</div>`;
     }
 }
 
