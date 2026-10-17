@@ -1,5 +1,5 @@
 // ==========================================
-// densities.js — ТАБЛИЦА ПЛОТНОСТЕЙ (группировка по символу+бирже)
+// densities.js — ТАБЛИЦА ПЛОТНОСТЕЙ (полноэкранное окно)
 // Загрузка и отображение плотностей из мастер-листа
 // ==========================================
 
@@ -10,10 +10,6 @@ let densitiesMarketSelect = null;
 let densitiesMinVolume = null;
 let densitiesLimit = null;
 
-let densitiesData = [];
-let densitiesSortState = { field: 'volume', direction: 'desc' };
-
-// State for the new grouped-card view
 const state = {
   densities: [],
   sortField: 'volume',
@@ -26,34 +22,65 @@ const state = {
 };
 
 function initDensitiesElements() {
-    densitiesOverlay = document.getElementById('densitiesOverlay');
-    densitiesOverlayBody = document.getElementById('densitiesOverlayBody');
     densitiesBtn = document.getElementById('densitiesBtn');
     densitiesMarketSelect = document.getElementById('densitiesMarketSelect');
     densitiesMinVolume = document.getElementById('densitiesMinVolume');
     densitiesLimit = document.getElementById('densitiesLimit');
 }
 
+function createFullscreenOverlay() {
+    const existing = document.getElementById('densitiesFullscreenOverlay');
+    if (existing) {
+        densitiesOverlay = existing;
+        densitiesOverlayBody = document.getElementById('densitiesFullscreenBody');
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'densitiesFullscreenOverlay';
+    overlay.className = 'densities-fullscreen-overlay';
+    overlay.innerHTML = `
+        <div class="densities-fullscreen-header">
+            <button class="densities-close-btn" onclick="closeDensitiesOverlay()">✕ Закрыть</button>
+            <div class="densities-fullscreen-title">Таблица плотностей</div>
+        </div>
+        <div class="densities-fullscreen-body" id="densitiesFullscreenBody"></div>
+    `;
+    document.body.appendChild(overlay);
+    densitiesOverlay = overlay;
+    densitiesOverlayBody = document.getElementById('densitiesFullscreenBody');
+}
+
 function toggleDensitiesOverlay() {
-    if (!densitiesOverlay) initDensitiesElements();
-    if (densitiesOverlay.classList.contains('active')) {
-        closeDensitiesOverlay();
-    } else {
+    if (!densitiesOverlay || !densitiesOverlay.classList.contains('active')) {
         openDensitiesOverlay();
+    } else {
+        closeDensitiesOverlay();
+    }
+    if (densitiesBtn) {
+        if (densitiesOverlay.classList.contains('active')) {
+            densitiesBtn.classList.add('active');
+        } else {
+            densitiesBtn.classList.remove('active');
+        }
     }
 }
 
 function openDensitiesOverlay() {
-    if (!densitiesOverlay) initDensitiesElements();
+    createFullscreenOverlay();
     densitiesOverlay.classList.add('active');
-    densitiesBtn.classList.add('active');
+    document.body.style.overflow = 'hidden';
     loadDensitiesTable();
 }
 
 function closeDensitiesOverlay() {
-    if (!densitiesOverlay) initDensitiesElements();
-    densitiesOverlay.classList.remove('active');
-    densitiesBtn.classList.remove('active');
+    if (densitiesOverlay) {
+        densitiesOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    if (densitiesBtn) {
+        densitiesBtn.classList.remove('active');
+    }
 }
 
 // ==========================================
@@ -172,7 +199,7 @@ function renderGroupCard(group, index, globalMaxVolume) {
                 <div class="row-side-icon ${d.side}">${d.side === 'buy' ? 'B' : 'S'}</div>
                 <div class="row-volume">$${fmtVolume(d.volume)}</div>
                 <div class="row-bar-container">
-                    <div class="row-bar-fill animate-bar-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}bb 60%, ${sideColor}33 100%); animation-delay: ${index * 40 + rowIdx * 20 + 100}ms;"></div>
+                    <div class="row-bar-fill animate-bar-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}bb 60%, ${sideColor}33 100%);"></div>
                 </div>
                 <div class="row-meta">
                     ${isWhale ? '<span class="whale-tag">⚡</span>' : ''}
@@ -272,9 +299,6 @@ function getMaxVolume() {
 // MAIN RENDER
 // ==========================================
 function render() {
-    const grid = document.getElementById('densities-grid');
-    const statsContainer = document.getElementById('stats-container');
-
     if (!densitiesOverlayBody) return;
 
     const processed = getProcessedDensities();
@@ -366,7 +390,7 @@ function toggleLive() {
 }
 
 // ==========================================
-// LIVE UPDATE LOOP
+// LIVE UPDATE LOOP (без мигания)
 // ==========================================
 function startLiveUpdates() {
     const interval = setInterval(() => {
