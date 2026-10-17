@@ -19,7 +19,6 @@ const state = {
   isLive: true,
   serverTime: Date.now(),
   intervals: [],
-  globalMaxVolume: 1,
   rowMap: new Map()  // id -> {rowEl, volEl, ageEl, barEl}
 };
 
@@ -184,10 +183,13 @@ function renderShell() {
 // ==========================================
 // CONTENT (динамическое содержимое — сетка + статистика)
 // ==========================================
-function renderGroupCard(group, index, globalMaxVolume) {
+function renderGroupCard(group, index) {
+    // Local max volume within this group for proportional bars
+    const localMaxVolume = Math.max(...group.densities.map(d => d.volume), 1);
+
     const rows = group.densities.map((d, rowIdx) => {
-        const volumePercent = globalMaxVolume > 0
-            ? Math.max(12, Math.min(100, (d.volume / globalMaxVolume) * 100))
+        const volumePercent = localMaxVolume > 0
+            ? Math.max(12, Math.min(100, (d.volume / localMaxVolume) * 100))
             : 12;
         const sideColor = d.side === 'buy' ? '#14b8a6' : '#f59e0b';
         const tier = getVolumeTier(d.volume);
@@ -198,6 +200,7 @@ function renderGroupCard(group, index, globalMaxVolume) {
                  data-id="${d.id}"
                  data-age="${d.age_seconds}"
                  data-volume="${d.volume}"
+                 data-local-max="${localMaxVolume}"
                  style="animation-delay: ${index * 40 + rowIdx * 20}ms">
                 <div class="row-side-icon ${d.side}">${d.side === 'buy' ? 'B' : 'S'}</div>
                 <div class="row-volume">$${fmtVolume(d.volume)}</div>
@@ -286,7 +289,6 @@ function renderContent() {
 
     const processed = getProcessedDensities();
     const groups = groupBySymbolAndExchange(processed);
-    state.globalMaxVolume = getProcessedMaxVolume();
 
     if (groups.length === 0) {
         grid.innerHTML = `
@@ -299,7 +301,7 @@ function renderContent() {
         state.rowMap.clear();
     } else {
         grid.innerHTML = groups.map((group, index) =>
-            renderGroupCard(group, index, state.globalMaxVolume)
+            renderGroupCard(group, index)
         ).join('');
 
         // Собираем ссылки на DOM-элементы строк для быстрого in-place обновления
@@ -329,9 +331,6 @@ function updateLiveDOM() {
     state.densities.forEach(d => { d.age_seconds += 3; });
     state.serverTime = Date.now();
 
-    // Пересчитываем максимум по отфильтрованным данным для корректных пропорций баров
-    state.globalMaxVolume = getProcessedMaxVolume();
-
     // In-place обновление через кэш ссылок — без поиска по DOM
     state.densities.forEach(d => {
         const entry = state.rowMap.get(d.id);
@@ -344,8 +343,9 @@ function updateLiveDOM() {
         if (entry.volEl) entry.volEl.textContent = '$' + fmtVolume(vol);
 
         const barEl = entry.barEl;
-        if (barEl && state.globalMaxVolume > 0) {
-            const pct = Math.max(12, Math.min(100, (vol / state.globalMaxVolume) * 100));
+        if (barEl) {
+            const localMax = parseFloat(entry.rowEl.dataset.localMax) || 1;
+            const pct = Math.max(12, Math.min(100, (vol / localMax) * 100));
             barEl.style.width = pct + '%';
         }
     });
@@ -409,11 +409,6 @@ function getProcessedDensities() {
 
 function getMaxVolume() {
     return Math.max(...state.densities.map(d => d.volume), 1);
-}
-
-function getProcessedMaxVolume() {
-    const processed = getProcessedDensities();
-    return Math.max(...processed.map(d => d.volume), 1);
 }
 
 // ==========================================
