@@ -15,11 +15,12 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
-from screener import views # Импорт твоего views.py
+from django.urls import path, include
+from screener import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('accounts/', include('screener.urls')),
     path('', views.index, name='index'),
     path('api/data/', views.api_data, name='api_data'),
     path('api/candles/<str:symbol>/', views.api_candles, name='api_candles'),
@@ -30,7 +31,7 @@ urlpatterns = [
     path('api/scalp-active/', views.api_scalp_active),
     path('api/mexc-depth/', views.api_mexc_depth, name='api_mexc_depth'),
     path('api/gate-depth/', views.api_gate_depth, name='api_gate_depth'),
-    path('api/logo/', views.api_logo),
+    path('api/logo/', views.api_logo, name='api_logo'),
     path('api/impulse-alerts/', views.api_impulse_alerts, name='api_impulse_alerts'),
     path('api/trades-count/', views.api_trades_count, name='api_trades_count'),
     path('api/exchanges/<str:symbol>/', views.api_exchanges, name='api_exchanges'),

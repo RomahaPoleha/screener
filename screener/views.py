@@ -3,19 +3,145 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.core.cache import cache
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.http import FileResponse, Http404
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django import forms
+from django.core import signing
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.conf import settings
 from pathlib import Path
 import time
 from . import coin_selection
+from .models import UserProfile
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+
+class RegisterForm(UserCreationForm):
+    """Форма регистрации с email"""
+    email = forms.EmailField(
+        required=True,
+        label='Email',
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'email@example.com'})
+    )
+
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'password1', 'password2')
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.email = self.cleaned_data['email']
+        if commit:
+            user.save()
+        return user
+
 # Глобальная сессия для переиспользования TCP-соединений (Keep-Alive)
 # Это главный секрет ускорения повторных запросов к одним и тем же биржам
 _http_session = None
+
+
+def register(request):
+    """Регистрация нового пользователя с подтверждением email"""
+    if request.method == 'POST':
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.is_active = False  # Не активируем до подтверждения email
+            user.save()
+
+            # Создаём профиль и генерируем токен
+            profile = UserProfile.objects.create(user=user)
+            token = profile.generate_verification_token()
+
+            # Формируем ссылку для подтверждения
+            verify_url = request.build_absolute_uri(f'/accounts/verify/{token}/')
+
+            # Отправляем email
+            try:
+                html_message = render_to_string('screener/email/verify_email.html', {
+                    'username': user.username,
+                    'verify_url': verify_url,
+                })
+                send_mail(
+                    subject='Подтверждение email — Recon&Scalp',
+                    message=f'Привет, {user.username}!\n\nПодтверди email: {verify_url}\n\nСсылка действительна 24 часа.',
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    html_message=html_message,
+                    fail_silently=False,
+                )
+            except Exception as e:
+                print(f"Email send error: {e}")
+                # В dev режиме показываем ссылку прямо на странице
+                if settings.DEBUG:
+                    return render(request, 'screener/check_email.html', {
+                        'email': user.email,
+                        'debug_verify_url': verify_url,
+                    })
+
+            return render(request, 'screener/check_email.html', {'email': user.email})
+    else:
+        form = RegisterForm()
+    return render(request, 'screener/register.html', {'form': form})
+
+
+def verify_email(request, token):
+    """Подтверждение email по токену"""
+    user = UserProfile.verify_token(token)
+    if user:
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+        UserProfile.objects.filter(user=user).update(email_verified=True, verification_token='', token_created=None)
+        login(request, user)
+        return render(request, 'screener/verify_success.html')
+    return render(request, 'screener/verify_failed.html')
+
+
+@require_http_methods(["POST"])
+def resend_verification(request):
+    """Повторная отправка письма подтверждения"""
+    email = request.POST.get('email')
+    try:
+        users = User.objects.filter(email=email)
+        if not users.exists():
+            pass  # Не сообщаем, существует ли email (безопасность)
+        else:
+            user = users.first()
+            if user.is_active:
+                return render(request, 'screener/check_email.html', {
+                    'email': email,
+                    'already_active': True,
+                })
+
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            token = profile.generate_verification_token()
+            verify_url = request.build_absolute_uri(f'/accounts/verify/{token}/')
+
+            html_message = render_to_string('screener/email/verify_email.html', {
+                'username': user.username,
+                'verify_url': verify_url,
+            })
+            send_mail(
+                subject='Подтверждение email — Recon&Scalp',
+                message=f'Привет, {user.username}!\n\nПодтверди email: {verify_url}\n\nСсылка действительна 24 часа.',
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+    except Exception as e:
+        print(f"Resend email error: {e}")
+
+    return render(request, 'screener/check_email.html', {'email': email, 'resent': True})
+
 
 def get_http_session():
     global _http_session
@@ -125,6 +251,7 @@ def get_symbols_from_tickers():
         return []
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_data(request):
     """API: список монет (только Futures) + ленивый старт RVOL поллера"""
@@ -152,6 +279,7 @@ def api_data(request):
     return JsonResponse(coins, safe=False)
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_trades_count(request):
     """API: точный count сделок за 24ч для топ монет"""
@@ -192,6 +320,7 @@ def api_trades_count(request):
 # ==========================================
 # API ФУНКЦИЯ
 # ==========================================
+@login_required
 @require_http_methods(["GET"])
 def api_candles(request, symbol):
     """API: история свечей с умным кэшированием по таймфрейму"""
@@ -246,6 +375,7 @@ def api_candles(request, symbol):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_natr(request):
     """API: NATR данные (только Futures)"""
@@ -271,6 +401,7 @@ def api_natr(request):
     })
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_scalp(request, symbol):
     """API: плотности из Redis (Binance + Bybit + OKX)"""
@@ -386,10 +517,12 @@ def api_logo(request):
     return FileResponse(open(filepath, 'rb'), content_type='image/png')
 
 
+@login_required
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
 
+@login_required
 @require_http_methods(["GET"])
 def api_candles_history(request, symbol):
     """API: глубокая история свечей (до 1500 свечей)"""
@@ -495,6 +628,7 @@ def api_candles_history(request, symbol):
         return JsonResponse({'error': str(e)}, status=500)
             
             
+@login_required
 @require_http_methods(["GET"])
 def api_scalp_active(request):
     """Возвращает монеты, у которых сейчас есть плотности"""
@@ -543,6 +677,7 @@ def api_scalp_active(request):
     return JsonResponse({'active': active})
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_mexc_depth(request):
     """Прокси для MEXC стаканов (обход CORS) - ОПТИМИЗИРОВАНО"""
@@ -609,6 +744,7 @@ def api_mexc_depth(request):
     return JsonResponse(result)
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_gate_depth(request):
     """Прокси для Gate.io стаканов (обход CORS) - ОПТИМИЗИРОВАНО"""
@@ -673,6 +809,7 @@ def api_gate_depth(request):
     return JsonResponse(result)
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_impulse_alerts(request):
     """API: последние импульсы из Redis"""
@@ -696,6 +833,7 @@ def api_impulse_alerts(request):
     })
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_exchanges(request, symbol):
     """API: проверка доступности символа на биржах"""
@@ -1000,6 +1138,7 @@ def check_symbol_all_exchanges(symbol):
     }
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_binance_check_symbol(request, symbol):
     """API: проверка символа на Binance (кэшированная)"""
@@ -1016,6 +1155,7 @@ def api_binance_check_symbol(request, symbol):
     })
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_exchanges(request, symbol):
     """API: проверка символа на всех биржах (кэшированная)"""
@@ -1024,12 +1164,14 @@ def api_exchanges(request, symbol):
     return JsonResponse(result)
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_exchange_alpha_map(request):
     """API: маппинг base_symbol -> ALPHA_{tokenId}USDT для Recon/Scalp"""
     return JsonResponse({'map': get_alpha_symbol_map()})
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_debug_master_list(request):
     """DEBUG: мастер-листы Binance (spot/futures)"""
@@ -1050,6 +1192,7 @@ def api_debug_master_list(request):
         return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
 
 
+@login_required
 @require_http_methods(["GET"])
 def api_densities_table(request):
     """API: таблица плотностей для всех активных символов (мастер-лист)"""
@@ -1171,6 +1314,7 @@ def api_densities_table(request):
 
 
 @csrf_exempt
+@login_required
 @require_http_methods(["POST"])
 def api_clear_exchange_cache(request):
     """Очистить кэш символов всех бирж"""

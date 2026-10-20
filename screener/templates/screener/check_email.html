@@ -1,0 +1,61 @@
+{% extends 'screener/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container d-flex align-items-center justify-content-center min-vh-100">
+    <div class="card shadow-sm w-100" style="max-width: 480px;">
+        <div class="card-body p-4 p-md-5 text-center">
+            <div class="mb-4">
+                <img src="{% url 'api_logo' %}" alt="Logo" height="56" class="mb-3">
+                <h2 class="fw-bold mb-2">Recon&Scalp</h2>
+            </div>
+
+            <div class="mb-4">
+                <div class="d-inline-flex align-items-center justify-content-center bg-warning-subtle text-warning rounded-circle" style="width:80px; height:80px;">
+                    <svg width="36" height="36" fill="currentColor" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+                </div>
+            </div>
+
+            {% if already_active %}
+                <h3 class="fw-bold mb-2">Уже подтверждено</h3>
+                <p class="text-muted mb-4">Этот email уже подтверждён. <a href="{% url 'login' %}" class="text-decoration-none">Войти</a></p>
+            {% else %}
+                <h3 class="fw-bold mb-2">Проверь почту</h3>
+                <p class="text-muted mb-4">Мы отправили ссылку для подтверждения на <strong>{{ email }}</strong></p>
+
+                <div class="alert alert-info mb-4" style="background:#1a1a1a; border-color:#333; color:#ccc;">
+                    <strong>Не пришло?</strong> Проверь папку «Спам» / «Промо».
+                </div>
+
+                {% if resent %}
+                    <div class="alert alert-success mb-3" style="background:#1a3a1a; border-color:#2d7d2d; color:#8fd98f;">
+                        Письмо отправлено повторно!
+                    </div>
+                {% endif %}
+
+                {% if debug_verify_url %}
+                    <div class="alert alert-warning mb-3" style="background:#3a2a1a; border-color:#f59e0b; color:#f59e0b; font-size:12px; word-break:break-all;">
+                        <strong>DEV MODE:</strong> Ссылка для теста:<br><a href="{{ debug_verify_url }}" style="color:#f59e0b;">{{ debug_verify_url }}</a>
+                    </div>
+                {% endif %}
+
+                <form method="post" action="{% url 'resend_verification' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="email" value="{{ email }}">
+                    <button type="submit" class="btn btn-outline-warning btn-sm" style="border-color:#f59e0b; color:#f59e0b;">
+                        Отправить снова
+                    </button>
+                </form>
+            {% endif %}
+
+            <div class="mt-4">
+                <a href="{% url 'login' %}" class="text-decoration-none small">← Вернуться к входу</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .min-vh-100 { min-height: 100vh; }
+</style>
+{% endblock %}

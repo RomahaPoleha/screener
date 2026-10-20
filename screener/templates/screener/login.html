@@ -1,0 +1,69 @@
+{% extends 'screener/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container d-flex align-items-center justify-content-center min-vh-100">
+    <div class="card shadow-sm w-100" style="max-width: 420px;">
+        <div class="card-body p-4 p-md-5">
+            <div class="text-center mb-4">
+                <img src="{% url 'api_logo' %}" alt="Logo" height="48" class="mb-3">
+                <h2 class="fw-bold mb-1">Recon&Scalp</h2>
+                <p class="text-muted">Войдите в аккаунт</p>
+            </div>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger alert-sm py-2">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label for="{{ form.username.id_for_label }}" class="form-label">Логин</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                        <div class="text-danger small mt-1">{{ form.username.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.password.id_for_label }}" class="form-label">Пароль</label>
+                    {{ form.password }}
+                    {% if form.password.errors %}
+                        <div class="text-danger small mt-1">{{ form.password.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">Войти</button>
+                </div>
+            </form>
+
+            <div class="text-center mt-4">
+                <p class="mb-0">Нет аккаунта? <a href="{% url 'register' %}" class="text-decoration-none">Зарегистрироваться</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .min-vh-100 { min-height: 100vh; }
+    .alert-sm { font-size: 0.875rem; }
+    input[type="text"], input[type="password"] {
+        width: 100%;
+        padding: 0.625rem 0.875rem;
+        font-size: 1rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.5rem;
+        background-color: var(--bs-body-bg);
+        color: var(--bs-body-color);
+    }
+    input[type="text"]:focus, input[type="password"]:focus {
+        outline: none;
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.25);
+    }
+</style>
+{% endblock %}
