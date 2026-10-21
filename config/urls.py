@@ -20,8 +20,8 @@ from screener import views # Импорт твоего views.py
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', views.index, name='index'),
     path('', include('screener.urls')),
+    path('', views.index, name='index'),
     path('api/data/', views.api_data, name='api_data'),
     path('api/candles/<str:symbol>/', views.api_candles, name='api_candles'),
     path('api/candles-history/<str:symbol>/', views.api_candles_history, name='api_candles_history'),
