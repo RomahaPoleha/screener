@@ -1187,3 +1187,124 @@ def api_clear_exchange_cache(request):
         cache.delete(key)
     return JsonResponse({'cleared': keys})
 
+
+# ==========================================
+# AUTH VIEWS
+# ==========================================
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import User
+from django.utils.crypto import get_random_string
+from django.utils import timezone
+from datetime import timedelta
+from django.shortcuts import redirect
+from django.contrib import messages
+from django.conf import settings
+from .email_service import unione_service
+from .models import UserProfile
+
+
+class RegisterForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ('username', 'email', 'password1', 'password2')
+
+
+def register(request):
+    if request.method == 'POST':
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.is_active = True
+            user.save()
+
+            profile, created = UserProfile.objects.get_or_create(user=user)
+            profile.verification_token = get_random_string(64)
+            profile.token_created = timezone.now()
+            profile.save()
+
+            verify_url = request.build_absolute_uri(f'/verify/{profile.verification_token}/')
+            success, response = unione_service.send_verification_email(user, verify_url, request=request)
+
+            if not success and settings.DEBUG:
+                messages.info(request, f'DEV MODE: Ссылка для подтверждения: {verify_url}')
+
+            return redirect('check_email', email=user.email)
+    else:
+        form = RegisterForm()
+
+    return render(request, 'screener/register.html', {'form': form})
+
+
+def verify_email(request, token):
+    try:
+        profile = UserProfile.objects.select_related('user').get(verification_token=token)
+    except UserProfile.DoesNotExist:
+        return render(request, 'screener/verify_failed.html')
+
+    if profile.email_verified:
+        return render(request, 'screener/verify_success.html', {'already_active': True})
+
+    if profile.token_created:
+        token_age = timezone.now() - profile.token_created
+        if token_age > timedelta(hours=24):
+            return render(request, 'screener/verify_failed.html')
+
+    profile.email_verified = True
+    profile.verification_token = ''
+    profile.token_created = None
+    profile.save()
+
+    return render(request, 'screener/verify_success.html')
+
+
+def resend_verification(request):
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip().lower()
+        try:
+            user = User.objects.get(email__iexact=email)
+            profile = UserProfile.objects.get(user=user)
+        except (User.DoesNotExist, UserProfile.DoesNotExist):
+            return render(request, 'screener/check_email.html', {
+                'email': email,
+                'resent': True,
+            })
+
+        if profile.email_verified:
+            return render(request, 'screener/check_email.html', {
+                'email': email,
+                'already_active': True,
+            })
+
+        profile.verification_token = get_random_string(64)
+        profile.token_created = timezone.now()
+        profile.save()
+
+        verify_url = request.build_absolute_uri(f'/verify/{profile.verification_token}/')
+        unione_service.send_verification_email(user, verify_url, request=request)
+
+        return render(request, 'screener/check_email.html', {
+            'email': email,
+            'resent': True,
+        })
+
+    return redirect('login')
+
+
+def check_email(request, email):
+    try:
+        user = User.objects.get(email__iexact=email)
+        profile = UserProfile.objects.get(user=user)
+    except (User.DoesNotExist, UserProfile.DoesNotExist):
+        return redirect('register')
+
+    context = {
+        'email': email,
+        'already_active': profile.email_verified,
+    }
+
+    if settings.DEBUG and not profile.email_verified and profile.verification_token:
+        context['debug_verify_url'] = request.build_absolute_uri(f'/verify/{profile.verification_token}/')
+
+    return render(request, 'screener/check_email.html', context)
+

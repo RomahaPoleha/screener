@@ -116,7 +116,7 @@ if REDIS_URL:
             }
         }
     }
-    print(f"✅ Redis настроен: {REDIS_URL}")
+    print(f"[OK] Redis configured: {REDIS_URL}")
 else:
     CACHES = {
         'default': {
@@ -124,7 +124,7 @@ else:
             'LOCATION': '/app/data/django_cache',
         }
     }
-    print("⚠️ Redis не найден, используем FileCache")
+    print("[WARN] Redis not found, using FileCache")
 
 # ==========================================
 # DJANGO CHANNELS
@@ -137,3 +137,16 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+# ==========================================
+# EMAIL & UNIONE
+# ==========================================
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+UNIONE_API_KEY = os.getenv('UNIONE_API_KEY', '')
+UNIONE_SENDER_EMAIL = os.getenv('UNIONE_SENDER_EMAIL', 'noreply@yourdomain.com')
+UNIONE_SENDER_NAME = os.getenv('UNIONE_SENDER_NAME', 'Recon&Scalp')
+DEFAULT_FROM_EMAIL = UNIONE_SENDER_EMAIL
+
+# Login redirect
+LOGIN_REDIRECT_URL = 'index'
+LOGOUT_REDIRECT_URL = 'login'
