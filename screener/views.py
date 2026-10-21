@@ -11,12 +11,13 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django import forms
 from django.core import signing
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
 from django.conf import settings
 from pathlib import Path
 import time
 from . import coin_selection
 from .models import UserProfile
-from .email_service import unione_service
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -63,18 +64,23 @@ def register(request):
             # Формируем ссылку для подтверждения
             verify_url = request.build_absolute_uri(f'/accounts/verify/{token}/')
 
-            # Отправляем email через UniOne
+            # Отправляем email
             try:
-                success, result = unione_service.send_verification_email(user, verify_url, request)
-                if not success:
-                    print(f"UniOne error: {result}")
-                    if settings.DEBUG:
-                        return render(request, 'screener/check_email.html', {
-                            'email': user.email,
-                            'debug_verify_url': verify_url,
-                        })
+                html_message = render_to_string('screener/email/verify_email.html', {
+                    'username': user.username,
+                    'verify_url': verify_url,
+                })
+                send_mail(
+                    subject='Подтверждение email — Recon&Scalp',
+                    message=f'Привет, {user.username}!\n\nПодтверди email: {verify_url}\n\nСсылка действительна 24 часа.',
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    html_message=html_message,
+                    fail_silently=False,
+                )
             except Exception as e:
                 print(f"Email send error: {e}")
+                # В dev режиме показываем ссылку прямо на странице
                 if settings.DEBUG:
                     return render(request, 'screener/check_email.html', {
                         'email': user.email,
@@ -119,15 +125,20 @@ def resend_verification(request):
             token = profile.generate_verification_token()
             verify_url = request.build_absolute_uri(f'/accounts/verify/{token}/')
 
-            # Отправляем email через UniOne
-            try:
-                success, result = unione_service.send_verification_email(user, verify_url, request)
-                if not success:
-                    print(f"UniOne resend error: {result}")
-            except Exception as e:
-                print(f"Resend email error: {e}")
+            html_message = render_to_string('screener/email/verify_email.html', {
+                'username': user.username,
+                'verify_url': verify_url,
+            })
+            send_mail(
+                subject='Подтверждение email — Recon&Scalp',
+                message=f'Привет, {user.username}!\n\nПодтверди email: {verify_url}\n\nСсылка действительна 24 часа.',
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
     except Exception as e:
-        print(f"Resend verification error: {e}")
+        print(f"Resend email error: {e}")
 
     return render(request, 'screener/check_email.html', {'email': email, 'resent': True})
 
