@@ -18,6 +18,7 @@ venv/
 db.sqlite3
 staticfiles/
 media/
+django_cache/
 
 # OS
 .DS_Store
