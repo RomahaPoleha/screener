@@ -5,6 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.cache import cache
 from django.shortcuts import render
 from django.http import FileResponse, Http404
+from django.contrib.auth.decorators import login_required
 from pathlib import Path
 import time
 from . import coin_selection
@@ -1199,7 +1200,6 @@ from django.utils.crypto import get_random_string
 from django.utils import timezone
 from datetime import timedelta
 from django.shortcuts import redirect
-from django.contrib.auth.decorators import login_required
 from .email_service import unione_service
 from .models import UserProfile
 
