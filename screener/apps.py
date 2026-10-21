@@ -1,5 +1,21 @@
 from django.apps import AppConfig
 import os
+import atexit
+import threading
+
+# Глобальные флаги для graceful shutdown
+_stop_event = threading.Event()
+_monitor_threads = []
+
+def _stop_monitors():
+    print("🛑 Stopping monitors...")
+    _stop_event.set()
+    os.environ['MONITORS_STOP'] = '1'
+    for t in _monitor_threads:
+        t.join(timeout=10)
+    print("✅ Monitors stopped")
+
+atexit.register(_stop_monitors)
 
 
 class ScreenerConfig(AppConfig):
@@ -22,13 +38,13 @@ class ScreenerConfig(AppConfig):
                 print(f"Scalp monitor not started: {e}")
 
             try:
-                import threading
                 from .impulse_monitor import start_impulse_monitor
                 impulse_thread = threading.Thread(
                     target=start_impulse_monitor,
                     name='Impulse-Monitor',
                     daemon=True
                 )
+                _monitor_threads.append(impulse_thread)
                 impulse_thread.start()
 
             except Exception as e:
