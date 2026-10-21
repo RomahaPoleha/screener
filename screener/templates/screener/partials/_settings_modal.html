@@ -102,8 +102,13 @@
 </div>
 </div>
 <div class="modal-footer" style="border-top:1px solid #333333;">
-<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2a2a2a; border:none; color:#ffffff; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Закрыть</button>
-<button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#f59e0b; border:none; color:#000000; font-weight:700; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Применить</button>
+<div style="display:flex; width:100%; justify-content:space-between; align-items:center;">
+    <a href="{% url 'logout' %}" class="btn btn-danger" style="background:#dc3545; border:none; color:#ffffff; border-radius:0; text-transform:uppercase; letter-spacing:0.5px; text-decoration:none;">Выйти из аккаунта</a>
+    <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2a2a2a; border:none; color:#ffffff; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Закрыть</button>
+        <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#f59e0b; border:none; color:#000000; font-weight:700; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Применить</button>
+    </div>
+</div>
 </div>
 </div>
 </div>
