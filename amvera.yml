@@ -9,8 +9,8 @@ build:
   useCache: true
 
 run:
-  # ВАЖНО: Сначала собираем статику (&&), потом запускаем сервер
-  command: python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 config.asgi:application
+  # ВАЖНО: Миграции -> статика -> сервер
+  command: python manage.py migrate --noinput && python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 config.asgi:application
   containerPort: 8000
   persistenceMount: /app/data
 
