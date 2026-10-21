@@ -386,6 +386,7 @@ def api_logo(request):
     return FileResponse(open(filepath, 'rb'), content_type='image/png')
 
 
+@login_required(login_url='login')
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
@@ -1198,8 +1199,7 @@ from django.utils.crypto import get_random_string
 from django.utils import timezone
 from datetime import timedelta
 from django.shortcuts import redirect
-from django.contrib import messages
-from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from .email_service import unione_service
 from .models import UserProfile
 
