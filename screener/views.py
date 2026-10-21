@@ -126,6 +126,8 @@ def resend_verification(request):
                     print(f"UniOne resend error: {result}")
             except Exception as e:
                 print(f"Resend email error: {e}")
+    except Exception as e:
+        print(f"Resend verification error: {e}")
 
     return render(request, 'screener/check_email.html', {'email': email, 'resent': True})
 
