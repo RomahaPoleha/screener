@@ -189,7 +189,7 @@ body {
 
 .group-symbol {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-size: 17px;
     font-weight: 800;
     color: var(--text-primary);
     letter-spacing: 0.5px;
