@@ -167,6 +167,9 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
 
                 natr_value = calculate_natr(ohlcv, config['period'])
 
+                # Явное удаление большого объекта ohlcv
+                del ohlcv
+
                 if natr_value is not None:
                     # Сохраняем только этот таймфрейм
                     cache_key = f"natr_{symbol}_future"
@@ -182,6 +185,9 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
 
                 if idx % 100 == 0:
                     log(f"  [{natr_key}] Прогресс: {idx}/{total} ({idx * 100 // total}%) | ✅ {success_count} | ❌ {error_count}")
+                    # Периодическая сборка мусора каждые 100 символов
+                    import gc
+                    gc.collect()
 
             except ccxt.RateLimitExceeded:
                 log(f"⚠️ [{natr_key}] Rate limit на {symbol}, жду 30 сек...")

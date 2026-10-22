@@ -100,6 +100,16 @@ def detect_impulses(now_sec):
     now_ms = now_sec * 1000
     impulses = []
 
+    # 🔥 MEMORY LEAK PREVENTION: Очистка старых окон candle_state
+    MAX_CANDLE_AGE = 600  # 10 минут = 2 окна по 300с
+    old_keys = [
+        k for k, v in candle_state.items()
+        if now_sec - v['start_time'] > MAX_CANDLE_AGE
+    ]
+    for k in old_keys:
+        candle_state.pop(k, None)
+        cooldowns.pop(k, None)
+
     for window in WINDOWS:
         cooldown_ms = max(30000, window * 1000)  # 1 мин → 60с, 5 мин → 300с
         current_window_start = int(now_sec // window) * window
