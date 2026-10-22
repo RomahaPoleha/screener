@@ -7,16 +7,7 @@ let scalpLines = [];
 let scalpEnabled = false;
 let scalpUpdateTimer = null;
 let previousScalpData = {};
-// Конфигурация бирж (легко расширяется — добавь строку)
-const EXCHANGES_CONFIG = [
-{ id: 'binance', name: 'Binance', label: 'BI',   domain: 'binance.com', color: '#f59e0b' },
-{ id: 'bybit',   name: 'Bybit',   label: 'BY',   domain: 'bybit.com',   color: '#f59e0b' },
-{ id: 'okx',     name: 'OKX',     label: 'OKX',  domain: 'okx.com',     color: '#ffffff' },
-{ id: 'gate',    name: 'Gate.io', label: 'GT',   domain: 'gate.io',     color: '#f59e0b' },
-{ id: 'mexc',    name: 'MEXC',    label: 'MEX',  domain: 'mexc.com',    color: '#f59e0b' },
-{ id: 'bitget',  name: 'Bitget',  label: 'BGB',  domain: 'bitget.com',  color: '#f59e0b' },
-{ id: 'binance_alpha', name: 'Binance Alpha', label: 'BI-A', domain: 'binance.com', color: '#8b5cf6' },
-];
+// Конфигурация бирж — берётся из densities.js (загружается раньше, доступна глобально)
 // Текущие настройки каждой биржи
 let scalpExchanges = {
 binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
