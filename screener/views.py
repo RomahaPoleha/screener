@@ -19,6 +19,7 @@ import time
 from . import coin_selection
 from .models import UserProfile
 
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
