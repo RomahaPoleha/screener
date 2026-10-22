@@ -91,17 +91,17 @@ function renderExchangeToggles() {
         const spotMinVol = volCfg.spot || ex.minVolSpot;
         
         return `
-            <label class="exchange-toggle" title="${ex.name}" style="display:flex; align-items:center; gap:4px; padding:2px 6px; border-radius:4px; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); cursor:pointer; transition:all 0.2s;">
-                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=16" onerror="this.style.display='none'" style="width:14px;height:14px;border-radius:2px;flex-shrink:0;">
-                <span style="font-size:9px; font-weight:600; color:var(--text-primary); font-family:'JetBrains Mono',monospace; min-width:18px; text-align:center;">${ex.label}</span>
+            <label class="exchange-toggle" title="${ex.name}">
+                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=16" onerror="this.style.display='none'" class="exchange-icon">
+                <span class="exchange-label">${ex.label}</span>
                 ${!isAlpha ? `
-                <input type="checkbox" id="exFilter-${ex.id}-futures" ${futuresChecked} ${futuresDisabled} onchange="handleExchangeFilter('${ex.id}', 'futures', this.checked)" style="accent-color:#f59e0b;width:14px;height:14px;cursor:pointer;">
-                <span style="font-size:8px; color:#f59e0b; font-weight:600;">F</span>
-                <input type="number" id="exMinVol-${ex.id}-futures" value="${futuresMinVol}" min="1000" step="1000" onchange="handleMinVolChange('${ex.id}', 'futures', this.value)" style="width:60px;font-size:10px;font-family:'JetBrains Mono',monospace;background:rgba(30,41,59,0.5);border:1px solid var(--border-primary);color:var(--text-primary);padding:2px 4px;border-radius:3px;" ${futuresDisabled}>
+                <input type="checkbox" id="exFilter-${ex.id}-futures" ${futuresChecked} ${futuresDisabled} onchange="handleExchangeFilter('${ex.id}', 'futures', this.checked)">
+                <span class="market-label futures">F</span>
+                <input type="number" id="exMinVol-${ex.id}-futures" value="${futuresMinVol}" min="1000" step="1000" onchange="handleMinVolChange('${ex.id}', 'futures', this.value)" ${futuresDisabled}>
                 ` : ''}
-                <input type="checkbox" id="exFilter-${ex.id}-spot" ${spotChecked} onchange="handleExchangeFilter('${ex.id}', 'spot', this.checked)" style="accent-color:#00C6FF;width:14px;height:14px;cursor:pointer;">
-                <span style="font-size:8px; color:#00C6FF; font-weight:600;">S</span>
-                <input type="number" id="exMinVol-${ex.id}-spot" value="${spotMinVol}" min="1000" step="1000" onchange="handleMinVolChange('${ex.id}', 'spot', this.value)" style="width:60px;font-size:10px;font-family:'JetBrains Mono',monospace;background:rgba(30,41,59,0.5);border:1px solid var(--border-primary);color:var(--text-primary);padding:2px 4px;border-radius:3px;">
+                <input type="checkbox" id="exFilter-${ex.id}-spot" ${spotChecked} onchange="handleExchangeFilter('${ex.id}', 'spot', this.checked)">
+                <span class="market-label spot">S</span>
+                <input type="number" id="exMinVol-${ex.id}-spot" value="${spotMinVol}" min="1000" step="1000" onchange="handleMinVolChange('${ex.id}', 'spot', this.value)">
             </label>
         `;
     }).join('');
