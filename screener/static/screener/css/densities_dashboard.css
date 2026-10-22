@@ -276,13 +276,13 @@ body {
 }
 
 .row-side-icon {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 800;
     font-family: 'JetBrains Mono', monospace;
     flex-shrink: 0;
@@ -302,7 +302,7 @@ body {
 
 .row-volume {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
     min-width: 55px;
@@ -343,15 +343,16 @@ body {
 
 .row-price {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: var(--text-primary);
-    font-weight: 600;
+    font-size: 12px;
+    color: #ffffff;
+    font-weight: 700;
 }
 
 .row-age {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    color: var(--text-secondary);
+    font-size: 10px;
+    color: #14b8a6;
+    font-weight: 600;
 }
 
 .row-exchange {

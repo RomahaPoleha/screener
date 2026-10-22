@@ -119,6 +119,16 @@ function handleMinVolChange(exchangeId, market, value) {
     loadDensitiesTable();
 }
 
+// Handle exchange filter change
+function handleExchangeFilter(exchangeId, market, enabled) {
+    if (!state.exchangeFilters[exchangeId]) {
+        state.exchangeFilters[exchangeId] = { futures: true, spot: true };
+    }
+    state.exchangeFilters[exchangeId][market] = enabled;
+    saveExchangeFilters();
+    renderContent(); // Re-render with new filters
+}
+
 // Get exchange domain for favicon
 function getExchangeDomain(exchangeId) {
     const ex = EXCHANGES_CONFIG.find(e => e.id === exchangeId);
