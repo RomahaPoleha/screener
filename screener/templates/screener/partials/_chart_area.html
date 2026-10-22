@@ -105,7 +105,10 @@
 </div>
 <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
 <button class="chart-history-btn" id="loadHistoryBtn" onclick="loadChartHistory()" title="Загрузить глубокую историю свечей">Загрузить историю</button>
-        <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
+        <div id="chart-hint">
+            <img src="{% url 'api_logo' %}" alt="Recon&Scalp" class="chart-hint-logo">
+            <span class="chart-hint-text">Выберите монету для отображения графика</span>
+        </div>
         <div id="chart-container"></div>
         <canvas id="pencilCanvas" class="pencil-canvas"></canvas>
         <div class="chart-watermark" id="chartWatermark">

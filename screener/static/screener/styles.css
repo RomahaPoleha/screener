@@ -61,7 +61,27 @@ body {
 #chart-container.active { visibility: visible; }
 #chart-hint {
     position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%); color: #555555; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: #555555;
+    text-align: center;
+    pointer-events: none;
+}
+.chart-hint-logo {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    opacity: 0.3;
+    filter: drop-shadow(0 4px 16px rgba(245, 158, 11, 0.15));
+}
+.chart-hint-text {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #555555;
 }
 .chart-title-bar {
     position: absolute; top: 8px; left: 12px; z-index: 10;
