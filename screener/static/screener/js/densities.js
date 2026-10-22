@@ -232,9 +232,6 @@ function renderShell() {
                 <span class="icon">🗺️</span>
                 <span>Карта плотностей</span>
             </div>
-            <div class="header-subtitle">
-                Real-time liquidity density map • ${state.densities.length} levels across ${uniqueSymbols} coins
-            </div>
         </div>
         <div class="filter-bar">
             <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">

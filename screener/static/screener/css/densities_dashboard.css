@@ -344,14 +344,14 @@ body {
 .row-price {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: var(--text-secondary);
-    font-weight: 500;
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
 .row-age {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
 }
 
 .row-exchange {
