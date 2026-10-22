@@ -206,6 +206,20 @@ body {
     border: 1px solid rgba(34, 211, 238, 0.2);
 }
 
+.group-market-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--text-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    letter-spacing: 0.5px;
+    min-width: 28px;
+    text-align: center;
+}
+
 .group-exchange-badge {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;

@@ -6,7 +6,6 @@
 let densitiesOverlay = null;
 let densitiesOverlayBody = null;
 let densitiesBtn = null;
-let densitiesMarketSelect = null;
 let densitiesMinVolume = null;
 let densitiesLimit = null;
 
@@ -24,7 +23,6 @@ const state = {
 
 function initDensitiesElements() {
     densitiesBtn = document.getElementById('densitiesBtn');
-    densitiesMarketSelect = document.getElementById('densitiesMarketSelect');
     densitiesMinVolume = document.getElementById('densitiesMinVolume');
     densitiesLimit = document.getElementById('densitiesLimit');
 }
@@ -43,7 +41,7 @@ function createFullscreenOverlay() {
     overlay.innerHTML = `
         <div class="densities-fullscreen-header">
             <button class="densities-close-btn" onclick="closeDensitiesOverlay()">✕ Закрыть</button>
-            <div class="densities-fullscreen-title">Таблица плотностей</div>
+            <div class="densities-fullscreen-title">Карта</div>
         </div>
         <div class="densities-fullscreen-body" id="densitiesFullscreenBody"></div>
     `;
@@ -132,20 +130,15 @@ function renderShell() {
     densitiesOverlayBody.innerHTML = `
         <div class="dashboard-header">
             <div class="header-title">
-                <span class="icon">📊</span>
-                <span>Таблица плотностей</span>
+                <span class="icon">🗺️</span>
+                <span>Карта</span>
             </div>
             <div class="header-subtitle">
-                Real-time liquidity density monitor • ${state.densities.length} levels across ${uniqueSymbols} coins
+                Real-time liquidity density map • ${state.densities.length} levels across ${uniqueSymbols} coins
             </div>
         </div>
         <div class="filter-bar">
             <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
-                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-right:6px;">Маркет:</label>
-                <select id="densitiesMarketSelect" style="font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;">
-                    <option value="futures">Futures</option>
-                    <option value="spot">Spot</option>
-                </select>
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Мин. объём:</label>
                 <input type="number" id="densitiesMinVolume" value="10000" min="1000" step="1000" style="width:80px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;">
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Лимит:</label>
@@ -169,15 +162,8 @@ function renderShell() {
     `;
 
     // Bind controls from overlay body (scoped, not document-wide)
-    densitiesMarketSelect = densitiesOverlayBody.querySelector('#densitiesMarketSelect');
     densitiesMinVolume = densitiesOverlayBody.querySelector('#densitiesMinVolume');
     densitiesLimit = densitiesOverlayBody.querySelector('#densitiesLimit');
-
-    // Market select change handler
-    if (densitiesMarketSelect) {
-        densitiesMarketSelect.value = state.sideFilter === 'all' ? 'futures' : densitiesMarketSelect.value;
-        densitiesMarketSelect.addEventListener('change', () => loadDensitiesTable());
-    }
 }
 
 // ==========================================
@@ -230,7 +216,7 @@ function renderGroupCard(group, index) {
                 <div class="group-symbol-row">
                     <span class="group-symbol">${group.symbol}</span>
                     <span class="group-exchange-badge">${group.exchangeShort}</span>
-                    <span class="group-count-badge">${group.count} lvl</span>
+                    <span class="group-market-badge">${group.market === 'futures' ? 'F' : 'S'}</span>
                     <div class="group-side-indicator">${sideDots}</div>
                 </div>
                 <div class="group-total-volume">$${fmtVolume(group.totalVolume)}</div>
@@ -358,19 +344,19 @@ function updateLiveDOM() {
 }
 
 // ==========================================
-// GROUPING LOGIC (symbol + exchange)
+// GROUPING LOGIC (symbol + exchange + market)
 // ==========================================
 function groupBySymbolAndExchange(densities) {
     const groups = {};
     for (const d of densities) {
-        const key = `${d.symbol}_${d.exchange}`;
+        const key = `${d.symbol}_${d.exchange}_${d.market}`;
         if (!groups[key]) groups[key] = [];
         groups[key].push(d);
     }
 
     const result = [];
     for (const key of Object.keys(groups)) {
-        const [symbol, exchange] = key.split('_');
+        const [symbol, exchange, market] = key.split('_');
         const items = groups[key].sort((a, b) => b.volume - a.volume);
         const totalVolume = items.reduce((sum, d) => sum + d.volume, 0);
         const buyCount = items.filter(d => d.side === 'buy').length;
@@ -379,6 +365,7 @@ function groupBySymbolAndExchange(densities) {
         result.push({
             symbol,
             exchange,
+            market,
             exchangeShort: getExchangeShort(exchange),
             densities: items,
             totalVolume,
@@ -417,7 +404,6 @@ function getMaxVolume() {
 async function loadDensitiesTable() {
     if (!densitiesOverlayBody) initDensitiesElements();
 
-    const market = densitiesMarketSelect?.value || 'futures';
     const minVolume = parseInt(densitiesMinVolume?.value) || 10000;
     const limit = parseInt(densitiesLimit?.value) || 20;
 
@@ -425,17 +411,23 @@ async function loadDensitiesTable() {
     if (grid) grid.innerHTML = '<div style="grid-column: 1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; color:#6b7280;">Загрузка...</div>';
 
     try {
-        const params = new URLSearchParams({
-            market: market,
-            min_volume: minVolume,
-            limit: limit,
-        });
-        const res = await fetch(`/api/densities/?${params.toString()}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        // Fetch both futures and spot in parallel
+        const [futuresRes, spotRes] = await Promise.all([
+            fetch(`/api/densities/?${new URLSearchParams({market: 'futures', min_volume: minVolume, limit: limit}).toString()}`),
+            fetch(`/api/densities/?${new URLSearchParams({market: 'spot', min_volume: minVolume, limit: limit}).toString()}`)
+        ]);
 
-        state.densities = data.densities || [];
-        state.serverTime = data.server_time || Date.now();
+        if (!futuresRes.ok) throw new Error(`Futures HTTP ${futuresRes.status}`);
+        if (!spotRes.ok) throw new Error(`Spot HTTP ${spotRes.status}`);
+
+        const [futuresData, spotData] = await Promise.all([futuresRes.json(), spotRes.json()]);
+
+        // Merge densities from both markets, adding market field to each density
+        const futuresDensities = (futuresData.densities || []).map(d => ({...d, market: 'futures'}));
+        const spotDensities = (spotData.densities || []).map(d => ({...d, market: 'spot'}));
+        
+        state.densities = [...futuresDensities, ...spotDensities];
+        state.serverTime = futuresData.server_time || spotData.server_time || Date.now();
         renderContent();
     } catch (err) {
         console.error('loadDensitiesTable error:', err);
