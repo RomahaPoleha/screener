@@ -1,7 +1,18 @@
 // ==========================================
-// densities.js — ТАБЛИЦА ПЛОТНОСТЕЙ (полноэкранное окно, без мерцания)
+// densities.js — КАРТА ПЛОТНОСТЕЙ (полноэкранное окно, без мерцания)
 // Загрузка и отображение плотностей из мастер-листа
 // ==========================================
+
+// Конфигурация бирж (совпадает с scalp.js)
+const EXCHANGES_CONFIG = [
+    { id: 'binance', name: 'Binance', label: 'BI', domain: 'binance.com', color: '#f59e0b' },
+    { id: 'bybit', name: 'Bybit', label: 'BY', domain: 'bybit.com', color: '#f59e0b' },
+    { id: 'okx', name: 'OKX', label: 'OKX', domain: 'okx.com', color: '#ffffff' },
+    { id: 'gate', name: 'Gate.io', label: 'GT', domain: 'gate.io', color: '#f59e0b' },
+    { id: 'mexc', name: 'MEXC', label: 'MEX', domain: 'mexc.com', color: '#f59e0b' },
+    { id: 'bitget', name: 'Bitget', label: 'BGB', domain: 'bitget.com', color: '#f59e0b' },
+    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BI-A', domain: 'binance.com', color: '#8b5cf6' },
+];
 
 let densitiesOverlay = null;
 let densitiesOverlayBody = null;
@@ -10,21 +21,88 @@ let densitiesMinVolume = null;
 let densitiesLimit = null;
 
 const state = {
-  densities: [],
-  sortField: 'volume',
-  sortDirection: 'desc',
-  sideFilter: 'all',
-  searchQuery: '',
-  isLive: true,
-  serverTime: Date.now(),
-  intervals: [],
-  rowMap: new Map()  // id -> {rowEl, volEl, ageEl, barEl}
+    densities: [],
+    sortField: 'volume',
+    sortDirection: 'desc',
+    sideFilter: 'all',
+    searchQuery: '',
+    isLive: true,
+    serverTime: Date.now(),
+    intervals: [],
+    rowMap: new Map(),
+    // Exchange filters: { exchangeId: { futures: bool, spot: bool } }
+    exchangeFilters: {}
 };
 
 function initDensitiesElements() {
     densitiesBtn = document.getElementById('densitiesBtn');
-    densitiesMinVolume = document.getElementById('densitiesMinVolume');
-    densitiesLimit = document.getElementById('densitiesLimit');
+}
+
+// Load exchange filters from localStorage
+function loadExchangeFilters() {
+    try {
+        const saved = localStorage.getItem('densitiesExchangeFilters');
+        if (saved) {
+            state.exchangeFilters = JSON.parse(saved);
+        }
+    } catch (e) {
+        console.warn('Failed to load exchange filters:', e);
+    }
+    // Default: all enabled
+    EXCHANGES_CONFIG.forEach(ex => {
+        if (!state.exchangeFilters[ex.id]) {
+            state.exchangeFilters[ex.id] = { futures: true, spot: true };
+        }
+    });
+}
+
+// Save exchange filters to localStorage
+function saveExchangeFilters() {
+    try {
+        localStorage.setItem('densitiesExchangeFilters', JSON.stringify(state.exchangeFilters));
+    } catch (e) {
+        console.warn('Failed to save exchange filters:', e);
+    }
+}
+
+// Render exchange toggles HTML
+function renderExchangeToggles() {
+    return EXCHANGES_CONFIG.map(ex => {
+        const cfg = state.exchangeFilters[ex.id] || { futures: true, spot: true };
+        const isAlpha = ex.id === 'binance_alpha';
+        const futuresChecked = cfg.futures ? 'checked' : '';
+        const spotChecked = cfg.spot ? 'checked' : '';
+        const futuresDisabled = isAlpha ? 'disabled' : '';
+        
+        return `
+            <label class="exchange-toggle" title="${ex.name}" style="display:flex; align-items:center; gap:4px; padding:2px 6px; border-radius:4px; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); cursor:pointer; transition:all 0.2s;">
+                <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=16" onerror="this.style.display='none'" style="width:14px;height:14px;border-radius:2px;flex-shrink:0;">
+                <span style="font-size:9px; font-weight:600; color:var(--text-primary); font-family:'JetBrains Mono',monospace; min-width:18px; text-align:center;">${ex.label}</span>
+                ${!isAlpha ? `
+                <input type="checkbox" id="exFilter-${ex.id}-futures" ${futuresChecked} ${futuresDisabled} onchange="handleExchangeFilter('${ex.id}', 'futures', this.checked)" style="accent-color:#f59e0b;width:14px;height:14px;cursor:pointer;">
+                <span style="font-size:8px; color:#f59e0b; font-weight:600;">F</span>
+                ` : ''}
+                <input type="checkbox" id="exFilter-${ex.id}-spot" ${spotChecked} onchange="handleExchangeFilter('${ex.id}', 'spot', this.checked)" style="accent-color:#00C6FF;width:14px;height:14px;cursor:pointer;">
+                <span style="font-size:8px; color:#00C6FF; font-weight:600;">S</span>
+            </label>
+        `;
+    }).join('');
+}
+
+// Handle exchange filter change
+function handleExchangeFilter(exchangeId, market, enabled) {
+    if (!state.exchangeFilters[exchangeId]) {
+        state.exchangeFilters[exchangeId] = { futures: true, spot: true };
+    }
+    state.exchangeFilters[exchangeId][market] = enabled;
+    saveExchangeFilters();
+    renderContent(); // Re-render with new filters
+}
+
+// Get exchange domain for favicon
+function getExchangeDomain(exchangeId) {
+    const ex = EXCHANGES_CONFIG.find(e => e.id === exchangeId);
+    return ex ? ex.domain : '';
 }
 
 function createFullscreenOverlay() {
@@ -72,6 +150,7 @@ function openDensitiesOverlay() {
     createFullscreenOverlay();
     densitiesOverlay.classList.add('active');
     document.body.style.overflow = 'hidden';
+    loadExchangeFilters(); // Load saved filters
     renderShell();
     loadDensitiesTable();
 }
@@ -157,6 +236,10 @@ function renderShell() {
                 <button class="densities-refresh-btn" onclick="loadDensitiesTable()">Обновить</button>
             </div>
         </div>
+        <div class="exchange-filters-bar" style="display:flex; align-items:center; gap:6px; padding:8px 16px; background:rgba(13,17,23,0.8); backdrop-filter:blur(12px); border-bottom:1px solid var(--border-primary); flex-wrap:wrap;">
+            <span style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-right:8px;">Биржи:</span>
+            ${renderExchangeToggles()}
+        </div>
         <div id="densities-grid" class="densities-grid"></div>
         <div id="stats-container"></div>
     `;
@@ -172,6 +255,7 @@ function renderShell() {
 function renderGroupCard(group, index) {
     // Local max volume within this group for proportional bars
     const localMaxVolume = Math.max(...group.densities.map(d => d.volume), 1);
+    const domain = getExchangeDomain(group.exchange);
 
     const rows = group.densities.map((d, rowIdx) => {
         const volumePercent = localMaxVolume > 0
@@ -202,22 +286,14 @@ function renderGroupCard(group, index) {
         `;
     }).join('');
 
-    let sideDots = '';
-    for (let i = 0; i < group.buyCount; i++) {
-        sideDots += '<div class="group-side-dot buy"></div>';
-    }
-    for (let i = 0; i < group.sellCount; i++) {
-        sideDots += '<div class="group-side-dot sell"></div>';
-    }
-
     return `
         <div class="group-card animate-fade-in" style="animation-delay: ${index * 50}ms">
             <div class="group-card-header">
                 <div class="group-symbol-row">
+                    ${domain ? `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=16" onerror="this.style.display='none'" class="group-exchange-icon" style="width:16px;height:16px;border-radius:3px;margin-right:6px;flex-shrink:0;">` : ''}
                     <span class="group-symbol">${group.symbol}</span>
                     <span class="group-exchange-badge">${group.exchangeShort}</span>
                     <span class="group-market-badge">${group.market === 'futures' ? 'F' : 'S'}</span>
-                    <div class="group-side-indicator">${sideDots}</div>
                 </div>
                 <div class="group-total-volume">$${fmtVolume(group.totalVolume)}</div>
             </div>
@@ -390,6 +466,13 @@ function getProcessedDensities() {
         const q = state.searchQuery.toUpperCase();
         result = result.filter(d => d.symbol.includes(q));
     }
+
+    // Filter by exchange filters
+    result = result.filter(d => {
+        const cfg = state.exchangeFilters[d.exchange];
+        if (!cfg) return true; // If no config, show by default
+        return cfg[d.market] === true;
+    });
 
     return result;
 }
