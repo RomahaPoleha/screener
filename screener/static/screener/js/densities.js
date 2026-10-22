@@ -504,8 +504,8 @@ function groupBySymbolAndExchange(densities, natrData = {}) {
     // Sort by NATR 1m if enabled, otherwise by total volume
     if (state.sortByNatr1m && Object.keys(natrData).length > 0) {
         result.sort((a, b) => {
-            const natrA = natrData[a.symbol] || 0;
-            const natrB = natrData[b.symbol] || 0;
+            const natrA = (natrData[a.symbol]?.natr_1m30) || 0;
+            const natrB = (natrData[b.symbol]?.natr_1m30) || 0;
             return natrB - natrA; // Descending NATR
         });
     } else {
