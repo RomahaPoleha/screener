@@ -291,8 +291,6 @@ async def sync_to_cache_async(symbol, log_func=print):
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, cache.set, key, densities, CACHE_TTL)
-            if densities:
-                log_func(f"💾 alpha {symbol}: сохранено {len(densities)} плотностей в {key}")
         except RuntimeError:
             pass
 
