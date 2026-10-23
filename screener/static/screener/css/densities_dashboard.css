@@ -193,6 +193,12 @@ body {
     font-weight: 800;
     color: var(--text-primary);
     letter-spacing: 0.5px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.group-symbol:hover {
+    color: var(--accent-cyan);
 }
 
 .group-market-badge {
@@ -201,8 +207,8 @@ body {
     font-weight: 700;
     padding: 2px 6px;
     border-radius: 4px;
-    background: rgba(148, 163, 184, 0.1);
-    color: var(--text-secondary);
+    background: #000;
+    color: #fff;
     border: 1px solid rgba(148, 163, 184, 0.15);
     letter-spacing: 0.5px;
     min-width: 28px;

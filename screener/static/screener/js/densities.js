@@ -34,7 +34,9 @@ const state = {
     // Exchange min volumes: { exchangeId: { futures: number, spot: number } }
     exchangeMinVolumes: {},
     // Sort by NATR 1m
-    sortByNatr1m: false
+    sortByNatr1m: false,
+    // Min age filter (seconds)
+    minAgeFilter: 0
 };
 
 function initDensitiesElements() {
@@ -133,6 +135,37 @@ function handleExchangeFilter(exchangeId, market, enabled) {
 function getExchangeDomain(exchangeId) {
     const ex = EXCHANGES_CONFIG.find(e => e.id === exchangeId);
     return ex ? ex.domain : '';
+}
+
+function copySymbol(symbol) {
+    navigator.clipboard.writeText(symbol).then(() => {
+        // Visual feedback
+        const toast = document.createElement('div');
+        toast.textContent = `Скопировано: ${symbol}`;
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent-teal);
+            color: var(--bg-primary);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 2000;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            animation: fadeInUp 0.3s ease-out;
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeInUp 0.3s ease-out reverse';
+            setTimeout(() => toast.remove(), 300);
+        }, 1500);
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+    });
 }
 
 function createFullscreenOverlay() {
@@ -249,6 +282,8 @@ function renderShell() {
                 <input type="number" id="densitiesLimit" value="20" min="1" max="50" step="1" style="width:60px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;">
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Поиск:</label>
                 <input type="text" id="search-input" class="search-input" placeholder="BTC, ETH..." value="${state.searchQuery}">
+                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Мин. возраст:</label>
+                <input type="number" id="min-age-input" value="${state.minAgeFilter}" min="0" max="3600" step="1" style="width:70px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;" placeholder="сек">
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
                 <button class="filter-btn ${state.sideFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="handleSideFilter('all')">Все</button>
@@ -319,7 +354,7 @@ function renderGroupCard(group, index) {
             <div class="group-card-header">
                 <div class="group-symbol-row">
                     ${domain ? `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=16" onerror="this.style.display='none'" class="group-exchange-icon" style="width:16px;height:16px;border-radius:3px;margin-right:6px;flex-shrink:0;">` : ''}
-                    <span class="group-symbol">${group.symbol}</span>
+                    <span class="group-symbol" onclick="copySymbol('${group.symbol}')" title="Клик для копирования">${group.symbol}</span>
                     <span class="group-exchange-badge">${group.exchangeShort}</span>
                     <span class="group-market-badge">${group.market === 'futures' ? 'F' : 'S'}</span>
                 </div>
@@ -533,6 +568,11 @@ function getProcessedDensities() {
         result = result.filter(d => d.symbol.includes(q));
     }
 
+    // Filter by min age
+    if (state.minAgeFilter > 0) {
+        result = result.filter(d => d.age_seconds >= state.minAgeFilter);
+    }
+
     // Filter by exchange filters
     result = result.filter(d => {
         const cfg = state.exchangeFilters[d.exchange];
@@ -628,6 +668,11 @@ function handleNatrSort(enabled) {
 function toggleLive() {
     state.isLive = !state.isLive;
     renderShell(); // live button state changed
+}
+
+function handleMinAgeFilter(value) {
+    state.minAgeFilter = parseInt(value) || 0;
+    renderContent();
 }
 
 // ==========================================
