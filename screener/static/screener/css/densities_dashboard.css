@@ -119,6 +119,11 @@ body {
     color: var(--accent-cyan);
 }
 
+.densities-hidden-btn:hover {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
 .densities-fullscreen-title {
     font-size: 18px;
     font-weight: 800;

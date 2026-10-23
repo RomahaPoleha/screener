@@ -36,7 +36,9 @@ const state = {
     // Sort by NATR 1m
     sortByNatr1m: false,
     // Min age filter (seconds)
-    minAgeFilter: 0
+    minAgeFilter: 0,
+    // Hidden symbols
+    hiddenSymbols: new Set()
 };
 
 function initDensitiesElements() {
@@ -182,7 +184,6 @@ function createFullscreenOverlay() {
     overlay.innerHTML = `
         <div class="densities-fullscreen-header">
             <button class="densities-close-btn" onclick="closeDensitiesOverlay()">✕ Закрыть</button>
-            <div class="densities-fullscreen-title">Карта плотностей</div>
         </div>
         <div class="densities-fullscreen-body" id="densitiesFullscreenBody"></div>
     `;
@@ -270,11 +271,12 @@ function renderShell() {
     const uniqueSymbols = new Set(state.densities.map(d => d.symbol)).size;
 
     densitiesOverlayBody.innerHTML = `
-        <div class="dashboard-header">
+        <div class="dashboard-header" style="display:flex; justify-content:space-between; align-items:center;">
             <div class="header-title">
                 <span class="icon">🗺️</span>
                 <span>Карта плотностей</span>
             </div>
+            <button class="densities-hidden-btn" onclick="openHiddenCoinsModal()" style="padding:6px 14px; border-radius:6px; border:1px solid var(--border-primary); background:transparent; color:var(--text-secondary); cursor:pointer; font-family:'Inter',sans-serif; font-size:12px; font-weight:600; transition:all 0.2s;">Скрытые монеты (${state.hiddenSymbols.size})</button>
         </div>
         <div class="filter-bar">
             <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
@@ -286,17 +288,13 @@ function renderShell() {
                 <input type="number" id="min-age-input" value="${state.minAgeFilter}" min="0" max="3600" step="1" style="width:70px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;" placeholder="сек">
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace;">
+                    <span>Фильтрация по Natr 1m</span>
+                    <input type="checkbox" id="sortNatr1m" ${state.sortByNatr1m ? 'checked' : ''} onchange="handleNatrSort(this.checked)" style="accent-color:#8b5cf6;width:14px;height:14px;cursor:pointer;">
+                </label>
                 <button class="filter-btn ${state.sideFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="handleSideFilter('all')">Все</button>
                 <button class="filter-btn ${state.sideFilter === 'buy' ? 'active-buy' : ''}" data-filter="buy" onclick="handleSideFilter('buy')">BUY</button>
                 <button class="filter-btn ${state.sideFilter === 'sell' ? 'active-sell' : ''}" data-filter="sell" onclick="handleSideFilter('sell')">SELL</button>
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px; color:var(--text-secondary);">
-                    <input type="checkbox" id="sortNatr1m" ${state.sortByNatr1m ? 'checked' : ''} onchange="handleNatrSort(this.checked)" style="accent-color:#8b5cf6;width:14px;height:14px;cursor:pointer;">
-                    <span>NATR 1m</span>
-                </label>
-                <button class="live-btn ${state.isLive ? 'active' : ''}" onclick="toggleLive()">
-                    <div class="live-btn-dot ${state.isLive ? '' : 'paused'}"></div>
-                    ${state.isLive ? 'LIVE' : 'PAUSED'}
-                </button>
                 <button class="densities-refresh-btn" onclick="loadDensitiesTable()">Обновить</button>
             </div>
         </div>
@@ -357,6 +355,7 @@ function renderGroupCard(group, index) {
                     <span class="group-symbol" onclick="copySymbol('${group.symbol}')" title="Клик для копирования">${group.symbol}</span>
                     <span class="group-exchange-badge">${group.exchangeShort}</span>
                     <span class="group-market-badge">${group.market === 'futures' ? 'F' : 'S'}</span>
+                    <button class="group-hide-btn" onclick="hideSymbol('${group.symbol}')" title="Скрыть монету" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;color:var(--text-muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent-red)'" onmouseout="this.style.color='var(--text-muted)'">👁</button>
                 </div>
                 <div class="group-total-volume">$${fmtVolume(group.totalVolume)}</div>
             </div>
@@ -395,13 +394,6 @@ function renderStatsFooter(densities, serverTime) {
                     <span id="buy-ratio-text" style="font-size:10px; color:#14b8a6; font-family:'JetBrains Mono',monospace;">${buyRatio}%</span>
                     <span style="font-size:9px; color:#64748b;">BUY</span>
                 </div>
-            </div>
-            <div class="live-indicator">
-                <span id="live-time" style="color:#94a3b8; font-family:'JetBrains Mono',monospace; font-size:11px;">
-                    ${new Date(serverTime).toLocaleTimeString()}
-                </span>
-                <div class="live-dot"></div>
-                <span style="color:#22d3ee; font-size:10px; font-weight:600;">LIVE</span>
             </div>
         </div>
     `;
@@ -559,6 +551,11 @@ function groupBySymbolAndExchange(densities, natrData = {}) {
 function getProcessedDensities() {
     let result = [...state.densities];
 
+    // Filter out hidden symbols
+    if (state.hiddenSymbols.size > 0) {
+        result = result.filter(d => !state.hiddenSymbols.has(d.symbol));
+    }
+
     if (state.sideFilter !== 'all') {
         result = result.filter(d => d.side === state.sideFilter);
     }
@@ -673,6 +670,71 @@ function toggleLive() {
 function handleMinAgeFilter(value) {
     state.minAgeFilter = parseInt(value) || 0;
     renderContent();
+}
+
+function hideSymbol(symbol) {
+    state.hiddenSymbols.add(symbol);
+    renderShell(); // Update hidden coins count
+    renderContent(); // Re-render without hidden symbol
+}
+
+function showSymbol(symbol) {
+    state.hiddenSymbols.delete(symbol);
+    renderShell(); // Update hidden coins count
+    renderContent(); // Re-render with shown symbol
+}
+
+function openHiddenCoinsModal() {
+    if (state.hiddenSymbols.size === 0) {
+        alert('Нет скрытых монет');
+        return;
+    }
+    
+    const hiddenList = Array.from(state.hiddenSymbols).sort();
+    
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.7);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    
+    modal.innerHTML = `
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 12px; padding: 24px; min-width: 300px; max-width: 400px; max-height: 80vh; overflow-y: auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="font-size:16px; font-weight:700; color:var(--text-primary);">Скрытые монеты (${hiddenList.length})</h3>
+                <button onclick="this.closest('.modal-overlay').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--text-muted);line-height:1;">✕</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                ${hiddenList.map(sym => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--bg-card); border:1px solid var(--border-primary); border-radius:8px;">
+                        <span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:var(--text-primary);">${sym}</span>
+                        <button onclick="showSymbol('${sym}'); this.closest('.modal-overlay').querySelector('[data-symbol=\"${sym}\"]').remove(); updateHiddenCount();" style="background:var(--accent-teal);border:none;color:var(--bg-primary);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Показать</button>
+                    </div>
+                `).join('')}
+            </div>
+            <button onclick="state.hiddenSymbols.clear(); renderShell(); renderContent(); this.closest('.modal-overlay').remove();" style="margin-top:16px;width:100%;background:var(--accent-red);border:none;color:white;padding:10px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Очистить всё</button>
+        </div>
+    `;
+    
+    modal.classList.add('modal-overlay');
+    document.body.appendChild(modal);
+    
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+function updateHiddenCount() {
+    const btn = document.querySelector('.densities-hidden-btn');
+    if (btn) {
+        btn.textContent = `Скрытые монеты (${state.hiddenSymbols.size})`;
+    }
 }
 
 // ==========================================
