@@ -285,7 +285,7 @@ function renderShell() {
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Поиск:</label>
                 <input type="text" id="search-input" class="search-input" placeholder="BTC, ETH..." value="${state.searchQuery}">
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Мин. возраст:</label>
-                <input type="number" id="min-age-input" value="${state.minAgeFilter}" min="0" max="3600" step="1" style="width:70px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;" placeholder="сек">
+                <input type="number" id="min-age-input" value="${state.minAgeFilter}" min="0" max="3600" step="1" onchange="handleMinAgeFilter(this.value)" style="width:70px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;" placeholder="мин">
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace;">
@@ -565,9 +565,9 @@ function getProcessedDensities() {
         result = result.filter(d => d.symbol.includes(q));
     }
 
-    // Filter by min age
+    // Filter by min age (value entered in minutes)
     if (state.minAgeFilter > 0) {
-        result = result.filter(d => d.age_seconds >= state.minAgeFilter);
+        result = result.filter(d => d.age_seconds >= state.minAgeFilter * 60);
     }
 
     // Filter by exchange filters
@@ -713,7 +713,7 @@ function openHiddenCoinsModal() {
                 ${hiddenList.map(sym => `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--bg-card); border:1px solid var(--border-primary); border-radius:8px;">
                         <span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:var(--text-primary);">${sym}</span>
-                        <button onclick="showSymbol('${sym}'); this.closest('.modal-overlay').querySelector('[data-symbol=\"${sym}\"]').remove(); updateHiddenCount();" style="background:var(--accent-teal);border:none;color:var(--bg-primary);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Показать</button>
+                        <button onclick="showSymbol('${sym}'); this.parentElement.remove(); updateHiddenCount();" style="background:var(--accent-teal);border:none;color:var(--bg-primary);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Показать</button>
                     </div>
                 `).join('')}
             </div>
