@@ -366,6 +366,26 @@ body {
     font-weight: 600;
 }
 
+.row-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid rgba(30, 41, 59, 0.3);
+}
+
+.row-pct-above {
+    color: var(--accent-red);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.row-pct-below {
+    color: var(--accent-green);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
 .row-exchange {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;

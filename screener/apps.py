@@ -7,6 +7,28 @@ import threading
 _stop_event = threading.Event()
 _monitor_threads = []
 
+
+def _create_superuser_from_env():
+    """Создаёт суперпользователя из переменных окружения при старте (для Amvera без shell)"""
+    from django.contrib.auth.models import User
+
+    username = os.getenv('ADMIN_USERNAME')
+    email = os.getenv('ADMIN_EMAIL')
+    password = os.getenv('ADMIN_PASSWORD')
+
+    if not username or not password:
+        return
+
+    if User.objects.filter(username=username).exists():
+        return
+
+    try:
+        User.objects.create_superuser(username, email or f'{username}@localhost', password)
+        print(f"✅ Суперпользователь '{username}' создан (ADMIN_USERNAME/ADMIN_PASSWORD)")
+    except Exception as e:
+        print(f"❌ Не удалось создать суперпользователя '{username}': {e}")
+
+
 def _stop_monitors():
     print("🛑 Stopping monitors...")
     _stop_event.set()
@@ -23,6 +45,9 @@ class ScreenerConfig(AppConfig):
     name = 'screener'
 
     def ready(self):
+        # Создать суперпользователя из ENV (для деплоя без shell)
+        _create_superuser_from_env()
+
         # Мониторы отключены по умолчанию. Включить: ENABLE_MONITORS=1
         if os.getenv('ENABLE_MONITORS', '0') == '1':
             try:

@@ -29,6 +29,7 @@ const state = {
     serverTime: Date.now(),
     intervals: [],
     rowMap: new Map(),
+    currentPrices: {},
     // Exchange filters: { exchangeId: { futures: bool, spot: bool } }
     exchangeFilters: {},
     // Exchange min volumes: { exchangeId: { futures: number, spot: number } }
@@ -326,6 +327,17 @@ function renderGroupCard(group, index) {
         const tier = getVolumeTier(d.volume);
         const isWhale = tier === 'high';
 
+        // % отклонение цены плотности от текущей рыночной цены
+        const currentPrice = state.currentPrices[d.symbol] || 0;
+        let pctHtml = '';
+        if (currentPrice > 0) {
+            const pct = ((d.price - currentPrice) / currentPrice) * 100;
+            const absPct = Math.abs(pct).toFixed(2);
+            const sign = pct >= 0 ? '+' : '−';
+            const pctClass = pct >= 0 ? 'row-pct-above' : 'row-pct-below';
+            pctHtml = `<span class="row-pct ${pctClass}" title="От текущей цены $${currentPrice.toLocaleString()}">${sign}${absPct}%</span>`;
+        }
+
         return `
             <div class="group-density-row ${d.side}-row ${isWhale ? 'whale-row' : ''}"
                  data-id="${d.id}"
@@ -341,6 +353,7 @@ function renderGroupCard(group, index) {
                 <div class="row-meta">
                     ${isWhale ? '<span class="whale-tag">⚡</span>' : ''}
                     <span class="row-price">$${d.price.toLocaleString()}</span>
+                    ${pctHtml}
                     <span class="row-age">${fmtAge(d.age_seconds)}</span>
                 </div>
             </div>
@@ -406,29 +419,39 @@ function renderContent() {
 
     const processed = getProcessedDensities();
 
-    // Fetch NATR 1m data if sort is enabled
-    let natrData = {};
-    if (state.sortByNatr1m) {
-        // Get unique symbols from processed densities
-        const symbols = [...new Set(processed.map(d => d.symbol))];
-        // Fetch NATR data from API
-        fetch(`/api/natr/`).then(r => r.json()).then(data => {
-            if (data.natr) {
-                natrData = data.natr;
-            }
-            // Re-render with NATR data
-            const groups = groupBySymbolAndExchange(processed, natrData);
-            renderGroups(grid, groups);
-        }).catch(err => {
-            console.warn('NATR fetch failed:', err);
-            const groups = groupBySymbolAndExchange(processed, {});
-            renderGroups(grid, groups);
-        });
-        return; // Will re-render after NATR fetch
-    }
+    // Fetch current prices for % deviation (cached on server, cheap)
+    fetch(`/api/data/`).then(r => r.json()).then(data => {
+        const priceMap = {};
+        if (Array.isArray(data)) {
+            data.forEach(c => { priceMap[c.symbol] = c.price; });
+        }
+        state.currentPrices = priceMap;
 
-    const groups = groupBySymbolAndExchange(processed, natrData);
-    renderGroups(grid, groups);
+        // Fetch NATR 1m data if sort is enabled
+        let natrData = {};
+        if (state.sortByNatr1m) {
+            const symbols = [...new Set(processed.map(d => d.symbol))];
+            fetch(`/api/natr/`).then(r => r.json()).then(data2 => {
+                if (data2.natr) {
+                    natrData = data2.natr;
+                }
+                const groups = groupBySymbolAndExchange(processed, natrData);
+                renderGroups(grid, groups);
+            }).catch(err => {
+                console.warn('NATR fetch failed:', err);
+                const groups = groupBySymbolAndExchange(processed, {});
+                renderGroups(grid, groups);
+            });
+            return;
+        }
+
+        const groups = groupBySymbolAndExchange(processed, natrData);
+        renderGroups(grid, groups);
+    }).catch(err => {
+        console.warn('Price fetch failed:', err);
+        const groups = groupBySymbolAndExchange(processed, {});
+        renderGroups(grid, groups);
+    });
 }
 
 function renderGroups(grid, groups) {

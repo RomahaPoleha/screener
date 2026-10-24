@@ -1275,7 +1275,7 @@ def api_densities_table(request):
                     'volume': volume,
                     'side': side,
                     'age_seconds': round(now - timestamp, 1),
-                    'exchange': item.get('exchange', exchange)
+                    'exchange': item.get('exchange', exchange),
                 })
 
         # Лимит делим поровну между биржами, чтобы одна не забирала все слоты.
@@ -1316,7 +1316,7 @@ def api_densities_table(request):
 
 @csrf_exempt
 @login_required
-@require_http_methods(["POST"])
+@require_http_methods(["GET"])
 def api_clear_exchange_cache(request):
     """Очистить кэш символов всех бирж"""
     from django.core.cache import cache
@@ -1331,4 +1331,25 @@ def api_clear_exchange_cache(request):
     for key in keys:
         cache.delete(key)
     return JsonResponse({'cleared': keys})
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_admin_stats(request):
+    """Статистика для админа: всего пользователей и онлайн (активны за последние 15 мин)"""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'forbidden'}, status=403)
+
+    from django.utils import timezone
+    from datetime import timedelta
+    from .models import UserProfile
+
+    total = User.objects.count()
+    online_cutoff = timezone.now() - timedelta(minutes=15)
+    online = UserProfile.objects.filter(last_activity__gte=online_cutoff).count()
+
+    return JsonResponse({
+        'total_users': total,
+        'online_users': online,
+    })
 

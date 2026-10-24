@@ -10,6 +10,7 @@ class UserProfile(models.Model):
     token_created = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_activity = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Profile({self.user.username})"

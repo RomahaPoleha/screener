@@ -67,5 +67,34 @@
 
         <!-- Настройки (крайняя справа) -->
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
+
+        <!-- Статистика онлайн (только для админов) -->
+        {% if request.user.is_staff %}
+        <div id="adminOnlineWrap" style="display:flex; align-items:center; gap:6px; padding:4px 10px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#22d3ee;">
+            <span style="font-weight:700;">👥 Онлайн: <span id="adminOnlineCount">–</span></span>
+            <span style="opacity:0.7; font-size:10px;">/ <span id="adminTotalCount">–</span></span>
+        </div>
+        {% endif %}
     </div>
 </div>
+
+<script>
+(function() {
+    if (!document.getElementById('adminOnlineWrap')) return;
+    async function fetchAdminStats() {
+        try {
+            const res = await fetch('/api/admin-stats/');
+            if (!res.ok) return;
+            const data = await res.json();
+            const onlineEl = document.getElementById('adminOnlineCount');
+            const totalEl = document.getElementById('adminTotalCount');
+            if (onlineEl) onlineEl.textContent = data.online_users;
+            if (totalEl) totalEl.textContent = data.total_users;
+        } catch (e) {
+            console.warn('Failed to fetch admin stats:', e);
+        }
+    }
+    fetchAdminStats();
+    setInterval(fetchAdminStats, 60000);
+})();
+</script>
