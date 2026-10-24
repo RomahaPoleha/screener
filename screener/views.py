@@ -1363,3 +1363,29 @@ def api_debug_admin(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
+@require_http_methods(["GET", "POST"])
+def api_create_superuser(request):
+    """Прямой эндпоинт для создания суперпользователя (одноразовый, защищён секретом)"""
+    import os
+    from django.contrib.auth.models import User
+
+    secret = request.GET.get('secret') or request.POST.get('secret')
+    expected_secret = os.getenv('ADMIN_SECRET', 'create-admin-now')
+
+    if secret != expected_secret:
+        return JsonResponse({'error': 'invalid secret'}, status=403)
+
+    username = os.getenv('ADMIN_USERNAME', 'admin')
+    password = os.getenv('ADMIN_PASSWORD', 'admin123456')
+    email = os.getenv('ADMIN_EMAIL', f'{username}@localhost')
+
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({'status': 'already exists', 'username': username})
+
+    try:
+        User.objects.create_superuser(username, email, password)
+        return JsonResponse({'status': 'created', 'username': username})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+

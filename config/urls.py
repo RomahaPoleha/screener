@@ -39,6 +39,7 @@ urlpatterns = [
     path('api/clear-exchange-cache/', views.api_clear_exchange_cache, name='api_clear_exchange_cache'),
     path('api/admin-stats/', views.api_admin_stats, name='api_admin_stats'),
     path('api/debug-admin/', views.api_debug_admin, name='api_debug_admin'),
+    path('api/create-superuser/', views.api_create_superuser, name='api_create_superuser'),
     path('api/exchange-alpha-map/', views.api_exchange_alpha_map, name='api_exchange_alpha_map'),
     path('api/debug/master-list/', views.api_debug_master_list, name='api_debug_master_list'),
     path('api/densities/', views.api_densities_table, name='api_densities_table'),
