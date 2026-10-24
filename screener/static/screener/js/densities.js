@@ -419,39 +419,81 @@ function renderContent() {
 
     const processed = getProcessedDensities();
 
-    // Fetch current prices for % deviation (cached on server, cheap)
+    // Fetch current prices for % deviation
+    // Primary: /api/data/ (cached 60s, cheap)
+    // Fallback: /api/candles/{symbol}/1m (cached 300s) for symbols not in /api/data/
     fetch(`/api/data/`).then(r => r.json()).then(data => {
         const priceMap = {};
         if (Array.isArray(data)) {
             data.forEach(c => { priceMap[c.symbol] = c.price; });
         }
-        state.currentPrices = priceMap;
 
-        // Fetch NATR 1m data if sort is enabled
-        let natrData = {};
-        if (state.sortByNatr1m) {
-            const symbols = [...new Set(processed.map(d => d.symbol))];
-            fetch(`/api/natr/`).then(r => r.json()).then(data2 => {
-                if (data2.natr) {
-                    natrData = data2.natr;
-                }
-                const groups = groupBySymbolAndExchange(processed, natrData);
-                renderGroups(grid, groups);
-            }).catch(err => {
-                console.warn('NATR fetch failed:', err);
-                const groups = groupBySymbolAndExchange(processed, {});
-                renderGroups(grid, groups);
-            });
+        // Find symbols without price
+        const uniqueSymbols = [...new Set(processed.map(d => d.symbol))];
+        const missing = uniqueSymbols.filter(s => !priceMap[s] || priceMap[s] <= 0);
+
+        if (missing.length === 0) {
+            state.currentPrices = priceMap;
+            renderWithNatr(grid, processed);
             return;
         }
 
-        const groups = groupBySymbolAndExchange(processed, natrData);
-        renderGroups(grid, groups);
+        // Fetch prices for missing symbols from candles API in parallel
+        const fetches = missing.map(sym =>
+            fetch(`/api/candles/${sym}/?tf=1m`)
+                .then(r => r.ok ? r.json() : null)
+                .then(candles => {
+                    if (Array.isArray(candles) && candles.length > 0) {
+                        priceMap[sym] = candles[candles.length - 1].close;
+                    }
+                })
+                .catch(() => {})
+        );
+
+        Promise.all(fetches).then(() => {
+            state.currentPrices = priceMap;
+            renderWithNatr(grid, processed);
+        });
     }).catch(err => {
         console.warn('Price fetch failed:', err);
-        const groups = groupBySymbolAndExchange(processed, {});
-        renderGroups(grid, groups);
+        // Fallback: try candles for all unique symbols
+        const uniqueSymbols = [...new Set(processed.map(d => d.symbol))];
+        const priceMap = {};
+        const fetches = uniqueSymbols.map(sym =>
+            fetch(`/api/candles/${sym}/?tf=1m`)
+                .then(r => r.ok ? r.json() : null)
+                .then(candles => {
+                    if (Array.isArray(candles) && candles.length > 0) {
+                        priceMap[sym] = candles[candles.length - 1].close;
+                    }
+                })
+                .catch(() => {})
+        );
+        Promise.all(fetches).then(() => {
+            state.currentPrices = priceMap;
+            renderWithNatr(grid, processed);
+        });
     });
+}
+
+function renderWithNatr(grid, processed) {
+    let natrData = {};
+    if (state.sortByNatr1m) {
+        fetch(`/api/natr/`).then(r => r.json()).then(data2 => {
+            if (data2.natr) {
+                natrData = data2.natr;
+            }
+            const groups = groupBySymbolAndExchange(processed, natrData);
+            renderGroups(grid, groups);
+        }).catch(err => {
+            console.warn('NATR fetch failed:', err);
+            const groups = groupBySymbolAndExchange(processed, {});
+            renderGroups(grid, groups);
+        });
+        return;
+    }
+    const groups = groupBySymbolAndExchange(processed, natrData);
+    renderGroups(grid, groups);
 }
 
 function renderGroups(grid, groups) {

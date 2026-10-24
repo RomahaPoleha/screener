@@ -8,8 +8,8 @@ _stop_event = threading.Event()
 _monitor_threads = []
 
 
-def _create_superuser_from_env():
-    """Создаёт суперпользователя из переменных окружения при старте (для Amvera без shell)"""
+def _create_superuser_from_env(sender, **kwargs):
+    """Создаёт суперпользователя из переменных окружения после миграций"""
     from django.contrib.auth.models import User
 
     username = os.getenv('ADMIN_USERNAME')
@@ -19,23 +19,22 @@ def _create_superuser_from_env():
     if not username or not password:
         return
 
-    if User.objects.filter(username=username).exists():
-        return
-
     try:
+        if User.objects.filter(username=username).exists():
+            return
         User.objects.create_superuser(username, email or f'{username}@localhost', password)
-        print(f"✅ Суперпользователь '{username}' создан (ADMIN_USERNAME/ADMIN_PASSWORD)")
+        print(f"Superuser '{username}' created (ADMIN_USERNAME/ADMIN_PASSWORD)")
     except Exception as e:
-        print(f"❌ Не удалось создать суперпользователя '{username}': {e}")
+        print(f"Failed to create superuser '{username}': {e}")
 
 
 def _stop_monitors():
-    print("🛑 Stopping monitors...")
+    print("Stopping monitors...")
     _stop_event.set()
     os.environ['MONITORS_STOP'] = '1'
     for t in _monitor_threads:
         t.join(timeout=10)
-    print("✅ Monitors stopped")
+    print("Monitors stopped")
 
 atexit.register(_stop_monitors)
 
@@ -45,8 +44,14 @@ class ScreenerConfig(AppConfig):
     name = 'screener'
 
     def ready(self):
-        # Создать суперпользователя из ENV (для деплоя без shell)
-        _create_superuser_from_env()
+        from django.db.models.signals import post_migrate
+        post_migrate.connect(_create_superuser_from_env, sender=self)
+
+        # Попытка создать суперпользователя сразу (если БД уже готова)
+        try:
+            _create_superuser_from_env(sender=self)
+        except Exception:
+            pass
 
         # Мониторы отключены по умолчанию. Включить: ENABLE_MONITORS=1
         if os.getenv('ENABLE_MONITORS', '0') == '1':
