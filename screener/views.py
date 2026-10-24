@@ -1174,27 +1174,6 @@ def api_exchange_alpha_map(request):
 
 @login_required
 @require_http_methods(["GET"])
-def api_debug_master_list(request):
-    """DEBUG: мастер-листы Binance (spot/futures)"""
-    from django.core.cache import cache
-    try:
-        spot = cache.get('scalp:master:spot') or []
-        fut = cache.get('scalp:master:futures') or []
-        alpha_map = cache.get('exchange:alpha:map') or {}
-        return JsonResponse({
-            'spot': spot,
-            'futures': fut,
-            'alpha_map_keys': list(alpha_map.keys())[:10],
-            'spot_count': len(spot) if isinstance(spot, list) else 'not list',
-            'futures_count': len(fut) if isinstance(fut, list) else 'not list',
-        })
-    except Exception as e:
-        import traceback
-        return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
-
-
-@login_required
-@require_http_methods(["GET"])
 def api_densities_table(request):
     """API: таблица плотностей для всех активных символов (мастер-лист)"""
     import time
@@ -1317,24 +1296,6 @@ def api_densities_table(request):
 @csrf_exempt
 @login_required
 @require_http_methods(["GET"])
-def api_clear_exchange_cache(request):
-    """Очистить кэш символов всех бирж"""
-    from django.core.cache import cache
-    keys = [
-        'exchange:binance:all',
-        'exchange:bybit:all',
-        'exchange:okx:all',
-        'exchange:gate:all',
-        'exchange:mexc:all',
-        'exchange:bitget:all',
-    ]
-    for key in keys:
-        cache.delete(key)
-    return JsonResponse({'cleared': keys})
-
-
-@login_required
-@require_http_methods(["GET"])
 def api_admin_stats(request):
     """Статистика для админа: всего пользователей и онлайн (активны за последние 15 мин)"""
     if not request.user.is_staff:
@@ -1352,40 +1313,4 @@ def api_admin_stats(request):
         'total_users': total,
         'online_users': online,
     })
-
-
-@require_http_methods(["GET"])
-def api_debug_admin(request):
-    """Диагностика создания админа (без авторизации, для отладки на Amvera)"""
-    from .middleware import get_superuser_status
-    try:
-        return JsonResponse(get_superuser_status())
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-@require_http_methods(["GET", "POST"])
-def api_create_superuser(request):
-    """Прямой эндпоинт для создания суперпользователя (одноразовый, защищён секретом)"""
-    import os
-    from django.contrib.auth.models import User
-
-    secret = request.GET.get('secret') or request.POST.get('secret')
-    expected_secret = os.getenv('ADMIN_SECRET', 'create-admin-now')
-
-    if secret != expected_secret:
-        return JsonResponse({'error': 'invalid secret'}, status=403)
-
-    username = os.getenv('ADMIN_USERNAME', 'admin')
-    password = os.getenv('ADMIN_PASSWORD', 'admin123456')
-    email = os.getenv('ADMIN_EMAIL', f'{username}@localhost')
-
-    if User.objects.filter(username=username).exists():
-        return JsonResponse({'status': 'already exists', 'username': username})
-
-    try:
-        User.objects.create_superuser(username, email, password)
-        return JsonResponse({'status': 'created', 'username': username})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
 
