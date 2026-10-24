@@ -18,7 +18,7 @@ MIN_VOLUME = 100_000
 # 🔧 ГЛОБАЛЬНЫЙ EXCHANGE (singleton)
 _exchange = ccxt.binance({
     'enableRateLimit': True,
-    'timeout': 10000,
+    'timeout': 30000,
     'options': {'defaultType': 'future'}
 })
 

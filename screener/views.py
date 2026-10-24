@@ -171,7 +171,7 @@ def get_binance_exchange():
         _binance_exchange_future = ccxt.binance({
             'enableRateLimit': True,
             'options': {'defaultType': 'future'},
-            'timeout': 10000
+            'timeout': 30000
         })
     return _binance_exchange_future
 
