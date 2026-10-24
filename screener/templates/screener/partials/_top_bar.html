@@ -1,50 +1,59 @@
 <div class="top-bar">
-  <div style="background: #1a1a1a; padding: 8px 16px; border-radius: 0; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; overflow: hidden;">
-  <style>
-    @keyframes fire-flicker {
-      0%, 100% { opacity: 1; filter: brightness(1); }
-      25% { opacity: 0.9; filter: brightness(1.1); }
-      50% { opacity: 1; filter: brightness(1.2); }
-      75% { opacity: 0.95; filter: brightness(1.05); }
-    }
-  </style>
-  <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 33%; opacity: 0.3; background: radial-gradient(ellipse at bottom, #ff4500 0%, #ff8c00 30%, transparent 70%); animation: fire-flicker 2s ease-in-out infinite;"></div>
-  <span style="
-    font-family: 'Montserrat', sans-serif;
-    font-size: 1.3rem;
-    font-weight: 900;
-    letter-spacing: 0.1em;
-    background: linear-gradient(180deg, #fff5e6 0%, #ffcc00 20%, #ff6600 50%, #cc0000 80%, #660000 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
-    animation: fire-flicker 1.5s ease-in-out infinite;
-    position: relative;
-  ">RECON</span>
-  <span style="
-    background: linear-gradient(180deg, #fff 0%, #ffcc00 50%, #ff4500 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-size: 1rem;
-    font-weight: bold;
-    filter: drop-shadow(0 0 8px rgba(255, 100, 0, 0.6));
-    position: relative;
-  ">&</span>
-  <span style="
-    font-family: 'Montserrat', sans-serif;
-    font-size: 1.3rem;
-    font-weight: 900;
-    letter-spacing: 0.1em;
-    background: linear-gradient(180deg, #fff5e6 0%, #ffcc00 20%, #ff6600 50%, #cc0000 80%, #660000 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
-    animation: fire-flicker 1.5s ease-in-out infinite 0.3s;
-    position: relative;
-  ">SCALP</span>
-</div>
+  <div style="display:flex; align-items:center; gap:12px; padding:8px 16px; border-radius:0; position:relative; overflow:hidden; width:100%;">
+    <style>
+      @keyframes fire-flicker {
+        0%, 100% { opacity: 1; filter: brightness(1); }
+        25% { opacity: 0.9; filter: brightness(1.1); }
+        50% { opacity: 1; filter: brightness(1.2); }
+        75% { opacity: 0.95; filter: brightness(1.05); }
+      }
+    </style>
+    <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 33%; opacity: 0.3; background: radial-gradient(ellipse at bottom, #ff4500 0%, #ff8c00 30%, transparent 70%); animation: fire-flicker 2s ease-in-out infinite;"></div>
+    <span style="
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      background: linear-gradient(180deg, #fff5e6 0%, #ffcc00 20%, #ff6600 50%, #cc0000 80%, #660000 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
+      animation: fire-flicker 1.5s ease-in-out infinite;
+      position: relative;
+    ">RECON</span>
+    <span style="
+      background: linear-gradient(180deg, #fff 0%, #ffcc00 50%, #ff4500 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 1rem;
+      font-weight: bold;
+      filter: drop-shadow(0 0 8px rgba(255, 100, 0, 0.6));
+      position: relative;
+    ">&</span>
+    <span style="
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      background: linear-gradient(180deg, #fff5e6 0%, #ffcc00 20%, #ff6600 50%, #cc0000 80%, #660000 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 50, 0, 0.4));
+      animation: fire-flicker 1.5s ease-in-out infinite 0.3s;
+      position: relative;
+    ">SCALP</span>
 
-    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+    <!-- Статистика онлайн (только для админов) — сразу после логотипа -->
+    {% if request.user.is_staff %}
+    <div id="adminOnlineWrap" style="display:flex; align-items:center; gap:6px; padding:4px 10px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#22d3ee;">
+        <span style="font-weight:700;">👥 Онлайн: <span id="adminOnlineCount">–</span></span>
+        <span style="opacity:0.7; font-size:10px;">/ <span id="adminTotalCount">–</span></span>
+    </div>
+    {% endif %}
+
+    <div style="flex:1;"></div>
+
+    <div style="display:flex; gap:8px; align-items:center;">
         <!-- История алертов (крайняя слева из трёх, видна только когда включена) -->
         <div id="alertHistoryWrap" style="position:relative; display:none;">
             <button class="sound-toggle" id="alertHistoryBtn" onclick="toggleAlertHistory()">
@@ -67,15 +76,8 @@
 
         <!-- Настройки (крайняя справа) -->
         <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()">⚙️ Настройки</button>
-
-        <!-- Статистика онлайн (только для админов) -->
-        {% if request.user.is_staff %}
-        <div id="adminOnlineWrap" style="display:flex; align-items:center; gap:6px; padding:4px 10px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#22d3ee;">
-            <span style="font-weight:700;">👥 Онлайн: <span id="adminOnlineCount">–</span></span>
-            <span style="opacity:0.7; font-size:10px;">/ <span id="adminTotalCount">–</span></span>
-        </div>
-        {% endif %}
     </div>
+  </div>
 </div>
 
 <script>
