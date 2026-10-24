@@ -1353,3 +1353,13 @@ def api_admin_stats(request):
         'online_users': online,
     })
 
+
+@require_http_methods(["GET"])
+def api_debug_admin(request):
+    """Диагностика создания админа (без авторизации, для отладки на Amvera)"""
+    from .middleware import get_superuser_status
+    try:
+        return JsonResponse(get_superuser_status())
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
