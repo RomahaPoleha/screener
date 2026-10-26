@@ -756,7 +756,7 @@ async def periodic_refresh(log_func=print):
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, cache.set, 'scalp:master:futures', new_active, 3600)
                 # Инвалидируем кэш таблицы плотностей для futures
-                await loop.run_in_executor(None, lambda: cache.delete_pattern("densities:table:futures:*"))
+                await loop.run_in_executor(None, lambda: _safe_delete_pattern("densities:table:futures:*"))
                 
             except Exception as e:
                 log_func(f"⚠️ binance futures: не удалось опубликовать master-список: {e}")
@@ -824,7 +824,7 @@ async def periodic_refresh(log_func=print):
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, cache.set, 'scalp:master:spot', new_active, 3600)
                 # Инвалидируем кэш таблицы плотностей для spot
-                await loop.run_in_executor(None, lambda: cache.delete_pattern("densities:table:spot:*"))
+                await loop.run_in_executor(None, lambda: _safe_delete_pattern("densities:table:spot:*"))
                 
             except Exception as e:
                 log_func(f"⚠️ binance spot: не удалось опубликовать master-список: {e}")
@@ -898,10 +898,14 @@ async def main_async(log_func=print):
         await loop.run_in_executor(None, cache.set, 'scalp:master:futures', active_futures, 600)
         await loop.run_in_executor(None, cache.set, 'scalp:master:spot', active_spot, 600)
         # Инвалидируем кэш таблицы плотностей при старте
-        await loop.run_in_executor(None, lambda: cache.delete_pattern("densities:table:*"))
+        await loop.run_in_executor(None, lambda: _safe_delete_pattern("densities:table:*"))
+        # 🔥 MERGED CACHE: строим сразу при старте, не ждём periodic_refresh (5 мин)
+        await build_merged_cache('futures', active_futures, log_func)
+        await build_merged_cache('spot', active_spot, log_func)
         
     except Exception as e:
         log_func(f"⚠️ Не удалось опубликовать master-списки при старте: {e}")
+
 
     tasks = [
         ws_listener('futures', log_func),
@@ -912,6 +916,24 @@ async def main_async(log_func=print):
     ]
 
     await asyncio.gather(*tasks)
+
+
+# ==========================================
+# HELPERS
+# ==========================================
+def _safe_delete_pattern(pattern):
+    """Безопасное удаление по паттерну: работает с Redis, игнорирует file cache."""
+    try:
+        from django_redis.cache import RedisCache
+        from django.core.cache import caches
+        cache_backend = caches['default']
+        if hasattr(cache_backend, 'delete_pattern'):
+            cache_backend.delete_pattern(pattern)
+        elif hasattr(cache_backend, 'client') and hasattr(cache_backend.client, 'delete_pattern'):
+            cache_backend.client.delete_pattern(pattern)
+    except Exception:
+        pass  # file cache или другая реализация — игнорируем
+
 
 def start_binance_async_monitor(log_func=print):
     loop = asyncio.new_event_loop()
