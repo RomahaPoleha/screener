@@ -587,7 +587,24 @@ function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = fals
     const result = [];
     for (const key of Object.keys(groups)) {
         const [symbol, exchange, market] = key.split('_');
-        const items = groups[key].sort((a, b) => b.volume - a.volume);
+        const items = groups[key];
+
+        // Sort items within group
+        if (preserveOrder) {
+            // Sort by % deviation from current price
+            items.sort((a, b) => {
+                const priceA = state.currentPrices[a.symbol] || 0;
+                const priceB = state.currentPrices[b.symbol] || 0;
+                if (!priceA || !priceB) return 0;
+                const pctA = ((a.price - priceA) / priceA) * 100;
+                const pctB = ((b.price - priceB) / priceB) * 100;
+                return pctB - pctA; // Descending: highest positive % first
+            });
+        } else {
+            // Default: sort by volume
+            items.sort((a, b) => b.volume - a.volume);
+        }
+
         const totalVolume = items.reduce((sum, d) => sum + d.volume, 0);
         const buyCount = items.filter(d => d.side === 'buy').length;
         const sellCount = items.filter(d => d.side === 'sell').length;
@@ -605,8 +622,7 @@ function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = fals
         });
     }
 
-    // Sort by NATR 1m if enabled, otherwise by total volume
-    // Unless preserveOrder is true (for % deviation sort)
+    // Sort groups
     if (!preserveOrder) {
         if (state.sortByNatr1m && Object.keys(natrData).length > 0) {
             result.sort((a, b) => {
@@ -618,6 +634,7 @@ function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = fals
             result.sort((a, b) => b.totalVolume - a.totalVolume);
         }
     }
+    // If preserveOrder = true, keep insertion order (from sorted densities)
     return result;
 }
 
