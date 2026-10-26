@@ -436,6 +436,7 @@ function renderContent() {
 
         if (missing.length === 0) {
             state.currentPrices = priceMap;
+            sortByPctDeviation(processed);
             renderWithNatr(grid, processed);
             return;
         }
@@ -454,6 +455,7 @@ function renderContent() {
 
         Promise.all(fetches).then(() => {
             state.currentPrices = priceMap;
+            sortByPctDeviation(processed);
             renderWithNatr(grid, processed);
         });
     }).catch(err => {
@@ -473,6 +475,7 @@ function renderContent() {
         );
         Promise.all(fetches).then(() => {
             state.currentPrices = priceMap;
+            sortByPctDeviation(processed);
             renderWithNatr(grid, processed);
         });
     });
@@ -653,8 +656,11 @@ function getProcessedDensities() {
         return d.volume >= minVol;
     });
 
-    // Sort by % deviation from current price (default behavior)
-    result.sort((a, b) => {
+    return result;
+}
+
+function sortByPctDeviation(densities) {
+    return densities.sort((a, b) => {
         const priceA = state.currentPrices[a.symbol] || 0;
         const priceB = state.currentPrices[b.symbol] || 0;
         if (!priceA || !priceB) return 0;
@@ -662,8 +668,6 @@ function getProcessedDensities() {
         const pctB = ((b.price - priceB) / priceB) * 100;
         return pctB - pctA; // Descending: highest positive % first
     });
-
-    return result;
 }
 
 function getMaxVolume() {
