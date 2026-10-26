@@ -625,10 +625,20 @@ function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = fals
     // Sort groups
     if (!preserveOrder) {
         if (state.sortByNatr1m && Object.keys(natrData).length > 0) {
+            // Сортируем исключительно по NATR бинанса (natr_1m30).
+            // Один и тот же NATR применяется ко всем биржам одного символа,
+            // поэтому все карточки символа идут подряд в порядке бинанс-NATR.
+            const symbolOrder = [...new Set(densities.map(d => d.symbol))].sort((a, b) => {
+                const natrA = natrData[a]?.natr_1m30;
+                const natrB = natrData[b]?.natr_1m30;
+                return (natrB ?? -1) - (natrA ?? -1);
+            });
+            const rank = new Map(symbolOrder.map((s, i) => [s, i]));
             result.sort((a, b) => {
-                const natrA = (natrData[a.symbol]?.natr_1m30) || 0;
-                const natrB = (natrData[b.symbol]?.natr_1m30) || 0;
-                return natrB - natrA; // Descending NATR
+                const ra = rank.has(a.symbol) ? rank.get(a.symbol) : Infinity;
+                const rb = rank.has(b.symbol) ? rank.get(b.symbol) : Infinity;
+                if (ra !== rb) return ra - rb;
+                return b.totalVolume - a.totalVolume;
             });
         } else {
             result.sort((a, b) => b.totalVolume - a.totalVolume);
