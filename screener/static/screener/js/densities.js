@@ -141,10 +141,12 @@ function getExchangeDomain(exchangeId) {
 }
 
 function copySymbol(symbol) {
-    navigator.clipboard.writeText(symbol).then(() => {
+    // Добавляем суффикс USDT для полного торгового пары
+    const fullSymbol = symbol + 'USDT';
+    navigator.clipboard.writeText(fullSymbol).then(() => {
         // Visual feedback
         const toast = document.createElement('div');
-        toast.textContent = `Скопировано: ${symbol}`;
+        toast.textContent = `Скопировано: ${fullSymbol}`;
         toast.style.cssText = `
             position: fixed;
             bottom: 24px;
