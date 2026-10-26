@@ -10,11 +10,21 @@ class OnlineUserMiddleware:
 
     def __call__(self, request):
         global _superuser_created
+
+        # Гарантируем наличие профиля до рендера шаблонов
+        if request.user.is_authenticated:
+            try:
+                from .models import UserProfile
+                UserProfile.objects.get_or_create(user=request.user)
+            except Exception:
+                pass
+
         response = self.get_response(request)
 
         if request.user.is_authenticated:
             try:
-                profile = request.user.profile
+                from .models import UserProfile
+                profile = UserProfile.objects.get(user=request.user)
                 profile.last_activity = timezone.now()
                 profile.save(update_fields=['last_activity'])
             except Exception:
