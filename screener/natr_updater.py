@@ -155,6 +155,9 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
         error_count = 0
         total = len(symbols)
 
+        # 🔥 BATCH: собираем все обновления в памяти
+        batch_updates = {}
+
         for idx, symbol in enumerate(symbols, 1):
             try:
                 pair = f"{symbol}/USDT:USDT"
@@ -167,25 +170,24 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
 
                 natr_value = calculate_natr(ohlcv, config['period'])
 
-                # Явное удаление большого объекта ohlcv
                 del ohlcv
 
                 if natr_value is not None:
-                    # Сохраняем только этот таймфрейм
                     cache_key = f"natr_{symbol}_future"
+                    # Читаем существующие данные (если есть)
                     old_data = cache.get(cache_key) or {'ts': current_time}
                     old_data[f'natr_{natr_key}'] = natr_value
                     old_data['ts'] = current_time
-                    cache.set(cache_key, old_data, CACHE_TTL)
+                    # Накапливаем в батч
+                    batch_updates[cache_key] = old_data
                     success_count += 1
                 else:
                     error_count += 1
 
-                time.sleep(0.03)  # Минимальная задержка
+                time.sleep(0.03)
 
                 if idx % 100 == 0:
                     log(f"  [{natr_key}] Прогресс: {idx}/{total} ({idx * 100 // total}%) | ✅ {success_count} | ❌ {error_count}")
-                    # Периодическая сборка мусора каждые 100 символов
                     import gc
                     gc.collect()
 
@@ -201,10 +203,22 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
                     return
                 continue
 
-        # ✅ ВРЕМЯ СОХРАНЯЕТСЯ В КОНЦЕ (после всех вычислений)
+        # 🔥 ATOMIC BATCH WRITE: пишем все обновления за один раз
+        if batch_updates:
+            try:
+                cache.set_many(batch_updates, CACHE_TTL)
+                log(f"  [{natr_key}] Batch write: {len(batch_updates)} symbols")
+            except Exception as e:
+                # Fallback: по одному
+                log(f"  [{natr_key}] set_many failed, fallback to individual: {e}")
+                for key, data in batch_updates.items():
+                    try:
+                        cache.set(key, data, CACHE_TTL)
+                    except Exception:
+                        pass
+
         last_update_times[natr_key] = time.time()
 
-        # Сохраняем в кэш для фронтенда
         cache.set(
             f"natr_last_update_times_future",
             {
