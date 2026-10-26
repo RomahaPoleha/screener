@@ -380,21 +380,60 @@ def api_candles(request, symbol):
 @require_http_methods(["GET"])
 def api_natr(request):
     """API: NATR данные (только Futures)"""
-    cache_key = "coins_future"
-    coins = cache.get(cache_key)
-    if not coins:
-        coins = get_symbols_from_tickers()
-        cache.set(cache_key, coins, 60)
-
+    # Читаем NATR кэш напрямую — это быстрее и не требует внешних вызовов
+    # Символы берём из ключей NATR кэша, а не из coins_future
     natr_data = {}
-    for coin in coins:
-        symbol = coin['symbol']
-        natr_cache_key = f"natr_{symbol}_future"
-        data = cache.get(natr_cache_key)
-        if data:
-            natr_data[symbol] = data
-
     last_update_times = cache.get("natr_last_update_times_future", {})
+
+    # Получаем все ключи NATR из кэша (batch read)
+    # Паттерн: natr_{symbol}_future
+    # Используем get_many если доступно, иначе fallback
+    try:
+        # Пытаемся получить список символов из volume_history кэша poller'а
+        # Если нет — читаем ключи NATR
+        from django.core.cache import caches
+        cache_backend = caches['default']
+        
+        # Быстрый путь: если есть доступ к клиенту Redis, сканируем ключи
+        symbols = set()
+        if hasattr(cache_backend, 'client'):
+            client = cache_backend.client
+            if hasattr(client, 'scan_iter'):
+                for key in client.scan_iter(match="natr_*_future", count=1000):
+                    # key format: natr_BTC_future
+                    parts = key.decode().split('_')
+                    if len(parts) >= 2:
+                        symbols.add(parts[1])
+        
+        # Fallback: если scan не доступен, читаем из известного кэша
+        if not symbols:
+            coins = cache.get("coins_future")
+            if coins:
+                symbols = {c['symbol'] for c in coins}
+    except Exception:
+        # На крайний случай — читаем coins_future
+        coins = cache.get("coins_future")
+        if coins:
+            symbols = {c['symbol'] for c in coins}
+        else:
+            symbols = set()
+
+    # Batch read NATR data для найденных символов
+    if symbols:
+        natr_keys = [f"natr_{sym}_future" for sym in symbols]
+        try:
+            natr_batch = cache.get_many(natr_keys)
+            for key, data in natr_batch.items():
+                if data:
+                    # key: natr_BTC_future -> symbol: BTC
+                    symbol = key.split('_')[1]
+                    natr_data[symbol] = data
+        except Exception:
+            # Fallback: по одному
+            for sym in symbols:
+                data = cache.get(f"natr_{sym}_future")
+                if data:
+                    natr_data[sym] = data
 
     return JsonResponse({
         'natr': natr_data,
