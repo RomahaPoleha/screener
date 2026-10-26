@@ -1185,6 +1185,7 @@ def api_densities_table(request):
     # ==========================================
     ENABLE_MERGED_CACHE = getattr(settings, 'ENABLE_MERGED_CACHE', True)
     MERGED_CACHE_TTL = getattr(settings, 'MERGED_CACHE_TTL', 30)
+    MERGED_MIN_VOLUME = getattr(settings, 'MERGED_MIN_VOLUME', 1000)
 
     try:
         min_volume = int(request.GET.get('min_volume', 10000))
