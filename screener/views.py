@@ -1432,7 +1432,8 @@ def api_densities_table(request):
 @require_http_methods(["GET"])
 def api_admin_stats(request):
     """Статистика для админа: всего пользователей и онлайн (активны за последние 15 мин)"""
-    if not request.user.is_staff:
+    profile = getattr(request.user, 'profile', None)
+    if not (request.user.is_staff or (profile and profile.can_view_stats)):
         return JsonResponse({'error': 'forbidden'}, status=403)
 
     from django.utils import timezone
