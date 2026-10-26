@@ -204,31 +204,43 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
                 continue
 
         # 🔥 ATOMIC BATCH WRITE: пишем все обновления за один раз
+        # Важно: перечитываем текущие значения из Redis перед записью,
+        # чтобы не затереть параллельный поток (1m30 vs 5m14)
         if batch_updates:
             try:
-                cache.set_many(batch_updates, CACHE_TTL)
-                log(f"  [{natr_key}] Batch write: {len(batch_updates)} symbols")
+                # Перечитываем актуальные данные для всех затронутых ключей
+                current_data = cache.get_many(list(batch_updates.keys()))
+                
+                # Мержим: наши обновления имеют приоритет, но сохраняем другие поля
+                merged_updates = {}
+                for key, our_data in batch_updates.items():
+                    existing = current_data.get(key, {})
+                    # Мержим: существующие поля + наши новые
+                    merged = {**existing, **our_data}
+                    merged_updates[key] = merged
+                
+                cache.set_many(merged_updates, CACHE_TTL)
+                log(f"  [{natr_key}] Batch write: {len(merged_updates)} symbols (merged)")
             except Exception as e:
-                # Fallback: по одному
+                # Fallback: по одному с перечитыванием
                 log(f"  [{natr_key}] set_many failed, fallback to individual: {e}")
-                for key, data in batch_updates.items():
+                for key, our_data in batch_updates.items():
                     try:
-                        cache.set(key, data, CACHE_TTL)
+                        existing = cache.get(key) or {}
+                        merged = {**existing, **our_data}
+                        cache.set(key, merged, CACHE_TTL)
                     except Exception:
                         pass
 
         last_update_times[natr_key] = time.time()
 
-        cache.set(
-            f"natr_last_update_times_future",
-            {
-                '1m30': datetime.fromtimestamp(last_update_times.get('1m30', 0)).isoformat() if last_update_times.get(
-                    '1m30') else None,
-                '5m14': datetime.fromtimestamp(last_update_times.get('5m14', 0)).isoformat() if last_update_times.get(
-                    '5m14') else None,
-            },
-            CACHE_TTL
-        )
+        # 🔥 MERGE last_update_times to avoid race condition between threads
+        try:
+            existing_times = cache.get("natr_last_update_times_future") or {}
+            existing_times[natr_key] = datetime.fromtimestamp(last_update_times[natr_key]).isoformat()
+            cache.set("natr_last_update_times_future", existing_times, CACHE_TTL)
+        except Exception as e:
+            log(f"  [{natr_key}] Failed to update last_update_times: {e}")
 
         log(f"✅ [{natr_key}] Завершено: {success_count}/{total} успешно, {error_count} ошибок")
 
