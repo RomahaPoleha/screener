@@ -488,16 +488,16 @@ function renderWithNatr(grid, processed) {
             if (data2.natr) {
                 natrData = data2.natr;
             }
-            const groups = groupBySymbolAndExchange(processed, natrData);
+            const groups = groupBySymbolAndExchange(processed, natrData, false);
             renderGroups(grid, groups);
         }).catch(err => {
             console.warn('NATR fetch failed:', err);
-            const groups = groupBySymbolAndExchange(processed, {});
+            const groups = groupBySymbolAndExchange(processed, {}, false);
             renderGroups(grid, groups);
         });
         return;
     }
-    const groups = groupBySymbolAndExchange(processed, natrData);
+    const groups = groupBySymbolAndExchange(processed, natrData, true);
     renderGroups(grid, groups);
 }
 
@@ -576,7 +576,7 @@ function updateLiveDOM() {
 // ==========================================
 // GROUPING LOGIC (symbol + exchange + market)
 // ==========================================
-function groupBySymbolAndExchange(densities, natrData = {}) {
+function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = false) {
     const groups = {};
     for (const d of densities) {
         const key = `${d.symbol}_${d.exchange}_${d.market}`;
@@ -606,14 +606,17 @@ function groupBySymbolAndExchange(densities, natrData = {}) {
     }
 
     // Sort by NATR 1m if enabled, otherwise by total volume
-    if (state.sortByNatr1m && Object.keys(natrData).length > 0) {
-        result.sort((a, b) => {
-            const natrA = (natrData[a.symbol]?.natr_1m30) || 0;
-            const natrB = (natrData[b.symbol]?.natr_1m30) || 0;
-            return natrB - natrA; // Descending NATR
-        });
-    } else {
-        result.sort((a, b) => b.totalVolume - a.totalVolume);
+    // Unless preserveOrder is true (for % deviation sort)
+    if (!preserveOrder) {
+        if (state.sortByNatr1m && Object.keys(natrData).length > 0) {
+            result.sort((a, b) => {
+                const natrA = (natrData[a.symbol]?.natr_1m30) || 0;
+                const natrB = (natrData[b.symbol]?.natr_1m30) || 0;
+                return natrB - natrA; // Descending NATR
+            });
+        } else {
+            result.sort((a, b) => b.totalVolume - a.totalVolume);
+        }
     }
     return result;
 }
