@@ -147,6 +147,13 @@ STORAGES = {
 # ==========================================
 REDIS_URL = os.getenv('REDIS_URL')
 
+# ==========================================
+# MERGED CACHE (pre-aggregated densities)
+# ==========================================
+ENABLE_MERGED_CACHE = os.getenv('ENABLE_MERGED_CACHE', '1') == '1'
+MERGED_CACHE_TTL = int(os.getenv('MERGED_CACHE_TTL', '30'))  # seconds
+MERGED_MIN_VOLUME = int(os.getenv('MERGED_MIN_VOLUME', '1000'))  # min volume for merged cache
+
 # Try Redis if URL provided, otherwise file cache
 if REDIS_URL:
     try:

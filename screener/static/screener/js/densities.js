@@ -673,9 +673,10 @@ async function loadDensitiesTable() {
 
     try {
         // Fetch both futures and spot in parallel
+        // Уменьшен множитель с 5x до 2x — сервер теперь отдаёт уже отфильтрованные и отсортированные данные
         const [futuresRes, spotRes] = await Promise.all([
-            fetch(`/api/densities/?${new URLSearchParams({market: 'futures', min_volume: globalMinVolume, limit: limit * 5}).toString()}`),
-            fetch(`/api/densities/?${new URLSearchParams({market: 'spot', min_volume: globalMinVolume, limit: limit * 5}).toString()}`)
+            fetch(`/api/densities/?${new URLSearchParams({market: 'futures', min_volume: globalMinVolume, limit: limit * 2}).toString()}`),
+            fetch(`/api/densities/?${new URLSearchParams({market: 'spot', min_volume: globalMinVolume, limit: limit * 2}).toString()}`)
         ]);
 
         if (!futuresRes.ok) throw new Error(`Futures HTTP ${futuresRes.status}`);

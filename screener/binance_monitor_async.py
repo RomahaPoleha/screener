@@ -9,6 +9,14 @@ import websockets
 from django.core.cache import cache
 import ccxt
 from . import coin_selection
+from django.conf import settings
+
+# ==========================================
+# MERGED CACHE CONFIG
+# ==========================================
+ENABLE_MERGED_CACHE = getattr(settings, 'ENABLE_MERGED_CACHE', True)
+MERGED_CACHE_TTL = getattr(settings, 'MERGED_CACHE_TTL', 30)
+MERGED_MIN_VOLUME = getattr(settings, 'MERGED_MIN_VOLUME', 1000)
 
 # ==========================================
 # ГЛОБАЛЬНЫЕ ЭКЗЕМПЛЯРЫ CCXT (Безопасная оптимизация)
@@ -595,6 +603,88 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             last_sync_time[key] = now
 
 # ==========================================
+# MERGED CACHE BUILDER (Single Writer: Binance Monitor)
+# ==========================================
+async def build_merged_cache(market, symbols, log_func=print):
+    """Строит pre-aggregated merged кэш для api_densities_table.
+    Вызывается только из Binance monitor (single writer pattern)."""
+    if not ENABLE_MERGED_CACHE or not symbols:
+        return
+
+    EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
+    now = time.time()
+
+    # 1. Собираем все ключи для batch read
+    all_keys = []
+    key_meta = {}  # key -> (symbol, exchange)
+
+    for symbol in symbols:
+        symbol_base = symbol.replace('USDT', '') if symbol.endswith('USDT') else symbol
+        for exchange in EXCHANGES:
+            if exchange == 'binance_alpha' and market == 'spot':
+                cache_symbol = symbol_base + 'USDT'
+            else:
+                cache_symbol = symbol_base
+            key = f"scalp:{market}:{exchange}:{cache_symbol}"
+            all_keys.append(key)
+            key_meta[key] = (symbol, exchange)
+
+    # 2. Один batch read
+    try:
+        loop = asyncio.get_running_loop()
+        all_data = await loop.run_in_executor(None, cache.get_many, all_keys)
+    except Exception as e:
+        log_func(f"⚠️ merged cache {market}: get_many failed: {e}")
+        return
+
+    # 3. Мержим и фильтруем
+    merged = []
+    for key, data in all_data.items():
+        if not data:
+            continue
+        symbol, exchange = key_meta[key]
+        for item in data:
+            try:
+                vol = item['volume']
+                if vol < MERGED_MIN_VOLUME:
+                    continue
+                merged.append({
+                    'symbol': symbol,
+                    'price': item['price'],
+                    'volume': vol,
+                    'side': item['side'],
+                    'age_seconds': round(now - item['timestamp'], 1),
+                    'exchange': item.get('exchange', exchange),
+                    'market': market,
+                })
+            except (KeyError, TypeError):
+                continue
+
+    # 4. Сортируем по объёму DESC
+    merged.sort(key=lambda x: x['volume'], reverse=True)
+
+    # 5. Пишем merged ключ с метаданными
+    merged_payload = {
+        'server_time': now,
+        'symbols_count': len(symbols),
+        'densities': merged,
+        'min_volume': MERGED_MIN_VOLUME,
+    }
+
+    try:
+        await loop.run_in_executor(
+            None,
+            cache.set,
+            f'scalp:densities:merged:{market}',
+            merged_payload,
+            MERGED_CACHE_TTL
+        )
+        log_func(f"✅ merged cache {market}: {len(merged)} densities, {len(symbols)} symbols")
+    except Exception as e:
+        log_func(f"⚠️ merged cache {market}: set failed: {e}")
+
+
+# ==========================================
 # ПЕРИОДИЧЕСКАЯ РОТАЦИЯ (ИЗМЕНЕНА)
 # ==========================================
 async def periodic_refresh(log_func=print):
@@ -648,13 +738,34 @@ async def periodic_refresh(log_func=print):
             else:
                 pass
 
+            # 🔥 Фильтруем master-лист: оставляем только символы с реальными данными в Redis
+            # Это ускоряет api_densities_table, который иначе перебирает пустые символы
+            try:
+                loop = asyncio.get_running_loop()
+                # Формируем ключи для проверки: scalp:{market}:binance:{symbol}
+                check_keys = [f"scalp:futures:binance:{sym}" for sym in new_active]
+                # batch get - один round-trip вместо N
+                cached_data = await loop.run_in_executor(None, cache.get_many, check_keys)
+                # Оставляем только те, у кого есть данные
+                new_active = [sym for sym in new_active if cached_data.get(f"scalp:futures:binance:{sym}")]
+            except Exception as e:
+                log_func(f"⚠️ binance futures: ошибка фильтрации master-листа: {e}")
+
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, cache.set, 'scalp:master:futures', new_active, 3600)
+                # Инвалидируем кэш таблицы плотностей для futures
+                await loop.run_in_executor(None, lambda: cache.delete_pattern("densities:table:futures:*"))
                 
             except Exception as e:
                 log_func(f"⚠️ binance futures: не удалось опубликовать master-список: {e}")
+
+            # 🔥 MERGED CACHE: строим pre-aggregated кэш для futures
+            try:
+                await build_merged_cache('futures', new_active, log_func)
+            except Exception as e:
+                log_func(f"⚠️ merged cache futures: {e}")
 
             # --- Spot ротация ---
             candidates_s = await get_top_symbols_async('spot')
@@ -699,13 +810,30 @@ async def periodic_refresh(log_func=print):
             else:
                 pass
 
+            # 🔥 Фильтруем master-лист spot: оставляем только символы с реальными данными
+            try:
+                loop = asyncio.get_running_loop()
+                check_keys = [f"scalp:spot:binance:{sym}" for sym in new_active]
+                cached_data = await loop.run_in_executor(None, cache.get_many, check_keys)
+                new_active = [sym for sym in new_active if cached_data.get(f"scalp:spot:binance:{sym}")]
+            except Exception as e:
+                log_func(f"⚠️ binance spot: ошибка фильтрации master-листа: {e}")
+
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, cache.set, 'scalp:master:spot', new_active, 3600)
+                # Инвалидируем кэш таблицы плотностей для spot
+                await loop.run_in_executor(None, lambda: cache.delete_pattern("densities:table:spot:*"))
                 
             except Exception as e:
                 log_func(f"⚠️ binance spot: не удалось опубликовать master-список: {e}")
+
+            # 🔥 MERGED CACHE: строим pre-aggregated кэш для spot
+            try:
+                await build_merged_cache('spot', new_active, log_func)
+            except Exception as e:
+                log_func(f"⚠️ merged cache spot: {e}")
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(binance): {e}")
@@ -769,6 +897,8 @@ async def main_async(log_func=print):
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, cache.set, 'scalp:master:futures', active_futures, 600)
         await loop.run_in_executor(None, cache.set, 'scalp:master:spot', active_spot, 600)
+        # Инвалидируем кэш таблицы плотностей при старте
+        await loop.run_in_executor(None, lambda: cache.delete_pattern("densities:table:*"))
         
     except Exception as e:
         log_func(f"⚠️ Не удалось опубликовать master-списки при старте: {e}")

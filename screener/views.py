@@ -1177,7 +1177,14 @@ def api_exchange_alpha_map(request):
 def api_densities_table(request):
     """API: таблица плотностей для всех активных символов (мастер-лист)"""
     import time
+    from django.conf import settings
     from django.core.cache import cache
+
+    # ==========================================
+    # MERGED CACHE CONFIG (read from settings)
+    # ==========================================
+    ENABLE_MERGED_CACHE = getattr(settings, 'ENABLE_MERGED_CACHE', True)
+    MERGED_CACHE_TTL = getattr(settings, 'MERGED_CACHE_TTL', 30)
 
     try:
         min_volume = int(request.GET.get('min_volume', 10000))
@@ -1194,6 +1201,69 @@ def api_densities_table(request):
     market = request.GET.get('market', 'futures')
     if market not in ['futures', 'spot']:
         market = 'futures'
+
+    # Кэш итогового ответа (TTL 5 сек)
+    cache_key = f"densities:table:{market}:{min_volume}:{limit_per_symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse(cached)
+
+    # ==========================================
+    # MERGED CACHE: читаем pre-aggregated данные
+    # ==========================================
+    if ENABLE_MERGED_CACHE:
+        merged_key = f'scalp:densities:merged:{market}'
+        merged = cache.get(merged_key)
+        if merged and isinstance(merged, dict):
+            # Проверяем свежесть (merged не старше MERGED_CACHE_TTL - 5 сек)
+            merged_age = time.time() - merged.get('server_time', 0)
+            if merged_age < (MERGED_CACHE_TTL - 5):
+                # Фильтруем по запрошенному min_volume
+                merged_min_vol = merged.get('min_volume', MERGED_MIN_VOLUME)
+                if min_volume >= merged_min_vol:
+                    # merged содержит все densities отсортированные по volume DESC
+                    filtered = [d for d in merged['densities'] if d['volume'] >= min_volume]
+                    
+                    # Применяем ту же логику распределения по биржам
+                    # Берём с запасом (limit_per_symbol * 5) для корректного распределения
+                    limited = filtered[:limit_per_symbol * 5]
+                    
+                    # Группируем по биржам и распределяем лимит
+                    by_exchange = {}
+                    for d in limited:
+                        by_exchange.setdefault(d['exchange'], []).append(d)
+                    
+                    exchange_order = sorted(
+                        by_exchange.keys(),
+                        key=lambda ex: max((x['volume'] for x in by_exchange[ex]), default=0),
+                        reverse=True,
+                    )
+                    n = len(exchange_order)
+                    result = []
+                    if n:
+                        base = limit_per_symbol // n
+                        remainder = limit_per_symbol % n
+                        for i, ex in enumerate(exchange_order):
+                            items = by_exchange[ex]
+                            items.sort(key=lambda x: x['volume'], reverse=True)
+                            take = max(1, base + (1 if i < remainder else 0)) if limit_per_symbol >= n else 1
+                            for d in items[:take]:
+                                d['symbol'] = d.get('symbol', '')
+                            result.extend(items[:take])
+                    
+                    # Итоговая сортировка
+                    result.sort(key=lambda x: x['volume'], reverse=True)
+                    
+                    response_data = {
+                        'market': market,
+                        'server_time': time.time(),
+                        'count': len(result),
+                        'symbols_count': merged.get('symbols_count', 0),
+                        'densities': result,
+                    }
+                    cache.set(cache_key, response_data, 5)
+                    return JsonResponse(response_data)
+                # Если запрошенный min_volume ниже чем в merged — фоллбек на полную логику
 
     # Берём мастер-лист из Redis (публикуется binance_monitor_async)
     master_key = f'scalp:master:{market}'
@@ -1217,49 +1287,69 @@ def api_densities_table(request):
     now = time.time()
     EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
 
-    result = []
+    # 🔥 BATCH READ: собираем все ключи для одного cache.get_many() вызова
+    # вместо 350+ отдельных cache.get()
+    all_keys = []
+    key_to_exchange = {}  # key -> (symbol_upper, exchange)
+    key_to_symbol_base = {}  # key -> cache_key_symbol (для нормализации)
 
     for symbol in symbols:
         symbol_upper = symbol.upper()
-        # Нормализуем: убираем суффикс USDT для единообразия
-        # (внутри хранится как BTCUSDT для Alpha, BTC для остальных)
         symbol_base = symbol_upper.replace('USDT', '') if symbol_upper.endswith('USDT') else symbol_upper
-        symbol_densities = []
-
+        
         for exchange in EXCHANGES:
-            # Binance Alpha хранит ключи С USDT (BTCUSDT), остальные БЕЗ USDT (BTC)
             if exchange == 'binance_alpha' and market == 'spot':
                 cache_key_symbol = symbol_base + 'USDT'
             else:
                 cache_key_symbol = symbol_base
             key = f"scalp:{market}:{exchange}:{cache_key_symbol}"
-            data = cache.get(key)
-            if not data:
+            all_keys.append(key)
+            key_to_exchange[key] = (symbol_upper, exchange)
+            key_to_symbol_base[key] = cache_key_symbol
+
+    # Один batch-запрос к Redis вместо сотен отдельных
+    all_cached_data = cache.get_many(all_keys)
+
+    result = []
+
+    # Группируем данные по символам
+    symbol_data_map = {}  # symbol_upper -> {exchange: [densities]}
+    for key, data in all_cached_data.items():
+        if not data:
+            continue
+        symbol_upper, exchange = key_to_exchange[key]
+        if symbol_upper not in symbol_data_map:
+            symbol_data_map[symbol_upper] = {}
+        if exchange not in symbol_data_map[symbol_upper]:
+            symbol_data_map[symbol_upper][exchange] = []
+        
+        for item in data:
+            try:
+                price = item['price']
+                volume = item['volume']
+                timestamp = item['timestamp']
+                side = item['side']
+            except (KeyError, TypeError):
                 continue
 
-            for item in data:
-                try:
-                    price = item['price']
-                    volume = item['volume']
-                    timestamp = item['timestamp']
-                    side = item['side']
-                except (KeyError, TypeError):
-                    continue
+            if volume < min_volume:
+                continue
 
-                if volume < min_volume:
-                    continue
+            symbol_data_map[symbol_upper][exchange].append({
+                'price': price,
+                'volume': volume,
+                'side': side,
+                'age_seconds': round(now - timestamp, 1),
+                'exchange': item.get('exchange', exchange),
+            })
 
-                symbol_densities.append({
-                    'price': price,
-                    'volume': volume,
-                    'side': side,
-                    'age_seconds': round(now - timestamp, 1),
-                    'exchange': item.get('exchange', exchange),
-                })
+    # Обрабатываем каждый символ
+    for symbol_upper, exchange_densities in symbol_data_map.items():
+        symbol_densities = []
+        for exchange, densities in exchange_densities.items():
+            symbol_densities.extend(densities)
 
-        # Лимит делим поровну между биржами, чтобы одна не забирала все слоты.
-        # Каждая биржа с плотностями получает минимум 1 запись,
-        # остаток (limit - n) распределяется по биржам с наибольшим объёмом.
+        # Лимит делим поровну между биржами
         by_exchange = {}
         for d in symbol_densities:
             by_exchange.setdefault(d['exchange'], []).append(d)
@@ -1284,13 +1374,17 @@ def api_densities_table(request):
     # Итоговая сортировка: объём DESC
     result.sort(key=lambda x: x['volume'], reverse=True)
 
-    return JsonResponse({
+    response_data = {
         'market': market,
         'server_time': now,
         'count': len(result),
         'symbols_count': len(symbols),
         'densities': result,
-    })
+    }
+    # Сохраняем в кэш на 5 секунд
+    cache.set(cache_key, response_data, 5)
+
+    return JsonResponse(response_data)
 
 
 @csrf_exempt
