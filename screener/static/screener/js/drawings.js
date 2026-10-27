@@ -44,8 +44,8 @@ function clearSpecificDrawings(type) {
         redrawAllPersistentDrawings();
     } else if (type === 'horizontalLines') {
         if (currentSymbol) window.savedHorizontalLines[currentSymbol] = [];
-        activeHorizontalLines.forEach(hl => { try { candleSeries.removePriceLine(hl.line); } catch(e){} });
         activeHorizontalLines = [];
+        redrawAllPersistentDrawings();
     } else if (type === 'pencil') {
         if (currentSymbol) window.savedPencilDrawings[currentSymbol] = [];
         pencilStrokes = [];
@@ -332,6 +332,24 @@ function redrawAllPersistentDrawings() {
         }
     });
 
+    activeHorizontalLines.forEach(hl => {
+        const y = candleSeries.priceToCoordinate(hl.price);
+        if (y === null) return;
+        const x1 = hl.time ? getXByTime(hl.time) : null;
+        const startX = (x1 !== null && x1 > 0) ? x1 : 0;
+        pencilCtx.strokeStyle = hl.color || '#f59e0b';
+        pencilCtx.lineWidth = 2;
+        pencilCtx.setLineDash([5, 5]);
+        pencilCtx.beginPath();
+        pencilCtx.moveTo(startX, y);
+        pencilCtx.lineTo(els.pencilCanvas.width, y);
+        pencilCtx.stroke();
+        pencilCtx.fillStyle = hl.color || '#f59e0b';
+        pencilCtx.font = '10px sans-serif';
+        pencilCtx.textAlign = 'right';
+        pencilCtx.fillText(hl.price.toFixed(currentPrecision), els.pencilCanvas.width - 4, y - 4);
+    });
+    pencilCtx.setLineDash([]);
     if (isDrawingTrendLine && trendLinePreview) {
         const x1 = getXByTime(trendLinePreview.time1);
         const x2 = getXByTime(trendLinePreview.time2);
@@ -388,8 +406,16 @@ function deleteLineAtPoint(x, y) {
         const hl = activeHorizontalLines[i];
         const hlY = candleSeries.priceToCoordinate(hl.price);
         if (hlY && Math.abs(hlY - y) < threshold) {
-            try { candleSeries.removePriceLine(hl.line); } catch(e) {}
             activeHorizontalLines.splice(i, 1);
+            if (currentSymbol) {
+                window.savedHorizontalLines[currentSymbol] = activeHorizontalLines.map(h => ({
+                    price: h.price,
+                    color: h.color || '#f59e0b',
+                    time: h.time
+                }));
+                localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
+            }
+            redrawAllPersistentDrawings();
             return;
         }
     }
@@ -440,18 +466,15 @@ function handleChartClick(param) {
     }
     else if (isHorizontalLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
+        const time = param.time || getTimeByX(param.point.x);
         if (!price || isNaN(price)) return;
-        const line = candleSeries.createPriceLine({
-            price: price, color: '#f59e0b', lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
-            title: `${price.toFixed(currentPrecision)}`
-        });
-        activeHorizontalLines.push({ price: price, line: line, color: '#f59e0b' });
+        activeHorizontalLines.push({ price: price, color: '#f59e0b', time: time });
 
         if (currentSymbol) {
             window.savedHorizontalLines[currentSymbol] = activeHorizontalLines.map(hl => ({
                 price: hl.price,
-                color: hl.color || '#f59e0b'
+                color: hl.color || '#f59e0b',
+                time: hl.time
             }));
             localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
         }
@@ -682,7 +705,8 @@ function saveCurrentDrawings(symbol) {
     window.savedTrendLines[symbol] = activeTrendlines;
     window.savedHorizontalLines[symbol] = activeHorizontalLines.map(hl => ({
         price: hl.price,
-        color: hl.color || '#f59e0b'
+        color: hl.color || '#f59e0b',
+        time: hl.time
     }));
     window.savedPencilDrawings[symbol] = pencilStrokes;
 
@@ -696,19 +720,9 @@ function restoreDrawingsForSymbol(symbol) {
     activeHorizontalLines = (window.savedHorizontalLines[symbol] || []).map(hl => ({
         price: hl.price,
         color: hl.color || '#f59e0b',
-        line: null
+        time: hl.time || null
     }));
     pencilStrokes = window.savedPencilDrawings[symbol] || [];
-
-    activeHorizontalLines.forEach(hl => {
-        try { if (hl.line) candleSeries.removePriceLine(hl.line); } catch(e){}
-        const line = candleSeries.createPriceLine({
-            price: hl.price, color: hl.color || '#f59e0b', lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true,
-            title: `${hl.price.toFixed(currentPrecision)}`
-        });
-        hl.line = line;
-    });
 
     redrawAllPersistentDrawings();
 }
