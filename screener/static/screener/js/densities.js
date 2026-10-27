@@ -283,8 +283,6 @@ function renderShell() {
         </div>
         <div class="filter-bar">
             <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:200px;">
-                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Лимит:</label>
-                <input type="number" id="densitiesLimit" value="20" min="1" max="50" step="1" style="width:60px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;">
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Поиск:</label>
                 <input type="text" id="search-input" class="search-input" placeholder="BTC, ETH..." value="${state.searchQuery}">
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Мин. возраст:</label>
@@ -319,7 +317,6 @@ function renderShell() {
 function renderGroupCard(group, index) {
     // Local max volume within this group for proportional bars
     const localMaxVolume = Math.max(...group.densities.map(d => d.volume), 1);
-    const domain = getExchangeDomain(group.exchange);
 
     const rows = group.densities.map((d, rowIdx) => {
         const volumePercent = localMaxVolume > 0
@@ -339,6 +336,8 @@ function renderGroupCard(group, index) {
             pctHtml = `<span class="row-pct" style="color:${sideColor};" title="От текущей цены $${currentPrice.toLocaleString()}">${sign}${absPct}%</span>`;
         }
 
+        const exDomain = getExchangeDomain(d.exchange);
+
         return `
             <div class="group-density-row ${d.side}-row ${isWhale ? 'whale-row' : ''}"
                  data-id="${d.id}"
@@ -346,6 +345,7 @@ function renderGroupCard(group, index) {
                  data-volume="${d.volume}"
                  data-local-max="${localMaxVolume}"
                  style="animation-delay: ${index * 40 + rowIdx * 20}ms">
+                ${exDomain ? `<img src="https://www.google.com/s2/favicons?domain=${exDomain}&sz=16" onerror="this.style.display='none'" style="width:14px;height:14px;border-radius:3px;margin-right:6px;flex-shrink:0;">` : ''}
                 <div class="row-volume">$${fmtVolume(d.volume)}</div>
                 <div class="row-bar-container">
                     <div class="row-bar-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}bb 60%, ${sideColor}33 100%);"></div>
@@ -365,7 +365,6 @@ function renderGroupCard(group, index) {
             <div class="group-card-header">
                 <div class="group-symbol-row">
                     <span class="group-symbol" onclick="copySymbol('${group.symbol}')" title="Клик для копирования">${group.symbol}</span>
-                    <span class="group-exchange-badge">${group.exchangeShort}</span>
                     <span class="group-market-badge">${group.market === 'futures' ? 'F' : 'S'}</span>
                     <button class="group-hide-btn" onclick="hideSymbol('${group.symbol}')" title="Скрыть монету" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;line-height:1;color:var(--text-muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent-red)'" onmouseout="this.style.color='var(--text-muted)'">👁</button>
                 </div>
@@ -579,14 +578,14 @@ function updateLiveDOM() {
 function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = false) {
     const groups = {};
     for (const d of densities) {
-        const key = `${d.symbol}_${d.exchange}_${d.market}`;
+        const key = `${d.symbol}_${d.market}`;
         if (!groups[key]) groups[key] = [];
         groups[key].push(d);
     }
 
     const result = [];
     for (const key of Object.keys(groups)) {
-        const [symbol, exchange, market] = key.split('_');
+        const [symbol, market] = key.split('_');
         const items = groups[key];
 
         // Sort items within group
@@ -611,9 +610,7 @@ function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = fals
 
         result.push({
             symbol,
-            exchange,
             market,
-            exchangeShort: getExchangeShort(exchange),
             densities: items,
             totalVolume,
             count: items.length,
@@ -625,9 +622,6 @@ function groupBySymbolAndExchange(densities, natrData = {}, preserveOrder = fals
     // Sort groups
     if (!preserveOrder) {
         if (state.sortByNatr1m && Object.keys(natrData).length > 0) {
-            // Сортируем исключительно по NATR бинанса (natr_1m30).
-            // Один и тот же NATR применяется ко всем биржам одного символа,
-            // поэтому все карточки символа идут подряд в порядке бинанс-NATR.
             const symbolOrder = [...new Set(densities.map(d => d.symbol))].sort((a, b) => {
                 const natrA = natrData[a]?.natr_1m30;
                 const natrB = natrData[b]?.natr_1m30;
@@ -718,8 +712,6 @@ function getMaxVolume() {
 async function loadDensitiesTable() {
     if (!densitiesOverlayBody) initDensitiesElements();
 
-    const limit = parseInt(densitiesLimit?.value) || 20;
-    // Use a low global min_volume to get all data, then filter per-exchange on client
     const globalMinVolume = 1000;
 
     const grid = document.getElementById('densities-grid');
@@ -727,10 +719,9 @@ async function loadDensitiesTable() {
 
     try {
         // Fetch both futures and spot in parallel
-        // Уменьшен множитель с 5x до 2x — сервер теперь отдаёт уже отфильтрованные и отсортированные данные
         const [futuresRes, spotRes] = await Promise.all([
-            fetch(`/api/densities/?${new URLSearchParams({market: 'futures', min_volume: globalMinVolume, limit: limit * 2}).toString()}`),
-            fetch(`/api/densities/?${new URLSearchParams({market: 'spot', min_volume: globalMinVolume, limit: limit * 2}).toString()}`)
+            fetch(`/api/densities/?${new URLSearchParams({market: 'futures', min_volume: globalMinVolume}).toString()}`),
+            fetch(`/api/densities/?${new URLSearchParams({market: 'spot', min_volume: globalMinVolume}).toString()}`)
         ]);
 
         if (!futuresRes.ok) throw new Error(`Futures HTTP ${futuresRes.status}`);

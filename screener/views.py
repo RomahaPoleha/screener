@@ -1232,11 +1232,22 @@ def api_densities_table(request):
         min_volume = 10000
 
     try:
-        limit_per_symbol = int(request.GET.get('limit', 20))
+        min_volume = int(request.GET.get('min_volume', 10000))
     except ValueError:
-        limit_per_symbol = 20
+        min_volume = 10000
 
-    limit_per_symbol = max(1, min(limit_per_symbol, 50))
+    limit_raw = request.GET.get('limit')
+    if limit_raw is None:
+        limit_per_symbol = None
+    else:
+        try:
+            limit_per_symbol = int(limit_raw)
+        except ValueError:
+            limit_per_symbol = None
+        if limit_per_symbol is not None and limit_per_symbol <= 0:
+            limit_per_symbol = None
+        if limit_per_symbol is not None:
+            limit_per_symbol = min(limit_per_symbol, 10000)
 
     market = request.GET.get('market', 'futures')
     if market not in ['futures', 'spot']:
@@ -1264,35 +1275,39 @@ def api_densities_table(request):
                     # merged содержит все densities отсортированные по volume DESC
                     filtered = [d for d in merged['densities'] if d['volume'] >= min_volume]
                     
-                    # Применяем ту же логику распределения по биржам
-                    # Берём с запасом (limit_per_symbol * 5) для корректного распределения
-                    limited = filtered[:limit_per_symbol * 5]
-                    
-                    # Группируем по биржам и распределяем лимит
-                    by_exchange = {}
-                    for d in limited:
-                        by_exchange.setdefault(d['exchange'], []).append(d)
-                    
-                    exchange_order = sorted(
-                        by_exchange.keys(),
-                        key=lambda ex: max((x['volume'] for x in by_exchange[ex]), default=0),
-                        reverse=True,
-                    )
-                    n = len(exchange_order)
-                    result = []
-                    if n:
-                        base = limit_per_symbol // n
-                        remainder = limit_per_symbol % n
-                        for i, ex in enumerate(exchange_order):
-                            items = by_exchange[ex]
-                            items.sort(key=lambda x: x['volume'], reverse=True)
-                            take = max(1, base + (1 if i < remainder else 0)) if limit_per_symbol >= n else 1
-                            for d in items[:take]:
-                                d['symbol'] = d.get('symbol', '')
-                            result.extend(items[:take])
-                    
-                    # Итоговая сортировка
-                    result.sort(key=lambda x: x['volume'], reverse=True)
+                    if limit_per_symbol is None:
+                        result = list(filtered)
+                        result.sort(key=lambda x: x['volume'], reverse=True)
+                    else:
+                        # Применяем ту же логику распределения по биржам
+                        # Берём с запасом (limit_per_symbol * 5) для корректного распределения
+                        limited = filtered[:limit_per_symbol * 5]
+                        
+                        # Группируем по биржам и распределяем лимит
+                        by_exchange = {}
+                        for d in limited:
+                            by_exchange.setdefault(d['exchange'], []).append(d)
+                        
+                        exchange_order = sorted(
+                            by_exchange.keys(),
+                            key=lambda ex: max((x['volume'] for x in by_exchange[ex]), default=0),
+                            reverse=True,
+                        )
+                        n = len(exchange_order)
+                        result = []
+                        if n:
+                            base = limit_per_symbol // n
+                            remainder = limit_per_symbol % n
+                            for i, ex in enumerate(exchange_order):
+                                items = by_exchange[ex]
+                                items.sort(key=lambda x: x['volume'], reverse=True)
+                                take = max(1, base + (1 if i < remainder else 0)) if limit_per_symbol >= n else 1
+                                for d in items[:take]:
+                                    d['symbol'] = d.get('symbol', '')
+                                result.extend(items[:take])
+                        
+                        # Итоговая сортировка
+                        result.sort(key=lambda x: x['volume'], reverse=True)
                     
                     response_data = {
                         'market': market,
@@ -1388,6 +1403,12 @@ def api_densities_table(request):
         symbol_densities = []
         for exchange, densities in exchange_densities.items():
             symbol_densities.extend(densities)
+
+        if limit_per_symbol is None:
+            for d in symbol_densities:
+                d['symbol'] = symbol_upper
+            result.extend(symbol_densities)
+            continue
 
         # Лимит делим поровну между биржами
         by_exchange = {}
