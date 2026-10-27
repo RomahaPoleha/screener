@@ -272,11 +272,12 @@ async function openChart(symbol) {
 
         els.chartWrapper.addEventListener('mouseup', (e) => {
             if (isPencilEnabled && e.button === 0) {
-                isDrawing = false;
-                lastPencilPoint = null;
-                if (currentStroke && currentStroke.length > 0) {
-                    pencilStrokes.push(currentStroke);
-                    currentStroke = null;
+                finishPencilStroke();
+                if (isPencilEnabled) {
+                    isPencilEnabled = false;
+                    updateToolUI('pencilBtn', false);
+                    if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+                    redrawAllPersistentDrawings();
                 }
             }
             if (isRulerEnabled && e.button === 0 && isRulerDragging) {
@@ -285,6 +286,11 @@ async function openChart(symbol) {
                 rulerCurrentPoint = null;
                 els.rulerMeasurement.style.display = 'none';
                 redrawAllPersistentDrawings();
+                if (isRulerEnabled) {
+                    isRulerEnabled = false;
+                    updateToolUI('rulerBtn', false);
+                    if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+                }
             }
             if (!isRulerEnabled && e.button === 1 && isRulerDragging) {
                 e.preventDefault(); e.stopPropagation();
@@ -298,11 +304,12 @@ async function openChart(symbol) {
 
         els.chartWrapper.addEventListener('mouseleave', () => {
             if (isPencilEnabled) {
-                isDrawing = false;
-                lastPencilPoint = null;
-                if (currentStroke && currentStroke.length > 0) {
-                    pencilStrokes.push(currentStroke);
-                    currentStroke = null;
+                finishPencilStroke();
+                if (isPencilEnabled) {
+                    isPencilEnabled = false;
+                    updateToolUI('pencilBtn', false);
+                    if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+                    redrawAllPersistentDrawings();
                 }
             }
             if (isRulerDragging) {
@@ -312,6 +319,11 @@ async function openChart(symbol) {
                 els.rulerMeasurement.style.display = 'none';
                 redrawAllPersistentDrawings();
                 isRulerMiddleClickDrag = false;
+                if (isRulerEnabled) {
+                    isRulerEnabled = false;
+                    updateToolUI('rulerBtn', false);
+                    if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+                }
             }
         });
     } catch (e) { console.error('Chart init error:', e); return; }

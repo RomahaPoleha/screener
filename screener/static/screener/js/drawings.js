@@ -195,10 +195,22 @@ function initPencilCanvas() {
     els.pencilCanvas.onmouseup = () => {
         if (!isPencilEnabled) return;
         finishPencilStroke();
+        if (isPencilEnabled) {
+            isPencilEnabled = false;
+            updateToolUI('pencilBtn', false);
+            if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+            redrawAllPersistentDrawings();
+        }
     };
     els.pencilCanvas.onmouseleave = () => {
         if (!isPencilEnabled) return;
         finishPencilStroke();
+        if (isPencilEnabled) {
+            isPencilEnabled = false;
+            updateToolUI('pencilBtn', false);
+            if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+            redrawAllPersistentDrawings();
+        }
     };
 }
 
@@ -417,13 +429,14 @@ function deleteLineAtPoint(x, y) {
 
 function handleChartClick(param) {
     if (!param.point || typeof param.point.y !== 'number') return;
-    if (isEraserEnabled) { deleteLineAtPoint(param.point.x, param.point.y); return; }
+    if (isEraserEnabled) { deleteLineAtPoint(param.point.x, param.point.y); if (isEraserEnabled) toggleEraser(); return; }
     if (isRulerEnabled) return;
 
     if (isAlertModeEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (!price || isNaN(price)) return;
         AlertManager.add(currentSymbol, price);
+        toggleAlertMode();
     }
     else if (isHorizontalLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
@@ -442,6 +455,7 @@ function handleChartClick(param) {
             }));
             localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
         }
+        toggleHorizontalLine();
     }
     else if (isTrendLineEnabled) {
         const price = candleSeries.coordinateToPrice(param.point.y);
@@ -467,6 +481,7 @@ function handleChartClick(param) {
                 window.savedTrendLines[currentSymbol] = activeTrendlines;
                 localStorage.setItem('savedTrendLines', JSON.stringify(window.savedTrendLines));
             }
+            toggleTrendLine();
         }
     }
 }
