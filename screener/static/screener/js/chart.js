@@ -215,7 +215,7 @@ async function openChart(symbol) {
                     const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
                     if (found.type === 'trendline') {
                         const tl = activeTrendlines[found.index];
-                        dragStart = { price: price, time: time, orig: { price1: tl.price1, price2: tl.price2 } };
+                        dragStart = { price: price, time: time, orig: { price1: tl.price1, price2: tl.price2, time1: tl.time1, time2: tl.time2 } };
                     } else {
                         dragStart = { price: price, time: time };
                     }

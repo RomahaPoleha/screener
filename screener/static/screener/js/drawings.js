@@ -562,8 +562,11 @@ function updateDrawing(sel, price, time) {
         } else if (sel.handle === 'move') {
             if (dragStart && dragStart.orig) {
                 const dPrice = price - dragStart.price;
+                const dTime = time - dragStart.time;
                 tl.price1 = dragStart.orig.price1 + dPrice;
                 tl.price2 = dragStart.orig.price2 + dPrice;
+                tl.time1 = dragStart.orig.time1 + dTime;
+                tl.time2 = dragStart.orig.time2 + dTime;
             }
         }
     }
