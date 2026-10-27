@@ -380,8 +380,12 @@ def api_candles(request, symbol):
 @require_http_methods(["GET"])
 def api_natr(request):
     """API: NATR данные (только Futures)"""
-    # Читаем NATR кэш напрямую — это быстрее и не требует внешних вызовов
-    # Символы берём из ключей NATR кэша, а не из coins_future
+    # Кэш последнего успешного ответа (защита от временных пустых результатов)
+    api_cache_key = 'natr:api:response'
+    cached_api = cache.get(api_cache_key)
+    if cached_api is not None:
+        return JsonResponse(cached_api)
+
     natr_data = {}
     last_update_times = cache.get("natr_last_update_times_future", {})
 
@@ -435,10 +439,15 @@ def api_natr(request):
                 if data:
                     natr_data[sym] = data
 
-    return JsonResponse({
+    response_data = {
         'natr': natr_data,
         'last_update_times': last_update_times
-    })
+    }
+    if natr_data:
+        cache.set(api_cache_key, response_data, 20)
+    elif cached_api is not None:
+        return JsonResponse(cached_api)
+    return JsonResponse(response_data)
 
 
 @login_required

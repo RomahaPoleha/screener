@@ -40,9 +40,12 @@ async function loadNatrData() {
         const res = await fetch(`/api/natr/`);
         if (!res.ok) throw new Error('Ошибка NATR');
         const response = await res.json();
-        natrData = response.natr || {};
-        applyLocalFilters();
-        updateChartStats();
+        // Не затираем старые данные пустым ответом
+        if (response.natr && Object.keys(response.natr).length > 0) {
+            natrData = response.natr;
+            applyLocalFilters();
+            updateChartStats();
+        }
     } catch (err) { console.error(err); }
 }
 
