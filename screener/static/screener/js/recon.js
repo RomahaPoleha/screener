@@ -438,6 +438,20 @@ function renderReconPanel() {
     }).join('');
 }
 
+function toggleReconMarket(exId, market) {
+    reconMarkets[exId][market] = !reconMarkets[exId][market];
+    localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
+    renderReconPanel();
+    const hasEnabled = RECON_EXCHANGES.some(ex =>
+        reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
+    );
+    if (currentSymbol && hasEnabled && reconEnabled) {
+        loadReconDensities(currentSymbol);
+    } else if (!hasEnabled) {
+        clearReconLines();
+    }
+}
+
 function toggleReconAll() {
     reconAllEnabled = !reconAllEnabled;
     reconEnabled = reconAllEnabled;
