@@ -12,6 +12,7 @@ let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 let reconAllEnabled = localStorage.getItem('reconAllEnabled') !== 'false';
 let reconSavedMarkets = null;
 try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
+let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
 let reconUpdateTimer = null;
 let reconPanelEl = null;
 let reconLines = [];
