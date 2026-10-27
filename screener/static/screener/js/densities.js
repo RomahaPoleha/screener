@@ -346,7 +346,6 @@ function renderGroupCard(group, index) {
                  data-volume="${d.volume}"
                  data-local-max="${localMaxVolume}"
                  style="animation-delay: ${index * 40 + rowIdx * 20}ms">
-                <div class="row-side-icon ${d.side}">${d.side === 'buy' ? 'B' : 'S'}</div>
                 <div class="row-volume">$${fmtVolume(d.volume)}</div>
                 <div class="row-bar-container">
                     <div class="row-bar-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}bb 60%, ${sideColor}33 100%);"></div>
@@ -365,7 +364,6 @@ function renderGroupCard(group, index) {
         <div class="group-card animate-fade-in" style="animation-delay: ${index * 50}ms">
             <div class="group-card-header">
                 <div class="group-symbol-row">
-                    ${domain ? `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=16" onerror="this.style.display='none'" class="group-exchange-icon" style="width:16px;height:16px;border-radius:3px;margin-right:6px;flex-shrink:0;">` : ''}
                     <span class="group-symbol" onclick="copySymbol('${group.symbol}')" title="Клик для копирования">${group.symbol}</span>
                     <span class="group-exchange-badge">${group.exchangeShort}</span>
                     <span class="group-market-badge">${group.market === 'futures' ? 'F' : 'S'}</span>
