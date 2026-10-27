@@ -9,7 +9,9 @@ let densityMarkets = { future: false, spot: false };
 let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
 let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 
-let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
+let reconAllEnabled = localStorage.getItem('reconAllEnabled') !== 'false';
+let reconSavedMarkets = null;
+try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
 let reconUpdateTimer = null;
 let reconPanelEl = null;
 let reconLines = [];
@@ -58,6 +60,14 @@ try {
     if (reconMinVolumes.binance_alpha.spot === 10000) reconMinVolumes.binance_alpha.spot = 1000;
     if (reconMinVolumes.binance_alpha.futures === 10000) reconMinVolumes.binance_alpha.futures = 1000;
 } catch (e) {}
+
+// Если мастер-выключатель был выключен, гасим все биржи при загрузке
+if (!reconAllEnabled) {
+    for (const ex of RECON_EXCHANGES) {
+        reconMarkets[ex.id].spot = false;
+        if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = false;
+    }
+}
 
 const RECON_EXCHANGES = [
     { id: 'binance', label: 'BI', color: '#f59e0b', domain: 'binance.com' },
@@ -373,6 +383,8 @@ function ensureReconPanel() {
     container.style.display = 'flex';
     if (!container.dataset.hasClickListener) {
         container.addEventListener('click', (e) => {
+            const allToggle = e.target.closest('.recon-toggle-all');
+            if (allToggle) { toggleReconAll(); return; }
             const t = e.target.closest('.recon-toggle');
             if (!t) return;
             toggleReconMarket(t.dataset.ex, t.dataset.market);
@@ -394,7 +406,16 @@ function removeReconPanel() {
 
 function renderReconPanel() {
     if (!reconPanelEl) return;
-    reconPanelEl.innerHTML = RECON_EXCHANGES.map(ex => {
+    const allEnabled = RECON_EXCHANGES.every(ex =>
+        reconMarkets[ex.id].spot && (ex.id === 'binance_alpha' || reconMarkets[ex.id].futures)
+    );
+    const masterHtml = `<div style="display:flex;align-items:center;gap:6px;padding-right:8px;border-right:1px solid #475569;">
+        <span style="font-weight:700;font-size:11px;color:#ffffff;">ВСЕ</span>
+        <div class="recon-toggle recon-toggle-all" data-all="1" title="Включить/выключить все биржи" style="position:relative;width:24px;height:24px;border-radius:4px;background:${allEnabled ? 'rgba(245,158,11,0.25)' : 'transparent'};border:${allEnabled ? '2px solid #f59e0b' : '2px solid #94a3b8'};cursor:pointer;user-select:none;${allEnabled ? '' : 'opacity:0.5;'}">
+            ${allEnabled ? '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#f59e0b;font-size:13px;font-weight:bold;">✓</span>' : ''}
+        </div>
+    </div>`;
+    reconPanelEl.innerHTML = masterHtml + RECON_EXCHANGES.map(ex => {
         const mkToggle = (market, letter) => {
             const on = reconMarkets[ex.id][market];
             const bg = on ? 'rgba(59, 130, 246, 0.2)' : 'transparent';
@@ -422,9 +443,39 @@ function renderReconPanel() {
     }).join('');
 }
 
-function toggleReconMarket(exId, market) {
-    reconMarkets[exId][market] = !reconMarkets[exId][market];
+function toggleReconAll() {
+    const allEnabled = RECON_EXCHANGES.every(ex =>
+        reconMarkets[ex.id].spot && (ex.id === 'binance_alpha' || reconMarkets[ex.id].futures)
+    );
+    if (allEnabled) {
+        // Save current state
+        reconSavedMarkets = JSON.parse(JSON.stringify(reconMarkets));
+        localStorage.setItem('reconSavedMarkets', JSON.stringify(reconSavedMarkets));
+        // Disable all
+        for (const ex of RECON_EXCHANGES) {
+            reconMarkets[ex.id].spot = false;
+            if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = false;
+        }
+        reconAllEnabled = false;
+    } else {
+        // Restore saved state if available, else enable all
+        if (reconSavedMarkets) {
+            for (const ex of RECON_EXCHANGES) {
+                if (reconSavedMarkets[ex.id]) {
+                    reconMarkets[ex.id].spot = !!reconSavedMarkets[ex.id].spot;
+                    if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = !!reconSavedMarkets[ex.id].futures;
+                }
+            }
+        } else {
+            for (const ex of RECON_EXCHANGES) {
+                reconMarkets[ex.id].spot = true;
+                if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = true;
+            }
+        }
+        reconAllEnabled = true;
+    }
     localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
+    localStorage.setItem('reconAllEnabled', reconAllEnabled ? 'true' : 'false');
     renderReconPanel();
     const hasEnabled = RECON_EXCHANGES.some(ex =>
         reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
