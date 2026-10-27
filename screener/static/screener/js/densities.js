@@ -336,8 +336,7 @@ function renderGroupCard(group, index) {
             const pct = ((d.price - currentPrice) / currentPrice) * 100;
             const absPct = Math.abs(pct).toFixed(2);
             const sign = pct >= 0 ? '+' : '−';
-            const pctClass = pct >= 0 ? 'row-pct-above' : 'row-pct-below';
-            pctHtml = `<span class="row-pct ${pctClass}" title="От текущей цены $${currentPrice.toLocaleString()}">${sign}${absPct}%</span>`;
+            pctHtml = `<span class="row-pct" style="color:${sideColor};" title="От текущей цены $${currentPrice.toLocaleString()}">${sign}${absPct}%</span>`;
         }
 
         return `

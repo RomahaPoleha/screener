@@ -378,13 +378,13 @@ body {
 }
 
 .row-pct-above {
-    color: var(--accent-green);
-    border-color: rgba(16, 185, 129, 0.3);
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
 }
 
 .row-pct-below {
-    color: var(--accent-red);
-    border-color: rgba(239, 68, 68, 0.3);
+    color: #14b8a6;
+    border-color: rgba(20, 184, 166, 0.3);
 }
 
 .row-exchange {
