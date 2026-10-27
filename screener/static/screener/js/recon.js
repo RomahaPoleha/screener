@@ -9,9 +9,7 @@ let densityMarkets = { future: false, spot: false };
 let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
 let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 
-let reconAllEnabled = localStorage.getItem('reconAllEnabled') === null
-    ? (localStorage.getItem('reconEnabled') === 'true')
-    : localStorage.getItem('reconAllEnabled') === 'true';
+let reconAllEnabled = true;
 let reconSavedMarkets = null;
 try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
 let reconEnabled = reconAllEnabled;
@@ -327,7 +325,7 @@ async function fetchReconMarket(exId, symbol, market) {
 }
 
 async function loadReconDensities(symbol) {
-    if (!reconEnabled || !candleSeries || isReconLoading) return;
+    if (!reconEnabled || !reconAllEnabled || !candleSeries || isReconLoading) return;
     isReconLoading = true;
     try {
         const tasks = [];
@@ -449,9 +447,6 @@ function toggleReconMarket(exId, market) {
 
 function toggleReconAll() {
     reconAllEnabled = !reconAllEnabled;
-    reconEnabled = reconAllEnabled;
-    localStorage.setItem('reconAllEnabled', reconAllEnabled ? 'true' : 'false');
-    localStorage.setItem('reconEnabled', reconEnabled ? 'true' : 'false');
     renderReconPanel();
     if (reconAllEnabled) {
         if (currentSymbol) {
@@ -473,7 +468,7 @@ function startReconUpdates(symbol) {
     fetchAlphaSymbolMap();
     loadReconDensities(symbol);
     reconUpdateTimer = setInterval(() => {
-        if (currentSymbol === symbol && reconEnabled) loadReconDensities(symbol);
+        if (currentSymbol === symbol && reconEnabled && reconAllEnabled) loadReconDensities(symbol);
     }, 3000);
 }
 
