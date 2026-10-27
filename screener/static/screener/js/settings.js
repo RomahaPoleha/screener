@@ -33,6 +33,8 @@ const volHist = document.getElementById('showVolumeHistogram');
 if (volHist) volHist.checked = volumeHistogramEnabled;
 const drawTools = document.getElementById('showDrawingTools');
 if (drawTools) drawTools.checked = showDrawingTools;
+const gridToggle = document.getElementById('showGrid');
+if (gridToggle) gridToggle.checked = (typeof gridEnabled !== 'undefined' ? gridEnabled : true);
 const reconToggle = document.getElementById('reconPanelToggle');
 if (reconToggle) {
     reconToggle.checked = reconEnabled;
@@ -72,6 +74,14 @@ showDrawingTools = document.getElementById('showDrawingTools').checked;
 localStorage.setItem('showDrawingTools', showDrawingTools);
 if (els && els.drawingToolsPanel) {
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+}
+const gridToggle = document.getElementById('showGrid');
+if (gridToggle) {
+    gridEnabled = gridToggle.checked;
+    localStorage.setItem('gridEnabled', gridEnabled);
+    if (chart) {
+        chart.applyOptions({ grid: { vertLines: { color: '#1f1f1f', visible: gridEnabled }, horzLines: { color: '#1f1f1f', visible: gridEnabled } } });
+    }
 }
 const reconToggle = document.getElementById('reconPanelToggle');
 if (reconToggle) {

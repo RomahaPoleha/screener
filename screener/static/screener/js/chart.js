@@ -120,7 +120,7 @@ async function openChart(symbol) {
             width: els.chartWrapper.clientWidth,
             height: els.chartWrapper.clientHeight,
             layout: { background: { color: '#0f0f0f' }, textColor: '#999999' },
-            grid: { vertLines: { color: '#1f1f1f' }, horzLines: { color: '#1f1f1f' } },
+            grid: { vertLines: { color: '#1f1f1f', visible: gridEnabled }, horzLines: { color: '#1f1f1f', visible: gridEnabled } },
             timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#333333', rightOffset: 50, barSpacing: 10 },
             rightPriceScale: { borderColor: '#333333', scaleMargins: { top: 0.1, bottom: 0.25 }, autoScale: true },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },

@@ -11,6 +11,7 @@ let rulerStartPoint = null, rulerCurrentPoint = null, rulerFixedMeasurement = nu
 let selectedDrawing = null; // { type, index, id?, handle }
 let isDraggingDrawing = false;
 let dragStart = null;
+let gridEnabled = localStorage.getItem('gridEnabled') !== 'false';
 let isEraserEnabled = false;
 let trendLineHotkeyActive = false;
 let horizontalLineHotkeyActive = false;
