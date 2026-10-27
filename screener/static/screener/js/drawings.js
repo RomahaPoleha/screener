@@ -8,7 +8,9 @@ let isTrendLineEnabled = false, trendLineStart = null, activeTrendlines = [];
 let isPencilEnabled = false, pencilCtx = null, isDrawing = false, lastPencilPoint = null;
 let isRulerEnabled = false, isRulerDragging = false, isRulerMiddleClickDrag = false;
 let rulerStartPoint = null, rulerCurrentPoint = null, rulerFixedMeasurement = null;
-let showDrawingTools = true;
+let selectedDrawing = null; // { type, index, id?, handle }
+let isDraggingDrawing = false;
+let dragStart = null;
 let isEraserEnabled = false;
 let trendLineHotkeyActive = false;
 let horizontalLineHotkeyActive = false;
@@ -369,6 +371,45 @@ function redrawAllPersistentDrawings() {
     if (isRulerDragging && rulerStartPoint && rulerCurrentPoint) drawRulerRectangle(rulerStartPoint, rulerCurrentPoint);
     if (rulerFixedMeasurement) drawRulerRectangle(rulerFixedMeasurement.start, rulerFixedMeasurement.end);
 
+    if (selectedDrawing) {
+        pencilCtx.fillStyle = '#ffffff';
+        pencilCtx.strokeStyle = '#3b82f6';
+        pencilCtx.lineWidth = 2;
+        const drawHandle = (hx, hy) => {
+            if (hx === null || hy === null) return;
+            pencilCtx.beginPath();
+            pencilCtx.arc(hx, hy, 5, 0, Math.PI * 2);
+            pencilCtx.fill();
+            pencilCtx.stroke();
+        };
+        if (selectedDrawing.type === 'horizontal') {
+            const hl = activeHorizontalLines[selectedDrawing.index];
+            if (hl) {
+                const hx = hl.time ? getXByTime(hl.time) : 0;
+                const hy = candleSeries.priceToCoordinate(hl.price);
+                drawHandle(hx !== null ? hx : 0, hy);
+            }
+        } else if (selectedDrawing.type === 'alert') {
+            const alerts = (currentSymbol && savedAlerts[currentSymbol]) ? savedAlerts[currentSymbol] : [];
+            const alert = alerts.find(a => a.id === selectedDrawing.id);
+            if (alert) {
+                const hy = candleSeries.priceToCoordinate(alert.price);
+                drawHandle(els.pencilCanvas.width / 2, hy);
+            }
+        } else if (selectedDrawing.type === 'trendline') {
+            const tl = activeTrendlines[selectedDrawing.index];
+            if (tl) {
+                const x1 = getXByTime(tl.time1), y1 = candleSeries.priceToCoordinate(tl.price1);
+                const x2 = getXByTime(tl.time2), y2 = candleSeries.priceToCoordinate(tl.price2);
+                drawHandle(x1, y1);
+                drawHandle(x2, y2);
+                if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+                    drawHandle((x1 + x2) / 2, (y1 + y2) / 2);
+                }
+            }
+        }
+    }
+
     redrawPencilStrokes();
     pencilCtx.setLineDash([]);
 }
@@ -450,6 +491,91 @@ function deleteLineAtPoint(x, y) {
                 }
             }
         }
+    }
+}
+
+function isAnyDrawingToolEnabled() {
+    return isAlertModeEnabled || isTrendLineEnabled || isHorizontalLineEnabled || isPencilEnabled || isRulerEnabled || isEraserEnabled;
+}
+
+function findDrawingAt(x, y) {
+    const threshold = 10;
+    // Alerts (by price line Y)
+    const alerts = (currentSymbol && savedAlerts[currentSymbol]) ? savedAlerts[currentSymbol] : [];
+    for (let i = alerts.length - 1; i >= 0; i--) {
+        const a = alerts[i];
+        const ay = candleSeries.priceToCoordinate(a.price);
+        if (ay !== null && Math.abs(ay - y) < threshold) {
+            return { type: 'alert', index: i, id: a.id, handle: 'move' };
+        }
+    }
+    // Horizontal lines
+    for (let i = activeHorizontalLines.length - 1; i >= 0; i--) {
+        const hl = activeHorizontalLines[i];
+        const hy = candleSeries.priceToCoordinate(hl.price);
+        if (hy !== null && Math.abs(hy - y) < threshold) {
+            const hx = hl.time ? getXByTime(hl.time) : 0;
+            if (hx === null || x >= hx - threshold) {
+                return { type: 'horizontal', index: i, handle: 'move' };
+            }
+        }
+    }
+    // Trendlines
+    for (let i = activeTrendlines.length - 1; i >= 0; i--) {
+        const tl = activeTrendlines[i];
+        const x1 = getXByTime(tl.time1), y1 = candleSeries.priceToCoordinate(tl.price1);
+        const x2 = getXByTime(tl.time2), y2 = candleSeries.priceToCoordinate(tl.price2);
+        if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+        const dStart = Math.hypot(x - x1, y - y1);
+        const dEnd = Math.hypot(x - x2, y - y2);
+        if (dStart < 8) return { type: 'trendline', index: i, handle: 'start' };
+        if (dEnd < 8) return { type: 'trendline', index: i, handle: 'end' };
+        const dist = pointToLineDistance(x, y, x1, y1, x2, y2);
+        if (dist < threshold) return { type: 'trendline', index: i, handle: 'move' };
+    }
+    return null;
+}
+
+function updateDrawing(sel, price, time) {
+    if (!sel) return;
+    if (sel.type === 'horizontal') {
+        const hl = activeHorizontalLines[sel.index];
+        if (hl) hl.price = price;
+    } else if (sel.type === 'alert') {
+        const alerts = (currentSymbol && savedAlerts[currentSymbol]) ? savedAlerts[currentSymbol] : [];
+        const alert = alerts.find(a => a.id === sel.id);
+        if (alert) {
+            alert.price = price;
+            if (chartAlertLines[alert.id]) {
+                try { candleSeries.removePriceLine(chartAlertLines[alert.id]); } catch(e){}
+                delete chartAlertLines[alert.id];
+            }
+            AlertManager.drawLine(alert);
+        }
+    } else if (sel.type === 'trendline') {
+        const tl = activeTrendlines[sel.index];
+        if (!tl) return;
+        if (sel.handle === 'start') {
+            tl.time1 = time; tl.price1 = price;
+        } else if (sel.handle === 'end') {
+            tl.time2 = time; tl.price2 = price;
+        } else if (sel.handle === 'move') {
+            if (dragStart && dragStart.orig) {
+                const dPrice = price - dragStart.price;
+                tl.price1 = dragStart.orig.price1 + dPrice;
+                tl.price2 = dragStart.orig.price2 + dPrice;
+            }
+        }
+    }
+}
+
+function saveDrawingChanges() {
+    if (!currentSymbol) return;
+    if (selectedDrawing && (selectedDrawing.type === 'horizontal' || selectedDrawing.type === 'trendline')) {
+        saveCurrentDrawings(currentSymbol);
+    }
+    if (selectedDrawing && selectedDrawing.type === 'alert') {
+        AlertManager.save();
     }
 }
 

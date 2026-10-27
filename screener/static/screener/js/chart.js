@@ -203,6 +203,30 @@ async function openChart(symbol) {
         }, { passive: true });
 
         els.chartWrapper.addEventListener('mousedown', (e) => {
+            if (!isAnyDrawingToolEnabled()) {
+                const rect = els.chartWrapper.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const found = (typeof findDrawingAt === 'function') ? findDrawingAt(x, y) : null;
+                if (found && e.button === 0) {
+                    selectedDrawing = found;
+                    isDraggingDrawing = true;
+                    const price = candleSeries.coordinateToPrice(y);
+                    const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
+                    if (found.type === 'trendline') {
+                        const tl = activeTrendlines[found.index];
+                        dragStart = { price: price, time: time, orig: { price1: tl.price1, price2: tl.price2 } };
+                    } else {
+                        dragStart = { price: price, time: time };
+                    }
+                    if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
+                    if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: false } });
+                    e.preventDefault(); e.stopPropagation();
+                    return;
+                } else if (e.button === 0) {
+                    if (selectedDrawing) { selectedDrawing = null; if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings(); }
+                }
+            }
             if (isRulerEnabled && e.button === 0) {
                 e.preventDefault(); e.stopPropagation();
                 rulerFixedMeasurement = null;
@@ -252,6 +276,18 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('mousemove', (e) => {
+            if (isDraggingDrawing && selectedDrawing) {
+                const rect = els.chartWrapper.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const price = candleSeries.coordinateToPrice(y);
+                const time = chart.timeScale().coordinateToTime(x) || getTimeByX(x);
+                if (price !== null && time !== null) {
+                    updateDrawing(selectedDrawing, price, time);
+                    if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
+                }
+                return;
+            }
             if (isRulerDragging && rulerStartPoint) {
                 const rect = els.chartWrapper.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -271,6 +307,13 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('mouseup', (e) => {
+            if (isDraggingDrawing) {
+                isDraggingDrawing = false;
+                if (typeof saveDrawingChanges === 'function') saveDrawingChanges();
+                dragStart = null;
+                if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+                if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
+            }
             if (isPencilEnabled && e.button === 0) {
                 finishPencilStroke();
                 if (isPencilEnabled) {
@@ -303,6 +346,13 @@ async function openChart(symbol) {
         });
 
         els.chartWrapper.addEventListener('mouseleave', () => {
+            if (isDraggingDrawing) {
+                isDraggingDrawing = false;
+                if (typeof saveDrawingChanges === 'function') saveDrawingChanges();
+                dragStart = null;
+                if (chart) chart.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true } });
+                if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
+            }
             if (isPencilEnabled) {
                 finishPencilStroke();
                 if (isPencilEnabled) {

@@ -111,7 +111,25 @@ els.change.addEventListener('input', (e) => {
         const isHoriz = typeof isHorizontalLineEnabled !== 'undefined' ? isHorizontalLineEnabled : false;
         const isPencil = typeof isPencilEnabled !== 'undefined' ? isPencilEnabled : false;
 
-        if (e.ctrlKey && e.key === 's') { e.preventDefault(); if (typeof toggleTrendLine === 'function') toggleTrendLine(); }
+        if (e.key === 'Escape') {
+            if (typeof selectedDrawing !== 'undefined' && selectedDrawing) {
+                selectedDrawing = null;
+                if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
+            }
+        }
+        if (e.key === 'Delete' && typeof selectedDrawing !== 'undefined' && selectedDrawing) {
+            if (selectedDrawing.type === 'horizontal') {
+                activeHorizontalLines.splice(selectedDrawing.index, 1);
+                if (currentSymbol) saveCurrentDrawings(currentSymbol);
+            } else if (selectedDrawing.type === 'trendline') {
+                activeTrendlines.splice(selectedDrawing.index, 1);
+                if (currentSymbol) saveCurrentDrawings(currentSymbol);
+            } else if (selectedDrawing.type === 'alert') {
+                if (typeof AlertManager !== 'undefined') AlertManager.remove(currentSymbol, selectedDrawing.id);
+            }
+            selectedDrawing = null;
+            if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
+        }
         if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); if (typeof togglePencil === 'function') togglePencil(); }
         if (e.key === 'b' || e.key === 'B') { if (typeof toggleAlertMode === 'function') toggleAlertMode(); }
         if (e.key === 'h' || e.key === 'H') { if (typeof toggleHorizontalLine === 'function') toggleHorizontalLine(); }
