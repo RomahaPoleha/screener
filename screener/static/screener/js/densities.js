@@ -38,6 +38,8 @@ const state = {
     sortByNatr1m: false,
     // Min age filter (seconds)
     minAgeFilter: 0,
+    // Max price deviation filter (%)
+    maxPctFilter: 30,
     // Hidden symbols
     hiddenSymbols: new Set()
 };
@@ -55,6 +57,9 @@ function loadExchangeFilters() {
             state.exchangeFilters = parsed.filters || {};
             state.exchangeMinVolumes = parsed.minVolumes || {};
             state.sortByNatr1m = parsed.sortByNatr1m || false;
+            state.maxPctFilter = (parsed.maxPctFilter !== undefined) ? parsed.maxPctFilter : 30;
+            if (state.maxPctFilter < 0) state.maxPctFilter = 0;
+            if (state.maxPctFilter > 30) state.maxPctFilter = 30;
         }
     } catch (e) {
         console.warn('Failed to load exchange filters:', e);
@@ -76,7 +81,8 @@ function saveExchangeFilters() {
         localStorage.setItem('densitiesExchangeFilters', JSON.stringify({
             filters: state.exchangeFilters,
             minVolumes: state.exchangeMinVolumes,
-            sortByNatr1m: state.sortByNatr1m
+            sortByNatr1m: state.sortByNatr1m,
+            maxPctFilter: state.maxPctFilter
         }));
     } catch (e) {
         console.warn('Failed to save exchange filters:', e);
@@ -287,6 +293,8 @@ function renderShell() {
                 <input type="text" id="search-input" class="search-input" placeholder="BTC, ETH..." value="${state.searchQuery}">
                 <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Мин. возраст:</label>
                 <input type="number" id="min-age-input" value="${state.minAgeFilter}" min="0" max="3600" step="1" onchange="handleMinAgeFilter(this.value)" style="width:70px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;" placeholder="мин">
+                <label style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-left:8px; margin-right:6px;">Макс. %:</label>
+                <input type="number" id="max-pct-input" value="${state.maxPctFilter}" min="0" max="30" step="1" onchange="handleMaxPctFilter(this.value)" style="width:60px; font-size:11px; font-family:'JetBrains Mono',monospace; background:rgba(30,41,59,0.3); border:1px solid var(--border-primary); color:var(--text-primary); padding:4px 8px; border-radius:4px;" placeholder="%">
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace;">
@@ -680,13 +688,15 @@ function getProcessedDensities() {
         return d.volume >= minVol;
     });
 
-    // Auto-filter: hide densities whose price deviates from current price by more than 30%
-    result = result.filter(d => {
-        const currentPrice = state.currentPrices[d.symbol];
-        if (!currentPrice || currentPrice <= 0) return true;
-        const pct = Math.abs(((d.price - currentPrice) / currentPrice) * 100);
-        return pct <= 30;
-    });
+    // Auto-filter: hide densities whose price deviates from current price by more than maxPctFilter %
+    if (state.maxPctFilter > 0) {
+        result = result.filter(d => {
+            const currentPrice = state.currentPrices[d.symbol];
+            if (!currentPrice || currentPrice <= 0) return true;
+            const pct = Math.abs(((d.price - currentPrice) / currentPrice) * 100);
+            return pct <= state.maxPctFilter;
+        });
+    }
 
     return result;
 }
@@ -780,6 +790,15 @@ function toggleLive() {
 
 function handleMinAgeFilter(value) {
     state.minAgeFilter = parseInt(value) || 0;
+    renderContent();
+}
+
+function handleMaxPctFilter(value) {
+    let v = parseInt(value) || 0;
+    if (v < 0) v = 0;
+    if (v > 30) v = 30;
+    state.maxPctFilter = v;
+    saveExchangeFilters();
     renderContent();
 }
 
