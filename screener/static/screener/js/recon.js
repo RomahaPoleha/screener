@@ -372,11 +372,6 @@ function clearReconLines() {
 function ensureReconPanel() {
     const container = document.getElementById('reconPanelContainer');
     if (!container) return;
-    if (!reconEnabled) {
-        container.style.display = 'none';
-        container.innerHTML = '';
-        return;
-    }
     container.style.display = 'flex';
     if (!container.dataset.hasClickListener) {
         container.addEventListener('click', (e) => {
@@ -466,7 +461,6 @@ function toggleReconAll() {
         }
     } else {
         clearReconLines();
-        removeReconPanel();
     }
 }
 
