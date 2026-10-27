@@ -9,10 +9,12 @@ let densityMarkets = { future: false, spot: false };
 let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
 let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 
-let reconAllEnabled = localStorage.getItem('reconAllEnabled') !== 'false';
+let reconAllEnabled = localStorage.getItem('reconAllEnabled') === null
+    ? (localStorage.getItem('reconEnabled') === 'true')
+    : localStorage.getItem('reconAllEnabled') === 'true';
 let reconSavedMarkets = null;
 try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
-let reconEnabled = localStorage.getItem('reconEnabled') === 'true';
+let reconEnabled = reconAllEnabled;
 let reconUpdateTimer = null;
 let reconPanelEl = null;
 let reconLines = [];
@@ -62,13 +64,7 @@ try {
     if (reconMinVolumes.binance_alpha.futures === 10000) reconMinVolumes.binance_alpha.futures = 1000;
 } catch (e) {}
 
-// Если мастер-выключатель был выключен, гасим все биржи при загрузке
-if (!reconAllEnabled) {
-    for (const ex of RECON_EXCHANGES) {
-        reconMarkets[ex.id].spot = false;
-        if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = false;
-    }
-}
+// Master toggle state is loaded from localStorage (reconAllEnabled/reconEnabled)
 
 const RECON_EXCHANGES = [
     { id: 'binance', label: 'BI', color: '#f59e0b', domain: 'binance.com' },
@@ -407,9 +403,7 @@ function removeReconPanel() {
 
 function renderReconPanel() {
     if (!reconPanelEl) return;
-    const allEnabled = RECON_EXCHANGES.every(ex =>
-        reconMarkets[ex.id].spot && (ex.id === 'binance_alpha' || reconMarkets[ex.id].futures)
-    );
+    const allEnabled = reconAllEnabled;
     const masterHtml = `<div style="display:flex;align-items:center;gap:6px;padding-right:8px;border-right:1px solid #475569;">
         <span style="font-weight:700;font-size:11px;color:#ffffff;">ВСЕ</span>
         <div class="recon-toggle recon-toggle-all" data-all="1" title="Включить/выключить все биржи" style="position:relative;width:24px;height:24px;border-radius:4px;background:${allEnabled ? 'rgba(245,158,11,0.25)' : 'transparent'};border:${allEnabled ? '2px solid #f59e0b' : '2px solid #94a3b8'};cursor:pointer;user-select:none;${allEnabled ? '' : 'opacity:0.5;'}">
@@ -445,46 +439,20 @@ function renderReconPanel() {
 }
 
 function toggleReconAll() {
-    const allEnabled = RECON_EXCHANGES.every(ex =>
-        reconMarkets[ex.id].spot && (ex.id === 'binance_alpha' || reconMarkets[ex.id].futures)
-    );
-    if (allEnabled) {
-        // Save current state
-        reconSavedMarkets = JSON.parse(JSON.stringify(reconMarkets));
-        localStorage.setItem('reconSavedMarkets', JSON.stringify(reconSavedMarkets));
-        // Disable all
-        for (const ex of RECON_EXCHANGES) {
-            reconMarkets[ex.id].spot = false;
-            if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = false;
-        }
-        reconAllEnabled = false;
-    } else {
-        // Restore saved state if available, else enable all
-        if (reconSavedMarkets) {
-            for (const ex of RECON_EXCHANGES) {
-                if (reconSavedMarkets[ex.id]) {
-                    reconMarkets[ex.id].spot = !!reconSavedMarkets[ex.id].spot;
-                    if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = !!reconSavedMarkets[ex.id].futures;
-                }
-            }
-        } else {
-            for (const ex of RECON_EXCHANGES) {
-                reconMarkets[ex.id].spot = true;
-                if (ex.id !== 'binance_alpha') reconMarkets[ex.id].futures = true;
-            }
-        }
-        reconAllEnabled = true;
-    }
-    localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
+    reconAllEnabled = !reconAllEnabled;
+    reconEnabled = reconAllEnabled;
     localStorage.setItem('reconAllEnabled', reconAllEnabled ? 'true' : 'false');
+    localStorage.setItem('reconEnabled', reconEnabled ? 'true' : 'false');
     renderReconPanel();
-    const hasEnabled = RECON_EXCHANGES.some(ex =>
-        reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
-    );
-    if (currentSymbol && hasEnabled) {
-        loadReconDensities(currentSymbol);
-    } else if (!hasEnabled) {
+    if (reconAllEnabled) {
+        if (currentSymbol) {
+            ensureReconPanel();
+            fetchAlphaSymbolMap();
+            loadReconDensities(currentSymbol);
+        }
+    } else {
         clearReconLines();
+        removeReconPanel();
     }
 }
 
