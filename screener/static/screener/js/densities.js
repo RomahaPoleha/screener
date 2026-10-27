@@ -436,8 +436,9 @@ function renderContent() {
 
         if (missing.length === 0) {
             state.currentPrices = priceMap;
-            sortByPctDeviation(processed);
-            renderWithNatr(grid, processed);
+            const filtered = getProcessedDensities();
+            sortByPctDeviation(filtered);
+            renderWithNatr(grid, filtered);
             return;
         }
 
@@ -455,8 +456,9 @@ function renderContent() {
 
         Promise.all(fetches).then(() => {
             state.currentPrices = priceMap;
-            sortByPctDeviation(processed);
-            renderWithNatr(grid, processed);
+            const filtered = getProcessedDensities();
+            sortByPctDeviation(filtered);
+            renderWithNatr(grid, filtered);
         });
     }).catch(err => {
         console.warn('Price fetch failed:', err);
@@ -475,8 +477,9 @@ function renderContent() {
         );
         Promise.all(fetches).then(() => {
             state.currentPrices = priceMap;
-            sortByPctDeviation(processed);
-            renderWithNatr(grid, processed);
+            const filtered = getProcessedDensities();
+            sortByPctDeviation(filtered);
+            renderWithNatr(grid, filtered);
         });
     });
 }
@@ -684,6 +687,14 @@ function getProcessedDensities() {
         const minVol = volCfg[d.market];
         if (minVol === undefined || minVol === null) return true;
         return d.volume >= minVol;
+    });
+
+    // Auto-filter: hide densities whose price deviates from current price by more than 30%
+    result = result.filter(d => {
+        const currentPrice = state.currentPrices[d.symbol];
+        if (!currentPrice || currentPrice <= 0) return true;
+        const pct = Math.abs(((d.price - currentPrice) / currentPrice) * 100);
+        return pct <= 30;
     });
 
     return result;
