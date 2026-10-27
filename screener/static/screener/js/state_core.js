@@ -39,7 +39,7 @@ let natrData = {};
 // WebSocket'ы
 let wsTrades = null, wsCandles = null;
 
-// Крупные сделки
+// Блок-сделки
 let tradeBuffer = [], currentThreshold = 10000;
 
 // Сортировка таблицы
