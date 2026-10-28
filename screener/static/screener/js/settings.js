@@ -3,27 +3,6 @@
 // Открытие/применение модалки, вкладки, карточки скальпа
 // ==========================================
 // ==========================================
-// ВСПЛЫВАЮЩИЕ ПОДСКАЗКИ
-// ==========================================
-function showHelpTip(text) {
-    let tip = document.getElementById('helpTip');
-    if (!tip) {
-        tip = document.createElement('div');
-        tip.id = 'helpTip';
-        tip.style.cssText = 'position:fixed; top:20%; left:50%; transform:translate(-50%,-50%); background:#1a1a1a; border:1px solid #f59e0b; color:#e5e5e5; padding:12px 16px; border-radius:4px; font-size:13px; max-width:360px; z-index:20000; box-shadow:0 4px 16px rgba(0,0,0,0.5); display:none;';
-        document.body.appendChild(tip);
-    }
-    tip.textContent = text;
-    tip.style.display = 'block';
-    clearTimeout(window._helpTipTimer);
-    window._helpTipTimer = setTimeout(() => { tip.style.display = 'none'; }, 5000);
-}
-document.addEventListener('click', (e) => {
-    const tip = document.getElementById('helpTip');
-    if (tip && !e.target.classList.contains('help-icon')) tip.style.display = 'none';
-}, true);
-
-// ==========================================
 // ВКЛАДКИ НАСТРОЕК
 // ==========================================
 function initSettingsTabs() {
