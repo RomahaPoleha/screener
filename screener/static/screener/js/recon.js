@@ -10,9 +10,15 @@ let densityMinVolumeFuture = 50000, densityMinVolumeSpot = 10000;
 let densityUpdateTimer = null, previousDensities = { future: [], spot: [] };
 
 let reconAllEnabled = true;
+if (localStorage.getItem('reconAllEnabled') !== null) {
+    reconAllEnabled = localStorage.getItem('reconAllEnabled') === 'true';
+}
 let reconSavedMarkets = null;
 try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
 let reconEnabled = reconAllEnabled;
+if (localStorage.getItem('reconEnabled') !== null) {
+    reconEnabled = localStorage.getItem('reconEnabled') === 'true';
+}
 let reconUpdateTimer = null;
 let reconPanelEl = null;
 let reconLines = [];
@@ -447,6 +453,7 @@ function toggleReconMarket(exId, market) {
 
 function toggleReconAll() {
     reconAllEnabled = !reconAllEnabled;
+    localStorage.setItem('reconAllEnabled', reconAllEnabled);
     renderReconPanel();
     if (reconAllEnabled) {
         if (currentSymbol) {
