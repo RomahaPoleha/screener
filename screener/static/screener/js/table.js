@@ -70,7 +70,7 @@ function sortBy(field) {
 }
 
 function applyLocalFilters() {
-    const searchVal = els.search.value.toUpperCase();
+    const searchVal = document.getElementById('searchInput').value.toUpperCase();
     const minVol = parseFloat(els.vol.value);
     const minChange = parseFloat(els.change.value);
 

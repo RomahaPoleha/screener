@@ -4,7 +4,6 @@
 // ==========================================
 
 const els = {
-    search: document.getElementById('searchInput'),
     vol: document.getElementById('volRange'),
     change: document.getElementById('changeRange'),
     table: document.getElementById('tableBody'),

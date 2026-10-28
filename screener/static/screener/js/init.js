@@ -21,7 +21,7 @@ function debounce(func, wait) {
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Безопасная проверка: если els не определен или элементов нет, останавливаемся
-    if (typeof els === 'undefined' || !els.tradesThresholdSlider || !els.search) {
+    if (typeof els === 'undefined' || !els.tradesThresholdSlider) {
         console.error('⚠️ Критическая ошибка: DOM-элементы или объект els не найдены. Проверьте HTML и порядок загрузки скриптов.');
         return;
     }
@@ -60,8 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // 5. Слайдеры фильтров
-// 5. Слайдеры фильтров
-els.vol.addEventListener('input', (e) => {
+    els.vol.addEventListener('input', (e) => {
     updateSliderFill(e.target);
     applyLocalFilters();
 });
@@ -69,15 +68,6 @@ els.change.addEventListener('input', (e) => {
     updateSliderFill(e.target);
     applyLocalFilters();
 });
-
-    // 6. Поиск
-    els.search.addEventListener('input', (e) => {
-        showSearchDropdown(e.target.value);
-        applyLocalFilters();
-    });
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.search-wrapper')) hideSearchDropdown();
-    });
 
     // 7. Ресайз с DEBOUNCE (оптимизация производительности)
     window.addEventListener('resize', debounce(() => {
