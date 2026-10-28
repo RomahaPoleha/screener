@@ -12,28 +12,29 @@
 <button type="button" class="settings-nav-item active" data-tab="display">Отображение</button>
 <button type="button" class="settings-nav-item" data-tab="recon-scalp">Recon & Scalp</button>
 <button type="button" class="settings-nav-item" data-tab="alerts">Оповещения</button>
-<button type="button" class="settings-nav-item" data-tab="help">Справка</button>
 </div>
 <!-- ПРАВАЯ СТОРОНА: содержимое раздела -->
 <div class="settings-content">
 <!-- ОТОБРАЖЕНИЕ -->
 <div class="settings-tab-content active" id="tab-display">
 <div class="modal-section">
-<div class="modal-section-title">График</div>
+<div class="modal-section-title">График <span class="help-icon" onclick="showHelpTip('Настройки отображения графика: сетка, объём.')" style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1px solid #f59e0b; color:#f59e0b; border-radius:50%; font-size:11px; cursor:pointer; margin-left:6px;">?</span></div>
 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
 <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f59e0b; width:16px; height:16px;">
 <span>Показывать гистограмму объёма</span>
 </label>
 </div>
 <div class="modal-section">
-<div class="modal-section-title">Инструменты рисования</div>
+<div class="modal-section-title">Инструменты рисования <span class="help-icon" onclick="showHelpTip('Панель с инструментами для рисования на графике: линии, алерты, карандаш.')" style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1px solid #f59e0b; color:#f59e0b; border-radius:50%; font-size:11px; cursor:pointer; margin-left:6px;">?</span></div>
 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
 <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f59e0b; width:16px; height:16px;">
 <span>Показывать панель инструментов</span>
+<span class="help-icon" onclick="showHelpTip('Включает или скрывает панель с кнопками рисования.')" style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1px solid #f59e0b; color:#f59e0b; border-radius:50%; font-size:11px; cursor:pointer; margin-left:6px;">?</span>
 </label>
 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5;">
 <input type="checkbox" id="showGrid" checked style="accent-color:#f59e0b; width:16px; height:16px;">
 <span>Показывать сетку</span>
+<span class="help-icon" onclick="showHelpTip('Сетка на графике для удобства чтения цен.')" style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1px solid #f59e0b; color:#f59e0b; border-radius:50%; font-size:11px; cursor:pointer; margin-left:6px;">?</span>
 </label>
 </div>
 </div>
@@ -102,25 +103,6 @@
 <span style="color:#999999; min-width:170px;">Громкость звука:</span>
 <input type="range" id="hourSoundVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
 </label>
-</div>
-</div>
-</div>
-<div class="settings-tab-content" id="tab-help" style="max-height:400px; overflow-y:auto;">
-<div class="modal-section">
-<div class="modal-section-title">Справка</div>
-<p style="font-size:12px; color:#999999; margin-bottom:10px;">Кратко о функциях скринера (без технических деталей).</p>
-<div style="font-size:13px; color:#e5e5e5; line-height:1.6;">
-<div style="margin-bottom:8px;"><b>Алерт (колокольчик)</b> — уведомление, когда цена монеты пересекает заданный уровень.</div>
-<div style="margin-bottom:8px;"><b>Трендовая линия</b> — линия по двум точкам для оценки направления движения.</div>
-<div style="margin-bottom:8px;"><b>Горизонтальная линия</b> — уровень цены, отмеченный на графике.</div>
-<div style="margin-bottom:8px;"><b>Карандаш</b> — свободное рисование на графике.</div>
-<div style="margin-bottom:8px;"><b>Линейка</b> — измерение изменения цены и объёма за период.</div>
-<div style="margin-bottom:8px;"><b>Магнит</b> — привязка курсора к ценам свечей при рисовании.</div>
-<div style="margin-bottom:8px;"><b>Импульс</b> — уведомление о резком движении цены за короткое время.</div>
-<div style="margin-bottom:8px;"><b>RVOL / объём</b> — показатель активности торгов (насколько объём выше обычного).</div>
-<div style="margin-bottom:8px;"><b>NATR</b> — показатель волатильности (насколько сильно цена колеблется).</div>
-<div style="margin-bottom:8px;"><b>Recon</b> — поиск крупных сделок на биржах.</div>
-<div style="margin-bottom:8px;"><b>Scalp</b> — подсветка монет с высокой активностью для скальпинга.</div>
 </div>
 </div>
 </div>
