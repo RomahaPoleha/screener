@@ -238,10 +238,41 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         # 🔥 СОБИРАЕМ ВСЕ ТЕКУЩИЕ ЦЕНЫ ИЗ СТАКАНА
         current_prices = set(book.get('bids', {}).keys()) | set(book.get('asks', {}).keys())
 
+        # Текущая mid-цена для детекции гуляющих плотностей
+        bids_keys = list(book.get('bids', {}).keys())
+        asks_keys = list(book.get('asks', {}).keys())
+        mid = None
+        if bids_keys and asks_keys:
+            mid = (max(bids_keys) + min(asks_keys)) / 2
+
+        # Недавно исчезнувшие уровни (для детекции сдвига плотности за ценой)
+        recently_removed = []
+        for p, t in list(ts.items()):
+            if p not in current_prices:
+                rel = ((p - mid) / mid) if mid else 0
+                recently_removed.append((p, t, rel))
+
+        MOVING_EPSILON = 0.002   # 0.2% — коридор относительного расстояния
+        RECENT_WINDOW = 60       # сек — окно для сопоставления сдвига
+
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
 
                 volume = qty * price
+
+                # Детекция гуляющей плотности (отсечение)
+                is_moving = False
+                if price not in ts and mid:
+                    rel = (price - mid) / mid
+                    for rp, rt, rrel in recently_removed:
+                        if abs(rrel - rel) < MOVING_EPSILON and (now - rt) < RECENT_WINDOW:
+                            is_moving = True
+                            log_func(f"⚠️ {symbol}: отсеян гуляющий уровень {price} (rel={rel:.4f}, prev={rrel:.4f})")
+                            break
+                if is_moving:
+                    if price in ts:
+                        ts.pop(price, None)
+                    continue
 
                 # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
@@ -260,7 +291,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'min': min(prev_stat['min'], volume),
                     'max': max(prev_stat['max'], volume),
                     'sum': prev_stat['sum'] + volume,
-                    'count': prev_stat['count'] + 1
+                    'count': prev_stat['count'] + 1,
+                    'rel_dist': ((price - mid) / mid) if mid else 0
                 }
                 new_stats[price] = new_stat
 
