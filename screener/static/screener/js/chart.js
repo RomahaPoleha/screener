@@ -216,6 +216,9 @@ async function openChart(symbol) {
                     if (found.type === 'trendline') {
                         const tl = activeTrendlines[found.index];
                         dragStart = { price: price, time: time, orig: { price1: tl.price1, price2: tl.price2, time1: tl.time1, time2: tl.time2 } };
+                    } else if (found.type === 'horizontal') {
+                        const hl = activeHorizontalLines[found.index];
+                        dragStart = { price: price, time: time, orig: { price: hl.price, time: hl.time, time2: hl.time2 } };
                     } else {
                         dragStart = { price: price, time: time };
                     }

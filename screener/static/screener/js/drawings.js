@@ -340,12 +340,17 @@ function redrawAllPersistentDrawings() {
         if (y === null) return;
         const x1 = hl.time ? getXByTime(hl.time) : null;
         const startX = (x1 !== null && x1 > 0) ? x1 : 0;
+        let endX = els.pencilCanvas.width;
+        if (hl.time2) {
+            const x2 = getXByTime(hl.time2);
+            if (x2 !== null) endX = x2;
+        }
         pencilCtx.strokeStyle = hl.color || '#f59e0b';
         pencilCtx.lineWidth = 2;
         pencilCtx.setLineDash([5, 5]);
         pencilCtx.beginPath();
         pencilCtx.moveTo(startX, y);
-        pencilCtx.lineTo(els.pencilCanvas.width, y);
+        pencilCtx.lineTo(endX, y);
         pencilCtx.stroke();
         pencilCtx.fillStyle = hl.color || '#f59e0b';
         pencilCtx.font = '10px sans-serif';
@@ -386,9 +391,13 @@ function redrawAllPersistentDrawings() {
         if (selectedDrawing.type === 'horizontal') {
             const hl = activeHorizontalLines[selectedDrawing.index];
             if (hl) {
-                const hx = hl.time ? getXByTime(hl.time) : 0;
+                const left = hl.time ? getXByTime(hl.time) : 0;
+                const right = hl.time2 ? getXByTime(hl.time2) : els.pencilCanvas.width;
                 const hy = candleSeries.priceToCoordinate(hl.price);
-                drawHandle(hx !== null ? hx : 0, hy);
+                drawHandle(left !== null ? left : 0, hy);
+                drawHandle(right !== null ? right : els.pencilCanvas.width, hy);
+                const mid = ((left !== null ? left : 0) + (right !== null ? right : els.pencilCanvas.width)) / 2;
+                drawHandle(mid, hy);
             }
         } else if (selectedDrawing.type === 'alert') {
             const alerts = (currentSymbol && savedAlerts[currentSymbol]) ? savedAlerts[currentSymbol] : [];
@@ -453,7 +462,8 @@ function deleteLineAtPoint(x, y) {
                 window.savedHorizontalLines[currentSymbol] = activeHorizontalLines.map(h => ({
                     price: h.price,
                     color: h.color || '#f59e0b',
-                    time: h.time
+                    time: h.time,
+                    time2: h.time2 || null
                 }));
                 localStorage.setItem('savedHorizontalLines', JSON.stringify(window.savedHorizontalLines));
             }
@@ -515,8 +525,13 @@ function findDrawingAt(x, y) {
         const hl = activeHorizontalLines[i];
         const hy = candleSeries.priceToCoordinate(hl.price);
         if (hy !== null && Math.abs(hy - y) < threshold) {
-            const hx = hl.time ? getXByTime(hl.time) : 0;
-            if (hx === null || x >= hx - threshold) {
+            const hxStart = hl.time ? getXByTime(hl.time) : 0;
+            const hxEnd = hl.time2 ? getXByTime(hl.time2) : els.pencilCanvas.width;
+            const left = hxStart !== null ? hxStart : 0;
+            const right = hxEnd !== null ? hxEnd : els.pencilCanvas.width;
+            if (Math.abs(x - left) <= 8) return { type: 'horizontal', index: i, handle: 'start' };
+            if (Math.abs(x - right) <= 8) return { type: 'horizontal', index: i, handle: 'end' };
+            if (x >= Math.min(left, right) - threshold && x <= Math.max(left, right) + threshold) {
                 return { type: 'horizontal', index: i, handle: 'move' };
             }
         }
@@ -541,7 +556,23 @@ function updateDrawing(sel, price, time) {
     if (!sel) return;
     if (sel.type === 'horizontal') {
         const hl = activeHorizontalLines[sel.index];
-        if (hl) hl.price = price;
+        if (!hl) return;
+        if (sel.handle === 'start') {
+            hl.time = time;
+        } else if (sel.handle === 'end') {
+            hl.time2 = time;
+        } else {
+            hl.price = price;
+            if (dragStart && dragStart.orig) {
+                const dTime = time - dragStart.time;
+                if (dragStart.orig.time !== undefined && dragStart.orig.time !== null) {
+                    hl.time = dragStart.orig.time + dTime;
+                }
+                if (dragStart.orig.time2 !== undefined && dragStart.orig.time2 !== null) {
+                    hl.time2 = dragStart.orig.time2 + dTime;
+                }
+            }
+        }
     } else if (sel.type === 'alert') {
         const alerts = (currentSymbol && savedAlerts[currentSymbol]) ? savedAlerts[currentSymbol] : [];
         const alert = alerts.find(a => a.id === sel.id);
@@ -598,7 +629,7 @@ function handleChartClick(param) {
         const price = candleSeries.coordinateToPrice(param.point.y);
         const time = param.time || getTimeByX(param.point.x);
         if (!price || isNaN(price)) return;
-        activeHorizontalLines.push({ price: price, color: '#f59e0b', time: time });
+        activeHorizontalLines.push({ price: price, color: '#f59e0b', time: time, time2: null });
 
         if (currentSymbol) {
             window.savedHorizontalLines[currentSymbol] = activeHorizontalLines.map(hl => ({
@@ -836,7 +867,8 @@ function saveCurrentDrawings(symbol) {
     window.savedHorizontalLines[symbol] = activeHorizontalLines.map(hl => ({
         price: hl.price,
         color: hl.color || '#f59e0b',
-        time: hl.time
+        time: hl.time,
+        time2: hl.time2 || null
     }));
     window.savedPencilDrawings[symbol] = pencilStrokes;
 
@@ -850,7 +882,8 @@ function restoreDrawingsForSymbol(symbol) {
     activeHorizontalLines = (window.savedHorizontalLines[symbol] || []).map(hl => ({
         price: hl.price,
         color: hl.color || '#f59e0b',
-        time: hl.time || null
+        time: hl.time || null,
+        time2: hl.time2 || null
     }));
     pencilStrokes = window.savedPencilDrawings[symbol] || [];
 
