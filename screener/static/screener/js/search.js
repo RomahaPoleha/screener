@@ -5,6 +5,23 @@
 let searchModalOpen = false;
 let selectedDropdownIndex = -1;
 
+// Транслитерация русской раскладки клавиатуры в латиницу (QWERTY)
+const RU_TO_LATIN = {
+    'й': 'q', 'ц': 'w', 'у': 'e', 'к': 'r', 'е': 't', 'н': 'y', 'г': 'u', 'ш': 'i', 'щ': 'o', 'з': 'p',
+    'х': '[', 'ъ': ']', 'ф': 'a', 'ы': 's', 'в': 'd', 'а': 'f', 'п': 'g', 'р': 'h', 'о': 'j', 'л': 'k',
+    'д': 'l', 'ж': ';', 'э': "'", 'я': 'z', 'ч': 'x', 'с': 'c', 'м': 'v', 'и': 'b', 'т': 'n', 'ь': 'm',
+    'б': ',', 'ю': '.', '.': '/'
+};
+
+function transliterateToLatin(str) {
+    return String(str).split('').map(ch => {
+        const lower = ch.toLowerCase();
+        const mapped = RU_TO_LATIN[lower];
+        if (!mapped) return ch;
+        return ch === lower ? mapped : mapped.toUpperCase();
+    }).join('');
+}
+
 function openSearchModal() {
     const modal = document.getElementById('searchModal');
     const input = document.getElementById('searchInput');
@@ -49,8 +66,9 @@ function showSearchDropdown(query) {
         return;
     }
 
+    const q = transliterateToLatin(query).toUpperCase();
     const filtered = allCoins.filter(coin =>
-        coin.symbol.toUpperCase().includes(query.toUpperCase())
+        coin.symbol.toUpperCase().includes(q)
     ).slice(0, 10);
 
     if (filtered.length === 0) {
@@ -90,7 +108,7 @@ function updateDropdownSelection() {
 
 function selectCoinFromSearch(symbol) {
     const input = document.getElementById('searchInput');
-    input.value = symbol;
+    input.value = '';
     hideSearchDropdown();
     applyLocalFilters();
     openChart(symbol);
@@ -153,7 +171,14 @@ function handleSearchKeydown(e) {
 }
 
 function handleSearchInput(e) {
-    showSearchDropdown(e.target.value);
+    const input = e.target;
+    const converted = transliterateToLatin(input.value);
+    if (converted !== input.value) {
+        const pos = input.selectionStart;
+        input.value = converted;
+        input.setSelectionRange(pos, pos);
+    }
+    showSearchDropdown(input.value);
 }
 
 function handleDropdownClick(e) {
@@ -197,11 +222,11 @@ function initSearchModal() {
         if (!searchModalOpen && !e.ctrlKey && !e.altKey && !e.metaKey) {
             const tag = e.target.tagName.toLowerCase();
             const isInput = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
-            if (!isInput && e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
+            if (!isInput && e.key.length === 1 && /^[\p{L}\p{N}]$/u.test(e.key)) {
                 e.preventDefault();
                 openSearchModal();
                 setTimeout(() => {
-                    input.value = e.key.toUpperCase();
+                    input.value = transliterateToLatin(e.key).toUpperCase();
                     input.dispatchEvent(new Event('input'));
                 }, 50);
             }
