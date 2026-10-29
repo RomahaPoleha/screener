@@ -39,6 +39,7 @@ gate_futures_message_queue = asyncio.Queue(maxsize=10000)
 gate_futures_lock = asyncio.Lock()
 gate_futures_reconnect_event = asyncio.Event()
 gate_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
+gate_futures_mid_history = {}   # symbol -> [(timestamp, mid)]
 gate_contract_sizes = {}
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
@@ -50,6 +51,7 @@ gate_spot_message_queue = asyncio.Queue(maxsize=10000)
 gate_spot_lock = asyncio.Lock()
 gate_spot_reconnect_event = asyncio.Event()
 gate_spot_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
+gate_spot_mid_history = {}   # symbol -> [(timestamp, mid)]
 
 # Защита от мгновенного созревания при очистке стакана спуфером
 gate_futures_first_load_done = set()
@@ -77,6 +79,11 @@ _http_client = None
 MAX_STATS_PER_SYMBOL = 200      # макс. ценовых уровней на символ
 MAX_STATS_AGE_SEC = 7200        # 2 часа — макс. возраст записи в volume_stats
 MAX_TS_AGE_SEC = 3600           # 1 час — макс. возраст записи в density_timestamps
+# Детекция "гуляющей" плотности, следующей за ценой
+MOVING_REL_EPSILON = 0.001      # порог изменения относительного расстояния уровня
+MOVING_MID_THRESHOLD = 0.002    # порог сдвига mid-цены
+MOVING_WINDOW_SEC = 60          # окно наблюдения
+REL_HISTORY_SIZE = 5            # размер истории относительных расстояний
 
 # ==========================================
 
@@ -213,6 +220,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 book = gate_futures_order_books.get(symbol, {})
                 ts = gate_futures_density_timestamps.get(symbol, {})
                 stats = gate_futures_volume_stats.get(symbol, {})
+                mid_history = gate_futures_mid_history
                 if not book:
                     return 0
         else:
@@ -220,6 +228,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 book = gate_spot_order_books.get(symbol, {})
                 ts = gate_spot_density_timestamps.get(symbol, {})
                 stats = gate_spot_volume_stats.get(symbol, {})
+                mid_history = gate_spot_mid_history
                 if not book:
                     return 0
 
@@ -245,6 +254,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if bids_keys and asks_keys:
             mid = (max(bids_keys) + min(asks_keys)) / 2
 
+        # Обновляем историю mid-цены
+        mh = mid_history.setdefault(symbol, [])
+        mh.append((now, mid))
+        if len(mh) > 20:
+            mh.pop(0)
+
         # Недавно исчезнувшие уровни (для детекции сдвига плотности за ценой)
         recently_removed = []
         for p, t in list(ts.items()):
@@ -259,6 +274,29 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             for price, qty in book.get(side, {}).items():
 
                 volume = qty * price
+
+                # Детекция "следования за ценой": уровень сдвигается вместе с mid
+                is_following = False
+                rel = None
+                if price in ts and mid is not None and mid != 0:
+                    rel = (price - mid) / mid
+                    prev_stat = stats.get(price, {})
+                    prev_rel = prev_stat.get('last_rel')
+                    if prev_rel is not None and abs(rel - prev_rel) < MOVING_REL_EPSILON:
+                        old_mid = None
+                        for t, m in reversed(mh):
+                            if now - t >= MOVING_WINDOW_SEC and m is not None:
+                                old_mid = m
+                                break
+                        if old_mid is not None and old_mid != 0:
+                            mid_change = abs((mid - old_mid) / old_mid)
+                            if mid_change >= MOVING_MID_THRESHOLD:
+                                is_following = True
+                                log_func(f"⚠️ {symbol}: отсеян гуляющий уровень {price} (следует за ценой, mid_change={mid_change:.4f})")
+                if is_following:
+                    if price in ts:
+                        ts.pop(price, None)
+                    continue
 
                 # Детекция гуляющей плотности (отсечение)
                 is_moving = False
@@ -292,7 +330,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'max': max(prev_stat['max'], volume),
                     'sum': prev_stat['sum'] + volume,
                     'count': prev_stat['count'] + 1,
-                    'rel_dist': ((price - mid) / mid) if mid else 0
+                    'rel_dist': ((price - mid) / mid) if mid else 0,
+                    'last_rel': rel if rel is not None else ((price - mid) / mid) if mid else 0
                 }
                 new_stats[price] = new_stat
 
