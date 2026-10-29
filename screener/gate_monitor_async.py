@@ -260,12 +260,22 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if len(mh) > 20:
             mh.pop(0)
 
-        # Недавно исчезнувшие уровни (для детекции сдвига плотности за ценой)
+        # Сдвинулась ли mid-цена заметно за окно наблюдения
+        old_mid = None
+        for t, m in reversed(mh):
+            if now - t >= MOVING_WINDOW_SEC and m is not None:
+                old_mid = m
+                break
+        mid_changed = (old_mid is not None and old_mid != 0 and mid is not None and mid != 0
+                       and abs((mid - old_mid) / old_mid) >= MOVING_MID_THRESHOLD)
+
+        # Недавно исчезнувшие уровни: берём их СТАРОЕ относительное расстояние из stats,
+        # а время удаления считаем текущим — иначе «созревшие» плотности не попадают в окно.
         recently_removed = []
         for p, t in list(ts.items()):
             if p not in current_prices:
-                rel = ((p - mid) / mid) if mid else 0
-                recently_removed.append((p, t, rel))
+                old_rel = stats.get(p, {}).get('last_rel')
+                recently_removed.append((p, now, old_rel))
 
         MOVING_EPSILON = 0.002   # 0.2% — коридор относительного расстояния
         RECENT_WINDOW = 60       # сек — окно для сопоставления сдвига
@@ -275,35 +285,15 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
                 volume = qty * price
 
-                # Детекция "следования за ценой": уровень сдвигается вместе с mid
-                is_following = False
-                rel = None
-                if price in ts and mid is not None and mid != 0:
-                    rel = (price - mid) / mid
-                    prev_stat = stats.get(price, {})
-                    prev_rel = prev_stat.get('last_rel')
-                    if prev_rel is not None and abs(rel - prev_rel) < MOVING_REL_EPSILON:
-                        old_mid = None
-                        for t, m in reversed(mh):
-                            if now - t >= MOVING_WINDOW_SEC and m is not None:
-                                old_mid = m
-                                break
-                        if old_mid is not None and old_mid != 0:
-                            mid_change = abs((mid - old_mid) / old_mid)
-                            if mid_change >= MOVING_MID_THRESHOLD:
-                                is_following = True
-                                log_func(f"⚠️ {symbol}: отсеян гуляющий уровень {price} (следует за ценой, mid_change={mid_change:.4f})")
-                if is_following:
-                    if price in ts:
-                        ts.pop(price, None)
-                    continue
-
-                # Детекция гуляющей плотности (отсечение)
+                # Детекция гуляющей плотности: новый уровень появляется на том же
+                # относительном расстоянии от mid, на котором недавно исчез старый,
+                # при этом mid-цена заметно сдвинулась.
                 is_moving = False
-                if price not in ts and mid:
+                rel = None
+                if price not in stats and mid is not None and mid != 0 and mid_changed:
                     rel = (price - mid) / mid
                     for rp, rt, rrel in recently_removed:
-                        if abs(rrel - rel) < MOVING_EPSILON and (now - rt) < RECENT_WINDOW:
+                        if rrel is not None and abs(rrel - rel) < MOVING_EPSILON:
                             is_moving = True
                             log_func(f"⚠️ {symbol}: отсеян гуляющий уровень {price} (rel={rel:.4f}, prev={rrel:.4f})")
                             break
@@ -311,6 +301,9 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     if price in ts:
                         ts.pop(price, None)
                     continue
+
+                if rel is None and mid is not None and mid != 0:
+                    rel = (price - mid) / mid
 
                 # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
@@ -561,10 +554,8 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
         async with gate_futures_lock:
             old_ts = gate_futures_density_timestamps.get(symbol, {})
             old_stats = gate_futures_volume_stats.get(symbol, {})
-            new_ts = {p: old_ts[p] for p in new_bids if p in old_ts}
-            new_ts.update({p: old_ts[p] for p in new_asks if p in old_ts})
-            new_stats = {p: old_stats[p] for p in new_bids if p in old_stats}
-            new_stats.update({p: old_stats[p] for p in new_asks if p in old_stats})
+            new_ts = dict(old_ts)
+            new_stats = dict(old_stats)
 
             gate_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             gate_futures_density_timestamps[symbol] = new_ts
@@ -573,10 +564,8 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
         async with gate_spot_lock:
             old_ts = gate_spot_density_timestamps.get(symbol, {})
             old_stats = gate_spot_volume_stats.get(symbol, {})
-            new_ts = {p: old_ts[p] for p in new_bids if p in old_ts}
-            new_ts.update({p: old_ts[p] for p in new_asks if p in old_ts})
-            new_stats = {p: old_stats[p] for p in new_bids if p in old_stats}
-            new_stats.update({p: old_stats[p] for p in new_asks if p in old_stats})
+            new_ts = dict(old_ts)
+            new_stats = dict(old_stats)
 
             gate_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             gate_spot_density_timestamps[symbol] = new_ts
@@ -608,7 +597,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
-                            ts.pop(price, None)
                             changed = True
                     else:
                         book['bids'][price] = qty
@@ -630,7 +618,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
-                            ts.pop(price, None)
                             changed = True
                     else:
                         book['asks'][price] = qty
@@ -662,7 +649,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if qty == 0:
                         if price in book['bids']:
                             del book['bids'][price]
-                            ts.pop(price, None)
                             changed = True
                     else:
                         book['bids'][price] = qty
@@ -684,7 +670,6 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     if qty == 0:
                         if price in book['asks']:
                             del book['asks'][price]
-                            ts.pop(price, None)
                             changed = True
                     else:
                         book['asks'][price] = qty
