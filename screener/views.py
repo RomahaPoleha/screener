@@ -1354,6 +1354,14 @@ def api_densities_table(request):
     now = time.time()
     EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
 
+    # Белый список (тяжеловесы) — стабильные монеты Binance
+    try:
+        from . import binance_monitor_async as _bm
+        _stable = _bm.stable_futures_symbols if market == 'futures' else _bm.stable_spot_symbols
+        stable_set = set(_stable or [])
+    except Exception:
+        stable_set = set()
+
     # 🔥 BATCH READ: собираем все ключи для одного cache.get_many() вызова
     # вместо 350+ отдельных cache.get()
     all_keys = []
@@ -1408,6 +1416,7 @@ def api_densities_table(request):
                 'side': side,
                 'age_seconds': round(now - timestamp, 1),
                 'exchange': item.get('exchange', exchange),
+                'is_whitelist': symbol_upper in stable_set,
             })
 
     # Обрабатываем каждый символ

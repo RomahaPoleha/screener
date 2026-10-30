@@ -614,6 +614,9 @@ async def build_merged_cache(market, symbols, log_func=print):
     EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'mexc', 'bitget', 'binance_alpha']
     now = time.time()
 
+    # Белый список (тяжеловесы) — стабильные монеты Binance
+    stable_set = set(stable_futures_symbols if market == 'futures' else stable_spot_symbols)
+
     # 1. Собираем все ключи для batch read
     all_keys = []
     key_meta = {}  # key -> (symbol, exchange)
@@ -659,6 +662,7 @@ async def build_merged_cache(market, symbols, log_func=print):
                     'age_seconds': round(age, 1),
                     'exchange': item.get('exchange', exchange),
                     'market': market,
+                    'is_whitelist': symbol in stable_set,
                 })
             except (KeyError, TypeError):
                 continue

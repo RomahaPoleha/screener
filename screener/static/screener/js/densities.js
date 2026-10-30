@@ -41,7 +41,9 @@ const state = {
     // Max price deviation filter (%)
     maxPctFilter: 30,
     // Hidden symbols
-    hiddenSymbols: new Set()
+    hiddenSymbols: new Set(),
+    // Скрыть тяжеловесы (белый список Binance)
+    hideWhitelist: false,
 };
 
 function initDensitiesElements() {
@@ -58,6 +60,7 @@ function loadExchangeFilters() {
             state.exchangeMinVolumes = parsed.minVolumes || {};
             state.sortByNatr1m = parsed.sortByNatr1m || false;
             state.maxPctFilter = (parsed.maxPctFilter !== undefined) ? parsed.maxPctFilter : 30;
+            state.hideWhitelist = !!parsed.hideWhitelist;
             if (state.maxPctFilter < 0) state.maxPctFilter = 0;
             if (state.maxPctFilter > 30) state.maxPctFilter = 30;
         }
@@ -82,7 +85,8 @@ function saveExchangeFilters() {
             filters: state.exchangeFilters,
             minVolumes: state.exchangeMinVolumes,
             sortByNatr1m: state.sortByNatr1m,
-            maxPctFilter: state.maxPctFilter
+            maxPctFilter: state.maxPctFilter,
+            hideWhitelist: state.hideWhitelist
         }));
     } catch (e) {
         console.warn('Failed to save exchange filters:', e);
@@ -300,6 +304,10 @@ function renderShell() {
                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace;">
                     <span>Фильтрация по Natr 1m</span>
                     <input type="checkbox" id="sortNatr1m" ${state.sortByNatr1m ? 'checked' : ''} onchange="handleNatrSort(this.checked)" style="accent-color:#8b5cf6;width:14px;height:14px;cursor:pointer;">
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace;">
+                    <span>Скрыть тяжеловесов</span>
+                    <input type="checkbox" id="hideWhitelist" ${state.hideWhitelist ? 'checked' : ''} onchange="handleHideWhitelist(this.checked)" style="accent-color:#ef4444;width:14px;height:14px;cursor:pointer;">
                 </label>
                 <button class="filter-btn ${state.sideFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="handleSideFilter('all')">Все</button>
                 <button class="filter-btn ${state.sideFilter === 'buy' ? 'active-buy' : ''}" data-filter="buy" onclick="handleSideFilter('buy')">BUY</button>
@@ -693,6 +701,11 @@ function getProcessedDensities() {
         result = result.filter(d => !state.hiddenSymbols.has(d.symbol));
     }
 
+    // Скрыть тяжеловесы (белый список Binance)
+    if (state.hideWhitelist) {
+        result = result.filter(d => !d.is_whitelist);
+    }
+
     if (state.sideFilter !== 'all') {
         result = result.filter(d => d.side === state.sideFilter);
     }
@@ -816,6 +829,12 @@ function handleSearch(query) {
 
 function handleNatrSort(enabled) {
     state.sortByNatr1m = enabled;
+    saveExchangeFilters();
+    renderContent();
+}
+
+function handleHideWhitelist(enabled) {
+    state.hideWhitelist = !!enabled;
     saveExchangeFilters();
     renderContent();
 }
