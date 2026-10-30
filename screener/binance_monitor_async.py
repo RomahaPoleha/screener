@@ -648,12 +648,15 @@ async def build_merged_cache(market, symbols, log_func=print):
                 vol = item['volume']
                 if vol < MERGED_MIN_VOLUME:
                     continue
+                age = now - item['timestamp']
+                if age < 180:
+                    continue
                 merged.append({
                     'symbol': symbol,
                     'price': item['price'],
                     'volume': vol,
                     'side': item['side'],
-                    'age_seconds': round(now - item['timestamp'], 1),
+                    'age_seconds': round(age, 1),
                     'exchange': item.get('exchange', exchange),
                     'market': market,
                 })

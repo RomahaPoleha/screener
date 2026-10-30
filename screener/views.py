@@ -508,6 +508,9 @@ def api_scalp(request, symbol):
             if volume < min_volume:
                 continue
 
+            if (now - timestamp) < 180:
+                continue
+
             exchange_densities.append({
                 'price': price,
                 'volume': volume,
