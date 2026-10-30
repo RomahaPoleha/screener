@@ -184,6 +184,36 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS — ИСПРАВЛЕНО (пороги + зачистка призраков + стабильность)
 # ==========================================
+# Пороги для детекции симметричных (двусторонних) спуф-плотностей
+SYMMETRY_EPSILON = 0.01          # 1% — допустимая разница расстояний от mid
+MAX_SYMMETRY_DISTANCE = 0.02     # 2% — максимальное расстояние уровня от mid
+
+def _filter_symmetric_spoofs(densities, mid, log_func=print, symbol=None):
+    """Отсекает пары buy/sell плотностей, симметричных относительно mid (спуф)."""
+    if not densities or not mid:
+        return densities
+    tagged = [(i, d, (d['price'] - mid) / mid) for i, d in enumerate(densities)]
+    buys = [t for t in tagged if t[1]['side'] == 'buy']
+    sells = [t for t in tagged if t[1]['side'] == 'sell']
+    drop = set()
+    for bi, bd, brel in buys:
+        if bi in drop:
+            continue
+        if abs(brel) > MAX_SYMMETRY_DISTANCE:
+            continue
+        cand = [(si, sd, srel) for si, sd, srel in sells
+                if si not in drop and abs(srel) <= MAX_SYMMETRY_DISTANCE]
+        if not cand:
+            continue
+        best = min(cand, key=lambda x: abs(abs(x[2]) - abs(brel)))
+        si, sd, srel = best
+        if abs(abs(srel) - abs(brel)) <= SYMMETRY_EPSILON:
+            drop.add(bi)
+            drop.add(si)
+            log_func(f"⚠️ {symbol}: отсеяна симметричная пара спуф: buy {bd['price']} / sell {sd['price']} (rel≈{brel:.4f})")
+    return [d for i, d in enumerate(densities) if i not in drop]
+
+
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
         if market == 'futures':
@@ -326,6 +356,9 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'age_seconds': age_seconds,
                     'exchange': 'mexc'
                 })
+
+        # Анти-спуф: отсекаем симметричные пары плотностей сверху/снизу цены
+        densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
 
         # 🔥 ШАГ 4: ЖЕСТКАЯ ЗАЧИСТКА ПРИЗРАКОВ
         prices_to_remove = [p for p in list(ts.keys()) if p not in current_prices]
