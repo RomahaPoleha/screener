@@ -537,12 +537,47 @@ function renderGroups(grid, groups) {
                 barEl: row.querySelector('.row-bar-fill')
             });
         });
+
+        applyMasonry(grid);
     }
 
     if (statsContainer) {
         statsContainer.innerHTML = renderStatsFooter(getProcessedDensities(), state.serverTime);
     }
 }
+
+// ==========================================
+// MASONRY LAYOUT (без пустот)
+// ==========================================
+function applyMasonry(container) {
+    if (!container) return;
+    const items = Array.from(container.querySelectorAll('.group-card'));
+    if (!items.length) { container.style.height = ''; return; }
+    const gap = 10;
+    const minColWidth = 340;
+    const containerWidth = container.clientWidth - 32; // padding
+    const cols = Math.max(1, Math.floor((containerWidth + gap) / (minColWidth + gap)));
+    const colHeights = new Array(cols).fill(0);
+    const colWidth = (containerWidth - (cols - 1) * gap) / cols;
+    items.forEach(item => {
+        let minCol = 0;
+        for (let i = 1; i < cols; i++) {
+            if (colHeights[i] < colHeights[minCol]) minCol = i;
+        }
+        const x = 16 + minCol * (colWidth + gap);
+        const y = 16 + colHeights[minCol];
+        item.style.left = x + 'px';
+        item.style.top = y + 'px';
+        item.style.width = colWidth + 'px';
+        colHeights[minCol] += item.offsetHeight + gap;
+    });
+    container.style.height = (Math.max(...colHeights) + 16) + 'px';
+}
+
+window.addEventListener('resize', () => {
+    const grid = document.getElementById('densities-grid');
+    if (grid && grid.querySelectorAll('.group-card').length) applyMasonry(grid);
+});
 
 // ==========================================
 // LIVE DOM UPDATE (in-place, без innerHTML — нет мерцания)

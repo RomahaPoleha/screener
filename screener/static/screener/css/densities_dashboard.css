@@ -140,11 +140,9 @@ body {
 
 /* Density Grid */
 .densities-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 10px;
+    position: relative;
     padding: 16px;
-    align-items: start;
+    min-height: 100px;
 }
 
 .group-card {
@@ -153,7 +151,7 @@ body {
     border-radius: 10px;
     overflow: hidden;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
+    position: absolute;
 }
 
 .group-card::before {
@@ -252,7 +250,7 @@ body {
     padding: 8px 14px;
     border-bottom: 1px solid rgba(30, 41, 59, 0.2);
     transition: background 0.15s;
-    position: relative;
+    position: absolute;
 }
 
 .group-density-row:last-child {
@@ -326,7 +324,7 @@ body {
     background: rgba(30, 41, 59, 0.25);
     border-radius: 3px;
     overflow: hidden;
-    position: relative;
+    position: absolute;
 }
 
 .row-bar-fill {
