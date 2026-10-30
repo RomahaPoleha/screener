@@ -21,6 +21,7 @@ mexc_futures_lock = asyncio.Lock()
 mexc_futures_reconnect_event = asyncio.Event()
 mexc_futures_volume_stats = {}
 mexc_futures_mid_history = {}   # symbol -> [(timestamp, mid)]
+mexc_futures_removed = {}       # symbol -> [(price, removal_time, rel)]
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — SPOT
 # ==========================================
@@ -32,6 +33,7 @@ mexc_spot_lock = asyncio.Lock()
 mexc_spot_reconnect_event = asyncio.Event()
 mexc_spot_volume_stats = {}
 mexc_spot_mid_history = {}   # symbol -> [(timestamp, mid)]
+mexc_spot_removed = {}       # symbol -> [(price, removal_time, rel)]
 
 # Защита от мгновенного созревания при очистке стакана спуфером
 mexc_futures_first_load_done = set()
@@ -238,17 +240,13 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         mid_changed = (old_mid is not None and old_mid != 0 and mid is not None and mid != 0
                        and abs((mid - old_mid) / old_mid) >= MOVING_MID_THRESHOLD)
 
-        # Недавно исчезнувшие уровни: берём их СТАРОЕ относительное расстояние из stats,
-        # а время удаления считаем текущим — иначе «созревшие» плотности (age>60s) не попадают
-        # в окно RECENT_WINDOW и детекция не срабатывает.
-        recently_removed = []
-        for p, t in list(ts.items()):
-            if p not in current_prices:
-                old_rel = stats.get(p, {}).get('last_rel')
-                recently_removed.append((p, now, old_rel))
-
         MOVING_EPSILON = 0.002
         RECENT_WINDOW = 60
+
+        removed_store = mexc_futures_removed if market == 'futures' else mexc_spot_removed
+        removed_list = [x for x in removed_store.get(symbol, []) if (now - x[1]) < (RECENT_WINDOW * 2)]
+        removed_store[symbol] = removed_list
+        recently_removed = list(removed_list)
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
@@ -565,7 +563,14 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             for price, qty in new_bids.items():
                 if qty == 0:
                     if price in book['bids']:
+                        _bids = list(book['bids'].keys())
+                        _asks = list(book['asks'].keys())
+                        _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                        _removed = mexc_futures_removed if market == 'futures' else mexc_spot_removed
+                        if _mid is not None:
+                            _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                         del book['bids'][price]
+                        ts.pop(price, None)
                         changed = True
                 else:
                     book['bids'][price] = qty
@@ -576,7 +581,14 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             for price, qty in new_asks.items():
                 if qty == 0:
                     if price in book['asks']:
+                        _bids = list(book['bids'].keys())
+                        _asks = list(book['asks'].keys())
+                        _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                        _removed = mexc_futures_removed if market == 'futures' else mexc_spot_removed
+                        if _mid is not None:
+                            _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                         del book['asks'][price]
+                        ts.pop(price, None)
                         changed = True
                 else:
                     book['asks'][price] = qty
@@ -597,7 +609,14 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             for price, qty in new_bids.items():
                 if qty == 0:
                     if price in book['bids']:
+                        _bids = list(book['bids'].keys())
+                        _asks = list(book['asks'].keys())
+                        _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                        _removed = mexc_futures_removed if market == 'futures' else mexc_spot_removed
+                        if _mid is not None:
+                            _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                         del book['bids'][price]
+                        ts.pop(price, None)
                         changed = True
                 else:
                     book['bids'][price] = qty
@@ -608,7 +627,14 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
             for price, qty in new_asks.items():
                 if qty == 0:
                     if price in book['asks']:
+                        _bids = list(book['bids'].keys())
+                        _asks = list(book['asks'].keys())
+                        _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                        _removed = mexc_futures_removed if market == 'futures' else mexc_spot_removed
+                        if _mid is not None:
+                            _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                         del book['asks'][price]
+                        ts.pop(price, None)
                         changed = True
                 else:
                     book['asks'][price] = qty
