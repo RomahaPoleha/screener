@@ -141,13 +141,13 @@ body {
 /* Density Grid */
 .densities-grid {
     columns: 340px;
-    column-gap: 10px;
+    column-gap: 16px;
     padding: 16px;
 }
 
 .group-card {
     break-inside: avoid;
-    margin-bottom: 10px;
+    margin-bottom: 16px;
 }
 
 .group-card::before {
