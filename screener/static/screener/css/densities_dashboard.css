@@ -250,7 +250,7 @@ body {
     padding: 8px 14px;
     border-bottom: 1px solid rgba(30, 41, 59, 0.2);
     transition: background 0.15s;
-    position: absolute;
+    position: relative;
 }
 
 .group-density-row:last-child {
