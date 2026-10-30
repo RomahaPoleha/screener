@@ -324,7 +324,7 @@ body {
     background: rgba(30, 41, 59, 0.25);
     border-radius: 3px;
     overflow: hidden;
-    position: absolute;
+    position: relative;
 }
 
 .row-bar-fill {
