@@ -760,7 +760,9 @@ async function loadDensitiesTable() {
     const globalMinVolume = 1000;
 
     const grid = document.getElementById('densities-grid');
-    if (grid) grid.innerHTML = '<div style="grid-column: 1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; color:#6b7280;">Загрузка...</div>';
+    if (grid && !grid.querySelector('.group-card')) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; color:#6b7280;">Загрузка...</div>';
+    }
 
     try {
         // Fetch both futures and spot in parallel
@@ -926,6 +928,9 @@ function startLiveUpdates() {
 function initApp() {
     state.serverTime = Date.now();
     startLiveUpdates();
+    state.intervals.push(setInterval(() => {
+        if (state.isLive) loadDensitiesTable();
+    }, 60000));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
