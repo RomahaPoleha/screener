@@ -341,7 +341,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             continue
                 else:
                     if is_first_load:
-                        ts[price] = now - MIN_AGE_SECONDS
+                        # Тест: не созревать сразу, ждать MIN_AGE_SECONDS
+                        ts[price] = now
                     else:
                         ts[price] = now
                         continue
