@@ -214,6 +214,60 @@ def _filter_symmetric_spoofs(densities, mid, log_func=print, symbol=None):
     return [d for i, d in enumerate(densities) if i not in drop]
 
 
+CLUSTER_MIN_LEVELS = 4
+CLUSTER_MIN_STEP = 0.005
+CLUSTER_MAX_STEP = 0.02
+CLUSTER_STEP_TOL = 0.003
+CLUSTER_MIN_VOLUME = 1000
+
+
+def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
+    if not densities or not mid or len(densities) < CLUSTER_MIN_LEVELS:
+        return densities
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for idx, d in enumerate(densities):
+        if d.get('volume', 0) < CLUSTER_MIN_VOLUME:
+            continue
+        key = (round(d['volume'], -3), d.get('side'))
+        groups[key].append((idx, d))
+    drop = set()
+    for key, items in groups.items():
+        if len(items) < CLUSTER_MIN_LEVELS:
+            continue
+        ordered = sorted(items, key=lambda x: x[1]['price'])
+        run = [ordered[0]]
+        steps = []
+        for k in range(1, len(ordered)):
+            prev_price = ordered[k - 1][1]['price']
+            curr_price = ordered[k][1]['price']
+            if not prev_price:
+                if len(run) >= CLUSTER_MIN_LEVELS:
+                    for idx, _ in run:
+                        drop.add(idx)
+                run = [ordered[k]]
+                steps = []
+                continue
+            step = abs((curr_price - prev_price) / prev_price)
+            if CLUSTER_MIN_STEP <= step <= CLUSTER_MAX_STEP and (not steps or abs(step - steps[-1]) <= max(CLUSTER_STEP_TOL, steps[-1] * 0.25)):
+                run.append(ordered[k])
+                steps.append(step)
+            else:
+                if len(run) >= CLUSTER_MIN_LEVELS:
+                    for idx, _ in run:
+                        drop.add(idx)
+                    if symbol is not None:
+                        log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
+                run = [ordered[k]]
+                steps = []
+        if len(run) >= CLUSTER_MIN_LEVELS:
+            for idx, _ in run:
+                drop.add(idx)
+            if symbol is not None:
+                log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
+    return [d for i, d in enumerate(densities) if i not in drop]
+
+
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
         if market == 'futures':
@@ -357,6 +411,9 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'age_seconds': age_seconds,
                     'exchange': 'mexc'
                 })
+
+        # Детекция повторяющихся объемов (volume clustering)
+        densities = _detect_volume_clustering(densities, mid, log_func, symbol)
 
         # Анти-спуф: отсекаем симметричные пары плотностей сверху/снизу цены
         densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
