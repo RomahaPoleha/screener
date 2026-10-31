@@ -451,10 +451,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         # Детекция повторяющихся объемов (volume clustering)
         densities = _detect_volume_clustering(densities, mid, log_func, symbol)
 
-        # Детекция layering (анализ стакана, dry-run: только логирование)
+        # Детекция layering (анализ стакана): отсеиваем кандидатов
         layering_prices = _detect_layering(book, mid, log_func, symbol, market)
         if layering_prices:
-            log_func(f"⚠️ {symbol}: layering dry-run: {len(layering_prices)} цен помечено (не отсеяно)")
+            before = len(densities)
+            densities = [d for d in densities if d['price'] not in layering_prices]
+            log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
 
         # Анти-спуф: отсекаем симметричные пары плотностей сверху/снизу цены
         densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
