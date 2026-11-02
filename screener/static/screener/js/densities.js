@@ -11,7 +11,7 @@ const EXCHANGES_CONFIG = [
     { id: 'gate', name: 'Gate.io', label: 'GT', domain: 'gate.io', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
     { id: 'mexc', name: 'MEXC', label: 'MEX', domain: 'mexc.com', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
     { id: 'bitget', name: 'Bitget', label: 'BGB', domain: 'bitget.com', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
-    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BI-A', domain: 'binance.com', color: '#8b5cf6', minVolFutures: 50000, minVolSpot: 5000 },
+    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BI-A', domain: 'binance.com', color: '#8b5cf6', minVolFutures: 50000, minVolSpot: 1000 },
 ];
 
 let densitiesOverlay = null;
@@ -112,11 +112,11 @@ function renderExchangeToggles() {
                 ${!isAlpha ? `
                 <input type="checkbox" id="exFilter-${ex.id}-futures" ${futuresChecked} ${futuresDisabled} onchange="handleExchangeFilter('${ex.id}', 'futures', this.checked)">
                 <span class="market-label futures">F</span>
-                <input type="number" id="exMinVol-${ex.id}-futures" value="${futuresMinVol}" min="1000" step="1000" onchange="handleMinVolChange('${ex.id}', 'futures', this.value)" ${futuresDisabled}>
+                <input type="number" id="exMinVol-${ex.id}-futures" value="${futuresMinVol}" min="${ex.minVolFutures}" step="1000" onchange="handleMinVolChange('${ex.id}', 'futures', this.value)" ${futuresDisabled}>
                 ` : ''}
                 <input type="checkbox" id="exFilter-${ex.id}-spot" ${spotChecked} onchange="handleExchangeFilter('${ex.id}', 'spot', this.checked)">
                 <span class="market-label spot">S</span>
-                <input type="number" id="exMinVol-${ex.id}-spot" value="${spotMinVol}" min="1000" step="1000" onchange="handleMinVolChange('${ex.id}', 'spot', this.value)">
+                <input type="number" id="exMinVol-${ex.id}-spot" value="${spotMinVol}" min="${ex.minVolSpot}" step="1000" onchange="handleMinVolChange('${ex.id}', 'spot', this.value)">
             </label>
         `;
     }).join('');
@@ -124,13 +124,16 @@ function renderExchangeToggles() {
 
 // Handle min volume change
 function handleMinVolChange(exchangeId, market, value) {
-    const numValue = parseInt(value) || 0;
+    const ex = EXCHANGES_CONFIG.find(e => e.id === exchangeId);
+    const backendMin = ex ? (market === 'futures' ? ex.minVolFutures : ex.minVolSpot) : 1000;
+    const numValue = Math.max(backendMin, parseInt(value) || backendMin);
     if (!state.exchangeMinVolumes[exchangeId]) {
         state.exchangeMinVolumes[exchangeId] = { futures: 0, spot: 0 };
     }
     state.exchangeMinVolumes[exchangeId][market] = numValue;
+    const input = document.getElementById(`exMinVol-${exchangeId}-${market}`);
+    if (input) input.value = numValue;
     saveExchangeFilters();
-    // Don't re-render content, just reload data
     loadDensitiesTable();
 }
 

@@ -16,7 +16,7 @@ okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutu
 gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 50000, minVolumeSpot: 10000 },
 mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 50000, minVolumeSpot: 10000 },
 bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 50000, minVolumeSpot: 10000 },
-binance_alpha: { enabled: true, markets: { futures: false, spot: true }, minVolumeFutures: 50000, minVolumeSpot: 5000 },
+binance_alpha: { enabled: true, markets: { futures: false, spot: true }, minVolumeFutures: 50000, minVolumeSpot: 1000 },
 };
 // Миграция любого старого формата + подхват сохранённых значений
 try {
@@ -168,7 +168,7 @@ const marketsHtml = isAlpha
         </label>
         <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
         <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}"
-          min="5000" step="1000"
+          min="1000" step="1000"
           style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
       </div>`
   : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -233,7 +233,7 @@ const sInput = document.getElementById( `scalpMinSpot_${ex.id}` );
 scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
 scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
     const minF = 50000;
-    const minS = isAlpha ? 5000 : 10000;
+    const minS = isAlpha ? 1000 : 10000;
     scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
     scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
 });
