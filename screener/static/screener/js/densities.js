@@ -370,8 +370,7 @@ function renderGroupCard(group, index) {
                     <div class="row-bar-fill" style="width: ${volumePercent}%; background: linear-gradient(90deg, ${sideColor} 0%, ${sideColor}bb 60%, ${sideColor}33 100%);"></div>
                 </div>
                 <div class="row-meta">
-                    ${isWhale ? '<span class="whale-tag">⚡</span>' : ''}
-                    <span class="row-price">$${d.price.toLocaleString()}</span>
+                     <span class="row-price">$${d.price.toLocaleString()}</span>
                     ${pctHtml}
                     <span class="row-age">${fmtAge(d.age_seconds)}</span>
                 </div>
