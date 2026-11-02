@@ -220,6 +220,19 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 SYMMETRY_EPSILON = 0.01          # 1% — допустимая разница расстояний от mid
 MAX_SYMMETRY_DISTANCE = 0.02     # 2% — максимальное расстояние уровня от mid
 
+# Детекция повторяющихся объёмов (volume clustering)
+CLUSTER_MIN_LEVELS = 4
+CLUSTER_MIN_STEP = 0.005
+CLUSTER_MAX_STEP = 0.02
+CLUSTER_STEP_TOL = 0.003
+CLUSTER_MIN_VOLUME = 1000
+
+# Детекция layering (ступенчатых плотностей)
+LAYERING_MIN_LEVELS = 5
+LAYERING_CV_THRESHOLD = 0.15
+LAYERING_MAX_DISTANCE = 0.02
+
+
 def _filter_symmetric_spoofs(densities, mid, log_func=print, symbol=None):
     """Отсекает пары buy/sell плотностей, симметричных относительно mid (спуф)."""
     if not densities or not mid:
@@ -244,6 +257,86 @@ def _filter_symmetric_spoofs(densities, mid, log_func=print, symbol=None):
             drop.add(si)
             log_func(f"⚠️ {symbol}: отсеяна симметричная пара спуф: buy {bd['price']} / sell {sd['price']} (rel≈{brel:.4f})")
     return [d for i, d in enumerate(densities) if i not in drop]
+
+
+def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
+    if not densities or not mid or len(densities) < CLUSTER_MIN_LEVELS:
+        return densities
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for idx, d in enumerate(densities):
+        if d.get('volume', 0) < CLUSTER_MIN_VOLUME:
+            continue
+        key = (round(d['volume'], -3), d.get('side'))
+        groups[key].append((idx, d))
+    drop = set()
+    for key, items in groups.items():
+        if len(items) < CLUSTER_MIN_LEVELS:
+            continue
+        ordered = sorted(items, key=lambda x: x[1]['price'])
+        run = [ordered[0]]
+        steps = []
+        for k in range(1, len(ordered)):
+            prev_price = ordered[k - 1][1]['price']
+            curr_price = ordered[k][1]['price']
+            if not prev_price:
+                if len(run) >= CLUSTER_MIN_LEVELS:
+                    for idx, _ in run:
+                        drop.add(idx)
+                run = [ordered[k]]
+                steps = []
+                continue
+            step = abs((curr_price - prev_price) / prev_price)
+            if CLUSTER_MIN_STEP <= step <= CLUSTER_MAX_STEP and (not steps or abs(step - steps[-1]) <= max(CLUSTER_STEP_TOL, steps[-1] * 0.25)):
+                run.append(ordered[k])
+                steps.append(step)
+            else:
+                if len(run) >= CLUSTER_MIN_LEVELS:
+                    for idx, _ in run:
+                        drop.add(idx)
+                    if symbol is not None:
+                        log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
+                run = [ordered[k]]
+                steps = []
+        if len(run) >= CLUSTER_MIN_LEVELS:
+            for idx, _ in run:
+                drop.add(idx)
+            if symbol is not None:
+                log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
+    return [d for i, d in enumerate(densities) if i not in drop]
+
+
+def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
+    suspicious = set()
+    if not book or not mid:
+        return suspicious
+    min_volume = DENSITY_MIN_VOLUME_FUTURES if market == 'futures' else DENSITY_MIN_VOLUME_SPOT
+    for side_key in ('bids', 'asks'):
+        levels = sorted(book.get(side_key, {}).items(), key=lambda x: x[0])
+        if len(levels) < LAYERING_MIN_LEVELS:
+            continue
+        prices = [p for p, _ in levels]
+        volumes = [p * q for p, q in levels]
+        n = len(levels)
+        for i in range(n - LAYERING_MIN_LEVELS + 1):
+            window_prices = prices[i:i + LAYERING_MIN_LEVELS]
+            window_volumes = volumes[i:i + LAYERING_MIN_LEVELS]
+            if any(v < min_volume for v in window_volumes):
+                continue
+            if any(abs((p - mid) / mid) > LAYERING_MAX_DISTANCE for p in window_prices):
+                continue
+            mean = sum(window_volumes) / len(window_volumes)
+            if mean == 0:
+                continue
+            variance = sum((v - mean) ** 2 for v in window_volumes) / len(window_volumes)
+            std = variance ** 0.5
+            cv = std / mean
+            if cv < LAYERING_CV_THRESHOLD:
+                for p in window_prices:
+                    suspicious.add(p)
+                if symbol is not None:
+                    log_func(f"⚠️ {symbol}: layering кандидат: {LAYERING_MIN_LEVELS} уровней, CV={cv:.3f}, цены {window_prices[0]}..{window_prices[-1]}")
+    return suspicious
 
 
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
@@ -373,11 +466,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
-                    if is_first_load:
-                        ts[price] = now - MIN_AGE_SECONDS
-                    else:
-                        ts[price] = now
-                        continue
+                    ts[price] = now
+                    continue
 
                 age_seconds = int(now - ts[price])
 
@@ -389,6 +479,16 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                     'age_seconds': age_seconds,
                     'exchange': 'gate'
                 })
+
+# Детекция повторяющихся объёмов (volume clustering)
+        densities = _detect_volume_clustering(densities, mid, log_func, symbol)
+
+# Детекция layering (анализ стакана): отсеиваем кандидатов
+        layering_prices = _detect_layering(book, mid, log_func, symbol, market)
+        if layering_prices:
+            before = len(densities)
+            densities = [d for d in densities if d['price'] not in layering_prices]
+            log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
 
 # Анти-спуф: отсекаем симметричные пары плотностей сверху/снизу цены
         densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
