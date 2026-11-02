@@ -129,7 +129,7 @@ EXCHANGES_CONFIG.forEach(ex => {
     const enabledCheckbox = document.getElementById(`scalp-${ex.id}-toggle`);
     const isAlpha = ex.id === 'binance_alpha';
     if (!scalpExchanges[ex.id]) {
-        scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
+        scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 };
     }
     scalpExchanges[ex.id].enabled = enabledCheckbox ? enabledCheckbox.checked : false;
     const fCheckbox = document.getElementById(`scalp-${ex.id}-f`);
@@ -138,8 +138,8 @@ EXCHANGES_CONFIG.forEach(ex => {
     const sInput = document.getElementById(`scalp-${ex.id}-sv`);
     scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
     scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-    const minF = isAlpha ? 10000 : 200000;
-    const minS = isAlpha ? 10000 : 100000;
+    const minF = 50000;
+    const minS = isAlpha ? 5000 : 10000;
     scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
     scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
 });
@@ -208,13 +208,13 @@ function renderScalpCards() {
 const container = document.getElementById('scalpExchangesContainer');
 if (!container) return;
 container.innerHTML = EXCHANGES_CONFIG.map(ex => {
-const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
+const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 };
 const isEnabled = cfg.enabled !== false;
 const isAlpha = ex.id === 'binance_alpha';
 const fEnabled = cfg.markets && cfg.markets.futures;
 const sEnabled = cfg.markets && cfg.markets.spot;
-const fVol = cfg.minVolumeFutures || (isAlpha ? 10000 : 300000);
-const sVol = cfg.minVolumeSpot || (isAlpha ? 10000 : 200000);
+const fVol = cfg.minVolumeFutures || (isAlpha ? 5000 : 50000);
+const sVol = cfg.minVolumeSpot || (isAlpha ? 5000 : 10000);
 
 // Alpha — только один рынок (Spot), остальные — S + F (как в Recon)
 const controlsHtml = isAlpha
@@ -229,7 +229,7 @@ const controlsHtml = isAlpha
         <span>S</span>
       </label>`
   : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-      <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="100000" step="10000"
+      <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000"
         style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
         ${!sEnabled ? 'disabled' : ''}>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
@@ -239,7 +239,7 @@ const controlsHtml = isAlpha
         <span>S</span>
       </label>
       <span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
-      <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="200000" step="10000"
+      <input type="number" id="scalp-${ex.id}-fv" value="${fVol}" min="50000" step="10000"
         style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
         ${!fEnabled ? 'disabled' : ''}>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#e2e8f0;">
@@ -267,7 +267,7 @@ return `<div style="display:flex;align-items:center;gap:6px;">
 
 function toggleScalpExchange(exchangeId, enabled) {
     if (!scalpExchanges[exchangeId]) {
-        scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 300000, minVolumeSpot: 200000 };
+        scalpExchanges[exchangeId] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 };
     }
     scalpExchanges[exchangeId].enabled = enabled;
     localStorage.setItem('scalpExchanges', JSON.stringify(scalpExchanges));

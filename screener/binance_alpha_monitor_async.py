@@ -8,6 +8,7 @@ import time
 import aiohttp
 import websockets
 from django.core.cache import cache
+from .density_config import DENSITY_MIN_VOLUME_ALPHA
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — BINANCE ALPHA
@@ -228,6 +229,11 @@ async def sync_to_cache_async(symbol, log_func=print):
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
+
+                if volume < DENSITY_MIN_VOLUME_ALPHA:
+                    if price in ts:
+                        ts.pop(price, None)
+                    continue
 
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
 

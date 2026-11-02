@@ -5,13 +5,13 @@
 
 // Конфигурация бирж (совпадает с scalp.js)
 const EXCHANGES_CONFIG = [
-    { id: 'binance', name: 'Binance', label: 'BI', domain: 'binance.com', color: '#f59e0b', minVolFutures: 40000, minVolSpot: 20000 },
-    { id: 'bybit', name: 'Bybit', label: 'BY', domain: 'bybit.com', color: '#f59e0b', minVolFutures: 30000, minVolSpot: 20000 },
-    { id: 'okx', name: 'OKX', label: 'OKX', domain: 'okx.com', color: '#ffffff', minVolFutures: 30000, minVolSpot: 20000 },
-    { id: 'gate', name: 'Gate.io', label: 'GT', domain: 'gate.io', color: '#f59e0b', minVolFutures: 20000, minVolSpot: 15000 },
-    { id: 'mexc', name: 'MEXC', label: 'MEX', domain: 'mexc.com', color: '#f59e0b', minVolFutures: 20000, minVolSpot: 15000 },
-    { id: 'bitget', name: 'Bitget', label: 'BGB', domain: 'bitget.com', color: '#f59e0b', minVolFutures: 25000, minVolSpot: 15000 },
-    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BI-A', domain: 'binance.com', color: '#8b5cf6', minVolFutures: 10000, minVolSpot: 5000 },
+    { id: 'binance', name: 'Binance', label: 'BI', domain: 'binance.com', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
+    { id: 'bybit', name: 'Bybit', label: 'BY', domain: 'bybit.com', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
+    { id: 'okx', name: 'OKX', label: 'OKX', domain: 'okx.com', color: '#ffffff', minVolFutures: 50000, minVolSpot: 10000 },
+    { id: 'gate', name: 'Gate.io', label: 'GT', domain: 'gate.io', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
+    { id: 'mexc', name: 'MEXC', label: 'MEX', domain: 'mexc.com', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
+    { id: 'bitget', name: 'Bitget', label: 'BGB', domain: 'bitget.com', color: '#f59e0b', minVolFutures: 50000, minVolSpot: 10000 },
+    { id: 'binance_alpha', name: 'Binance Alpha', label: 'BI-A', domain: 'binance.com', color: '#8b5cf6', minVolFutures: 50000, minVolSpot: 5000 },
 ];
 
 let densitiesOverlay = null;

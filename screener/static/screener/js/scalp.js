@@ -10,13 +10,13 @@ let previousScalpData = {};
 // Конфигурация бирж — берётся из densities.js (загружается раньше, доступна глобально)
 // Текущие настройки каждой биржи
 let scalpExchanges = {
-binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
-bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
-okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 },
-gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 200000, minVolumeSpot: 100000 },
-binance_alpha: { enabled: true, markets: { futures: false, spot: true }, minVolumeFutures: 10000, minVolumeSpot: 1000 },
+binance: { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 },
+bybit:   { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 },
+okx:     { enabled: true, markets: { futures: true, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 },
+gate:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 50000, minVolumeSpot: 10000 },
+mexc:    { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 50000, minVolumeSpot: 10000 },
+bitget:  { enabled: true, markets: { futures: true, spot: true },  minVolumeFutures: 50000, minVolumeSpot: 10000 },
+binance_alpha: { enabled: true, markets: { futures: false, spot: true }, minVolumeFutures: 50000, minVolumeSpot: 5000 },
 };
 // Миграция любого старого формата + подхват сохранённых значений
 try {
@@ -156,7 +156,7 @@ if (currentSymbol === symbol && scalpEnabled) loadScalpDensities(symbol);
 function openScalpSettingsModal() {
 const container = document.getElementById('scalpExchangesContainer');
 container.innerHTML = EXCHANGES_CONFIG.map(ex => {
-const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
+const cfg = scalpExchanges[ex.id] || { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 };
 const isAlpha = ex.id === 'binance_alpha';
 // Единый UI для всех бирж — всё активно
 const marketsHtml = isAlpha
@@ -168,7 +168,7 @@ const marketsHtml = isAlpha
         </label>
         <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
         <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}"
-          min="10000" step="1000"
+          min="5000" step="1000"
           style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
       </div>`
   : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
@@ -180,7 +180,7 @@ const marketsHtml = isAlpha
          </label>
          <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
          <input type="number" id="scalpMinFutures_${ex.id}" value="${cfg.minVolumeFutures}"
-           min="200000" step="10000"
+           min="50000" step="10000"
            style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
        </div>
        <div style="background:#1e293b; border:1px solid #475569; border-radius:4px; padding:10px;">
@@ -191,7 +191,7 @@ const marketsHtml = isAlpha
          </label>
          <label style="font-size:10px; color:#94a3b8; display:block; margin-bottom:4px;">Min volume (USDT):</label>
          <input type="number" id="scalpMinSpot_${ex.id}" value="${cfg.minVolumeSpot}"
-           min="100000" step="10000"
+           min="10000" step="10000"
            style="width:100%; background:#1e293b; border:1px solid #475569; color:#fff; padding:5px 8px; border-radius:3px; font-size:12px;">
        </div>
      </div>`;
@@ -222,7 +222,7 @@ EXCHANGES_CONFIG.forEach(ex => {
 const toggle = document.getElementById( `scalpEnabled_${ex.id}` );
 const isAlpha = ex.id === 'binance_alpha';
 if (!scalpExchanges[ex.id]) {
-scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 200000, minVolumeSpot: 100000 };
+scalpExchanges[ex.id] = { enabled: false, markets: { futures: false, spot: false }, minVolumeFutures: 50000, minVolumeSpot: 10000 };
 }
 // Единая обработка для всех бирж (включая Alpha)
 scalpExchanges[ex.id].enabled = toggle ? toggle.checked : false;
@@ -232,8 +232,8 @@ const fInput = document.getElementById( `scalpMinFutures_${ex.id}` );
 const sInput = document.getElementById( `scalpMinSpot_${ex.id}` );
 scalpExchanges[ex.id].markets.futures = fCheckbox ? fCheckbox.checked : false;
 scalpExchanges[ex.id].markets.spot = sCheckbox ? sCheckbox.checked : false;
-const minF = isAlpha ? 10000 : 200000;
-    const minS = isAlpha ? 10000 : 100000;
+    const minF = 50000;
+    const minS = isAlpha ? 5000 : 10000;
     scalpExchanges[ex.id].minVolumeFutures = fInput ? Math.max(minF, parseInt(fInput.value) || minF) : minF;
     scalpExchanges[ex.id].minVolumeSpot = sInput ? Math.max(minS, parseInt(sInput.value) || minS) : minS;
 });

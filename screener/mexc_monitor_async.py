@@ -9,6 +9,7 @@ import time
 import aiohttp
 import websockets
 from django.core.cache import cache
+from .density_config import DENSITY_MIN_VOLUME_FUTURES, DENSITY_MIN_VOLUME_SPOT, DENSITY_IMMATURE_FACTOR
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
@@ -276,7 +277,7 @@ def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
     suspicious = set()
     if not book or not mid:
         return suspicious
-    min_volume = 50000 if market == 'futures' else 10000
+    min_volume = DENSITY_MIN_VOLUME_FUTURES if market == 'futures' else DENSITY_MIN_VOLUME_SPOT
     for side_key in ('bids', 'asks'):
         levels = sorted(book.get(side_key, {}).items(), key=lambda x: x[0])
         if len(levels) < LAYERING_MIN_LEVELS:
@@ -395,8 +396,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 # 🔥 ШАГ 2: Выравниваем пороги с recon.js (Futures: 50k, Spot: 10k)
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
 
-                target_min = 50000 if market == 'futures' else 10000
-                min_volume = target_min if is_mature else int(target_min * 1.2)
+                target_min = DENSITY_MIN_VOLUME_FUTURES if market == 'futures' else DENSITY_MIN_VOLUME_SPOT
+                min_volume = target_min if is_mature else int(target_min * DENSITY_IMMATURE_FACTOR)
 
                 if volume < min_volume:
                     if price in ts:

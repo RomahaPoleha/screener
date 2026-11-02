@@ -9,6 +9,7 @@ import aiohttp
 import websockets
 from django.core.cache import cache
 import ccxt
+from .density_config import DENSITY_MIN_VOLUME_FUTURES, DENSITY_MIN_VOLUME_SPOT, DENSITY_IMMATURE_FACTOR
 
 # Поддержка старых и новых версий ccxt
 GateExchange = getattr(ccxt, 'gateio', None) or getattr(ccxt, 'gate', None)
@@ -337,9 +338,9 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 # 1. ГИСТЕРЕЗИС
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
                 # Целевой порог для "созревшей" плотности
-                target_min = 50000 if market == 'futures' else 10000
+                target_min = DENSITY_MIN_VOLUME_FUTURES if market == 'futures' else DENSITY_MIN_VOLUME_SPOT
                 # Для "несозревшей" делаем порог чуть выше (на 20%), чтобы отсечь мгновенный шум
-                min_volume = target_min if is_mature else int(target_min * 1.2)
+                min_volume = target_min if is_mature else int(target_min * DENSITY_IMMATURE_FACTOR)
 
                 if volume < min_volume:
                     if price in ts:

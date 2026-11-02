@@ -32,13 +32,13 @@ let reconMarkets = {
     binance_alpha: { spot: true, futures: false },
 };
 let reconMinVolumes = {
-    binance: { spot: 10000, futures: 10000 },
-    bybit:   { spot: 10000, futures: 10000 },
-    okx:     { spot: 10000, futures: 10000},
-    gate:    { spot: 10000, futures: 10000 },
-    mexc:    { spot: 10000, futures: 10000 },
-    bitget:  { spot: 10000, futures: 10000 },
-    binance_alpha: { spot: 1000, futures: 1000 }
+    binance: { spot: 10000, futures: 50000 },
+    bybit:   { spot: 10000, futures: 50000 },
+    okx:     { spot: 10000, futures: 50000 },
+    gate:    { spot: 10000, futures: 50000 },
+    mexc:    { spot: 10000, futures: 50000 },
+    bitget:  { spot: 10000, futures: 50000 },
+    binance_alpha: { spot: 5000, futures: 50000 }
 };
 
 // --- НОВОЕ: Кэш для мультипликаторов контрактов Gate.io Futures ---
@@ -63,10 +63,7 @@ try {
             if (Number(savedVol[id].futures) > 0) reconMinVolumes[id].futures = Number(savedVol[id].futures);
         }
     }
-    // Сброс дефолта для Alpha если сохранено старое значение 10000
-    if (reconMinVolumes.binance_alpha.spot === 10000) reconMinVolumes.binance_alpha.spot = 1000;
-    if (reconMinVolumes.binance_alpha.futures === 10000) reconMinVolumes.binance_alpha.futures = 1000;
-} catch (e) {}
+ } catch (e) {}
 
 // Master toggle state is loaded from localStorage (reconAllEnabled/reconEnabled)
 
@@ -490,7 +487,7 @@ function renderReconSettings() {
     if (!container) return;
     container.innerHTML = RECON_EXCHANGES.map(ex => {
         const isAlpha = ex.id === 'binance_alpha';
-        const minVal = isAlpha ? 1000 : 10000;
+        const minVal = isAlpha ? 5000 : 10000;
         return `<div style="display:flex;align-items:center;gap:6px;">
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
             <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
