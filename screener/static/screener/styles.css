@@ -11,8 +11,8 @@
 }
 .help-tip::after {
     content: attr(data-tip);
-    position: absolute; bottom: calc(100% + 6px); left: 50%;
-    transform: translateX(-50%);
+    position: absolute; top: 50%; left: calc(100% + 6px);
+    transform: translateY(-50%);
     background: #1a1a1a; color: #e5e5e5; border: 1px solid #444;
     padding: 6px 10px; border-radius: 4px; font-size: 12px; font-weight: 400;
     white-space: normal; width: 220px; text-align: left; line-height: 1.4;
