@@ -21,7 +21,7 @@
 <div class="modal-section-title">График</div>
 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
 <input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f59e0b; width:16px; height:16px;">
-<span>Показывать гистограмму объёма</span>
+<span>Гистограмма объёма</span>
 <span class="help-tip" data-tip="Отображает столбики объёма под графиком свечей. Помогает оценить активность торгов и подтвердить движения цены.">?</span>
 </label>
 </div>
@@ -29,12 +29,12 @@
 <div class="modal-section-title">Инструменты рисования</div>
 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
 <input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f59e0b; width:16px; height:16px;">
-<span>Показывать панель инструментов</span>
+<span>Панель инструментов</span>
 <span class="help-tip" data-tip="Показывает или скрывает панель инструментов рисования на графике.">?</span>
 </label>
 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5;">
 <input type="checkbox" id="showGrid" checked style="accent-color:#f59e0b; width:16px; height:16px;">
-<span>Показывать сетку</span>
+<span>Сетка</span>
 <span class="help-tip" data-tip="Отображает сетку на графике для удобства чтения уровней цены.">?</span>
 </label>
 </div>
@@ -72,7 +72,7 @@
     <div class="modal-section-title">Импульс</div>
     <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:12px;">
         <input type="checkbox" id="volumeAlertToggle" style="accent-color:#f59e0b; width:16px; height:16px;">
-        <span>Включить технологию «Импульс»</span>
+        <span>Импульс</span>
 <span class="help-tip" data-tip="Отслеживает резкие движения цены (импульсы) и оповещает о них звуком.">?</span>
     </label>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
@@ -94,16 +94,12 @@
 <span class="help-tip" data-tip="Громкость звукового сигнала при импульсе.">?</span>
         <input type="range" id="alertBeepVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
     </label>
-    <p style="font-size:10px; color:#666666; margin:0; line-height:1.5;">
-        Сервер отслеживает амплитуду свечи (High-Low).<br>
-        Защита: порог не может быть ниже 1.5%, таймфрейм только 1 или 5 мин.
-    </p>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Часовые звуки</div>
 <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
 <input type="checkbox" id="soundToggleModal" onchange="toggleSound()" style="accent-color:#f59e0b; width:16px; height:16px;">
-<span>Оповещения за 5 и 1 минуту до нового часа</span>
+<span>Оповещения</span>
 <span class="help-tip" data-tip="Звуковые сигналы за 5 и 1 минуту до начала нового часа.">?</span>
 </label>
 <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5;">
