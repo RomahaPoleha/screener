@@ -1328,7 +1328,7 @@ def api_densities_table(request):
                         'symbols_count': merged.get('symbols_count', 0),
                         'densities': result,
                     }
-                    cache.set(cache_key, response_data, 5)
+                    cache.set(cache_key, response_data, 2)
                     return JsonResponse(response_data)
                 # Если запрошенный min_volume ниже чем в merged — фоллбек на полную логику
 
@@ -1463,8 +1463,8 @@ def api_densities_table(request):
         'symbols_count': len(symbols),
         'densities': result,
     }
-    # Сохраняем в кэш на 5 секунд
-    cache.set(cache_key, response_data, 5)
+    # Сохраняем в кэш на 2 секунды
+    cache.set(cache_key, response_data, 2)
 
     return JsonResponse(response_data)
 
