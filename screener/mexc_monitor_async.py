@@ -65,6 +65,8 @@ MAX_TS_AGE_SEC = 3600           # 1 час — макс. возраст запи
 MOVING_REL_EPSILON = 0.001
 MOVING_MID_THRESHOLD = 0.002
 MOVING_WINDOW_SEC = 60
+# Уровень, снятый близко к mid (touch-and-pull), не показываем 120 сек
+TOUCH_PULL_DISTANCE = 0.005
 
 # ==========================================
 
@@ -372,6 +374,12 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
+                # Touch-and-pull: уровень, снятый близко к mid, пропускаем
+                if any(rp == price and abs(rrel) <= TOUCH_PULL_DISTANCE for rp, rt, rrel in recently_removed):
+                    if price in ts:
+                        ts.pop(price, None)
+                    continue
+
                 volume = price * qty
 
                 # Детекция гуляющей плотности: новый уровень появляется на том же
