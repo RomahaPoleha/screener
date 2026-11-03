@@ -51,6 +51,11 @@ okx_spot_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
 okx_futures_first_load_done = set()
 okx_spot_first_load_done = set()
 
+okx_futures_removed = {}
+okx_spot_removed = {}
+okx_futures_mid_history = {}
+okx_spot_mid_history = {}
+
 # URLs — У OKX один и тот же WS URL для futures и spot!
 OKX_WS_URL = "wss://ws.okx.com:8443/ws/v5/public"
 OKX_FUTURES_REST_URL = "https://www.okx.com/api/v5/market/books?instId={}-USDT-SWAP&sz=200"
@@ -69,6 +74,12 @@ _http_client = None
 MAX_STATS_PER_SYMBOL = 200      # макс. ценовых уровней на символ
 MAX_STATS_AGE_SEC = 7200        # 2 часа — макс. возраст записи в volume_stats
 MAX_TS_AGE_SEC = 3600           # 1 час — макс. возраст записи в density_timestamps
+
+MOVING_REL_EPSILON = 0.001
+MOVING_MID_THRESHOLD = 0.002
+MOVING_WINDOW_SEC = 60
+RECENT_WINDOW = 60
+TOUCH_PULL_DISTANCE = 0.005
 
 # ==========================================
 
@@ -193,6 +204,126 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 # ==========================================
 # СИНХРОНИЗАЦИЯ В REDIS (async) — ИСПРАВЛЕНО (пороги + зачистка призраков)
 # ==========================================
+# ==========================================
+# АНТИ-СПУФИНГ ФИЛЬТРЫ (как в MEXC/Gate)
+# ==========================================
+SYMMETRY_EPSILON = 0.01
+MAX_SYMMETRY_DISTANCE = 0.02
+CLUSTER_MIN_LEVELS = 4
+CLUSTER_MIN_STEP = 0.005
+CLUSTER_MAX_STEP = 0.02
+CLUSTER_STEP_TOL = 0.003
+CLUSTER_MIN_VOLUME = 1000
+LAYERING_MIN_LEVELS = 5
+LAYERING_CV_THRESHOLD = 0.15
+LAYERING_MAX_DISTANCE = 0.02
+
+
+def _filter_symmetric_spoofs(densities, mid, log_func=print, symbol=None):
+    if not densities or not mid:
+        return densities
+    tagged = [(i, d, (d['price'] - mid) / mid) for i, d in enumerate(densities)]
+    buys = [t for t in tagged if t[1]['side'] == 'buy']
+    sells = [t for t in tagged if t[1]['side'] == 'sell']
+    drop = set()
+    for bi, bd, brel in buys:
+        if bi in drop:
+            continue
+        if abs(brel) > MAX_SYMMETRY_DISTANCE:
+            continue
+        cand = [(si, sd, srel) for si, sd, srel in sells
+                if si not in drop and abs(srel) <= MAX_SYMMETRY_DISTANCE]
+        if not cand:
+            continue
+        best = min(cand, key=lambda x: abs(abs(x[2]) - abs(brel)))
+        si, sd, srel = best
+        if abs(abs(srel) - abs(brel)) <= SYMMETRY_EPSILON:
+            drop.add(bi)
+            drop.add(si)
+    return [d for i, d in enumerate(densities) if i not in drop]
+
+
+def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
+    if not densities or not mid or len(densities) < CLUSTER_MIN_LEVELS:
+        return densities
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for idx, d in enumerate(densities):
+        if d.get('volume', 0) < CLUSTER_MIN_VOLUME:
+            continue
+        key = (round(d['volume'], -3), d.get('side'))
+        groups[key].append((idx, d))
+    drop = set()
+    for key, items in groups.items():
+        if len(items) < CLUSTER_MIN_LEVELS:
+            continue
+        ordered = sorted(items, key=lambda x: x[1]['price'])
+        run = [ordered[0]]
+        steps = []
+        for k in range(1, len(ordered)):
+            prev_price = ordered[k - 1][1]['price']
+            curr_price = ordered[k][1]['price']
+            if not prev_price:
+                if len(run) >= CLUSTER_MIN_LEVELS:
+                    for idx, _ in run:
+                        drop.add(idx)
+                run = [ordered[k]]
+                steps = []
+                continue
+            step = abs((curr_price - prev_price) / prev_price)
+            if CLUSTER_MIN_STEP <= step <= CLUSTER_MAX_STEP and (not steps or abs(step - steps[-1]) <= max(CLUSTER_STEP_TOL, steps[-1] * 0.25)):
+                run.append(ordered[k])
+                steps.append(step)
+            else:
+                if len(run) >= CLUSTER_MIN_LEVELS:
+                    for idx, _ in run:
+                        drop.add(idx)
+                    if symbol is not None:
+                        log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
+                run = [ordered[k]]
+                steps = []
+        if len(run) >= CLUSTER_MIN_LEVELS:
+            for idx, _ in run:
+                drop.add(idx)
+            if symbol is not None:
+                log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
+    return [d for i, d in enumerate(densities) if i not in drop]
+
+
+def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
+    suspicious = set()
+    if not book or not mid:
+        return suspicious
+    from .density_config import DENSITY_MIN_VOLUME_FUTURES, DENSITY_MIN_VOLUME_SPOT
+    min_volume = DENSITY_MIN_VOLUME_FUTURES if market == 'futures' else DENSITY_MIN_VOLUME_SPOT
+    for side_key in ('bids', 'asks'):
+        levels = sorted(book.get(side_key, {}).items(), key=lambda x: x[0])
+        if len(levels) < LAYERING_MIN_LEVELS:
+            continue
+        prices = [p for p, _ in levels]
+        volumes = [p * q for p, q in levels]
+        n = len(levels)
+        for i in range(n - LAYERING_MIN_LEVELS + 1):
+            window_prices = prices[i:i + LAYERING_MIN_LEVELS]
+            window_volumes = volumes[i:i + LAYERING_MIN_LEVELS]
+            if any(v < min_volume for v in window_volumes):
+                continue
+            if any(abs((p - mid) / mid) > LAYERING_MAX_DISTANCE for p in window_prices):
+                continue
+            mean = sum(window_volumes) / len(window_volumes)
+            if mean == 0:
+                continue
+            variance = sum((v - mean) ** 2 for v in window_volumes) / len(window_volumes)
+            std = variance ** 0.5
+            cv = std / mean
+            if cv < LAYERING_CV_THRESHOLD:
+                for p in window_prices:
+                    suspicious.add(p)
+                if symbol is not None:
+                    log_func(f"⚠️ {symbol}: layering кандидат: {LAYERING_MIN_LEVELS} уровней, CV={cv:.3f}, цены {window_prices[0]}..{window_prices[-1]}")
+    return suspicious
+
+
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
         if market == 'futures':
@@ -223,12 +354,61 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
 
         new_stats = {}
 
+        # Текущая mid-цена
+        bids_keys = list(book.get('bids', {}).keys())
+        asks_keys = list(book.get('asks', {}).keys())
+        mid = None
+        if bids_keys and asks_keys:
+            mid = (max(bids_keys) + min(asks_keys)) / 2
+
+        mh = okx_futures_mid_history if market == 'futures' else okx_spot_mid_history
+        mhl = mh.setdefault(symbol, [])
+        mhl.append((now, mid))
+        if len(mhl) > 20:
+            mhl.pop(0)
+
+        old_mid = None
+        for t, m in reversed(mhl):
+            if now - t >= MOVING_WINDOW_SEC and m is not None:
+                old_mid = m
+                break
+        mid_changed = (old_mid is not None and old_mid != 0 and mid is not None and mid != 0
+                       and abs((mid - old_mid) / old_mid) >= MOVING_MID_THRESHOLD)
+
+        removed_store = okx_futures_removed if market == 'futures' else okx_spot_removed
+        removed_list = [x for x in removed_store.get(symbol, []) if (now - x[1]) < (RECENT_WINDOW * 2)]
+        removed_store[symbol] = removed_list
+        recently_removed = list(removed_list)
+
         # 🔥 ШАГ 1: Собираем все цены, которые реально есть в стакане ПРЯМО СЕЙЧАС
         current_prices = set(book.get('bids', {}).keys()) | set(book.get('asks', {}).keys())
 
         for side, side_name in [('bids', 'buy'), ('asks', 'sell')]:
             for price, qty in book.get(side, {}).items():
                 volume = price * qty
+
+                # Детекция гуляющей плотности
+                is_moving = False
+                rel = None
+                if price not in stats and mid is not None and mid != 0 and mid_changed:
+                    rel = (price - mid) / mid
+                    for rp, rt, rrel in recently_removed:
+                        if rrel is not None and abs(rrel - rel) < MOVING_REL_EPSILON:
+                            is_moving = True
+                            break
+                if is_moving:
+                    if price in ts:
+                        ts.pop(price, None)
+                    continue
+
+                if rel is None and mid is not None and mid != 0:
+                    rel = (price - mid) / mid
+
+                # Touch-and-pull
+                if any(rp == price and abs(rrel) <= TOUCH_PULL_DISTANCE for rp, rt, rrel in recently_removed):
+                    if price in ts:
+                        ts.pop(price, None)
+                    continue
 
                 # 🔥 ШАГ 2: Выравниваем пороги с recon.js (Futures: 50k, Spot: 10k)
                 is_mature = (price in ts) and ((now - ts[price]) >= MIN_AGE_SECONDS)
@@ -269,12 +449,9 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                             new_stats[price] = {'min': volume, 'max': volume, 'sum': volume, 'count': 1}
                             continue
                 else:
-                    # Если это первый запуск символа — даем фору, иначе заставляем ждать
-                    if is_first_load:
-                        ts[price] = now - MIN_AGE_SECONDS
-                    else:
-                        ts[price] = now
-                        continue
+                    # Если это первый запуск символа — даём фору, иначе заставляем ждать
+                    ts[price] = now
+                    continue
 
                 age_seconds = int(now - ts[price])
 
@@ -288,6 +465,19 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
                 })
 
         # 🔥 ШАГ 3: ЖЕСТКАЯ ЗАЧИСТКА ПРИЗРАКОВ
+        # Детекция повторяющихся объёмов (volume clustering)
+        densities = _detect_volume_clustering(densities, mid, log_func, symbol)
+
+        # Детекция layering (анализ стакана)
+        layering_prices = _detect_layering(book, mid, log_func, symbol, market)
+        if layering_prices:
+            before = len(densities)
+            densities = [d for d in densities if d['price'] not in layering_prices]
+            log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
+
+        # Анти-спуф: отсекаем симметричные пары
+        densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
+
         # Удаляем из памяти всё, чего уже нет в текущем стакане
         prices_to_remove = [p for p in list(ts.keys()) if p not in current_prices]
         for p in prices_to_remove:
@@ -484,10 +674,18 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
         async with okx_futures_lock:
             old_ts = okx_futures_density_timestamps.get(symbol, {})
             old_stats = okx_futures_volume_stats.get(symbol, {})
+            old_book = okx_futures_order_books.get(symbol, {})
+            _ob = list(old_book.get('bids', {}).keys())
+            _oa = list(old_book.get('asks', {}).keys())
+            _omid = (max(_ob) + min(_oa)) / 2 if _ob and _oa else None
             new_ts = {p: old_ts[p] for p in new_bids if p in old_ts}
             new_ts.update({p: old_ts[p] for p in new_asks if p in old_ts})
             new_stats = {p: old_stats[p] for p in new_bids if p in old_stats}
             new_stats.update({p: old_stats[p] for p in new_asks if p in old_stats})
+
+            if _omid is not None:
+                for p in (set(old_ts) - set(new_ts)):
+                    okx_futures_removed.setdefault(symbol, []).append((p, time.time(), (p - _omid) / _omid))
 
             okx_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             okx_futures_density_timestamps[symbol] = new_ts
@@ -496,10 +694,18 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
         async with okx_spot_lock:
             old_ts = okx_spot_density_timestamps.get(symbol, {})
             old_stats = okx_spot_volume_stats.get(symbol, {})
+            old_book = okx_spot_order_books.get(symbol, {})
+            _ob = list(old_book.get('bids', {}).keys())
+            _oa = list(old_book.get('asks', {}).keys())
+            _omid = (max(_ob) + min(_oa)) / 2 if _ob and _oa else None
             new_ts = {p: old_ts[p] for p in new_bids if p in old_ts}
             new_ts.update({p: old_ts[p] for p in new_asks if p in old_ts})
             new_stats = {p: old_stats[p] for p in new_bids if p in old_stats}
             new_stats.update({p: old_stats[p] for p in new_asks if p in old_stats})
+
+            if _omid is not None:
+                for p in (set(old_ts) - set(new_ts)):
+                    okx_spot_removed.setdefault(symbol, []).append((p, time.time(), (p - _omid) / _omid))
 
             okx_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             okx_spot_density_timestamps[symbol] = new_ts
@@ -524,6 +730,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['bids']:
+                            _bids = list(book['bids'].keys())
+                            _asks = list(book['asks'].keys())
+                            _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                            _removed = okx_futures_removed if market == 'futures' else okx_spot_removed
+                            if _mid is not None:
+                                _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                             del book['bids'][price]
                             ts.pop(price, None)
                             changed = True
@@ -542,6 +754,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['asks']:
+                            _bids = list(book['bids'].keys())
+                            _asks = list(book['asks'].keys())
+                            _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                            _removed = okx_futures_removed if market == 'futures' else okx_spot_removed
+                            if _mid is not None:
+                                _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                             del book['asks'][price]
                             ts.pop(price, None)
                             changed = True
@@ -570,6 +788,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['bids']:
+                            _bids = list(book['bids'].keys())
+                            _asks = list(book['asks'].keys())
+                            _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                            _removed = okx_futures_removed if market == 'futures' else okx_spot_removed
+                            if _mid is not None:
+                                _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                             del book['bids'][price]
                             ts.pop(price, None)
                             changed = True
@@ -588,6 +812,12 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                     price, qty = float(row[0]), float(row[1])
                     if qty == 0:
                         if price in book['asks']:
+                            _bids = list(book['bids'].keys())
+                            _asks = list(book['asks'].keys())
+                            _mid = (max(_bids) + min(_asks)) / 2 if _bids and _asks else None
+                            _removed = okx_futures_removed if market == 'futures' else okx_spot_removed
+                            if _mid is not None:
+                                _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
                             del book['asks'][price]
                             ts.pop(price, None)
                             changed = True
