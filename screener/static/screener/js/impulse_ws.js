@@ -2,10 +2,10 @@
 // impulse_ws.js — POLLING С КЛИЕНТСКОЙ ФИЛЬТРАЦИЕЙ
 // ==========================================
 
-// ✅ 1. ДЕЛАЕМ ПЕРЕМЕННУЮ ГЛОБАЛЬНОЙ (window.)
 window.impulsePollingEnabled = false;
 let impulsePollingTimer = null;
-let impulseLastTimestamp = 0;
+let impulseLastTimestamp = parseFloat(localStorage.getItem('impulseLastTimestamp') || '0');
+const seenImpulses = new Set();
 
 function startImpulseWebSocket() {
     if (window.impulsePollingEnabled) return;
@@ -39,20 +39,23 @@ async function pollImpulseAlerts() {
         const alerts = data.alerts || [];
         if (alerts.length === 0) return;
 
-        impulseLastTimestamp = data.server_time || Date.now() / 1000;
+        const maxAlertTs = Math.max(...alerts.map(a => a.timestamp || 0));
+        impulseLastTimestamp = Math.max(impulseLastTimestamp, data.server_time || 0, maxAlertTs);
+        localStorage.setItem('impulseLastTimestamp', String(impulseLastTimestamp));
 
-        // ✅ 2. ЧИТАЕМ НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ ДЛЯ ФИЛЬТРАЦИИ
         const userThreshold = parseFloat(localStorage.getItem('priceImpulseThreshold') || '1.0');
         const userWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
 
         for (const alert of alerts) {
-            // ✅ 3. ФИЛЬТР: показываем только выбранный таймфрейм и порог
+            const key = `${alert.symbol}_${alert.window}_${alert.timestamp}`;
+            if (seenImpulses.has(key)) continue;
+            seenImpulses.add(key);
+
             if (alert.window !== userWindow) continue;
             if (alert.price_change < userThreshold) continue;
 
             const direction = alert.direction === 'up' ? '↑' : '↓';
 
-            // ✅ 4. ИСПРАВЛЕНО: передаем реальный объем с сервера, а не 0
             showVolumeAlertToast(
                 alert.symbol,
                 alert.volume || 0,

@@ -25,9 +25,9 @@ _console = logging.StreamHandler()
 _console.setFormatter(logging.Formatter('%(message)s'))
 _logger.addHandler(_console)
 
-# Состояние свечей: "{symbol}_{window}" -> {'start_time', 'low', 'high', 'current', 'volume', 'window', 'symbol'}
+# Состояние свечей: "{symbol}_{window}_{window_start}" -> {...}
 candle_state = {}
-cooldowns = {}  # "{symbol}_{window}" -> timestamp последнего алерта
+cooldowns = {}  # cooldowns keyed by same state key
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
@@ -58,11 +58,11 @@ def process_ticker_batch(tickers, now_sec):
 
         # Обновляем состояние для КАЖДОГО окна независимо
         for window in WINDOWS:
-            state_key = f"{clean}_{window}"
             current_window_start = int(now_sec // window) * window
+            state_key = f"{clean}_{window}_{current_window_start}"
 
             state = candle_state.get(state_key)
-            if state is None or state['start_time'] != current_window_start:
+            if state is None:
                 candle_state[state_key] = {
                     'start_time': current_window_start,
                     'low': price,
@@ -87,9 +87,7 @@ async def ticker_processor():
     while True:
         try:
             tickers, now_sec = await ticker_queue.get()
-            # Выполняем синхронную обработку в executor, чтобы не блокировать event loop
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, process_ticker_batch, tickers, now_sec)
+            process_ticker_batch(tickers, now_sec)
         except Exception as e:
             _logger.warning(f"⚠️ Ticker processor error: {e}")
             await asyncio.sleep(0.1)
@@ -114,7 +112,7 @@ def detect_impulses(now_sec):
         cooldown_ms = max(30000, window * 1000)  # 1 мин → 60с, 5 мин → 300с
         current_window_start = int(now_sec // window) * window
 
-        for state_key, state in candle_state.items():
+        for state_key, state in list(candle_state.items()):
             if state.get('window') != window or state['start_time'] < current_window_start:
                 continue
             low = state.get('low', 0)
@@ -149,7 +147,7 @@ def detect_impulses(now_sec):
 async def impulse_ws_listener():
     global ticker_queue
     # Очередь с ограничением размера — защита от переполнения памяти
-    ticker_queue = asyncio.Queue(maxsize=100)
+    ticker_queue = asyncio.Queue(maxsize=1000)
 
     while True:
         try:
