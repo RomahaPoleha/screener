@@ -8,6 +8,16 @@ let hoverTimeout = null;
 let isShiftPressed = false;
 
 function initContextMenu() {
+    // Правый клик как запасной способ открытия (не зависит от Shift/браузера)
+    document.addEventListener('contextmenu', (e) => {
+        const row = e.target.closest('.coin-row');
+        if (!row) return;
+        e.preventDefault();
+        contextMenuSymbol = row.dataset.symbol;
+        const rect = row.getBoundingClientRect();
+        showContextMenu(rect.right + 8, rect.top, contextMenuSymbol);
+    });
+    
     // Отслеживаем Shift
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Shift') isShiftPressed = true;
@@ -123,14 +133,20 @@ function renderExchangesMenu(data, symbol) {
 
     let headerHtml;
     if (tigerOn) {
+        const isHttps = (location.protocol === 'https:');
+        const connected = (typeof tigerIsConnected === 'function') ? tigerIsConnected() : false;
+        const statusText = isHttps ? 'нужен HTTP' : (connected ? 'онлайн' : 'офлайн');
+        const statusColor = isHttps ? '#f59e0b' : (connected ? '#22c55e' : '#ef4444');
         headerHtml = `
         <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <span>Торговые площадки: ${symbol}</span>
-            <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#aaa;">
-                Tiger grp:
+            <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:${statusColor};">
+                Tiger: ${statusText}
+                <span style="display:flex;align-items:center;gap:4px;color:#aaa;margin-left:6px;">grp:
                 <select id="tigerGroupSelect" style="background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:1px 4px;font-size:11px;">
                     ${groupOptions}
                 </select>
+                </span>
             </span>
         </div>
         `;

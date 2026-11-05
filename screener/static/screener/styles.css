@@ -387,6 +387,7 @@ body {
     gap: 4px; padding: 6px 12px; border-bottom: 1px solid #1f1f1f;
     cursor: pointer; font-size: 11px; align-items: center;
     transition: background 0.1s;
+    user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
 }
 .coin-row:hover { background: #1f1f1f; }
 .coin-symbol { font-weight: 700; color: #ffffff; }
