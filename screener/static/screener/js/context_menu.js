@@ -58,11 +58,13 @@ function initContextMenu() {
 }
 
 function isMenuHovered() {
-    return document.querySelector('#exchangesContextMenu:hover') !== null;
+    const menu = document.querySelector('#exchangesContextMenu:hover');
+    return menu !== null;
 }
 
 function showContextMenu(x, y, symbol) {
     const menu = document.getElementById('exchangesContextMenu');
+    if (!menu) return;
     menu.dataset.symbol = symbol;
     
     menu.innerHTML = `
@@ -93,6 +95,7 @@ function showContextMenu(x, y, symbol) {
 
 function renderExchangesMenu(data, symbol) {
     const menu = document.getElementById('exchangesContextMenu');
+    if (!menu) return;
     if (menu.dataset.symbol !== symbol) return;
     
     const exchanges = [
@@ -181,6 +184,7 @@ function renderExchangesMenu(data, symbol) {
 
 function hideContextMenu() {
     const menu = document.getElementById('exchangesContextMenu');
+    if (!menu) return;
     menu.classList.remove('active');
     contextMenuSymbol = null;
     clearTimeout(hoverTimeout);
