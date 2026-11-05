@@ -5,7 +5,7 @@
 
 let contextMenuSymbol = null;
 let hoverTimeout = null;
-let isShiftPressed = false;
+let isCtrlPressed = false;
 
 function initContextMenu() {
     // Правый клик как запасной способ открытия (не зависит от Shift/браузера)
@@ -20,11 +20,11 @@ function initContextMenu() {
     
     // Отслеживаем Shift
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Shift') isShiftPressed = true;
+        if (e.key === 'Control') isCtrlPressed = true;
     });
     document.addEventListener('keyup', (e) => {
-        if (e.key === 'Shift') {
-            isShiftPressed = false;
+        if (e.key === 'Control') {
+            isCtrlPressed = false;
             hideContextMenu();
         }
     });
@@ -39,7 +39,7 @@ function initContextMenu() {
         const row = e.target.closest('.coin-row');
         if (!row) return;
         
-        if (isShiftPressed) {
+        if (isCtrlPressed) {
             clearTimeout(hoverTimeout);
             hoverTimeout = setTimeout(() => {
                 contextMenuSymbol = row.dataset.symbol;
@@ -194,6 +194,10 @@ function renderExchangesMenu(data, symbol) {
             </div>
         `;
     });
+    
+    if (tigerOn && location.protocol === 'https:') {
+        html += `<div style="color:#f59e0b;font-size:11px;padding:8px 12px;border-top:1px solid #2a2a2a;">Линковка недоступна по HTTPS. Откройте по HTTP: <a href="http://${location.host}${location.pathname}" style="color:#f59e0b;">http://${location.host}</a></div>`;
+    }
     
     menu.innerHTML = html;
 }
