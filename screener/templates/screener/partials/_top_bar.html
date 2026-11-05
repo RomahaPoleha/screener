@@ -4,7 +4,7 @@
     <a href="/" style="display:flex; align-items:center; gap:8px; text-decoration:none;">
       <img src="/api/logo/" alt="Recon&Scalp" class="logo-img" style="width:64px; height:64px; object-fit:cover;">
     </a>
-    <button class="sound-toggle" id="supportBtn" onclick="openSupportModal()" style="font-size:12px; opacity:0.7;">Поддержать проект</button>
+    <button class="sound-toggle" id="supportBtn" onclick="openSupportModal()" style="font-size:12px; opacity:0.85;">Стать частью команды <span style="color:#22d3ee; font-size:11px;">&#10084;</span></button>
 
     <!-- Статистика онлайн (для админов и пользователей с правом просмотра статистики) -->
     {% if request.user.is_staff or request.user.profile.can_view_stats %}
