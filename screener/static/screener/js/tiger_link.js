@@ -11,7 +11,13 @@ let tigerConnected = false;
 let tigerReconnectTimer = null;
 let tigerPingTimer = null;
 
-function tigerGetLastGroup() {
+function tigerIsEnabled() {
+    try { return localStorage.getItem('tiger_link_enabled') !== '0'; } catch (e) { return true; }
+}
+
+function tigerSetEnabled(v) {
+    try { localStorage.setItem('tiger_link_enabled', v ? '1' : '0'); } catch (e) {}
+}
     try { return localStorage.getItem('tiger_last_link_group') || 'A'; } catch (e) { return 'A'; }
 }
 
@@ -104,7 +110,8 @@ function tigerSendFromMenu(symbol, exchangeKey, market) {
     tigerLinkSymbol(symbol, exchange, market, group);
 }
 
-window.tigerConnect = tigerConnect;
+window.tigerIsEnabled = tigerIsEnabled;
+window.tigerSetEnabled = tigerSetEnabled;
 window.tigerLinkSymbol = tigerLinkSymbol;
 window.tigerIsConnected = () => tigerConnected;
 window.tigerSendFromMenu = tigerSendFromMenu;
@@ -116,7 +123,18 @@ document.addEventListener('change', (e) => {
     }
 });
 
-// Автоподключение
+// Синхронизация чекбокса в настройках
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'tigerLinkEnabled') {
+        tigerSetEnabled(e.target.checked);
+    }
+});
+
+// Установка состояния чекбокса при загрузке
+document.addEventListener('DOMContentLoaded', () => {
+    const cb = document.getElementById('tigerLinkEnabled');
+    if (cb) cb.checked = tigerIsEnabled();
+});
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', tigerConnect);
 } else {
