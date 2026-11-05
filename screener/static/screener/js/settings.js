@@ -26,7 +26,15 @@ function initSettingsTabs() {
 // ==========================================
 // ОТКРЫТИЕ МОДАЛКИ НАСТРОЕК
 // ==========================================
-function openSettingsModal() {
+function applyMenuButtonsVisibility() {
+    var trades = document.getElementById('tradesBtn');
+    var densities = document.getElementById('densitiesBtn');
+    var showTrades = localStorage.getItem('showTradesBtn') !== '0';
+    var showDensities = localStorage.getItem('showDensitiesBtn') !== '0';
+    if (trades) trades.style.display = showTrades ? '' : 'none';
+    if (densities) densities.style.display = showDensities ? '' : 'none';
+}
+document.addEventListener('DOMContentLoaded', applyMenuButtonsVisibility);
 initSettingsTabs();
 document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
 document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
@@ -60,6 +68,10 @@ const hourSlider = document.getElementById('hourSoundVolume');
 if (hourSlider) hourSlider.value = hourSoundVolume;
 const tigerCb = document.getElementById('tigerLinkEnabled');
 if (tigerCb) tigerCb.checked = (typeof tigerIsEnabled === 'function') ? tigerIsEnabled() : false;
+const tradesCb = document.getElementById('showTradesBtnToggle');
+if (tradesCb) tradesCb.checked = localStorage.getItem('showTradesBtn') !== '0';
+const densCb = document.getElementById('showDensitiesBtnToggle');
+if (densCb) densCb.checked = localStorage.getItem('showDensitiesBtn') !== '0';
 const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
 modal.show();
 }
@@ -72,7 +84,11 @@ function openSupportModal() {
     if (tab) tab.click();
 }
 function applySettings() {
-volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
+const tradesCb = document.getElementById('showTradesBtnToggle');
+if (tradesCb) localStorage.setItem('showTradesBtn', tradesCb.checked ? '1' : '0');
+const densCb = document.getElementById('showDensitiesBtnToggle');
+if (densCb) localStorage.setItem('showDensitiesBtn', densCb.checked ? '1' : '0');
+applyMenuButtonsVisibility();
 localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
 if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 const deltaHist = document.getElementById('showDeltaHistogram');
