@@ -26,17 +26,8 @@ function initSettingsTabs() {
 // ==========================================
 // ОТКРЫТИЕ МОДАЛКИ НАСТРОЕК
 // ==========================================
-function applyMenuButtonsVisibility() {
-    var trades = document.getElementById('tradesBtn');
-    var densities = document.getElementById('densitiesBtn');
-    var showTrades = localStorage.getItem('showTradesBtn') !== '0';
-    var showDensities = localStorage.getItem('showDensitiesBtn') !== '0';
-    if (trades) trades.style.display = showTrades ? '' : 'none';
-    if (densities) densities.style.display = showDensities ? '' : 'none';
-}
-document.addEventListener('DOMContentLoaded', applyMenuButtonsVisibility);
+function openSettingsModal() {
 initSettingsTabs();
-document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
 document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
 const firstTab = document.querySelector('.settings-nav-item[data-tab="display"]');
 const firstContent = document.getElementById('tab-display');
@@ -88,7 +79,11 @@ const tradesCb = document.getElementById('showTradesBtnToggle');
 if (tradesCb) localStorage.setItem('showTradesBtn', tradesCb.checked ? '1' : '0');
 const densCb = document.getElementById('showDensitiesBtnToggle');
 if (densCb) localStorage.setItem('showDensitiesBtn', densCb.checked ? '1' : '0');
-applyMenuButtonsVisibility();
+var tradesBtnEl = document.getElementById('tradesBtn');
+var densBtnEl = document.getElementById('densitiesBtn');
+if (tradesBtnEl) tradesBtnEl.style.display = (localStorage.getItem('showTradesBtn') !== '0') ? '' : 'none';
+if (densBtnEl) densBtnEl.style.display = (localStorage.getItem('showDensitiesBtn') !== '0') ? '' : 'none';
+volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
 localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
 if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
 const deltaHist = document.getElementById('showDeltaHistogram');
@@ -344,3 +339,4 @@ function applyScalpSettingsSilent() {
         }
     }
 }
+document.addEventListener('DOMContentLoaded', function() { var tradesBtnEl = document.getElementById('tradesBtn'); var densBtnEl = document.getElementById('densitiesBtn'); if (tradesBtnEl) tradesBtnEl.style.display = (localStorage.getItem('showTradesBtn') !== '0') ? '' : 'none'; if (densBtnEl) densBtnEl.style.display = (localStorage.getItem('showDensitiesBtn') !== '0') ? '' : 'none'; });
