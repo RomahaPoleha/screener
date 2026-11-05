@@ -53,7 +53,8 @@ const beepSlider = document.getElementById('alertBeepVolume');
 if (beepSlider) beepSlider.value = alertBeepVolume;
 const hourSlider = document.getElementById('hourSoundVolume');
 if (hourSlider) hourSlider.value = hourSoundVolume;
-initSettingsTabs();
+const tigerCb = document.getElementById('tigerLinkEnabled');
+if (tigerCb) tigerCb.checked = (typeof tigerIsEnabled === 'function') ? tigerIsEnabled() : false;
 const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
 modal.show();
 }

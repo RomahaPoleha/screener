@@ -12,7 +12,7 @@ let tigerReconnectTimer = null;
 let tigerPingTimer = null;
 
 function tigerIsEnabled() {
-    try { return localStorage.getItem('tiger_link_enabled') !== '0'; } catch (e) { return true; }
+    try { return localStorage.getItem('tiger_link_enabled') === '1'; } catch (e) { return false; }
 }
 
 function tigerSetEnabled(v) {
