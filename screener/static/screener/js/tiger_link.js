@@ -112,6 +112,13 @@ function tigerSendFromMenu(symbol, exchangeKey, market) {
     const groupSelect = document.getElementById('tigerGroupSelect');
     const group = groupSelect ? groupSelect.value : tigerGetLastGroup();
     tigerSetLastGroup(group);
+    // Если скринер открыт внутри локального моста (iframe), отправляем команду родителю
+    if (window.parent && window.parent !== window) {
+        try {
+            window.parent.postMessage({ type: 'tigerLink', symbol: symbol, exchangeKey: exchangeKey, market: market, group: group }, '*');
+        } catch (e) {}
+        return;
+    }
     const exchange = tigerExchangeMap[exchangeKey] || 'BINANCE';
     tigerLinkSymbol(symbol, exchange, market, group);
 }

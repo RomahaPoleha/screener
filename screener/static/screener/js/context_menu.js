@@ -118,7 +118,8 @@ function renderExchangesMenu(data, symbol) {
         { key: 'binance_alpha', name: 'Binance Alpha', color: '#8b5cf6' },
     ];
     
-    const tigerOn = (typeof tigerIsEnabled === 'function') ? tigerIsEnabled() : true;
+    const inBridge = (window.parent && window.parent !== window);
+    const tigerOn = inBridge ? true : ((typeof tigerIsEnabled === 'function') ? tigerIsEnabled() : true);
 
     const tigerExchanges = {
         'binance': 'BINANCE', 'bybit': 'BYBIT', 'okx': 'OKX', 'gate': 'Gate.io',
@@ -133,10 +134,11 @@ function renderExchangesMenu(data, symbol) {
 
     let headerHtml;
     if (tigerOn) {
+        const inBridge = (window.parent && window.parent !== window);
         const isHttps = (location.protocol === 'https:');
         const connected = (typeof tigerIsConnected === 'function') ? tigerIsConnected() : false;
-        const statusText = isHttps ? 'нужен HTTP' : (connected ? 'онлайн' : 'офлайн');
-        const statusColor = isHttps ? '#f59e0b' : (connected ? '#22c55e' : '#ef4444');
+        const statusText = inBridge ? 'мост' : (isHttps ? 'нужен HTTP' : (connected ? 'онлайн' : 'офлайн'));
+        const statusColor = inBridge ? '#22c55e' : (isHttps ? '#f59e0b' : (connected ? '#22c55e' : '#ef4444'));
         headerHtml = `
         <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <span>Торговые площадки: ${symbol}</span>
