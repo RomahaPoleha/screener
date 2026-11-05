@@ -65,6 +65,7 @@ function openSupportModal() {
     const tab = document.querySelector('.settings-nav-item[data-tab="about"]');
     if (tab) tab.click();
 }
+function applySettings() {
 volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
 localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
 if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });

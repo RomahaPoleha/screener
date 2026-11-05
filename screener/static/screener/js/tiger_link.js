@@ -18,6 +18,7 @@ function tigerIsEnabled() {
 function tigerSetEnabled(v) {
     try { localStorage.setItem('tiger_link_enabled', v ? '1' : '0'); } catch (e) {}
 }
+function tigerGetLastGroup() {
     try { return localStorage.getItem('tiger_last_link_group') || 'A'; } catch (e) { return 'A'; }
 }
 
