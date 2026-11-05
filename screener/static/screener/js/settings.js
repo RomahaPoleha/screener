@@ -60,7 +60,11 @@ modal.show();
 // ==========================================
 // ПРИМЕНЕНИЕ НАСТРОЕК
 // ==========================================
-function applySettings() {
+function openSupportModal() {
+    openSettingsModal();
+    const tab = document.querySelector('.settings-nav-item[data-tab="about"]');
+    if (tab) tab.click();
+}
 volumeHistogramEnabled = document.getElementById('showVolumeHistogram').checked;
 localStorage.setItem('volumeHistogramEnabled', volumeHistogramEnabled);
 if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
