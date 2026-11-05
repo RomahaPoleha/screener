@@ -105,7 +105,28 @@ function renderExchangesMenu(data, symbol) {
         { key: 'binance_alpha', name: 'Binance Alpha', color: '#8b5cf6' },
     ];
     
-    let html = `<div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Торговые площадки: ${symbol}</div>`;
+    const tigerExchanges = {
+        'binance': 'BINANCE', 'bybit': 'BYBIT', 'okx': 'OKX', 'gate': 'Gate.io',
+        'mexc': 'MEXC', 'bitget': 'Bitget', 'binance_alpha': 'BINANCE'
+    };
+    const lastGroup = (typeof tigerGetLastGroup === 'function') ? tigerGetLastGroup() : 'A';
+    const groupOptions = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(g =>
+        `<option value="${g}" ${g === lastGroup ? 'selected' : ''}>${g}</option>`
+    ).join('') + Array.from({length:12}, (_,i) => i).map(n =>
+        `<option value="${n}" ${String(n) === lastGroup ? 'selected' : ''}>${n}</option>`
+    ).join('');
+
+    let html = `
+        <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span>Торговые площадки: ${symbol}</span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#aaa;">
+                Tiger grp:
+                <select id="tigerGroupSelect" style="background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:1px 4px;font-size:11px;">
+                    ${groupOptions}
+                </select>
+            </span>
+        </div>
+    `;
     
     exchanges.forEach(ex => {
         const exData = data[ex.key] || { futures: false, spot: false };
@@ -116,9 +137,11 @@ function renderExchangesMenu(data, symbol) {
         
         let marketTags = '';
         if (isAlpha) {
-            marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Spot" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};">S</span>`;
+            marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Открыть в Tiger (Spot)" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};cursor:${hasFutures ? 'pointer' : 'default'};" ${hasFutures ? `onclick="tigerSendFromMenu('${symbol}','${ex.key}','spot')"` : ''}>S</span>`;
         } else {
-            marketTags = `\n                <span class="market-tag ${hasFutures ? 'active' : ''}" title="Futures" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};">F</span>\n                <span class="market-tag ${hasSpot ? 'active' : ''}" title="Spot" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};">S</span>
+            marketTags = `
+                <span class="market-tag ${hasFutures ? 'active' : ''}" title="Открыть в Tiger (Futures)" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};cursor:${hasFutures ? 'pointer' : 'default'};" ${hasFutures ? `onclick="tigerSendFromMenu('${symbol}','${ex.key}','futures')"` : ''}>F</span>
+                <span class="market-tag ${hasSpot ? 'active' : ''}" title="Открыть в Tiger (Spot)" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};cursor:${hasSpot ? 'pointer' : 'default'};" ${hasSpot ? `onclick="tigerSendFromMenu('${symbol}','${ex.key}','spot')"` : ''}>S</span>
             `;
         }
         

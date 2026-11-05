@@ -1,0 +1,124 @@
+// ==========================================
+// tiger_link.js — ЛИНКОВКА С ТЕРМИНАЛОМ TIGER
+// WebSocket локальный сервер терминала (порт 7819)
+// ==========================================
+
+const TIGER_WS_URL = 'ws://127.0.0.1:7819';
+const TIGER_PING_INTERVAL = 20000;
+
+let tigerSocket = null;
+let tigerConnected = false;
+let tigerReconnectTimer = null;
+let tigerPingTimer = null;
+
+function tigerGetLastGroup() {
+    try { return localStorage.getItem('tiger_last_link_group') || 'A'; } catch (e) { return 'A'; }
+}
+
+function tigerSetLastGroup(group) {
+    try { localStorage.setItem('tiger_last_link_group', group); } catch (e) {}
+}
+
+function tigerConnect() {
+    if (tigerSocket && (tigerSocket.readyState === WebSocket.OPEN || tigerSocket.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+    try {
+        tigerSocket = new WebSocket(TIGER_WS_URL);
+    } catch (e) {
+        scheduleTigerReconnect();
+        return;
+    }
+
+    tigerSocket.onopen = () => {
+        tigerConnected = true;
+        if (tigerPingTimer) clearInterval(tigerPingTimer);
+        tigerPingTimer = setInterval(() => {
+            if (tigerSocket && tigerSocket.readyState === WebSocket.OPEN) {
+                try { tigerSocket.send('ping'); } catch (e) {}
+            }
+        }, TIGER_PING_INTERVAL);
+    };
+
+    tigerSocket.onmessage = (e) => {
+        // Ответы терминала; можно логировать при необходимости
+    };
+
+    tigerSocket.onclose = () => {
+        tigerConnected = false;
+        if (tigerPingTimer) { clearInterval(tigerPingTimer); tigerPingTimer = null; }
+        scheduleTigerReconnect();
+    };
+
+    tigerSocket.onerror = () => {
+        try { tigerSocket.close(); } catch (e) {}
+    };
+}
+
+function scheduleTigerReconnect() {
+    if (tigerReconnectTimer) return;
+    tigerReconnectTimer = setTimeout(() => {
+        tigerReconnectTimer = null;
+        tigerConnect();
+    }, 3000);
+}
+
+function tigerSend(payload) {
+    if (!tigerSocket || tigerSocket.readyState !== WebSocket.OPEN) {
+        tigerConnect();
+        // попытка отправить после подключения
+        setTimeout(() => tigerSend(payload), 500);
+        return false;
+    }
+    try {
+        tigerSocket.send(JSON.stringify(payload));
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function tigerLinkSymbol(symbol, exchange, market, linkGroup) {
+    const group = linkGroup || tigerGetLastGroup();
+    tigerSetLastGroup(group);
+    const payload = {
+        type: 'setLinkSymbol',
+        e: exchange,
+        m: market === 'futures' ? 'FUTURES' : 'SPOT',
+        symbol: String(symbol).toUpperCase(),
+        linkGroup: group
+    };
+    return tigerSend(payload);
+}
+
+const tigerExchangeMap = {
+    'binance': 'BINANCE', 'bybit': 'BYBIT', 'okx': 'OKX', 'gate': 'Gate.io',
+    'mexc': 'MEXC', 'bitget': 'Bitget', 'binance_alpha': 'BINANCE'
+};
+
+function tigerSendFromMenu(symbol, exchangeKey, market) {
+    const groupSelect = document.getElementById('tigerGroupSelect');
+    const group = groupSelect ? groupSelect.value : tigerGetLastGroup();
+    tigerSetLastGroup(group);
+    const exchange = tigerExchangeMap[exchangeKey] || 'BINANCE';
+    tigerLinkSymbol(symbol, exchange, market, group);
+}
+
+window.tigerConnect = tigerConnect;
+window.tigerLinkSymbol = tigerLinkSymbol;
+window.tigerIsConnected = () => tigerConnected;
+window.tigerSendFromMenu = tigerSendFromMenu;
+
+// Сохраняем выбранную группу при изменении select
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'tigerGroupSelect') {
+        tigerSetLastGroup(e.target.value);
+    }
+});
+
+// Автоподключение
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tigerConnect);
+} else {
+    tigerConnect();
+}
