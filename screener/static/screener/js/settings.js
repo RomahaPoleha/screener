@@ -6,23 +6,28 @@
 // ВКЛАДКИ НАСТРОЕК
 // ==========================================
 function initSettingsTabs() {
-document.querySelectorAll('.settings-nav-item').forEach(tab => {
-tab.replaceWith(tab.cloneNode(true));
-});
-document.querySelectorAll('.settings-nav-item').forEach(tab => {
-tab.addEventListener('click', () => {
-document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
-document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
-tab.classList.add('active');
-const target = document.getElementById('tab-' + tab.dataset.tab);
-if (target) target.classList.add('active');
-});
-});
+    var nav = document.querySelector('.settings-nav');
+    if (!nav) return;
+    // удаляем старый обработчик, если был
+    if (nav._settingsTabHandler) {
+        nav.removeEventListener('click', nav._settingsTabHandler);
+    }
+    nav._settingsTabHandler = function(e) {
+        var tab = e.target.closest('.settings-nav-item');
+        if (!tab) return;
+        document.querySelectorAll('.settings-nav-item').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.settings-tab-content').forEach(function(c) { c.classList.remove('active'); });
+        tab.classList.add('active');
+        var target = document.getElementById('tab-' + tab.dataset.tab);
+        if (target) target.classList.add('active');
+    };
+    nav.addEventListener('click', nav._settingsTabHandler);
 }
 // ==========================================
 // ОТКРЫТИЕ МОДАЛКИ НАСТРОЕК
 // ==========================================
 function openSettingsModal() {
+initSettingsTabs();
 document.querySelectorAll('.settings-nav-item').forEach(t => t.classList.remove('active'));
 document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
 const firstTab = document.querySelector('.settings-nav-item[data-tab="display"]');
