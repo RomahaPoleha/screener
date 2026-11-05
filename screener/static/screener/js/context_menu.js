@@ -150,15 +150,15 @@ function renderExchangesMenu(data, symbol) {
         let marketTags = '';
         if (isAlpha) {
             if (tigerOn) {
-                marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Открыть в Tiger (Spot)" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};cursor:${hasFutures ? 'pointer' : 'default'};" ${hasFutures ? `onclick="tigerSendFromMenu('${symbol}','${ex.key}','spot')"` : ''}>S</span>`;
+                marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Открыть в Tiger (Spot)" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};cursor:${hasFutures ? 'pointer' : 'default'};" ${hasFutures ? `onclick="event.stopPropagation(); tigerSendFromMenu('${symbol}','${ex.key}','spot')"` : ''}>S</span>`;
             } else {
                 marketTags = `<span class="market-tag ${hasFutures ? 'active' : ''}" title="Spot" style="background:${hasFutures ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#8b5cf6' : '#666'};border:1px solid ${hasFutures ? '#8b5cf6' : '#333'};">S</span>`;
             }
         } else {
             if (tigerOn) {
                 marketTags = `
-                    <span class="market-tag ${hasFutures ? 'active' : ''}" title="Открыть в Tiger (Futures)" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};cursor:${hasFutures ? 'pointer' : 'default'};" ${hasFutures ? `onclick="tigerSendFromMenu('${symbol}','${ex.key}','futures')"` : ''}>F</span>
-                    <span class="market-tag ${hasSpot ? 'active' : ''}" title="Открыть в Tiger (Spot)" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};cursor:${hasSpot ? 'pointer' : 'default'};" ${hasSpot ? `onclick="tigerSendFromMenu('${symbol}','${ex.key}','spot')"` : ''}>S</span>
+                    <span class="market-tag ${hasFutures ? 'active' : ''}" title="Открыть в Tiger (Futures)" style="background:${hasFutures ? 'rgba(255,205,0,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasFutures ? '#FFCD00' : '#666'};border:1px solid ${hasFutures ? '#FFCD00' : '#333'};cursor:${hasFutures ? 'pointer' : 'default'};" ${hasFutures ? `onclick="event.stopPropagation(); tigerSendFromMenu('${symbol}','${ex.key}','futures')"` : ''}>F</span>
+                    <span class="market-tag ${hasSpot ? 'active' : ''}" title="Открыть в Tiger (Spot)" style="background:${hasSpot ? 'rgba(0,198,255,0.2)' : 'rgba(255,255,255,0.05)'};color:${hasSpot ? '#00C6FF' : '#666'};border:1px solid ${hasSpot ? '#00C6FF' : '#333'};cursor:${hasSpot ? 'pointer' : 'default'};" ${hasSpot ? `onclick="event.stopPropagation(); tigerSendFromMenu('${symbol}','${ex.key}','spot')"` : ''}>S</span>
                 `;
             } else {
                 marketTags = `
