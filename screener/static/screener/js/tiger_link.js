@@ -27,6 +27,7 @@ function tigerSetLastGroup(group) {
 }
 
 function tigerConnect() {
+    if (!tigerIsEnabled()) return;
     if (tigerSocket && (tigerSocket.readyState === WebSocket.OPEN || tigerSocket.readyState === WebSocket.CONNECTING)) {
         return;
     }
@@ -128,6 +129,7 @@ document.addEventListener('change', (e) => {
 document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'tigerLinkEnabled') {
         tigerSetEnabled(e.target.checked);
+        if (e.target.checked) tigerConnect();
     }
 });
 
@@ -136,8 +138,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const cb = document.getElementById('tigerLinkEnabled');
     if (cb) cb.checked = tigerIsEnabled();
 });
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', tigerConnect);
-} else {
-    tigerConnect();
+if (tigerIsEnabled()) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', tigerConnect);
+    } else {
+        tigerConnect();
+    }
 }
