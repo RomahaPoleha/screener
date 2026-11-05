@@ -37,13 +37,16 @@ function tigerConnect() {
     }
     try {
         tigerSocket = new WebSocket(TIGER_WS_URL);
+        console.log('[Tiger] connecting to', TIGER_WS_URL);
     } catch (e) {
+        console.error('[Tiger] WebSocket constructor error:', e);
         scheduleTigerReconnect();
         return;
     }
 
     tigerSocket.onopen = () => {
         tigerConnected = true;
+        console.log('[Tiger] connected');
         if (tigerPingTimer) clearInterval(tigerPingTimer);
         tigerPingTimer = setInterval(() => {
             if (tigerSocket && tigerSocket.readyState === WebSocket.OPEN) {
@@ -62,7 +65,8 @@ function tigerConnect() {
         scheduleTigerReconnect();
     };
 
-    tigerSocket.onerror = () => {
+    tigerSocket.onerror = (e) => {
+        console.error('[Tiger] WebSocket error', e);
         try { tigerSocket.close(); } catch (e) {}
     };
 }
@@ -76,6 +80,7 @@ function scheduleTigerReconnect() {
 }
 
 function tigerSend(payload) {
+    console.log('[Tiger] tigerSend', payload);
     if (!tigerSocket || tigerSocket.readyState !== WebSocket.OPEN) {
         tigerConnect();
         // попытка отправить после подключения
@@ -109,6 +114,7 @@ const tigerExchangeMap = {
 };
 
 function tigerSendFromMenu(symbol, exchangeKey, market) {
+    console.log('[Tiger] sendFromMenu', symbol, exchangeKey, market);
     const groupSelect = document.getElementById('tigerGroupSelect');
     const group = groupSelect ? groupSelect.value : tigerGetLastGroup();
     tigerSetLastGroup(group);
@@ -116,7 +122,8 @@ function tigerSendFromMenu(symbol, exchangeKey, market) {
     if (window.parent && window.parent !== window) {
         try {
             window.parent.postMessage({ type: 'tigerLink', symbol: symbol, exchangeKey: exchangeKey, market: market, group: group }, '*');
-        } catch (e) {}
+            console.log('[Tiger] posted to parent');
+        } catch (e) { console.error('[Tiger] postMessage error', e); }
         return;
     }
     const exchange = tigerExchangeMap[exchangeKey] || 'BINANCE';
