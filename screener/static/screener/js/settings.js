@@ -249,7 +249,8 @@ const controlsHtml = isAlpha
           style="accent-color:#f59e0b;width:14px;height:14px;"
           onchange="document.getElementById('scalp-${ex.id}-sv').disabled = !this.checked">
         <span>S</span>
-      </label>`
+      </label>
+      <span style="width:121px;display:inline-block;"></span>`
   : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
       <input type="number" id="scalp-${ex.id}-sv" value="${sVol}" min="10000" step="10000"
         style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;"
@@ -273,7 +274,7 @@ const controlsHtml = isAlpha
 
 return `<div style="display:flex;align-items:center;gap:6px;">
   <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-  <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
+  <span style="font-weight:600;font-size:12px;color:${ex.color};width:35px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;">${ex.label}</span>
   <div style="display:flex;align-items:center;gap:6px;">${controlsHtml}</div>
   <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;" title="Enable/Disable ${ex.name}">
     <input type="checkbox" id="scalp-${ex.id}-toggle" ${isEnabled ? 'checked' : ''}

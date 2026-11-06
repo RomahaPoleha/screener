@@ -490,11 +490,11 @@ function renderReconSettings() {
         const minVal = isAlpha ? 1000 : 10000;
         return `<div style="display:flex;align-items:center;gap:6px;">
             <img src="https://www.google.com/s2/favicons?domain=${ex.domain}&sz=32" onerror="this.style.display='none'" style="width:16px;height:16px;border-radius:2px;flex-shrink:0;">
-            <span style="font-weight:600;font-size:12px;color:${ex.color};min-width:24px;">${ex.label}</span>
-            ${isAlpha ? '' : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
-            <input type="number" id="reconMinS_${ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${minVal}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`}
-             <span style="font-size:11px;color:#94a3b8;min-width:10px;">${isAlpha ? 'S' : 'F'}:</span>
-            <input type="number" id="reconMinF_${ex.id}" value="${isAlpha ? reconMinVolumes[ex.id].spot : reconMinVolumes[ex.id].futures}" min="${isAlpha ? 1000 : 50000}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+            <span style="font-weight:600;font-size:12px;color:${ex.color};width:35px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;">${ex.label}</span>
+            <span style="font-size:11px;color:#94a3b8;min-width:10px;">S:</span>
+            <input type="number" id="${isAlpha ? 'reconMinF_' + ex.id : 'reconMinS_' + ex.id}" value="${reconMinVolumes[ex.id].spot}" min="${isAlpha ? 1000 : 10000}" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">
+            ${isAlpha ? '<span style="width:86px;display:inline-block;"></span>' : `<span style="font-size:11px;color:#94a3b8;min-width:10px;">F:</span>
+            <input type="number" id="reconMinF_${ex.id}" value="${reconMinVolumes[ex.id].futures}" min="50000" step="1000" style="width:70px;background:#1e293b;border:1px solid #475569;color:#fff;padding:4px 6px;border-radius:3px;font-size:12px;">`}
         </div>`;
     }).join('');
 }

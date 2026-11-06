@@ -1,30 +1,22 @@
 // ==========================================
 // context_menu.js — КОНТЕКСТНОЕ МЕНЮ БИРЖ
-// Shift + наведение на монету -> "Торговые площадки"
+// Ctrl + наведение на монету -> "Торговые площадки"
 // ==========================================
 
 let contextMenuSymbol = null;
 let hoverTimeout = null;
 let isCtrlPressed = false;
+let hoveredRow = null;
 
 function initContextMenu() {
-    // Правый клик как запасной способ открытия (не зависит от Shift/браузера)
-    document.addEventListener('contextmenu', (e) => {
-        const row = e.target.closest('.coin-row');
-        if (!row) return;
-        e.preventDefault();
-        contextMenuSymbol = row.dataset.symbol;
-        const rect = row.getBoundingClientRect();
-        showContextMenu(rect.right + 8, rect.top, contextMenuSymbol);
-    });
-    
-    // Отслеживаем Shift
+    // Отслеживаем Control
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Control') isCtrlPressed = true;
     });
     document.addEventListener('keyup', (e) => {
         if (e.key === 'Control') {
             isCtrlPressed = false;
+            hoveredRow = null;
             hideContextMenu();
         }
     });
@@ -37,32 +29,49 @@ function initContextMenu() {
     // Делегирование для строк таблицы
     document.addEventListener('mouseover', (e) => {
         const row = e.target.closest('.coin-row');
-        if (!row) return;
+        if (!row) {
+            if (hoveredRow && isCtrlPressed) {
+                clearTimeout(hoverTimeout);
+                hoverTimeout = setTimeout(() => {
+                    if (!isMenuHovered()) hideContextMenu();
+                }, 300);
+            }
+            return;
+        }
+        
+        if (row === hoveredRow) return;
+        hoveredRow = row;
         
         if (isCtrlPressed) {
             clearTimeout(hoverTimeout);
             hoverTimeout = setTimeout(() => {
                 contextMenuSymbol = row.dataset.symbol;
                 const rect = row.getBoundingClientRect();
-                showContextMenu(rect.right + 8, rect.top, contextMenuSymbol);
-            }, 150); // задержка против дрожания
+                showContextMenu(rect, contextMenuSymbol);
+            }, 120);
         }
     });
     
     document.addEventListener('mouseout', (e) => {
         const row = e.target.closest('.coin-row');
         if (!row) return;
+        if (e.relatedTarget && row.contains(e.relatedTarget)) return;
+        if (row !== hoveredRow) return;
+        
         clearTimeout(hoverTimeout);
-        // Скрываем с задержкой, чтобы успеть перевести мышь на меню
         hoverTimeout = setTimeout(() => {
-            if (!isMenuHovered()) hideContextMenu();
-        }, 200);
+            if (!isMenuHovered()) {
+                hoveredRow = null;
+                hideContextMenu();
+            }
+        }, 300);
     });
     
-    // Не скрывать если мышь на меню
+// Не скрывать если мышь на меню
     document.addEventListener('mouseover', (e) => {
         if (e.target.closest('#exchangesContextMenu')) {
             clearTimeout(hoverTimeout);
+            hoveredRow = null;
         }
     });
 }
@@ -72,9 +81,11 @@ function isMenuHovered() {
     return menu !== null;
 }
 
-function showContextMenu(x, y, symbol) {
+function showContextMenu(anchorRect, symbol) {
     const menu = document.getElementById('exchangesContextMenu');
     if (!menu) return;
+    // Не перерисовываем если уже показываем тот же символ
+    if (menu.classList.contains('active') && menu.dataset.symbol === symbol) return;
     menu.dataset.symbol = symbol;
     
     menu.innerHTML = `
@@ -82,28 +93,74 @@ function showContextMenu(x, y, symbol) {
         <div class="context-menu-loading" style="color:#666;font-size:12px;padding:8px 12px;">Загрузка...</div>
     `;
     
-    // Ограничиваем чтобы не выходило за экран
-    const menuWidth = 220;
-    const menuHeight = 300;
-    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
+    const padding = 8;
+    const preferredLeft = anchorRect.right + padding;
+    menu.style.left = `${preferredLeft}px`;
+    menu.style.top = `${anchorRect.top}px`;
     
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
+    // Clamp position BEFORE showing (menu is in layout even without .active)
+    const menuWidth = menu.offsetWidth;
+    const menuHeight = menu.offsetHeight;
+    
+    let left = preferredLeft;
+    const altLeft = anchorRect.left - menuWidth - padding;
+    if (preferredLeft + menuWidth > window.innerWidth) {
+        left = Math.max(padding, altLeft);
+    }
+    if (left + menuWidth > window.innerWidth) {
+        left = window.innerWidth - menuWidth - padding;
+    }
+    if (left < padding) left = padding;
+    
+    let top = anchorRect.top;
+    if (top + menuHeight > window.innerHeight) {
+        top = window.innerHeight - menuHeight - padding;
+    }
+    if (top < padding) top = padding;
+    
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
     menu.classList.add('active');
     
     fetch(`/api/exchanges/${symbol}/`)
         .then(res => res.json())
-        .then(data => renderExchangesMenu(data, symbol))
+        .then(data => renderExchangesMenu(data, symbol, anchorRect))
         .catch(err => {
             menu.innerHTML = `
                 <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Торговые площадки: ${symbol}</div>
                 <div class="context-menu-error" style="color:#666;font-size:12px;padding:8px 12px;">Ошибка загрузки</div>
             `;
+            clampMenuToViewport(menu, anchorRect);
         });
 }
 
-function renderExchangesMenu(data, symbol) {
+function clampMenuToViewport(menu, anchorRect) {
+    const menuWidth = menu.offsetWidth;
+    const menuHeight = menu.offsetHeight;
+    const padding = 8;
+    const preferredLeft = anchorRect.right + padding;
+    const altLeft = anchorRect.left - menuWidth - padding;
+    
+    let left = preferredLeft;
+    if (preferredLeft + menuWidth > window.innerWidth) {
+        left = Math.max(padding, altLeft);
+    }
+    if (left + menuWidth > window.innerWidth) {
+        left = window.innerWidth - menuWidth - padding;
+    }
+    if (left < padding) left = padding;
+    
+    let top = anchorRect.top;
+    if (top + menuHeight > window.innerHeight) {
+        top = window.innerHeight - menuHeight - padding;
+    }
+    if (top < padding) top = padding;
+    
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+function renderExchangesMenu(data, symbol, anchorRect) {
     const menu = document.getElementById('exchangesContextMenu');
     if (!menu) return;
     if (menu.dataset.symbol !== symbol) return;
@@ -202,6 +259,7 @@ function renderExchangesMenu(data, symbol) {
     }
     
     menu.innerHTML = html;
+    clampMenuToViewport(menu, anchorRect);
 }
 
 function hideContextMenu() {
