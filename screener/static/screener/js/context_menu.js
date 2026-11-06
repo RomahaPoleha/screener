@@ -185,7 +185,7 @@ function renderExchangesMenu(data, symbol, anchorRect) {
     const lastGroup = (typeof tigerGetLastGroup === 'function') ? tigerGetLastGroup() : 'A';
     const groupOptions = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(g =>
         `<option value="${g}" ${g === lastGroup ? 'selected' : ''}>${g}</option>`
-    ).join('') + Array.from({length:12}, (_,i) => i).map(n =>
+    ).join('') + Array.from({length:19}, (_,i) => i).map(n =>
         `<option value="${n}" ${String(n) === lastGroup ? 'selected' : ''}>${n}</option>`
     ).join('');
 

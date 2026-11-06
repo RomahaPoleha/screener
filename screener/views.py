@@ -248,7 +248,7 @@ def get_symbols_from_tickers():
         return symbols_with_volume
 
     except Exception as e:
-        print(f"❌ Ошибка get_symbols_from_tickers: {e}")
+        print(f"Error get_symbols_from_tickers: {e}")
         return []
 
 
@@ -366,10 +366,10 @@ def api_candles(request, symbol):
         return JsonResponse(candles, safe=False)
 
     except ccxt.BadSymbol as e:
-        print(f"⚠️ {symbol} не найден: {e}")
+        print(f"Warning {symbol} not found: {e}")
         return JsonResponse({'error': f'{symbol} недоступен'}, status=404)
     except Exception as e:
-        print(f"❌ Ошибка api_candles {symbol}: {e}")
+        print(f"Error api_candles {symbol}: {e}")
         # Если есть старый кэш — отдаём его даже устаревший (лучше чем 500)
         if cached:
             return JsonResponse(cached, safe=False)
@@ -763,7 +763,7 @@ def api_mexc_depth(request):
             return JsonResponse({'bids': [], 'asks': []})
         data = res.json()
     except Exception as e:
-        print(f"⚠️ api_mexc_depth({market} {symbol}): {e}")
+        print(f"Warning api_mexc_depth({market} {symbol}): {e}")
         # При ошибке можно вернуть старый кэш, если он есть (даже протухший), чтобы не ломать фронт
         if cached:
             return JsonResponse(cached)
@@ -822,13 +822,13 @@ def api_gate_depth(request):
         # ✅ ИСПОЛЬЗУЕМ СЕССИЮ И ТАЙМАУТ 3 сек
         res = get_http_session().get(url, timeout=3, headers={'User-Agent': 'Mozilla/5.0'})
         if not res.ok:
-            print(f"⚠️ api_gate_depth({market} {symbol}): HTTP {res.status_code}")
+            print(f"Warning api_gate_depth({market} {symbol}): HTTP {res.status_code}")
             if cached:
                 return JsonResponse(cached)
             return JsonResponse({'bids': [], 'asks': []})
         data = res.json()
     except Exception as e:
-        print(f"⚠️ api_gate_depth({market} {symbol}): {e}")
+        print(f"Warning api_gate_depth({market} {symbol}): {e}")
         if cached:
             return JsonResponse(cached)
         return JsonResponse({'bids': [], 'asks': []})
@@ -980,7 +980,10 @@ def _fetch_binance_all():
     return fut, spot
 
 def get_binance_symbols():
-    return _get_cached('exchange:binance:all', _fetch_binance_all)
+    try:
+        return _get_cached('exchange:binance:all', _fetch_binance_all)
+    except Exception:
+        return set(), set()
 
 # --- Bybit ---
 def _fetch_bybit_all():
@@ -1002,7 +1005,10 @@ def _fetch_bybit_all():
     return fut, spot
 
 def get_bybit_symbols():
-    return _get_cached('exchange:bybit:all', _fetch_bybit_all)
+    try:
+        return _get_cached('exchange:bybit:all', _fetch_bybit_all)
+    except Exception:
+        return set(), set()
 
 # --- OKX ---
 def _fetch_okx_all():
@@ -1024,7 +1030,10 @@ def _fetch_okx_all():
     return fut, spot
 
 def get_okx_symbols():
-    return _get_cached('exchange:okx:all', _fetch_okx_all)
+    try:
+        return _get_cached('exchange:okx:all', _fetch_okx_all)
+    except Exception:
+        return set(), set()
 
 # --- Gate.io ---
 def _fetch_gate_all():
@@ -1046,7 +1055,10 @@ def _fetch_gate_all():
     return fut, spot
 
 def get_gate_symbols():
-    return _get_cached('exchange:gate:all', _fetch_gate_all)
+    try:
+        return _get_cached('exchange:gate:all', _fetch_gate_all)
+    except Exception:
+        return set(), set()
 
 # --- MEXC ---
 def _fetch_mexc_all():
@@ -1072,7 +1084,10 @@ def _fetch_mexc_all():
     return fut, spot
 
 def get_mexc_symbols():
-    return _get_cached('exchange:mexc:all', _fetch_mexc_all)
+    try:
+        return _get_cached('exchange:mexc:all', _fetch_mexc_all)
+    except Exception:
+        return set(), set()
 
 # --- Bitget ---
 def _fetch_bitget_all():
@@ -1094,7 +1109,10 @@ def _fetch_bitget_all():
     return fut, spot
 
 def get_bitget_symbols():
-    return _get_cached('exchange:bitget:all', _fetch_bitget_all)
+    try:
+        return _get_cached('exchange:bitget:all', _fetch_bitget_all)
+    except Exception:
+        return set(), set()
 
 
 # --- Binance Alpha ---
@@ -1118,7 +1136,7 @@ def _fetch_alpha_token_list():
             print(f"Alpha token sample: {tokens[0]}")
         return tokens
     except Exception as e:
-        print(f"❌ Alpha token list error: {e}")
+        print(f"Error Alpha token list error: {e}")
         return []
 
 
@@ -1155,11 +1173,14 @@ def _fetch_alpha_all():
         alpha_fut = set(mapping.values())
         return alpha_fut, set()
     except Exception as e:
-        print(f"❌ Alpha token list error: {e}")
+        print(f"Error Alpha token list error: {e}")
         return set(), set()
 
 def get_alpha_symbols():
-    return _get_cached('exchange:alpha:all', _fetch_alpha_all)
+    try:
+        return _get_cached('exchange:alpha:all', _fetch_alpha_all)
+    except Exception:
+        return set(), set()
 
 
 # --- Объединённый чек ---
