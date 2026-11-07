@@ -304,6 +304,15 @@ function clearAlertHistory() {
 }
 
 
+// Закрытие панели истории импульсов по клику вне её
+document.addEventListener('click', (e) => {
+    const panel = document.getElementById('alertHistoryPanel');
+    const btn = document.getElementById('alertHistoryBtn');
+    if (!panel || !panel.classList.contains('active')) return;
+    if (panel.contains(e.target) || (btn && btn.contains(e.target))) return;
+    panel.classList.remove('active');
+});
+
 function openChartFromHistory(symbol) {
     const panel = document.getElementById('alertHistoryPanel');
     if (panel) panel.classList.remove('active');
