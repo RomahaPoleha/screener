@@ -67,7 +67,7 @@ function tigerAutoLink(symbol) {
   const group = groups[idx % groups.length];
   localStorage.setItem(TIGER_AUTO_LINK_INDEX_KEY, String((idx + 1) % groups.length));
   tigerAutoLinkLastTs = now;
-  tigerLinkSymbol(symbol, 'BINANCE', 'futures', group);
+  tigerLinkSymbol(symbol, 'BINANCE-FUT', 'futures', group);
 }
 
 function tigerConnect() {
