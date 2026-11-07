@@ -192,10 +192,9 @@ function renderExchangesMenu(data, symbol, anchorRect) {
     let headerHtml;
     if (tigerOn) {
         const inBridge = (window.parent && window.parent !== window);
-        const isHttps = (location.protocol === 'https:');
         const connected = (typeof tigerIsConnected === 'function') ? tigerIsConnected() : false;
-        const statusText = inBridge ? 'мост' : (isHttps ? 'нужен HTTP' : (connected ? 'онлайн' : 'офлайн'));
-        const statusColor = inBridge ? '#22c55e' : (isHttps ? '#f59e0b' : (connected ? '#22c55e' : '#ef4444'));
+        const statusText = inBridge ? 'мост' : (connected ? 'онлайн' : 'офлайн');
+        const statusColor = inBridge ? '#22c55e' : (connected ? '#22c55e' : '#ef4444');
         headerHtml = `
         <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <span>Торговые площадки: ${symbol}</span>
