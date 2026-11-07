@@ -194,8 +194,14 @@ function showVolumeAlertToast(symbol, volume, direction, priceChange) {
     unreadAlerts++;
     updateAlertBadge();
 
+    // Обновляем список истории, если панель открыта
     const histPanel = document.getElementById('alertHistoryPanel');
-    if (histPanel && histPanel.classList.contains('active')) renderAlertHistory();
+    if (histPanel) {
+        const isOpen = histPanel.classList.contains('active') || histPanel.offsetParent !== null || histPanel.style.display === 'block';
+        if (isOpen && typeof renderAlertHistory === 'function') {
+            renderAlertHistory();
+        }
+    }
 
     const existing = document.querySelectorAll('.volume-alert-toast');
     if (existing.length >= 3) existing[0].remove();

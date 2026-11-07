@@ -68,6 +68,12 @@ async function pollImpulseAlerts() {
                 tigerAutoLink(alert.symbol);
             }
         }
+        // Обновить историю импульсов, если панель открыта
+        const _hp = document.getElementById('alertHistoryPanel');
+        if (_hp && (_hp.classList.contains('active') || _hp.offsetParent !== null) && typeof renderAlertHistory === 'function') {
+            console.log('[Impulse] re-rendering history panel');
+            renderAlertHistory();
+        }
     } catch (err) {
         console.warn('Impulse polling error:', err);
     }
