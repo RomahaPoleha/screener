@@ -31,6 +31,45 @@ function tigerSetLastGroup(group) {
   try { localStorage.setItem('tiger_last_link_group', group); } catch (e) {}
 }
 
+// --- Auto-link on impulse ---
+const TIGER_AUTO_LINK_GROUPS_KEY = 'tiger_auto_link_groups';
+const TIGER_AUTO_LINK_ENABLED_KEY = 'tiger_auto_link_enabled';
+const TIGER_AUTO_LINK_INDEX_KEY = 'tiger_auto_link_index';
+const TIGER_AUTO_LINK_COOLDOWN_MS = 5000;
+let tigerAutoLinkLastTs = 0;
+
+function tigerIsAutoLinkEnabled() {
+  try { return localStorage.getItem(TIGER_AUTO_LINK_ENABLED_KEY) === '1'; } catch (e) { return false; }
+}
+function tigerSetAutoLinkEnabled(v) {
+  try { localStorage.setItem(TIGER_AUTO_LINK_ENABLED_KEY, v ? '1' : '0'); } catch (e) {}
+}
+function tigerGetAutoLinkGroups() {
+  try {
+    const raw = localStorage.getItem(TIGER_AUTO_LINK_GROUPS_KEY);
+    if (!raw) return ['A'];
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) return arr.slice(0, 5);
+  } catch (e) {}
+  return ['A'];
+}
+function tigerSetAutoLinkGroups(arr) {
+  try { localStorage.setItem(TIGER_AUTO_LINK_GROUPS_KEY, JSON.stringify((arr || []).slice(0, 5))); } catch (e) {}
+}
+function tigerAutoLink(symbol) {
+  if (!tigerIsEnabled() || !tigerIsConnected() || !tigerIsAutoLinkEnabled()) return;
+  const now = Date.now();
+  if (now - tigerAutoLinkLastTs < TIGER_AUTO_LINK_COOLDOWN_MS) return;
+  const groups = tigerGetAutoLinkGroups();
+  if (!groups.length) return;
+  let idx = parseInt(localStorage.getItem(TIGER_AUTO_LINK_INDEX_KEY) || '0', 10);
+  if (isNaN(idx)) idx = 0;
+  const group = groups[idx % groups.length];
+  localStorage.setItem(TIGER_AUTO_LINK_INDEX_KEY, String((idx + 1) % groups.length));
+  tigerAutoLinkLastTs = now;
+  tigerLinkSymbol(symbol, 'BINANCE', 'futures', group);
+}
+
 function tigerConnect() {
   if (!tigerIsEnabled()) return;
   if (tigerSocket && (tigerSocket.readyState === WebSocket.OPEN || tigerSocket.readyState === WebSocket.CONNECTING)) return;
@@ -144,6 +183,11 @@ window.tigerSetEnabled = tigerSetEnabled;
 window.tigerLinkSymbol = tigerLinkSymbol;
 window.tigerIsConnected = () => tigerConnected;
 window.tigerSendFromMenu = tigerSendFromMenu;
+window.tigerIsAutoLinkEnabled = tigerIsAutoLinkEnabled;
+window.tigerSetAutoLinkEnabled = tigerSetAutoLinkEnabled;
+window.tigerGetAutoLinkGroups = tigerGetAutoLinkGroups;
+window.tigerSetAutoLinkGroups = tigerSetAutoLinkGroups;
+window.tigerAutoLink = tigerAutoLink;
 
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'tigerGroupSelect') tigerSetLastGroup(e.target.value);

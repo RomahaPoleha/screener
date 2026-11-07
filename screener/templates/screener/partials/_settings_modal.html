@@ -47,6 +47,16 @@
 <span>Включить линковку с терминалом Tiger</span>
 <span class="help-tip" data-tip="Позволяет открывать монету из скринера в терминале Tiger.com по клику на F/S биржи.">?</span>
 </label>
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
+<input type="checkbox" id="tigerAutoLinkEnabled" style="accent-color:#f59e0b; width:16px; height:16px;">
+<span>Авто-линковка при импульсе</span>
+<span class="help-tip" data-tip="При импульсе (амплитуда >= порога) автоматически переключает окна Tiger по списку групп (round-robin, до 5).">?</span>
+</label>
+<div id="tigerAutoLinkGroupsWrap" style="margin-bottom:10px;">
+  <div style="font-size:11px; color:#999; margin-bottom:6px;">Группы для авто-линковки (до 5):</div>
+  <div id="tigerAutoLinkGroups" style="display:flex; flex-direction:column; gap:6px;"></div>
+  <button type="button" id="tigerAutoLinkAdd" style="margin-top:6px; background:#2a2a2a; border:1px solid #444; color:#fff; padding:4px 10px; cursor:pointer; font-size:12px;">+ Добавить группу</button>
+</div>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Кнопки меню</div>

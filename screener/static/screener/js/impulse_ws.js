@@ -54,7 +54,7 @@ async function pollImpulseAlerts() {
             if (alert.window !== userWindow) continue;
             if (alert.price_change < userThreshold) continue;
 
-            const direction = alert.direction === 'up' ? '↑' : '↓';
+            const direction = alert.direction === 'up' ? 'в†‘' : 'в†“';
 
             showVolumeAlertToast(
                 alert.symbol,
@@ -62,6 +62,11 @@ async function pollImpulseAlerts() {
                 direction,
                 alert.price_change
             );
+
+            // Авто-линковка в Tiger при импульсе
+            if (typeof tigerAutoLink === 'function' && typeof tigerIsAutoLinkEnabled === 'function' && tigerIsAutoLinkEnabled()) {
+                tigerAutoLink(alert.symbol);
+            }
         }
     } catch (err) {
         console.warn('Impulse polling error:', err);

@@ -59,6 +59,10 @@ const hourSlider = document.getElementById('hourSoundVolume');
 if (hourSlider) hourSlider.value = hourSoundVolume;
 const tigerCb = document.getElementById('tigerLinkEnabled');
 if (tigerCb) tigerCb.checked = (typeof tigerIsEnabled === 'function') ? tigerIsEnabled() : false;
+const tigerAutoCb = document.getElementById('tigerAutoLinkEnabled');
+if (tigerAutoCb) tigerAutoCb.checked = (typeof tigerIsAutoLinkEnabled === 'function') ? tigerIsAutoLinkEnabled() : false;
+// Рендер слотов групп
+if (typeof renderTigerAutoLinkGroups === 'function') renderTigerAutoLinkGroups();
 const tradesCb = document.getElementById('showTradesBtnToggle');
 if (tradesCb) tradesCb.checked = localStorage.getItem('showTradesBtn') !== '0';
 const densCb = document.getElementById('showDensitiesBtnToggle');
@@ -218,6 +222,10 @@ if (volumeAlertEnabled) {
         stopImpulseWebSocket();
     }
 }
+// Сохраняем настройки авто-линковки Tiger
+const tigerAutoCb = document.getElementById('tigerAutoLinkEnabled');
+if (tigerAutoCb && typeof tigerSetAutoLinkEnabled === 'function') tigerSetAutoLinkEnabled(tigerAutoCb.checked);
+if (typeof saveTigerAutoLinkGroups === 'function') saveTigerAutoLinkGroups();
 const modalInstance = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
 if (modalInstance) {
     modalInstance.hide();
@@ -340,4 +348,88 @@ function applyScalpSettingsSilent() {
         }
     }
 }
-document.addEventListener('DOMContentLoaded', function() { var tradesBtnEl = document.getElementById('tradesBtn'); var densBtnEl = document.getElementById('densitiesBtn'); if (tradesBtnEl) tradesBtnEl.style.display = (localStorage.getItem('showTradesBtn') !== '0') ? '' : 'none'; if (densBtnEl) densBtnEl.style.display = (localStorage.getItem('showDensitiesBtn') !== '0') ? '' : 'none'; });
+// ==========================================
+// TIGER AUTO-LINK GROUPS (round-robin слоты)
+// ==========================================
+const TIGER_GROUP_OPTIONS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').concat(Array.from({length:19}, (_,i) => String(i)));
+
+function renderTigerAutoLinkGroups() {
+    const container = document.getElementById('tigerAutoLinkGroups');
+    if (!container) return;
+    const groups = (typeof tigerGetAutoLinkGroups === 'function') ? tigerGetAutoLinkGroups() : ['A'];
+    container.innerHTML = '';
+    groups.forEach((g, idx) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '6px';
+        row.style.alignItems = 'center';
+        const sel = document.createElement('select');
+        sel.className = 'tiger-auto-group';
+        sel.dataset.index = idx;
+        sel.style.background = '#0f0f0f';
+        sel.style.border = '1px solid #444';
+        sel.style.color = '#fff';
+        sel.style.padding = '4px 8px';
+        sel.style.fontSize = '12px';
+        // опции, исключая уже выбранные в других слотах
+        const used = groups.filter((_, i) => i !== idx);
+        TIGER_GROUP_OPTIONS.forEach(opt => {
+            if (used.indexOf(opt) !== -1) return;
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt;
+            if (opt === g) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.addEventListener('change', saveTigerAutoLinkGroups);
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.textContent = '×';
+        rm.style.background = '#2a2a2a';
+        rm.style.border = '1px solid #444';
+        rm.style.color = '#fff';
+        rm.style.cursor = 'pointer';
+        rm.style.padding = '2px 8px';
+        rm.addEventListener('click', () => {
+            const cur = (typeof tigerGetAutoLinkGroups === 'function') ? tigerGetAutoLinkGroups() : [];
+            cur.splice(idx, 1);
+            if (typeof tigerSetAutoLinkGroups === 'function') tigerSetAutoLinkGroups(cur.length ? cur : ['A']);
+            renderTigerAutoLinkGroups();
+        });
+        row.appendChild(sel);
+        row.appendChild(rm);
+        container.appendChild(row);
+    });
+    // кнопка "+" видимость
+    const addBtn = document.getElementById('tigerAutoLinkAdd');
+    if (addBtn) addBtn.style.display = groups.length >= 5 ? 'none' : '';
+}
+
+function saveTigerAutoLinkGroups() {
+    const sels = document.querySelectorAll('.tiger-auto-group');
+    const arr = [];
+    sels.forEach(s => arr.push(s.value));
+    if (typeof tigerSetAutoLinkGroups === 'function') tigerSetAutoLinkGroups(arr.length ? arr : ['A']);
+}
+
+// wiring
+document.addEventListener('DOMContentLoaded', () => {
+    const addBtn = document.getElementById('tigerAutoLinkAdd');
+    if (addBtn) {
+        addBtn.addEventListener('click', () => {
+            const cur = (typeof tigerGetAutoLinkGroups === 'function') ? tigerGetAutoLinkGroups() : [];
+            if (cur.length >= 5) return;
+            const used = new Set(cur);
+            let next = TIGER_GROUP_OPTIONS.find(o => !used.has(o)) || 'A';
+            cur.push(next);
+            if (typeof tigerSetAutoLinkGroups === 'function') tigerSetAutoLinkGroups(cur);
+            renderTigerAutoLinkGroups();
+        });
+    }
+    const autoCb = document.getElementById('tigerAutoLinkEnabled');
+    if (autoCb) {
+        autoCb.addEventListener('change', () => {
+            if (typeof tigerSetAutoLinkEnabled === 'function') tigerSetAutoLinkEnabled(autoCb.checked);
+        });
+    }
+});
