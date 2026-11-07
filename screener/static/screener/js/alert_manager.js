@@ -194,6 +194,9 @@ function showVolumeAlertToast(symbol, volume, direction, priceChange) {
     unreadAlerts++;
     updateAlertBadge();
 
+    const histPanel = document.getElementById('alertHistoryPanel');
+    if (histPanel && histPanel.classList.contains('active')) renderAlertHistory();
+
     const existing = document.querySelectorAll('.volume-alert-toast');
     if (existing.length >= 3) existing[0].remove();
 
