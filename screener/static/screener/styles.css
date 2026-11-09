@@ -403,7 +403,7 @@ body {
 .natr-high { color: #ef4444; }
 .coin-gap { /* пустая колонка-разделитель */ }
 .coins-header {
-    display: grid; grid-template-columns: 16px 48px 45px 8px 45px 45px 45px 45px 20px; gap: 4px;
+    display: grid; grid-template-columns: 16px 48px 45px 8px 45px 8px 45px 45px 45px 20px; gap: 4px;
     padding: 6px 12px; background: #0f0f0f; font-size: 10px; color: #999999;
     border-bottom: 2px solid #333333; position: sticky; top: 0;
     font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
@@ -434,8 +434,7 @@ body {
 .column-settings-dropdown {
     position: absolute;
     top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    right: 0;
     background: #1a1a1a;
     border: 1px solid #333333;
     border-radius: 4px;

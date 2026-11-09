@@ -9,6 +9,7 @@ const COIN_COLUMN_CONFIG = [
     { id: 'change',  defaultVisible: true },
     { id: 'gap',     defaultVisible: true, fixed: true },
     { id: 'deals',   defaultVisible: true },
+    { id: 'gap2',    defaultVisible: true, fixed: true },
     { id: 'volume',  defaultVisible: true },
     { id: 'natr_1m', defaultVisible: true },
     { id: 'natr_5m', defaultVisible: true },
@@ -16,12 +17,12 @@ const COIN_COLUMN_CONFIG = [
 
 const COIN_COLUMN_WIDTHS = {
     color: 16, symbol: 48, change: 45, gap: 8,
-    deals: 45, volume: 45, natr_1m: 45, natr_5m: 45,
+    deals: 45, gap2: 8, volume: 45, natr_1m: 45, natr_5m: 45,
 };
 
 const COIN_COLUMN_LABELS = {
     color: 'Цвет', symbol: 'Пара', change: 'Изм. 24ч',
-    gap: '', deals: 'Сделки', volume: 'Объём',
+    gap: '', deals: 'Сделки', gap2: '', volume: 'Объём',
     natr_1m: 'NATR 1m', natr_5m: 'NATR 5m',
 };
 
@@ -179,6 +180,7 @@ function renderTable(data) {
         if (vis.change) cells += `<div class="coin-change ${isUp ? 'text-up' : 'text-down'}">${isUp ? '+' : ''}${coin.change}%</div>`;
         if (vis.gap) cells += `<div class="coin-gap"></div>`;
         if (vis.deals) cells += `<div class="coin-deals" title="Сделок за 24ч">${dealsTxt}</div>`;
+        if (vis.gap2) cells += `<div class="coin-gap"></div>`;
         if (vis.volume) cells += `<div class="coin-volume">$${fmt(coin.volume)}</div>`;
         if (vis.natr_1m) cells += `<div class="coin-natr ${n1 ? getNatrClass(n1) : 'empty'}">${n1Txt}</div>`;
         if (vis.natr_5m) cells += `<div class="coin-natr ${n5 ? getNatrClass(n5) : 'empty'}">${n5Txt}</div>`;
