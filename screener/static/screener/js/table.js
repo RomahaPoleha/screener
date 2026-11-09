@@ -67,6 +67,17 @@ function getPanelWidth() {
 function updatePanelWidth() {
     const panel = document.querySelector('.right-panel');
     if (panel) panel.style.width = getPanelWidth() + 'px';
+    // Resize chart immediately and after transition
+    const resizeChart = () => {
+        if (typeof chart !== 'undefined' && chart && typeof els !== 'undefined' && els.chartWrapper) {
+            chart.applyOptions({
+                width: els.chartWrapper.clientWidth,
+                height: els.chartWrapper.clientHeight
+            });
+        }
+    };
+    resizeChart();
+    setTimeout(resizeChart, 220);
 }
 
 function applyGridColumnLayout() {
