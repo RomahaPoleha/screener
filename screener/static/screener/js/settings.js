@@ -60,10 +60,15 @@ if (hourSlider) hourSlider.value = hourSoundVolume;
 const tigerCb = document.getElementById('tigerLinkEnabled');
 if (tigerCb) tigerCb.checked = (typeof tigerIsEnabled === 'function') ? tigerIsEnabled() : false;
 const tigerAutoCb = document.getElementById('tigerAutoLinkEnabled');
-if (tigerAutoCb) tigerAutoCb.checked = (typeof tigerIsAutoLinkEnabled === 'function') ? tigerIsAutoLinkEnabled() : false;
-// Рендер слотов групп
-if (typeof renderTigerAutoLinkGroups === 'function') renderTigerAutoLinkGroups();
-const tradesCb = document.getElementById('showTradesBtnToggle');
+  if (tigerAutoCb) tigerAutoCb.checked = (typeof tigerIsAutoLinkEnabled === 'function') ? tigerIsAutoLinkEnabled() : false;
+  // Рендер слотов групп
+  if (typeof renderTigerAutoLinkGroups === 'function') renderTigerAutoLinkGroups();
+  // Tiger group cooldown
+  const tigerCooldown = document.getElementById('tigerGroupCooldown');
+  if (tigerCooldown && typeof tigerGetGroupCooldownMs === 'function') {
+    tigerCooldown.value = Math.round(tigerGetGroupCooldownMs() / 60000);
+  }
+  const tradesCb = document.getElementById('showTradesBtnToggle');
 if (tradesCb) tradesCb.checked = localStorage.getItem('showTradesBtn') !== '0';
 const densCb = document.getElementById('showDensitiesBtnToggle');
 if (densCb) densCb.checked = localStorage.getItem('showDensitiesBtn') !== '0';
@@ -223,10 +228,15 @@ if (volumeAlertEnabled) {
     }
 }
 // Сохраняем настройки авто-линковки Tiger
-const tigerAutoCb = document.getElementById('tigerAutoLinkEnabled');
-if (tigerAutoCb && typeof tigerSetAutoLinkEnabled === 'function') tigerSetAutoLinkEnabled(tigerAutoCb.checked);
-if (typeof saveTigerAutoLinkGroups === 'function') saveTigerAutoLinkGroups();
-const modalInstance = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+  const tigerAutoCb = document.getElementById('tigerAutoLinkEnabled');
+  if (tigerAutoCb && typeof tigerSetAutoLinkEnabled === 'function') tigerSetAutoLinkEnabled(tigerAutoCb.checked);
+  if (typeof saveTigerAutoLinkGroups === 'function') saveTigerAutoLinkGroups();
+  const tigerCooldown = document.getElementById('tigerGroupCooldown');
+  if (tigerCooldown && typeof tigerSetGroupCooldownMs === 'function') {
+    const mins = parseInt(tigerCooldown.value, 10);
+    if (!isNaN(mins) && mins >= 1 && mins <= 5) tigerSetGroupCooldownMs(mins * 60000);
+  }
+  const modalInstance = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
 if (modalInstance) {
     modalInstance.hide();
 }
