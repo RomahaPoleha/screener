@@ -89,12 +89,18 @@ function applyGridColumnLayout() {
 
 function toggleColumnSettings() {
     const dropdown = document.getElementById('columnSettingsDropdown');
+    const btn = document.getElementById('columnGearBtn');
     if (!dropdown) return;
     if (dropdown.classList.contains('active')) {
         dropdown.classList.remove('active');
         return;
     }
     renderColumnSettings();
+    // Position dropdown relative to gear button (fixed positioning)
+    const rect = btn.getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.left = (rect.left + rect.width / 2) + 'px';
+    dropdown.style.transform = 'translateX(-50%)';
     dropdown.classList.add('active');
 }
 

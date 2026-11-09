@@ -260,7 +260,8 @@ body {
     width: 380px; background: #1a1a1a; display: flex; flex-direction: column;
     border-left: 2px solid #333333; position: relative;
     transition: width 0.2s ease;
-    height: 100%;
+    min-height: 0;
+    overflow: hidden;
 }
 .filters-panel { padding: 12px; background: #1f1f1f; border-bottom: 2px solid #333333; }
 .filter-section { margin-bottom: 12px; }
@@ -381,7 +382,7 @@ body {
     font-size: 12px; font-weight: 700; color: #ffffff; background: #0f0f0f;
     letter-spacing: 1px; text-transform: uppercase;
 }
-.coins-table-wrap { flex: 1; overflow-y: auto; }
+.coins-table-wrap { flex: 1; overflow-y: auto; min-height: 0; }
 .coins-table-wrap::-webkit-scrollbar { width: 4px; }
 .coins-table-wrap::-webkit-scrollbar-thumb { background: #333333; border-radius: 0; }
 .coin-row {
@@ -433,10 +434,7 @@ body {
 .column-gear-btn:hover { color: #f59e0b; border-color: #f59e0b; background: #333333; }
 
 .column-settings-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
     background: #1a1a1a;
     border: 1px solid #333333;
     border-radius: 4px;
