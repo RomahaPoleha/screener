@@ -66,7 +66,7 @@ const tigerAutoCb = document.getElementById('tigerAutoLinkEnabled');
   // Tiger group cooldown
   const tigerCooldown = document.getElementById('tigerGroupCooldown');
   if (tigerCooldown && typeof tigerGetGroupCooldownMs === 'function') {
-    tigerCooldown.value = Math.round(tigerGetGroupCooldownMs() / 60000);
+    tigerCooldown.value = Math.round(tigerGetGroupCooldownMs() / 1000);
   }
   const tradesCb = document.getElementById('showTradesBtnToggle');
 if (tradesCb) tradesCb.checked = localStorage.getItem('showTradesBtn') !== '0';
@@ -233,8 +233,8 @@ if (volumeAlertEnabled) {
   if (typeof saveTigerAutoLinkGroups === 'function') saveTigerAutoLinkGroups();
   const tigerCooldown = document.getElementById('tigerGroupCooldown');
   if (tigerCooldown && typeof tigerSetGroupCooldownMs === 'function') {
-    const mins = parseInt(tigerCooldown.value, 10);
-    if (!isNaN(mins) && mins >= 1 && mins <= 5) tigerSetGroupCooldownMs(mins * 60000);
+    const secs = parseInt(tigerCooldown.value, 10);
+    if (!isNaN(secs) && secs >= 1 && secs <= 180) tigerSetGroupCooldownMs(secs * 1000);
   }
   const modalInstance = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
 if (modalInstance) {

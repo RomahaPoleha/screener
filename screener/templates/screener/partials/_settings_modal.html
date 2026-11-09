@@ -58,10 +58,10 @@
     <button type="button" id="tigerAutoLinkAdd" style="margin-top:6px; background:#2a2a2a; border:1px solid #444; color:#fff; padding:4px 10px; cursor:pointer; font-size:12px;">+ Добавить группу</button>
   </div>
   <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-    <span style="color:#999; min-width:170px;">Кулдаун стакана (мин):</span>
-    <input type="number" id="tigerGroupCooldown" min="1" max="5" step="1" value="1"
+    <span style="color:#999; min-width:170px;">Кулдаун стакана (сек):</span>
+    <input type="number" id="tigerGroupCooldown" min="1" max="180" step="1" value="60"
       style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 8px; border-radius:0; font-size:12px; text-align:center;">
-    <span class="help-tip" data-tip="Минимальное время перед повторным использованием той же группы (стакана). Если группа в кулдауне, она пропускается и берётся следующая свободная.">?</span>
+    <span class="help-tip" data-tip="Минимальное время в секундах перед повторным использованием той же группы (стакана). Если группа в кулдауне, она пропускается и берётся следующая свободная.">?</span>
   </label>
 </div>
 <div class="modal-section">

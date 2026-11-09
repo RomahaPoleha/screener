@@ -61,12 +61,12 @@ function tigerSetAutoLinkGroups(arr) {
 function tigerGetGroupCooldownMs() {
   try {
     const v = parseInt(localStorage.getItem(TIGER_AUTO_LINK_GROUP_COOLDOWN_KEY), 10);
-    if (!isNaN(v) && v >= 60000 && v <= 300000) return v;
+    if (!isNaN(v) && v >= 1000 && v <= 180000) return v;
   } catch (e) {}
-  return 60000; // дефолт 1 мин
+  return 60000; // дефолт 60 сек
 }
 function tigerSetGroupCooldownMs(ms) {
-  try { localStorage.setItem(TIGER_AUTO_LINK_GROUP_COOLDOWN_KEY, String(Math.max(60000, Math.min(300000, ms)))); } catch (e) {}
+  try { localStorage.setItem(TIGER_AUTO_LINK_GROUP_COOLDOWN_KEY, String(Math.max(1000, Math.min(180000, ms)))); } catch (e) {}
 }
 
 function tigerGetGroupLastUsed() {
