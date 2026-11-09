@@ -384,7 +384,7 @@ body {
 .coins-table-wrap::-webkit-scrollbar { width: 4px; }
 .coins-table-wrap::-webkit-scrollbar-thumb { background: #333333; border-radius: 0; }
 .coin-row {
-    display: grid; grid-template-columns: 16px 48px 45px 8px 45px 45px 45px 45px 20px;
+    display: grid; grid-template-columns: 16px 48px 45px 8px 45px 8px 45px 45px 45px 20px;
     gap: 4px; padding: 6px 12px; border-bottom: 1px solid #1f1f1f;
     cursor: pointer; font-size: 11px; align-items: center;
     transition: background 0.1s;
