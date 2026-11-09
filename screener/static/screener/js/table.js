@@ -79,7 +79,7 @@ function applyGridColumnLayout() {
         const prefs = getColumnPrefs();
         COIN_COLUMN_CONFIG.forEach(col => {
             const cell = header.querySelector('.col-' + col.id);
-            if (cell) cell.style.visibility = (col.fixed || prefs[col.id] !== false) ? 'visible' : 'hidden';
+            if (cell) cell.style.display = (col.fixed || prefs[col.id] !== false) ? '' : 'none';
         });
     }
     document.querySelectorAll('.coin-row').forEach(row => {
