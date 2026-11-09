@@ -93,6 +93,19 @@ els.change.addEventListener('input', (e) => {
         }
     }, 150)); // Задержка 150мс
 
+    // 7b. Реакция на изменение ширины правой панели (скрытие/показ столбцов)
+    window.addEventListener('panelWidthChanged', () => {
+        if (chart && els.chartWrapper && els.chartWrapper.classList.contains('active')) {
+            chart.applyOptions({
+                width: els.chartWrapper.clientWidth,
+                height: els.chartWrapper.clientHeight
+            });
+            setTimeout(() => {
+                if (typeof initPencilCanvas === 'function') initPencilCanvas();
+            }, 220);
+        }
+    });
+
     // 8. Горячие клавиши
     document.addEventListener('keydown', (e) => {
         // Проверка, что переменные существуют, чтобы избежать ReferenceError

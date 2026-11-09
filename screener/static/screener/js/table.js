@@ -68,6 +68,7 @@ function getPanelWidth() {
 function updatePanelWidth() {
     const panel = document.querySelector('.right-panel');
     if (panel) panel.style.width = getPanelWidth() + 'px';
+    window.dispatchEvent(new CustomEvent('panelWidthChanged'));
 }
 
 function applyGridColumnLayout() {
