@@ -435,6 +435,8 @@ body {
 
 .column-settings-dropdown {
     position: fixed;
+    top: -9999px;
+    left: -9999px;
     background: #1a1a1a;
     border: 1px solid #333333;
     border-radius: 4px;
