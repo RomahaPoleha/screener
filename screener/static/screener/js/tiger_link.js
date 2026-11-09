@@ -35,7 +35,9 @@ function tigerSetLastGroup(group) {
 const TIGER_AUTO_LINK_GROUPS_KEY = 'tiger_auto_link_groups';
 const TIGER_AUTO_LINK_ENABLED_KEY = 'tiger_auto_link_enabled';
 const TIGER_AUTO_LINK_INDEX_KEY = 'tiger_auto_link_index';
-const TIGER_AUTO_LINK_COOLDOWN_MS = 5000;
+const TIGER_AUTO_LINK_GROUP_COOLDOWN_KEY = 'tiger_auto_link_group_cooldown_ms';
+const TIGER_AUTO_LINK_GROUP_LAST_USED_KEY = 'tiger_auto_link_group_last_used';
+const TIGER_AUTO_LINK_GLOBAL_COOLDOWN_MS = 1000; // глобальный кулдаун 1 сек
 let tigerAutoLinkLastTs = 0;
 
 function tigerIsAutoLinkEnabled() {
@@ -56,18 +58,61 @@ function tigerGetAutoLinkGroups() {
 function tigerSetAutoLinkGroups(arr) {
   try { localStorage.setItem(TIGER_AUTO_LINK_GROUPS_KEY, JSON.stringify((arr || []).slice(0, 5))); } catch (e) {}
 }
+function tigerGetGroupCooldownMs() {
+  try {
+    const v = parseInt(localStorage.getItem(TIGER_AUTO_LINK_GROUP_COOLDOWN_KEY), 10);
+    if (!isNaN(v) && v >= 60000 && v <= 300000) return v;
+  } catch (e) {}
+  return 60000; // дефолт 1 мин
+}
+function tigerSetGroupCooldownMs(ms) {
+  try { localStorage.setItem(TIGER_AUTO_LINK_GROUP_COOLDOWN_KEY, String(Math.max(60000, Math.min(300000, ms)))); } catch (e) {}
+}
+
+function tigerGetGroupLastUsed() {
+  try {
+    const raw = localStorage.getItem(TIGER_AUTO_LINK_GROUP_LAST_USED_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function tigerSetGroupLastUsed(group, ts) {
+  try {
+    const map = tigerGetGroupLastUsed();
+    map[group] = ts;
+    localStorage.setItem(TIGER_AUTO_LINK_GROUP_LAST_USED_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
+
 function tigerAutoLink(symbol) {
   if (!tigerIsEnabled() || !tigerIsConnected() || !tigerIsAutoLinkEnabled()) return;
   const now = Date.now();
-  if (now - tigerAutoLinkLastTs < TIGER_AUTO_LINK_COOLDOWN_MS) return;
+  if (now - tigerAutoLinkLastTs < TIGER_AUTO_LINK_GLOBAL_COOLDOWN_MS) return;
   const groups = tigerGetAutoLinkGroups();
   if (!groups.length) return;
+  const cooldownMs = tigerGetGroupCooldownMs();
+  const lastUsed = tigerGetGroupLastUsed();
   let idx = parseInt(localStorage.getItem(TIGER_AUTO_LINK_INDEX_KEY) || '0', 10);
   if (isNaN(idx)) idx = 0;
-  const group = groups[idx % groups.length];
-  localStorage.setItem(TIGER_AUTO_LINK_INDEX_KEY, String((idx + 1) % groups.length));
-  tigerAutoLinkLastTs = now;
-  tigerLinkSymbol(symbol, 'BINANCE-FUT', 'futures', group);
+  const startIdx = idx;
+  let found = false;
+  for (let i = 0; i < groups.length; i++) {
+    const checkIdx = (startIdx + i) % groups.length;
+    const group = groups[checkIdx];
+    const last = lastUsed[group] || 0;
+    if (now - last >= cooldownMs) {
+      // группа свободна
+      localStorage.setItem(TIGER_AUTO_LINK_INDEX_KEY, String((checkIdx + 1) % groups.length));
+      tigerAutoLinkLastTs = now;
+      tigerSetGroupLastUsed(group, now);
+      tigerLinkSymbol(symbol, 'BINANCE-FUT', 'futures', group);
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    // все группы в кулдауне — пропускаем этот импульс
+    console.log('[Tiger] все группы в кулдауне, авто-линковка пропущена');
+  }
 }
 
 function tigerConnect() {
@@ -188,6 +233,9 @@ window.tigerSetAutoLinkEnabled = tigerSetAutoLinkEnabled;
 window.tigerGetAutoLinkGroups = tigerGetAutoLinkGroups;
 window.tigerSetAutoLinkGroups = tigerSetAutoLinkGroups;
 window.tigerAutoLink = tigerAutoLink;
+window.tigerGetGroupCooldownMs = tigerGetGroupCooldownMs;
+window.tigerSetGroupCooldownMs = tigerSetGroupCooldownMs;
+window.tigerGetGroupLastUsed = tigerGetGroupLastUsed;
 
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'tigerGroupSelect') tigerSetLastGroup(e.target.value);
