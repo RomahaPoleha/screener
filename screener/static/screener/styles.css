@@ -259,6 +259,7 @@ body {
 .right-panel {
     width: 380px; background: #1a1a1a; display: flex; flex-direction: column;
     overflow: hidden; border-left: 2px solid #333333; position: relative;
+    transition: width 0.2s ease;
 }
 .filters-panel { padding: 12px; background: #1f1f1f; border-bottom: 2px solid #333333; }
 .filter-section { margin-bottom: 12px; }
@@ -383,7 +384,7 @@ body {
 .coins-table-wrap::-webkit-scrollbar { width: 4px; }
 .coins-table-wrap::-webkit-scrollbar-thumb { background: #333333; border-radius: 0; }
 .coin-row {
-    display: grid; grid-template-columns: 16px 60px 1fr 12px 1fr 45px 45px 45px;
+    display: grid; grid-template-columns: 16px 48px 45px 8px 45px 45px 45px 45px 20px;
     gap: 4px; padding: 6px 12px; border-bottom: 1px solid #1f1f1f;
     cursor: pointer; font-size: 11px; align-items: center;
     transition: background 0.1s;
@@ -402,14 +403,64 @@ body {
 .natr-high { color: #ef4444; }
 .coin-gap { /* пустая колонка-разделитель */ }
 .coins-header {
-    display: grid; grid-template-columns: 16px 60px 1fr 12px 1fr 45px 45px 45px; gap: 4px;
+    display: grid; grid-template-columns: 16px 48px 45px 8px 45px 45px 45px 45px 20px; gap: 4px;
     padding: 6px 12px; background: #0f0f0f; font-size: 10px; color: #999999;
     border-bottom: 2px solid #333333; position: sticky; top: 0;
     font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    position: relative;
 }
 .coins-header > div { cursor: pointer; user-select: none; }
 .coins-header > div:hover { color: #f59e0b; }
 .coins-header .text-end { text-align: right; }
+
+.column-gear-btn {
+    background: #2a2a2a;
+    border: 1px solid #444444;
+    color: #999999;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    border-radius: 3px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 18px;
+}
+.column-gear-btn:hover { color: #f59e0b; border-color: #f59e0b; background: #333333; }
+
+.column-settings-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: 8px 12px;
+    z-index: 10001;
+    display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    min-width: 160px;
+}
+.column-settings-dropdown.active { display: block; }
+
+.column-settings-dropdown label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #e5e5e5;
+    cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap;
+}
+.column-settings-dropdown input[type=checkbox] {
+    accent-color: #f59e0b;
+    width: 14px;
+    height: 14px;
+}
 
 .hour-toast {
     position: fixed; top: 80px; right: 20px;

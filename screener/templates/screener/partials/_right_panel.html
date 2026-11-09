@@ -42,16 +42,20 @@
         </button>
     </div>
 
-    <div class="coins-header">
-        <div></div>
-        <div>Пара</div>
-        <div class="text-end" onclick="sortBy('change')">Изм. 24ч <span id="sort-change"></span></div>
-        <div class="coin-gap"></div>
-        <div class="text-end" onclick="sortBy('deals')">Сделки <span id="sort-deals"></span></div>
-        <div class="text-end" onclick="sortBy('volume')">Объём <span id="sort-volume"></span></div>
-        <div class="text-end" onclick="sortBy('natr_1m')">NATR 1m <span id="sort-natr_1m"></span></div>
-        <div class="text-end" onclick="sortBy('natr_5m')">NATR 5m <span id="sort-natr_5m"></span></div>
+    <div class="coins-header" id="coinsHeader">
+        <div class="col-cell col-color"></div>
+        <div class="col-cell col-symbol">Пара</div>
+        <div class="col-cell col-change text-end" onclick="sortBy('change')">Изм. 24ч <span id="sort-change"></span></div>
+        <div class="col-cell col-gap coin-gap"></div>
+        <div class="col-cell col-deals text-end" onclick="sortBy('deals')">Сделки <span id="sort-deals"></span></div>
+        <div class="col-cell col-volume text-end" onclick="sortBy('volume')">Объём <span id="sort-volume"></span></div>
+        <div class="col-cell col-natr_1m text-end" onclick="sortBy('natr_1m')">NATR 1m <span id="sort-natr_1m"></span></div>
+        <div class="col-cell col-natr_5m text-end" onclick="sortBy('natr_5m')">NATR 5m <span id="sort-natr_5m"></span></div>
+        <div class="col-cell col-gear">
+            <button class="column-gear-btn" id="columnGearBtn" title="Настройка столбцов" onclick="toggleColumnSettings()">⚙</button>
+        </div>
     </div>
+    <div class="column-settings-dropdown" id="columnSettingsDropdown"></div>
 
     <div class="coins-table-wrap" id="tableBody">
         <div style="color:#6b7280; text-align:center; padding:20px;">Загрузка...</div>
