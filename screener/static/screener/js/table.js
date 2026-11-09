@@ -51,15 +51,15 @@ function getVisibleColumns() {
 }
 
 function getGridColumns() {
-    // Всегда возвращаем все колонки + gear, чтобы структура грида не менялась
-    const cols = COIN_COLUMN_CONFIG.map(c => COIN_COLUMN_WIDTHS[c.id] + 'px');
+    const cols = getVisibleColumns().map(c => COIN_COLUMN_WIDTHS[c.id] + 'px');
     cols.push(GEAR_WIDTH + 'px');
     return cols.join(' ');
 }
 
 function getPanelWidth() {
-    const numCols = COIN_COLUMN_CONFIG.length + 1; // +1 for gear
-    const colWidth = COIN_COLUMN_CONFIG.reduce((sum, c) => sum + COIN_COLUMN_WIDTHS[c.id], 0) + GEAR_WIDTH;
+    const visible = getVisibleColumns();
+    const numCols = visible.length + 1; // +1 for gear
+    const colWidth = visible.reduce((sum, c) => sum + COIN_COLUMN_WIDTHS[c.id], 0) + GEAR_WIDTH;
     const gaps = COL_GAP * (numCols - 1);
     const total = colWidth + gaps + PANEL_PADDING;
     return Math.max(PANEL_MIN_WIDTH, total);

@@ -435,7 +435,8 @@ body {
 .column-settings-dropdown {
     position: absolute;
     top: 100%;
-    right: 0;
+    left: 50%;
+    transform: translateX(-50%);
     background: #1a1a1a;
     border: 1px solid #333333;
     border-radius: 4px;
