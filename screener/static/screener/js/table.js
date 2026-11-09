@@ -135,6 +135,8 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Ensure overlays are closed on load
+    document.querySelectorAll('.trades-overlay, .densities-overlay').forEach(el => el.classList.remove('active'));
     applyGridColumnLayout();
 });
 
