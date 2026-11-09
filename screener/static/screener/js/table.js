@@ -51,15 +51,15 @@ function getVisibleColumns() {
 }
 
 function getGridColumns() {
-    const cols = getVisibleColumns().map(c => COIN_COLUMN_WIDTHS[c.id] + 'px');
+    // Всегда возвращаем все колонки + gear, чтобы структура грида не менялась
+    const cols = COIN_COLUMN_CONFIG.map(c => COIN_COLUMN_WIDTHS[c.id] + 'px');
     cols.push(GEAR_WIDTH + 'px');
     return cols.join(' ');
 }
 
 function getPanelWidth() {
-    const visible = getVisibleColumns();
-    const numCols = visible.length + 1;
-    const colWidth = visible.reduce((sum, c) => sum + COIN_COLUMN_WIDTHS[c.id], 0) + GEAR_WIDTH;
+    const numCols = COIN_COLUMN_CONFIG.length + 1; // +1 for gear
+    const colWidth = COIN_COLUMN_CONFIG.reduce((sum, c) => sum + COIN_COLUMN_WIDTHS[c.id], 0) + GEAR_WIDTH;
     const gaps = COL_GAP * (numCols - 1);
     const total = colWidth + gaps + PANEL_PADDING;
     return Math.max(PANEL_MIN_WIDTH, total);
@@ -89,7 +89,7 @@ function applyGridColumnLayout() {
         const prefs = getColumnPrefs();
         COIN_COLUMN_CONFIG.forEach(col => {
             const cell = header.querySelector('.col-' + col.id);
-            if (cell) cell.style.display = (col.fixed || prefs[col.id] !== false) ? '' : 'none';
+            if (cell) cell.style.visibility = (col.fixed || prefs[col.id] !== false) ? 'visible' : 'hidden';
         });
     }
     document.querySelectorAll('.coin-row').forEach(row => {
