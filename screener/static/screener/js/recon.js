@@ -401,7 +401,7 @@ function renderReconPanel() {
     if (!reconPanelEl) return;
     const allEnabled = reconAllEnabled;
     const masterHtml = `<div style="display:flex;align-items:center;gap:6px;padding-right:8px;border-right:1px solid #475569;">
-        <span style="font-weight:700;font-size:11px;color:#ffffff;">Мастер выключатель</span>
+        <span style="font-weight:700;font-size:11px;color:#f59e0b;">Мастер выключатель</span>
         <div class="recon-toggle recon-toggle-all" data-all="1" title="Включить/выключить все биржи" style="position:relative;width:40px;height:20px;border-radius:10px;background:${allEnabled ? '#f59e0b' : '#475569'};cursor:pointer;user-select:none;transition:background .2s;">
             <span style="position:absolute;top:2px;left:${allEnabled ? '22px' : '2px'};width:16px;height:16px;border-radius:50%;background:#ffffff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></span>
         </div>
