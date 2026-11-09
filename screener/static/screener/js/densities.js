@@ -563,7 +563,7 @@ function applyMasonry(container) {
     if (!container) return;
     const items = Array.from(container.querySelectorAll('.group-card'));
     if (!items.length) { container.style.height = ''; return; }
-    const gap = 10;
+    const gap = 14;
     const minColWidth = 340;
     const containerWidth = container.clientWidth - 32; // padding
     const cols = Math.max(1, Math.floor((containerWidth + gap) / (minColWidth + gap)));
