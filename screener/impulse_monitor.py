@@ -68,6 +68,7 @@ def process_ticker_batch(tickers, now_sec):
                     'low': price,
                     'high': price,
                     'current': price,
+                    'open': price,
                     'volume': volume,
                     'window': window,
                     'symbol': clean
@@ -113,8 +114,12 @@ def detect_impulses(now_sec):
         current_window_start = int(now_sec // window) * window
 
         for state_key, state in list(candle_state.items()):
-            if state.get('window') != window or state['start_time'] < current_window_start:
+            if state.get('window') != window:
                 continue
+            if state['start_time'] < current_window_start:
+                if state.get('is_reported'):
+                    continue
+                state['is_reported'] = True
             low = state.get('low', 0)
             high = state.get('high', 0)
             if low == 0 or high == 0:
@@ -129,8 +134,8 @@ def detect_impulses(now_sec):
                 continue
 
             cooldowns[state_key] = now_ms
-            mid_price = (high + low) / 2
-            direction = 'up' if state.get('current', mid_price) >= mid_price else 'down'
+            open_price = state.get('open', 0)
+            direction = 'up' if state.get('current', 0) >= open_price else 'down'
 
             impulses.append({
                 'symbol': state.get('symbol', ''),
