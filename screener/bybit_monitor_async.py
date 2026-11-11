@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 import signal
+import os
 import aiohttp
 import websockets
 from django.core.cache import cache
@@ -67,6 +68,9 @@ MOVING_MID_THRESHOLD = 0.002
 MOVING_WINDOW_SEC = 60
 RECENT_WINDOW = 60
 TOUCH_PULL_DISTANCE = 0.005
+
+# Debug флаг для анти-спуф логов (VERBOSE=1 для дебага)
+DEBUG_ANTISPOOF = os.getenv('DEBUG_ANTISPOOF', '0') == '1'
 
 # ==========================================
 
@@ -261,14 +265,14 @@ def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
                 if len(run) >= CLUSTER_MIN_LEVELS:
                     for idx, _ in run:
                         drop.add(idx)
-                    if symbol is not None:
+                    if DEBUG_ANTISPOOF and symbol is not None:
                         log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
                 run = [ordered[k]]
                 steps = []
         if len(run) >= CLUSTER_MIN_LEVELS:
             for idx, _ in run:
                 drop.add(idx)
-            if symbol is not None:
+            if DEBUG_ANTISPOOF and symbol is not None:
                 log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
     return [d for i, d in enumerate(densities) if i not in drop]
 
@@ -302,8 +306,6 @@ def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
             if cv < LAYERING_CV_THRESHOLD:
                 for p in window_prices:
                     suspicious.add(p)
-                if symbol is not None:
-                    log_func(f"⚠️ {symbol}: layering кандидат: {LAYERING_MIN_LEVELS} уровней, CV={cv:.3f}, цены {window_prices[0]}..{window_prices[-1]}")
     return suspicious
 
 
@@ -455,7 +457,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if layering_prices:
             before = len(densities)
             densities = [d for d in densities if d['price'] not in layering_prices]
-            log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
+            if DEBUG_ANTISPOOF:
+                log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
 
         # Анти-спуф: отсекаем симметричные пары
         densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
