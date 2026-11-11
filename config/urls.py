@@ -12,13 +12,40 @@ Class-based views
     2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
 Including another URLconf
     1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
+from django.db import connection
+from django.core.cache import cache
 from screener import views
 
+
+def healthz(request):
+    # Проверка БД
+    try:
+        connection.ensure_connection()
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    # Проверка Redis/кэша
+    try:
+        cache.set('healthz_test', 'ok', 10)
+        cache_ok = cache.get('healthz_test') == 'ok'
+    except Exception:
+        cache_ok = False
+
+    status = 200 if (db_ok and cache_ok) else 503
+    return JsonResponse({
+        'status': 'ok' if status == 200 else 'degraded',
+        'database': 'ok' if db_ok else 'error',
+        'cache': 'ok' if cache_ok else 'error',
+    }, status=status)
+
+
 urlpatterns = [
+    path('healthz/', healthz, name='healthz'),
     path('admin/', admin.site.urls),
     path('accounts/', include('screener.urls')),
     path('', views.index, name='index'),

@@ -5,17 +5,19 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load .env first, then .env.local (local overrides)
+load_dotenv()
+load_dotenv(BASE_DIR / '.env.local', override=True)
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-local-dev-only-change-in-production')
+SECRET_KEY = os.environ['SECRET_KEY']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = os.environ['ALLOWED_HOSTS'].split(',')
 
 # ==========================================
 # AUTH & SECURITY
@@ -199,3 +201,13 @@ if not REDIS_URL:
         },
     }
     print("Redis not available, using file cache + DB sessions + in-memory channels")
+
+# ==========================================
+# SECURITY HEADERS (Production only)
+# ==========================================
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
