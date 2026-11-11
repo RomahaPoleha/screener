@@ -54,7 +54,7 @@ async function pollImpulseAlerts() {
             if (alert.window !== userWindow) continue;
             if (alert.price_change < userThreshold) continue;
 
-            const direction = alert.direction === 'up' ? 'в†‘' : 'в†“';
+            const direction = alert.direction === 'up' ? '↑' : '↓';
 
             showVolumeAlertToast(
                 alert.symbol,
