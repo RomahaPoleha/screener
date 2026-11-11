@@ -5,6 +5,8 @@ Gate Monitor ASYNC — WORKER NODE
 import asyncio
 import json
 import time
+import os
+import signal
 import aiohttp
 import websockets
 from django.core.cache import cache
@@ -90,6 +92,9 @@ MOVING_WINDOW_SEC = 60          # окно наблюдения
 TOUCH_PULL_DISTANCE = 0.005
 REL_HISTORY_SIZE = 5            # размер истории относительных расстояний
 
+# Debug флаг для анти-спуф логов
+DEBUG_ANTISPOOF = os.getenv('DEBUG_ANTISPOOF', '0') == '1'
+
 # ==========================================
 
 
@@ -102,6 +107,14 @@ async def get_http_client():
             headers={'User-Agent': 'Mozilla/5.0'}
         )
     return _http_client
+
+
+async def close_http_client():
+    """Явное закрытие сессии (для graceful shutdown)"""
+    global _http_client
+    if _http_client and not _http_client.closed:
+        await _http_client.close()
+        _http_client = None
 
 
 # ==========================================
@@ -296,14 +309,14 @@ def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
                 if len(run) >= CLUSTER_MIN_LEVELS:
                     for idx, _ in run:
                         drop.add(idx)
-                    if symbol is not None:
+                    if DEBUG_ANTISPOOF and symbol is not None:
                         log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
                 run = [ordered[k]]
                 steps = []
         if len(run) >= CLUSTER_MIN_LEVELS:
             for idx, _ in run:
                 drop.add(idx)
-            if symbol is not None:
+            if DEBUG_ANTISPOOF and symbol is not None:
                 log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
     return [d for i, d in enumerate(densities) if i not in drop]
 
@@ -336,8 +349,6 @@ def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
             if cv < LAYERING_CV_THRESHOLD:
                 for p in window_prices:
                     suspicious.add(p)
-                if symbol is not None:
-                    log_func(f"⚠️ {symbol}: layering кандидат: {LAYERING_MIN_LEVELS} уровней, CV={cv:.3f}, цены {window_prices[0]}..{window_prices[-1]}")
     return suspicious
 
 
@@ -496,7 +507,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if layering_prices:
             before = len(densities)
             densities = [d for d in densities if d['price'] not in layering_prices]
-            log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
+            if DEBUG_ANTISPOOF:
+                log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
 
 # Анти-спуф: отсекаем симметричные пары плотностей сверху/снизу цены
         densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
@@ -1047,7 +1059,40 @@ async def main_async(log_func=print):
         periodic_force_sync(log_func),  # 🔥 НОВАЯ ЗАДАЧА
     ]
 
-    await asyncio.gather(*tasks)
+    # Graceful shutdown
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    
+    def _signal_handler():
+        log_func("🛑 Получен сигнал остановки, завершаем работу...")
+        stop_event.set()
+    
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, _signal_handler)
+        except NotImplementedError:
+            pass
+    
+    running_tasks = [asyncio.create_task(t) for t in tasks]
+    
+    try:
+        done, pending = await asyncio.wait(
+            running_tasks + [asyncio.create_task(stop_event.wait())],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        if stop_event.is_set():
+            log_func("🛑 Отменяем все задачи...")
+            for task in running_tasks:
+                task.cancel()
+            await asyncio.gather(*running_tasks, return_exceptions=True)
+            
+    except asyncio.CancelledError:
+        pass
+    finally:
+        log_func("🔒 Закрываем HTTP клиент...")
+        await close_http_client()
+        log_func("✅ Gate Monitor остановлен корректно")
 
 
 def start_gate_async_monitor(log_func=print):
@@ -1062,4 +1107,8 @@ def start_gate_async_monitor(log_func=print):
         import traceback
         log_func(traceback.format_exc())
     finally:
-        pass
+        try:
+            loop.run_until_complete(close_http_client())
+        except Exception:
+            pass
+        loop.close()

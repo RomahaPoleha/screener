@@ -6,6 +6,7 @@ Impulse Monitor — детекция амплитуды свечи (Scalp Board 
 import asyncio
 import json
 import time
+import signal
 import websockets
 from django.core.cache import cache
 from logging.handlers import RotatingFileHandler
@@ -210,11 +211,42 @@ async def impulse_checker():
 async def main():
     _logger.info("🚀 Запуск Impulse Monitor (Amplitude Mode)...")
     
-    await asyncio.gather(
-        impulse_ws_listener(),
-        ticker_processor(),
-        impulse_checker()
-    )
+    # Graceful shutdown
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    
+    def _signal_handler():
+        _logger.info("🛑 Получен сигнал остановки, завершаем работу...")
+        stop_event.set()
+    
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, _signal_handler)
+        except NotImplementedError:
+            pass
+    
+    tasks = [
+        asyncio.create_task(impulse_ws_listener()),
+        asyncio.create_task(ticker_processor()),
+        asyncio.create_task(impulse_checker()),
+    ]
+    
+    try:
+        done, pending = await asyncio.wait(
+            tasks + [asyncio.create_task(stop_event.wait())],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        if stop_event.is_set():
+            _logger.info("🛑 Отменяем все задачи...")
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _logger.info("✅ Impulse Monitor остановлен корректно")
 
 
 def start_impulse_monitor():
@@ -224,3 +256,5 @@ def start_impulse_monitor():
         loop.run_until_complete(main())
     except Exception as e:
         _logger.error(f"❌ Impulse Monitor упал: {e}")
+    finally:
+        loop.close()
