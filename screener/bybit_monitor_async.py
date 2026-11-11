@@ -5,6 +5,7 @@ Bybit Monitor ASYNC — WORKER NODE
 import asyncio
 import json
 import time
+import signal
 import aiohttp
 import websockets
 from django.core.cache import cache
@@ -908,7 +909,6 @@ async def periodic_force_sync(log_func=print):
         except Exception as e:
             log_func(f"❌ Ошибка periodic_force_sync: {e}")
 
-
 # ==========================================
 # 🔥 ГЛАВНАЯ ФУНКЦИЯ (С ожиданием мастер-списка)
 # ==========================================
@@ -950,6 +950,7 @@ async def main_async(log_func=print):
     bybit_spot_symbols = active_spot
 
     
+    
 
     tasks = [
         ws_listener('futures', log_func),
@@ -961,7 +962,41 @@ async def main_async(log_func=print):
         periodic_force_sync(log_func),  # 🔥 НОВАЯ ЗАДАЧА
     ]
 
-    await asyncio.gather(*tasks)
+    # Graceful shutdown
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    
+    def _signal_handler():
+        log_func("🛑 Получен сигнал остановки, завершаем работу...")
+        stop_event.set()
+    
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, _signal_handler)
+        except NotImplementedError:
+            # Windows не поддерживает add_signal_handler
+            pass
+    
+    running_tasks = [asyncio.create_task(t) for t in tasks]
+    
+    try:
+        done, pending = await asyncio.wait(
+            running_tasks + [asyncio.create_task(stop_event.wait())],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        if stop_event.is_set():
+            log_func("🛑 Отменяем все задачи...")
+            for task in running_tasks:
+                task.cancel()
+            await asyncio.gather(*running_tasks, return_exceptions=True)
+            
+    except asyncio.CancelledError:
+        pass
+    finally:
+        log_func("🔒 Закрываем HTTP клиент...")
+        await close_http_client()
+        log_func("✅ Bybit Monitor остановлен корректно")
 
 
 def start_bybit_async_monitor(log_func=print):
@@ -976,4 +1011,8 @@ def start_bybit_async_monitor(log_func=print):
         import traceback
         log_func(traceback.format_exc())
     finally:
-        pass
+        try:
+            loop.run_until_complete(close_http_client())
+        except Exception:
+            pass
+        loop.close()
