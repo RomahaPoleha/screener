@@ -53,6 +53,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'screener.middleware.OnlineUserMiddleware',
+    'screener.middleware.RateLimitMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -110,12 +111,12 @@ AUTH_PASSWORD_VALIDATORS = [
 # EMAIL (Email verification)
 # ==========================================
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.sendgrid.net')
+EMAIL_HOST = os.getenv('EMAIL_HOST')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'apikey')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@localhost')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 EMAIL_TIMEOUT = 10
 
 # Internationalization
@@ -148,6 +149,16 @@ STORAGES = {
 # REDIS & CACHING
 # ==========================================
 REDIS_URL = os.getenv('REDIS_URL')
+
+# ==========================================
+# RATE LIMITING (по IP)
+# ==========================================
+RATELIMIT_ENABLE = os.getenv('RATELIMIT_ENABLE', '1') == '1'
+# Формат: 'путь:лимит:окно_секунд' через запятую
+RATELIMIT_RULES = os.getenv(
+    'RATELIMIT_RULES',
+    '/api/data/:60:60,/api/candles/:30:60,/api/scalp/:30:60,/api/register/:5:60',
+)
 
 # ==========================================
 # MERGED CACHE (pre-aggregated densities)

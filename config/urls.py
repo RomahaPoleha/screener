@@ -19,7 +19,7 @@ from django.urls import path, include
 from screener import views
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('panel-admin/', admin.site.urls),
     path('accounts/', include('screener.urls')),
     path('', views.index, name='index'),
     path('api/data/', views.api_data, name='api_data'),
