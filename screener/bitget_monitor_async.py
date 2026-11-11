@@ -151,7 +151,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 continue
 
         if not bids and not asks:
-            log_func(f"⚠️ bitget {market} {symbol}: пустой стакан")
             return 0
 
         if market == 'futures':
@@ -249,15 +248,11 @@ def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
                 if len(run) >= CLUSTER_MIN_LEVELS:
                     for idx, _ in run:
                         drop.add(idx)
-                    if symbol is not None:
-                        log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
                 run = [ordered[k]]
                 steps = []
         if len(run) >= CLUSTER_MIN_LEVELS:
             for idx, _ in run:
                 drop.add(idx)
-            if symbol is not None:
-                log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
     return [d for i, d in enumerate(densities) if i not in drop]
 
 
@@ -499,7 +494,6 @@ async def ws_heartbeat(ws, market='futures', log_func=print):
             try:
                 await ws.send("ping")
             except (websockets.exceptions.ConnectionClosed, Exception) as e:
-                log_func(f"⚠️ bitget {market} heartbeat завершён: {e}")
                 return
     except asyncio.CancelledError:
         return
@@ -518,8 +512,6 @@ async def ws_listener(market='futures', log_func=print):
             if not symbols:
                 await asyncio.sleep(5)
                 continue
-
-            log_func(f"🔌 bitget {market} WS подключение: {len(symbols)} символов")
 
             async with websockets.connect(BITGET_WS_URL, ping_interval=None, ping_timeout=None) as ws:
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, market, log_func))
@@ -564,7 +556,6 @@ async def ws_listener(market='futures', log_func=print):
                         pass
 
         except websockets.exceptions.ConnectionClosed:
-            log_func(f"⚠️ bitget {market} WS закрыт, переподключение через 3 сек")
             await asyncio.sleep(3)
         except Exception as e:
             log_func(f"❌ bitget {market} WS ошибка: {e}, переподключение через 5 сек")
@@ -832,7 +823,6 @@ async def periodic_refresh(market='futures', log_func=print):
             master_symbols = await get_master_symbols_async(market)
 
             if not master_symbols:
-                log_func(f"⚠️ bitget {market}: мастер-список пуст, пропускаем ротацию (ждём Binance)")
                 continue
 
             old_symbols = set(bitget_futures_symbols if market == 'futures' else bitget_spot_symbols)
@@ -893,14 +883,14 @@ async def periodic_force_sync(log_func=print):
             for symbol in list(bitget_futures_symbols):
                 try:
                     await sync_to_cache_async(symbol, 'futures', log_func)
-                except Exception as e:
-                    log_func(f"⚠️ bitget futures force sync {symbol}: {e}")
+                except Exception:
+                    pass
 
             for symbol in list(bitget_spot_symbols):
                 try:
                     await sync_to_cache_async(symbol, 'spot', log_func)
-                except Exception as e:
-                    log_func(f"⚠️ bitget spot force sync {symbol}: {e}")
+                except Exception:
+                    pass
         except Exception as e:
             log_func(f"❌ Ошибка periodic_force_sync: {e}")
 

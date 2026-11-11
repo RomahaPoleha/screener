@@ -149,7 +149,6 @@ async def init_order_book_async(symbol, alpha_map, log_func=print):
         base_symbol = symbol.upper().replace('USDT', '')
 
         if not alpha_map or base_symbol not in alpha_map:
-            log_func(f"⚠️ alpha {symbol}: нет в маппинге Alpha (base={base_symbol})")
             return False, 0
 
         alpha_symbol = alpha_map[base_symbol]
@@ -199,7 +198,7 @@ async def init_order_book_async(symbol, alpha_map, log_func=print):
             alpha_density_timestamps[symbol] = {}
 
         if not bids and not asks:
-            log_func(f"⚠️ alpha {symbol}: пустой стакан (ожидаем WS апдейты)")
+            pass
 
         saved_count = await sync_to_cache_async(symbol, log_func)
         log_func(f"✅ alpha Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
@@ -289,15 +288,11 @@ def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
                 if len(run) >= CLUSTER_MIN_LEVELS:
                     for idx, _ in run:
                         drop.add(idx)
-                    if symbol is not None:
-                        log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
                 run = [ordered[k]]
                 steps = []
         if len(run) >= CLUSTER_MIN_LEVELS:
             for idx, _ in run:
                 drop.add(idx)
-            if symbol is not None:
-                log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
     return [d for i, d in enumerate(densities) if i not in drop]
 
 
@@ -509,7 +504,6 @@ async def ws_heartbeat(ws, log_func=print):
             try:
                 await ws.send(json.dumps({"method": "PING", "id": int(time.time() * 1000)}))
             except (websockets.exceptions.ConnectionClosed, Exception) as e:
-                log_func(f"⚠️ alpha heartbeat завершён: {e}")
                 return
     except asyncio.CancelledError:
         return
@@ -526,16 +520,12 @@ async def ws_listener(alpha_map, log_func=print):
         try:
             symbols = alpha_symbols
             if not symbols:
-                log_func("⚠️ alpha: alpha_symbols пуст, жду 5 сек")
                 await asyncio.sleep(5)
                 continue
 
             if not alpha_map:
-                log_func("⚠️ alpha: exchange:alpha:map пуст, жду 5 сек")
                 await asyncio.sleep(5)
                 continue
-
-            log_func(f"🔌 alpha WS подключение: {len(symbols)} символов: {symbols[:5]}...")
 
             async with websockets.connect(ALPHA_WS_URL, ping_interval=30, ping_timeout=10) as ws:
                 heartbeat_task = asyncio.create_task(ws_heartbeat(ws, log_func))
@@ -547,11 +537,8 @@ async def ws_listener(alpha_map, log_func=print):
                         alpha_sym = alpha_map.get(base)
                         if alpha_sym:
                             args.append(f"{alpha_sym.lower()}@fulldepth@100ms")
-                        else:
-                            log_func(f"⚠️ alpha: {s} не в alpha_map")
 
                     if not args:
-                        log_func("⚠️ alpha: нет валидных символов для подписки")
                         await asyncio.sleep(30)
                         continue
 
@@ -561,12 +548,10 @@ async def ws_listener(alpha_map, log_func=print):
                         "id": int(time.time() * 1000)
                     }
                     await ws.send(json.dumps(subscribe_msg))
-                    log_func(f"✅ alpha WS подписан на {len(args)} символов: {args[:5]}...")
 
                     while True:
                         if alpha_reconnect_event.is_set():
                             alpha_reconnect_event.clear()
-                            log_func("🔄 alpha: сигнал переподключения получен")
                             break
 
                         try:
@@ -587,7 +572,6 @@ async def ws_listener(alpha_map, log_func=print):
                         pass
 
         except websockets.exceptions.ConnectionClosed:
-            log_func("⚠️ alpha WS закрыт, переподключение через 3 сек")
             await asyncio.sleep(3)
         except Exception as e:
             log_func(f"❌ alpha WS ошибка: {e}, переподключение через 5 сек")
@@ -619,7 +603,6 @@ async def process_queue(alpha_map, log_func=print):
 
             symbol = reverse_map.get(alpha_symbol)
             if not symbol:
-                log_func(f"⚠️ alpha: unknown stream symbol: {alpha_symbol}")
                 continue
 
             payload_data = data.get('data', {})
@@ -739,7 +722,6 @@ async def periodic_refresh(log_func=print):
 
             if added or removed:
                 alpha_reconnect_event.set()
-                log_func(f"🔄 alpha: список синхронизирован (+{len(added)} -{len(removed)})")
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(alpha): {e}")
@@ -758,8 +740,8 @@ async def periodic_force_sync(log_func=print):
             for symbol in list(alpha_symbols):
                 try:
                     await sync_to_cache_async(symbol, log_func)
-                except Exception as e:
-                    log_func(f"⚠️ alpha force sync {symbol}: {e}")
+                except Exception:
+                    pass
         except Exception as e:
             log_func(f"❌ Ошибка periodic_force_sync: {e}")
 
@@ -778,7 +760,6 @@ async def main_async(log_func=print):
         from screener.views import get_alpha_symbol_map
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, get_alpha_symbol_map)
-        log_func("✅ Alpha map кэш заполнен/проверен")
     except Exception as e:
         log_func(f"⚠️ Не удалось заполнить alpha map кэш: {e}")
 
@@ -787,13 +768,11 @@ async def main_async(log_func=print):
 
     attempts = 0
     while not initial_symbols and attempts < 12:
-        log_func("⏳ Alpha ожидает мастер-список и alpha_map из Redis...")
         await asyncio.sleep(5)
         attempts += 1
         initial_symbols = await build_alpha_symbol_list()
 
     if not initial_symbols:
-        log_func("⚠️ Мастер-список пуст после ожидания. Alpha будет ждать обновления.")
 
     alpha_map = await _get_alpha_map_async() or {}
 
@@ -810,9 +789,8 @@ async def main_async(log_func=print):
     for symbol, (success, saved_count) in zip(initial_symbols, results):
         if success:
             active_symbols.append(symbol)
-            log_func(f"✅ alpha {symbol}: принят (плотностей: {saved_count})")
         else:
-            log_func(f"⚠️ alpha {symbol}: пропущен")
+            pass
 
     alpha_symbols = active_symbols
     log_func(f"✅ Binance Alpha Async Monitor инициализирован: {len(active_symbols)} символов")

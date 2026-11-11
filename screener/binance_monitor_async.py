@@ -248,7 +248,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
         bids, asks = await loop.run_in_executor(None, _init_order_book_sync, symbol, market)
 
         if not bids and not asks:
-            log_func(f"⚠️ binance {market} {symbol}: пустой стакан")
             return 0
 
         if market == 'futures':
@@ -351,15 +350,11 @@ def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
                 if len(run) >= CLUSTER_MIN_LEVELS:
                     for idx, _ in run:
                         drop.add(idx)
-                    if symbol is not None:
-                        log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
                 run = [ordered[k]]
                 steps = []
         if len(run) >= CLUSTER_MIN_LEVELS:
             for idx, _ in run:
                 drop.add(idx)
-            if symbol is not None:
-                log_func(f"⚠️ {symbol}: отсеян volume cluster: {len(run)} уровней, объём≈{key[0]}")
     return [d for i, d in enumerate(densities) if i not in drop]
 
 
@@ -646,7 +641,6 @@ async def ws_listener(market='futures', log_func=print):
                     raise
 
         except websockets.exceptions.ConnectionClosed:
-            log_func(f"⚠️ binance {market} WS закрыт, переподключение через 3 сек")
             await asyncio.sleep(3)
         except Exception as e:
             log_func(f"❌ binance {market} WS ошибка: {e}, переподключение через 5 сек")
@@ -902,7 +896,6 @@ async def build_merged_cache(market, symbols, log_func=print):
             merged_payload,
             MERGED_CACHE_TTL
         )
-        log_func(f"✅ merged cache {market}: {len(merged)} densities, {len(symbols)} symbols")
     except Exception as e:
         log_func(f"⚠️ merged cache {market}: set failed: {e}")
 
