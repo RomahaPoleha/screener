@@ -121,7 +121,7 @@ def _fetch_dynamic_by_natr_sync(market='futures', limit=40):
                 continue
 
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
-            if '-' in clean_symbol or len(clean_symbol) < 2 or len(clean_symbol) > 15:
+            if '-' in clean_symbol or len(clean_symbol) < 1 or len(clean_symbol) > 15:
                 continue
             if not clean_symbol.replace('_', '').isalnum():
                 continue
@@ -194,7 +194,7 @@ def _fetch_stable_coins_sync(market='futures', limit=10):
             clean_symbol = symbol.replace('/USDT', '').replace(':USDT', '')
             if '-' in clean_symbol:
                 continue
-            if len(clean_symbol) < 2 or len(clean_symbol) > 15:
+            if len(clean_symbol) < 1 or len(clean_symbol) > 15:
                 continue
             if not clean_symbol.replace('_', '').isalnum():
                 continue

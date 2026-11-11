@@ -157,7 +157,7 @@ RATELIMIT_ENABLE = os.getenv('RATELIMIT_ENABLE', '1') == '1'
 # Формат: 'путь:лимит:окно_секунд' через запятую
 RATELIMIT_RULES = os.getenv(
     'RATELIMIT_RULES',
-    '/api/data/:60:60,/api/candles/:30:60,/api/scalp/:30:60,/accounts/login/:5:60,/accounts/register/:5:60',
+    '/api/data/:60:60,/accounts/login/:5:60,/accounts/register/:5:60',
 )
 
 # ==========================================
