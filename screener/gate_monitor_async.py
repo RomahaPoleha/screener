@@ -336,8 +336,6 @@ def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
             if cv < LAYERING_CV_THRESHOLD:
                 for p in window_prices:
                     suspicious.add(p)
-                if symbol is not None:
-                    log_func(f"⚠️ {symbol}: layering кандидат: {LAYERING_MIN_LEVELS} уровней, CV={cv:.3f}, цены {window_prices[0]}..{window_prices[-1]}")
     return suspicious
 
 
