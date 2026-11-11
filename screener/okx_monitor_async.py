@@ -471,7 +471,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         if layering_prices:
             before = len(densities)
             densities = [d for d in densities if d['price'] not in layering_prices]
-            log_func(f"⚠️ {symbol}: layering отсеяно {before - len(densities)} уровней")
 
         # Анти-спуф: отсекаем симметричные пары
         densities = _filter_symmetric_spoofs(densities, mid, log_func, symbol)
