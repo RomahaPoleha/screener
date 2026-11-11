@@ -496,7 +496,6 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         for p in prices_to_remove:
             ts.pop(p, None)
             new_stats.pop(p, None)
-            log_func(f"️ {symbol}: Удалена несуществующая плотность на цене {p}")
 
         # 🔥 MEMORY LEAK PREVENTION: Очистка старых записей volume_stats и density_timestamps
         # Ограничение volume_stats по количеству записей на символ
@@ -995,7 +994,6 @@ async def main_async(log_func=print):
 
     attempts = 0
     while (not master_f and not master_s) and attempts < 12:
-        log_func("⏳ Gate ожидает мастер-список от Binance...")
         await asyncio.sleep(5)
         attempts += 1
         master_f = await get_master_symbols_async('futures')

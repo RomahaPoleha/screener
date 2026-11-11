@@ -201,7 +201,6 @@ async def init_order_book_async(symbol, alpha_map, log_func=print):
             pass
 
         saved_count = await sync_to_cache_async(symbol, log_func)
-        log_func(f"✅ alpha Стакан {symbol}: {len(bids)} bids, {len(asks)} asks | плотностей: {saved_count}")
         return True, saved_count
 
     except Exception as e:
@@ -584,9 +583,7 @@ async def ws_listener(alpha_map, log_func=print):
 async def process_queue(alpha_map, log_func=print):
     """Обработка очереди сообщений Binance Alpha"""
     reverse_map = {v.upper(): k.upper() + 'USDT' for k, v in alpha_map.items()}
-    log_func(f"🔍 alpha reverse_map built: {len(reverse_map)} entries")
-
-    while True:
+    log_func(f"❌ alpha process_queue ошибка: {e}")
         try:
             message = await alpha_message_queue.get()
             data = json.loads(message)
@@ -701,12 +698,11 @@ async def periodic_refresh(log_func=print):
             for symbol in new_filtered:
                 if symbol not in old_symbols:
                     success, saved_count = await init_order_book_async(symbol, alpha_map, log_func)
-                    if success:
+if success:
                         new_active.append(symbol)
                         added.append(symbol)
-                        log_func(f"✅ alpha {symbol}: добавлен (плотностей: {saved_count})")
-                else:
-                    new_active.append(symbol)
+                    else:
+                        new_active.append(symbol)
 
             alpha_symbols = new_active
 
@@ -718,7 +714,6 @@ async def periodic_refresh(log_func=print):
                         alpha_volume_stats.pop(sym, None)
                         last_sync_time.pop(f"scalp:spot:binance_alpha:{sym}", None)
                         alpha_first_load_done.discard(sym)
-                log_func(f"🗑️ alpha удалены: {', '.join(sorted(removed))}")
 
             if added or removed:
                 alpha_reconnect_event.set()
@@ -793,7 +788,6 @@ async def main_async(log_func=print):
             pass
 
     alpha_symbols = active_symbols
-    log_func(f"✅ Binance Alpha Async Monitor инициализирован: {len(active_symbols)} символов")
 
     tasks = [
         ws_listener(alpha_map, log_func),

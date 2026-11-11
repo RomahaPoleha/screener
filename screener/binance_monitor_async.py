@@ -604,8 +604,6 @@ async def ws_listener(market='futures', log_func=print):
                 await asyncio.sleep(5)
                 continue
 
-            log_func(f"🔌 binance {market} WS подключение: {len(symbols)} символов")
-
             async with websockets.connect(ws_url, ping_interval=20, ping_timeout=20) as ws:
                 try:
                     streams = [f"{s.lower()}usdt@depth@100ms" for s in symbols]
@@ -1067,9 +1065,6 @@ async def main_async(log_func=print):
     stable_s = await get_stable_coins_async('spot', STABLE_COINS_LIMIT)
     stable_futures_symbols = stable_f
     stable_spot_symbols = stable_s
-
-    log_func(f"🔒 Белый список futures: {stable_f}")
-    log_func(f"🔒 Белый список spot: {stable_s}")
 
     # --- Шаг 2: Получаем кандидатов по NATR ---
     futures_candidates = await get_top_symbols_async('futures')

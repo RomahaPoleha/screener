@@ -490,7 +490,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         return len(densities)
 
     except Exception as e:
-        log_func(f" sync_to_cache_async(bybit {market} {symbol}): {e}")
+        log_func(f"❌ sync_to_cache_async(bybit {market} {symbol}): {e}")
         return 0
 
 # ==========================================
@@ -911,7 +911,6 @@ async def main_async(log_func=print):
 
     attempts = 0
     while (not master_f and not master_s) and attempts < 12:
-        log_func("⏳ Bybit ожидает мастер-список от Binance...")
         await asyncio.sleep(5)
         attempts += 1
         master_f = await get_master_symbols_async('futures')

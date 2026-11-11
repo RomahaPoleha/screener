@@ -927,7 +927,6 @@ async def main_async(log_func=print):
 
     attempts = 0
     while (not master_f and not master_s) and attempts < 12:
-        log_func("⏳ OKX ожидает мастер-список от Binance...")
         await asyncio.sleep(5)
         attempts += 1
         master_f = await get_master_symbols_async('futures')

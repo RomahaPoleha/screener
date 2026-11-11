@@ -554,7 +554,6 @@ async def ws_listener(market='futures', log_func=print):
                         params = [f"spot@public.aggre.depth.v3.api.pb@100ms@{s.upper()}USDT" for s in symbols]
                         msg = {"method": "SUBSCRIPTION", "params": params}
                         await ws.send(json.dumps(msg))
-                        log_func(f"📤 mexc spot отправлена подписка: {params[:2]}...")
 
                     
 
@@ -874,7 +873,6 @@ async def main_async(log_func=print):
 
     attempts = 0
     while (not master_f and not master_s) and attempts < 12:
-        log_func("⏳ MEXC ожидает мастер-список от Binance...")
         await asyncio.sleep(5)
         attempts += 1
         master_f = await get_master_symbols_async('futures')
