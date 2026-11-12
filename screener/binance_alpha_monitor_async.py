@@ -583,7 +583,8 @@ async def ws_listener(alpha_map, log_func=print):
 async def process_queue(alpha_map, log_func=print):
     """Обработка очереди сообщений Binance Alpha"""
     reverse_map = {v.upper(): k.upper() + 'USDT' for k, v in alpha_map.items()}
-    log_func(f"❌ alpha process_queue ошибка: {e}")
+
+    while True:
         try:
             message = await alpha_message_queue.get()
             data = json.loads(message)
@@ -698,7 +699,7 @@ async def periodic_refresh(log_func=print):
             for symbol in new_filtered:
                 if symbol not in old_symbols:
                     success, saved_count = await init_order_book_async(symbol, alpha_map, log_func)
-if success:
+                    if success:
                         new_active.append(symbol)
                         added.append(symbol)
                     else:
@@ -768,9 +769,9 @@ async def main_async(log_func=print):
         initial_symbols = await build_alpha_symbol_list()
 
     if not initial_symbols:
+        pass
 
     alpha_map = await _get_alpha_map_async() or {}
-
     # Параллельная инициализация стаканов (семафор 5)
     sem = asyncio.Semaphore(5)
 
