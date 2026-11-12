@@ -89,7 +89,7 @@ async def get_http_client():
     global _http_client
     if _http_client is None or _http_client.closed:
         _http_client = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=10),
+            timeout=aiohttp.ClientTimeout(connect=5, sock_read=10, total=30),
             headers={'User-Agent': 'Mozilla/5.0'}
         )
     return _http_client
