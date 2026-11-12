@@ -69,7 +69,7 @@ function showSearchDropdown(query) {
     const q = transliterateToLatin(query).toUpperCase();
     const filtered = allCoins.filter(coin =>
         coin.symbol.toUpperCase().includes(q)
-    ).slice(0, 10);
+    );
 
     if (filtered.length === 0) {
         hideSearchDropdown();
