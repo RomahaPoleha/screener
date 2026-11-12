@@ -157,8 +157,10 @@ async def init_order_book_async(symbol, alpha_map, log_func=print):
 
         client = await get_http_client()
         async with client.get(url) as resp:
-            if resp.status != 200:
+            if resp.status >= 500:
                 log_func(f"⚠️ alpha {symbol}: HTTP {resp.status}")
+                return False, 0
+            if resp.status != 200:
                 return False, 0
             data = await resp.json()
 

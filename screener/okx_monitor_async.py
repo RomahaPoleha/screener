@@ -135,8 +135,10 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         client = await get_http_client()
         async with client.get(url) as resp:
-            if resp.status != 200:
+            if resp.status >= 500:
                 log_func(f"⚠️ okx {market} {symbol}: HTTP {resp.status}")
+                return 0
+            if resp.status != 200:
                 return 0
             data = await resp.json()
 
