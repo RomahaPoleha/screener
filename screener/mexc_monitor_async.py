@@ -121,14 +121,12 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         if market == 'futures':
             if not isinstance(data, dict) or data.get('success') is False:
-                log_func(f"⚠️ mexc futures {symbol}: API ошибка: {str(data)[:200]}")
                 return 0
             inner = data.get('data') or {}
             raw_bids = inner.get('bids') or []
             raw_asks = inner.get('asks') or []
         else:
             if isinstance(data, list) or not isinstance(data, dict):
-                log_func(f"⚠️ mexc spot {symbol}: Неожиданный формат ответа REST")
                 return 0
             if 'code' in data and data.get('code') != 0:
                 return 0
