@@ -142,7 +142,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         # OKX возвращает code "0" при успехе. Если монета не поддерживается, code будет другим.
         if data.get('code') != '0':
-            log_func(f"⚠️ okx {market} {symbol}: code={data.get('code')} msg={data.get('msg')}")
             return 0
 
         result_list = data.get('data') or []

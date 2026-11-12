@@ -131,7 +131,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                 log_func(f"⚠️ mexc spot {symbol}: Неожиданный формат ответа REST")
                 return 0
             if 'code' in data and data.get('code') != 0:
-                log_func(f"⚠️ mexc spot {symbol}: code={data.get('code')}")
                 return 0
             raw_bids = data.get('bids') or []
             raw_asks = data.get('asks') or []

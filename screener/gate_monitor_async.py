@@ -177,7 +177,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         # Gate ошибка в формате {label, message} (например, если монета не поддерживается)
         if 'label' in data or 'message' in data:
-            log_func(f"⚠️ gate {market} {symbol}: ошибка API: {data.get('label')} - {data.get('message')}")
             return 0
 
         if 'asks' not in data and 'bids' not in data:

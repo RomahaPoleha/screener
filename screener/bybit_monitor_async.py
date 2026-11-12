@@ -128,7 +128,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         # Если Bybit не поддерживает символ, он вернёт retCode != 0
         if data.get('retCode') != 0:
-            # log_func(f"⚠️ bybit {market} {symbol}: retCode={data.get('retCode')} msg={data.get('retMsg')}")
             return 0
 
         result = data.get('result') or {}

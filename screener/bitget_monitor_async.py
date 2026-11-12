@@ -120,7 +120,6 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
 
         # Bitget V2 API возвращает code "00000" при успехе
         if data.get('code') != '00000':
-            log_func(f"⚠️ bitget {market} {symbol}: code={data.get('code')} msg={data.get('msg')}")
             return 0
 
         result = data.get('data') or {}

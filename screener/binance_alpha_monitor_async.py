@@ -163,7 +163,6 @@ async def init_order_book_async(symbol, alpha_map, log_func=print):
             data = await resp.json()
 
         if data.get('code') != "000000":
-            log_func(f"⚠️ alpha {symbol}: code={data.get('code')} msg={data.get('message')}")
             return False, 0
 
         result = data.get('data') or {}
