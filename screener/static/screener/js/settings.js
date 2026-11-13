@@ -5,6 +5,9 @@
 // ==========================================
 // ВКЛАДКИ НАСТРОЕК
 // ==========================================
+
+// Флаг: настройки скальпа изменены в модалке, но ещё не применены кнопкой "Применить"
+let scalpSettingsPending = false;
 function initSettingsTabs() {
     var nav = document.querySelector('.settings-nav');
     if (!nav) return;
@@ -179,13 +182,14 @@ if (currentSymbol && candleSeries) {
     clearScalpLines();
     previousScalpData = {};
 }
-if (currentSymbol) {
-    if (scalpEnabled) startScalpUpdates(currentSymbol);
-    else {
-        if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+    if (currentSymbol) {
+        if (scalpEnabled) startScalpUpdates(currentSymbol);
+        else {
+            if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+        }
     }
-}
-const volAlertToggle = document.getElementById('volumeAlertToggle');
+    scalpSettingsPending = false;
+    const volAlertToggle = document.getElementById('volumeAlertToggle');
 if (volAlertToggle) {
     volumeAlertEnabled = volAlertToggle.checked;
     localStorage.setItem('volumeAlertEnabled', volumeAlertEnabled);
@@ -329,6 +333,7 @@ function toggleScalpExchange(exchangeId, enabled) {
     }
 
     renderScalpCards();
+    scalpSettingsPending = true;
     // applyScalpSettingsSilent() убран — настройки скальпа применяются только по кнопке "Применить" в applySettings()
 }
 

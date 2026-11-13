@@ -388,7 +388,7 @@ async function openChart(symbol) {
     updateChartStats();
     if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);
     if (densityEnabled) startDensityUpdates(symbol);
-    if (scalpEnabled) startScalpUpdates(symbol);
+    if (scalpEnabled && !scalpSettingsPending) startScalpUpdates(symbol);
     if (reconEnabled) startReconUpdates(symbol);
 }
 

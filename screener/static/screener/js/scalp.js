@@ -252,7 +252,8 @@ if (scalpEnabled) startScalpUpdates(currentSymbol);
 else {
 if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
 }
-}
-const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
-if (modal) modal.hide();
+    }
+    scalpSettingsPending = false;
+    const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+    if (modal) modal.hide();
 }
