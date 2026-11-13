@@ -46,7 +46,7 @@ if (reconToggle) {
 }
 renderScalpCards();
 const priceImpulseThr = document.getElementById('priceImpulseThreshold');
-if (priceImpulseThr) priceImpulseThr.value = priceImpulseThreshold;
+if (priceImpulseThr) priceImpulseThr.value = Math.max(1.5, Math.min(20, priceImpulseThreshold));
 const priceImpulseWin = document.getElementById('priceImpulseWindow');
 if (priceImpulseWin) priceImpulseWin.value = priceImpulseWindow;
 const soundCheckbox = document.getElementById('soundToggleModal');
@@ -140,12 +140,11 @@ const priceImpulseWin = document.getElementById('priceImpulseWindow');
 if (priceImpulseThr || priceImpulseWin) {
 const settingsPayload = {};
 if (priceImpulseThr) {
-const thr = parseFloat(priceImpulseThr.value);
-settingsPayload.threshold = thr;
-if (thr > 0) {
-priceImpulseThreshold = thr;
-localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
-}
+    const thr = Math.max(1.5, Math.min(20, parseFloat(priceImpulseThr.value) || 1.5));
+    settingsPayload.threshold = thr;
+    priceImpulseThreshold = thr;
+    localStorage.setItem('priceImpulseThreshold', priceImpulseThreshold);
+    priceImpulseThr.value = thr;
 }
 if (priceImpulseWin) {
 const win = parseInt(priceImpulseWin.value);

@@ -26,6 +26,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    // Применение сохраненной видимости кнопок меню из localStorage
+    const tradesBtnEl = document.getElementById('tradesBtn');
+    const densBtnEl = document.getElementById('densitiesBtn');
+    if (tradesBtnEl) tradesBtnEl.style.display = (localStorage.getItem('showTradesBtn') !== '0') ? '' : 'none';
+    if (densBtnEl) densBtnEl.style.display = (localStorage.getItem('showDensitiesBtn') !== '0') ? '' : 'none';
+
     // 2. Слайдер порога крупных сделок
     els.tradesThresholdSlider.addEventListener('input', (e) => {
         currentThreshold = parseInt(e.target.value);

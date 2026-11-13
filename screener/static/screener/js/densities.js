@@ -847,7 +847,10 @@ function toggleLive() {
 }
 
 function handleMinAgeFilter(value) {
-    state.minAgeFilter = parseInt(value) || 0;
+    let v = parseInt(value) || 0;
+    if (v < 0) v = 0;
+    if (v > 3600) v = 3600;
+    state.minAgeFilter = v;
     renderContent();
 }
 
