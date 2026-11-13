@@ -23,14 +23,6 @@ try:
     _PSUTIL_AVAILABLE = True
 except ImportError:
     _PSUTIL_AVAILABLE = False
-from .memory_config import (
-    MAX_MONITORED_SYMBOLS,
-    MAX_ORDER_BOOK_LEVELS,
-    MAX_STATS_PER_SYMBOL,
-    MAX_TS_AGE_SEC,
-    MAX_REMOVED_PER_SYMBOL,
-    MAX_MID_HISTORY,
-)
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES

@@ -582,8 +582,8 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
             ts.pop(p, None)
             new_stats.pop(p, None)
 
-        # Ограничение volume_stats по возрасту записей (MAX_STATS_AGE_SEC)
-        old_stats_prices = [p for p, stat in new_stats.items() if now - stat.get('sum', 0) / max(stat.get('count', 1), 1) > MAX_STATS_AGE_SEC]
+        # Ограничение volume_stats по возрасту записей (MAX_TS_AGE_SEC)
+        old_stats_prices = [p for p, stat in new_stats.items() if now - stat.get('sum', 0) / max(stat.get('count', 1), 1) > MAX_TS_AGE_SEC]
         # Примечание: в stats нет явного timestamp, используем proxy через ts
         # Более точное ограничение по возрасту делаем через ts выше
 
