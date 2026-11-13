@@ -29,6 +29,12 @@ alpha_lock = asyncio.Lock()
 alpha_reconnect_event = asyncio.Event()
 alpha_volume_stats = {}
 
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
+
 # Защита от мгновенного созревания при очистке стакана спуфером
 alpha_first_load_done = set()
 

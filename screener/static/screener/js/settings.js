@@ -329,7 +329,7 @@ function toggleScalpExchange(exchangeId, enabled) {
     }
 
     renderScalpCards();
-    applyScalpSettingsSilent();
+    // applyScalpSettingsSilent() убран — настройки скальпа применяются только по кнопке "Применить" в applySettings()
 }
 
 function applyScalpSettingsSilent() {
