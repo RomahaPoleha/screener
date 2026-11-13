@@ -52,7 +52,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'screener.middleware.OnlineUserMiddleware',
+    'screener.middleware.OnlineCacheMiddleware',
     'screener.middleware.RateLimitMiddleware',
 ]
 
@@ -87,7 +87,7 @@ if os.getenv('POSTGRES_HOST'):
             'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
             'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
             'PORT': os.getenv('POSTGRES_PORT', '5432'),
-            'CONN_MAX_AGE': 0,
+            'CONN_MAX_AGE': 600,
             'CONN_HEALTH_CHECKS': True,
         }
     }

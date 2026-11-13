@@ -1,4 +1,3 @@
-from django.utils import timezone
 from django.core.cache import cache
 from django.http import JsonResponse
 import time
@@ -73,22 +72,16 @@ class RateLimitMiddleware:
         return self.get_response(request)
 
 
-class OnlineUserMiddleware:
+class OnlineCacheMiddleware:
+    """Отмечает онлайн-пользователей в кэше (без обращения к БД).
+    Каждый аутентифицированный запрос ставит ключ online:<user_id> на 5 минут.
+    Эндпоинт api_online_users читает эти ключи по требованию.
+    """
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # Гарантируем наличие профиля до рендера шаблонов (один запрос к БД)
         if request.user.is_authenticated:
-            try:
-                from .models import UserProfile
-                UserProfile.objects.update_or_create(
-                    user=request.user,
-                    defaults={'last_activity': timezone.now()},
-                )
-            except Exception:
-                pass
-
+            cache.set(f"online:{request.user.id}", time.time(), 300)
         response = self.get_response(request)
-
         return response

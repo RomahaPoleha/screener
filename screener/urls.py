@@ -14,4 +14,5 @@ urlpatterns = [
     path('register/', views.register, name='register'),
     path('verify/<str:token>/', views.verify_email, name='verify_email'),
     path('resend-verification/', views.resend_verification, name='resend_verification'),
+    path('api/online-users/', views.api_online_users, name='api_online_users'),
 ]

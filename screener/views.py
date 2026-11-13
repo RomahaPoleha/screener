@@ -887,6 +887,21 @@ def api_impulse_alerts(request):
 
 @login_required
 @require_http_methods(["GET"])
+def api_online_users(request):
+    """API: количество пользователей онлайн (по требованию, без постоянного опроса БД).
+    Данные берутся из кэша, куда OnlineCacheMiddleware пишет ключи online:<user_id>
+    при каждом запросе аутентифицированного пользователя.
+    """
+    try:
+        keys = cache.keys("online:*")
+        count = len(keys) if keys else 0
+    except Exception:
+        count = 0
+    return JsonResponse({'online': count})
+
+
+@login_required
+@require_http_methods(["GET"])
 def api_exchanges(request, symbol):
     """API: проверка доступности символа на биржах"""
     symbol = symbol.upper().strip()
