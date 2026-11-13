@@ -10,7 +10,21 @@ from django.core.cache import cache
 import ccxt
 from . import coin_selection
 from .density_config import DENSITY_MIN_VOLUME_FUTURES, DENSITY_MIN_VOLUME_SPOT, DENSITY_IMMATURE_FACTOR
+from .memory_config import (
+    MAX_MONITORED_SYMBOLS,
+    MAX_ORDER_BOOK_LEVELS,
+    MAX_STATS_PER_SYMBOL,
+    MAX_TS_AGE_SEC,
+    MAX_REMOVED_PER_SYMBOL,
+    MAX_MID_HISTORY,
+)
 from django.conf import settings
+
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
 
 # ==========================================
 # MERGED CACHE CONFIG
@@ -80,11 +94,9 @@ binance_futures_volume_stats = {}
 binance_spot_volume_stats = {}
 
 # ==========================================
-# MEMORY LEAK PREVENTION CONSTANTS
+# MEMORY LEAK PREVENTION CONSTANTS (из memory_config)
 # ==========================================
-MAX_STATS_PER_SYMBOL = 200      # макс. ценовых уровней на символ
-MAX_STATS_AGE_SEC = 7200        # 2 часа — макс. возраст записи в volume_stats
-MAX_TS_AGE_SEC = 3600           # 1 час — макс. возраст записи в density_timestamps
+# MAX_STATS_PER_SYMBOL, MAX_TS_AGE_SEC, MAX_REMOVED_PER_SYMBOL, MAX_MID_HISTORY — из memory_config
 
 # Детекция гуляющей плотности
 MOVING_REL_EPSILON = 0.001
@@ -235,6 +247,14 @@ def _init_order_book_sync(symbol, market):
         for price, qty in ob.get('asks', []):
             if price > 0 and qty > 0:
                 asks[price] = qty
+
+        # Ограничение уровнями по объёму (топ-N по price*qty)
+        def _top_levels(levels, limit):
+            items = sorted(levels.items(), key=lambda kv: kv[0] * kv[1], reverse=True)
+            return dict(items[:limit])
+
+        bids = _top_levels(bids, MAX_ORDER_BOOK_LEVELS)
+        asks = _top_levels(asks, MAX_ORDER_BOOK_LEVELS)
 
         return bids, asks
 
@@ -907,6 +927,12 @@ async def periodic_refresh(log_func=print):
     while True:
         await asyncio.sleep(300)
         try:
+            # 📊 Лог потребления памяти
+            if _PSUTIL_AVAILABLE:
+                import os as _os
+                _rss_mb = psutil.Process(_os.getpid()).memory_info().rss / 1024 / 1024
+                log_func(f"📊 RSS memory: {_rss_mb:.1f} MB")
+
             # --- Futures ротация ---
             candidates_f = await get_top_symbols_async('futures')
             old_symbols = set(futures_symbols)
@@ -923,7 +949,7 @@ async def periodic_refresh(log_func=print):
 
             # ШАГ 2: Добавляем топ по NATR
             for symbol in candidates_f:
-                if len(new_active) >= 50:
+                if len(new_active) >= MAX_MONITORED_SYMBOLS:
                     break
                 if symbol in new_active:
                     continue
@@ -941,9 +967,7 @@ async def periodic_refresh(log_func=print):
             if removed:
                 async with binance_futures_lock:
                     for sym in removed:
-                        binance_futures_order_books.pop(sym, None)
-                        binance_futures_density_timestamps.pop(sym, None)
-                        binance_futures_volume_stats.pop(sym, None)
+                        remove_symbol_state('binance', sym, 'futures')
                         last_sync_time.pop(f"binance:futures:{sym}", None)
                 
 
@@ -995,7 +1019,7 @@ async def periodic_refresh(log_func=print):
                     
 
             for symbol in candidates_s:
-                if len(new_active) >= 50:
+                if len(new_active) >= MAX_MONITORED_SYMBOLS:
                     break
                 if symbol in new_active:
                     continue
@@ -1013,9 +1037,7 @@ async def periodic_refresh(log_func=print):
             if removed:
                 async with binance_spot_lock:
                     for sym in removed:
-                        binance_spot_order_books.pop(sym, None)
-                        binance_spot_density_timestamps.pop(sym, None)
-                        binance_spot_volume_stats.pop(sym, None)
+                        remove_symbol_state('binance', sym, 'spot')
                         last_sync_time.pop(f"binance:spot:{sym}", None)
                 
 
@@ -1084,14 +1106,14 @@ async def main_async(log_func=print):
         
 
     # --- Шаг 4: Добавляем топ по NATR ---
-    for symbol in futures_candidates[:40]:
+    for symbol in futures_candidates[:MAX_MONITORED_SYMBOLS]:
         if symbol in active_futures:
             continue
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         active_futures.append(symbol)
         
 
-    for symbol in spot_candidates[:40]:
+    for symbol in spot_candidates[:MAX_MONITORED_SYMBOLS]:
         if symbol in active_spot:
             continue
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
@@ -1144,6 +1166,30 @@ def _safe_delete_pattern(pattern):
             cache_backend.client.delete_pattern(pattern)
     except Exception:
         pass  # file cache или другая реализация — игнорируем
+
+
+def remove_symbol_state(exchange_name, symbol, market='futures'):
+    """Полная очистка всего состояния символа из памяти монитора."""
+    prefix = f"{exchange_name}_{market}"
+    order_books = globals().get(f'{prefix}_order_books')
+    density_ts = globals().get(f'{prefix}_density_timestamps')
+    volume_stats = globals().get(f'{prefix}_volume_stats')
+    mid_history = globals().get(f'{prefix}_mid_history')
+    removed = globals().get(f'{prefix}_removed')
+    first_load_done = globals().get(f'{prefix}_first_load_done')
+
+    if order_books is not None:
+        order_books.pop(symbol, None)
+    if density_ts is not None:
+        density_ts.pop(symbol, None)
+    if volume_stats is not None:
+        volume_stats.pop(symbol, None)
+    if mid_history is not None:
+        mid_history.pop(symbol, None)
+    if removed is not None:
+        removed.pop(symbol, None)
+    if first_load_done is not None:
+        first_load_done.discard(symbol)
 
 
 def start_binance_async_monitor(log_func=print):

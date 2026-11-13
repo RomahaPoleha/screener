@@ -10,6 +10,28 @@ import aiohttp
 import websockets
 from django.core.cache import cache
 from .density_config import DENSITY_MIN_VOLUME_FUTURES, DENSITY_MIN_VOLUME_SPOT, DENSITY_IMMATURE_FACTOR
+from .memory_config import (
+    MAX_MONITORED_SYMBOLS,
+    MAX_ORDER_BOOK_LEVELS,
+    MAX_STATS_PER_SYMBOL,
+    MAX_TS_AGE_SEC,
+    MAX_REMOVED_PER_SYMBOL,
+    MAX_MID_HISTORY,
+)
+
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
+from .memory_config import (
+    MAX_MONITORED_SYMBOLS,
+    MAX_ORDER_BOOK_LEVELS,
+    MAX_STATS_PER_SYMBOL,
+    MAX_TS_AGE_SEC,
+    MAX_REMOVED_PER_SYMBOL,
+    MAX_MID_HISTORY,
+)
 
 # ==========================================
 # ГЛОБАЛЬНОЕ СОСТОЯНИЕ — FUTURES
@@ -56,11 +78,9 @@ SYNC_INTERVAL = 3
 _http_client = None
 
 # ==========================================
-# MEMORY LEAK PREVENTION CONSTANTS
+# MEMORY LEAK PREVENTION CONSTANTS (из memory_config)
 # ==========================================
-MAX_STATS_PER_SYMBOL = 200      # макс. ценовых уровней на символ
-MAX_STATS_AGE_SEC = 7200        # 2 часа — макс. возраст записи в volume_stats
-MAX_TS_AGE_SEC = 3600           # 1 час — макс. возраст записи в density_timestamps
+# MAX_STATS_PER_SYMBOL, MAX_TS_AGE_SEC, MAX_REMOVED_PER_SYMBOL, MAX_MID_HISTORY — из memory_config
 # Детекция "гуляющей" плотности, следующей за ценой
 MOVING_REL_EPSILON = 0.001
 MOVING_MID_THRESHOLD = 0.002
@@ -157,6 +177,14 @@ async def init_order_book_async(symbol, market='futures', log_func=print):
                         asks[price] = qty
             except Exception:
                 continue
+
+        # Ограничение уровнями по объёму (топ-N по price*qty)
+        def _top_levels(levels, limit):
+            items = sorted(levels.items(), key=lambda kv: kv[0] * kv[1], reverse=True)
+            return dict(items[:limit])
+
+        bids = _top_levels(bids, MAX_ORDER_BOOK_LEVELS)
+        asks = _top_levels(asks, MAX_ORDER_BOOK_LEVELS)
 
         if not bids and not asks:
             return 0
@@ -785,17 +813,24 @@ async def periodic_refresh(market='futures', log_func=print):
         await asyncio.sleep(300)  # Проверка каждые 5 минут
 
         try:
+            # 📊 Лог потребления памяти
+            if _PSUTIL_AVAILABLE:
+                import os as _os
+                _rss_mb = psutil.Process(_os.getpid()).memory_info().rss / 1024 / 1024
+                log_func(f"📊 RSS memory: {_rss_mb:.1f} MB")
+
             master_symbols = await get_master_symbols_async(market)
 
             if not master_symbols:
                 continue
-
             old_symbols = set(mexc_futures_symbols if market == 'futures' else mexc_spot_symbols)
             new_active = []
             added = []
             removed = old_symbols - set(master_symbols)
 
             for symbol in master_symbols:
+                if len(new_active) >= MAX_MONITORED_SYMBOLS:
+                    break
                 if symbol not in old_symbols:
                     saved_count = await init_order_book_async(symbol, market, log_func)
                     new_active.append(symbol)
@@ -809,10 +844,10 @@ async def periodic_refresh(market='futures', log_func=print):
                 if removed:
                     async with mexc_futures_lock:
                         for sym in removed:
-                            mexc_futures_order_books.pop(sym, None)
-                            mexc_futures_density_timestamps.pop(sym, None)
-                            mexc_futures_volume_stats.pop(sym, None)
+                            remove_symbol_state('mexc', sym, 'futures')
+                            last_sync_time.pop(f"mexc:futures:{sym}", None)
                     
+
 
                 if added or removed:
                     mexc_futures_reconnect_event.set()
@@ -822,14 +857,13 @@ async def periodic_refresh(market='futures', log_func=print):
                 if removed:
                     async with mexc_spot_lock:
                         for sym in removed:
-                            mexc_spot_order_books.pop(sym, None)
-                            mexc_spot_density_timestamps.pop(sym, None)
-                            mexc_spot_volume_stats.pop(sym, None)
+                            remove_symbol_state('mexc', sym, 'spot')
+                            last_sync_time.pop(f"mexc:spot:{sym}", None)
                     
+
 
                 if added or removed:
                     mexc_spot_reconnect_event.set()
-                    
 
         except Exception as e:
             log_func(f"❌ Ошибка в periodic_refresh(mexc {market}): {e}")
@@ -882,13 +916,13 @@ async def main_async(log_func=print):
 
     # Инициализируем стаканы. Добавляем в активный список ТОЛЬКО если стакан загрузился успешно.
     active_futures = []
-    for symbol in master_f:
+    for symbol in master_f[:MAX_MONITORED_SYMBOLS]:
         saved_count = await init_order_book_async(symbol, 'futures', log_func)
         active_futures.append(symbol)
         
 
     active_spot = []
-    for symbol in master_s:
+    for symbol in master_s[:MAX_MONITORED_SYMBOLS]:
         saved_count = await init_order_book_async(symbol, 'spot', log_func)
         active_spot.append(symbol)
         
@@ -909,6 +943,30 @@ async def main_async(log_func=print):
     ]
 
     await asyncio.gather(*tasks)
+
+
+def remove_symbol_state(exchange_name, symbol, market='futures'):
+    """Полная очистка всего состояния символа из памяти монитора."""
+    prefix = f"{exchange_name}_{market}"
+    order_books = globals().get(f'{prefix}_order_books')
+    density_ts = globals().get(f'{prefix}_density_timestamps')
+    volume_stats = globals().get(f'{prefix}_volume_stats')
+    mid_history = globals().get(f'{prefix}_mid_history')
+    removed = globals().get(f'{prefix}_removed')
+    first_load_done = globals().get(f'{prefix}_first_load_done')
+
+    if order_books is not None:
+        order_books.pop(symbol, None)
+    if density_ts is not None:
+        density_ts.pop(symbol, None)
+    if volume_stats is not None:
+        volume_stats.pop(symbol, None)
+    if mid_history is not None:
+        mid_history.pop(symbol, None)
+    if removed is not None:
+        removed.pop(symbol, None)
+    if first_load_done is not None:
+        first_load_done.discard(symbol)
 
 
 def start_mexc_async_monitor(log_func=print):

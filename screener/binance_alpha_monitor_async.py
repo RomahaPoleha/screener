@@ -43,11 +43,9 @@ ALPHA_CACHE_MARKET = 'spot'
 ALPHA_CACHE_EXCHANGE = 'binance_alpha'
 
 # ==========================================
-# MEMORY LEAK PREVENTION CONSTANTS
+# MEMORY LEAK PREVENTION CONSTANTS (из memory_config)
 # ==========================================
-MAX_STATS_PER_SYMBOL = 200      # макс. ценовых уровней на символ
-MAX_STATS_AGE_SEC = 7200        # 2 часа — макс. возраст записи в volume_stats
-MAX_TS_AGE_SEC = 3600           # 1 час — макс. возраст записи в density_timestamps
+# MAX_STATS_PER_SYMBOL, MAX_TS_AGE_SEC, MAX_REMOVED_PER_SYMBOL, MAX_MID_HISTORY — из memory_config
 
 MOVING_REL_EPSILON = 0.001
 MOVING_MID_THRESHOLD = 0.002
@@ -194,6 +192,14 @@ async def init_order_book_async(symbol, alpha_map, log_func=print):
             except Exception:
                 continue
 
+        # Ограничение уровнями по объёму (топ-N по price*qty)
+        def _top_levels(levels, limit):
+            items = sorted(levels.items(), key=lambda kv: kv[0] * kv[1], reverse=True)
+            return dict(items[:limit])
+
+        bids = _top_levels(bids, MAX_ORDER_BOOK_LEVELS)
+        asks = _top_levels(asks, MAX_ORDER_BOOK_LEVELS)
+
         async with alpha_lock:
             alpha_order_books[symbol] = {'bids': bids, 'asks': asks}
             alpha_density_timestamps[symbol] = {}
@@ -295,12 +301,10 @@ def _detect_volume_clustering(densities, mid, log_func=print, symbol=None):
                 drop.add(idx)
     return [d for i, d in enumerate(densities) if i not in drop]
 
-
 def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
     suspicious = set()
     if not book or not mid:
         return suspicious
-    from .density_config import DENSITY_MIN_VOLUME_ALPHA
     min_volume = DENSITY_MIN_VOLUME_ALPHA
     for side_key in ('bids', 'asks'):
         levels = sorted(book.get(side_key, {}).items(), key=lambda x: x[0])
@@ -679,6 +683,12 @@ async def periodic_refresh(log_func=print):
         await asyncio.sleep(300)
 
         try:
+            # 📊 Лог потребления памяти
+            if _PSUTIL_AVAILABLE:
+                import os as _os
+                _rss_mb = psutil.Process(_os.getpid()).memory_info().rss / 1024 / 1024
+                log_func(f"📊 RSS memory: {_rss_mb:.1f} MB")
+
             master_symbols = await _get_master_symbols_sync()
             alpha_map = await _get_alpha_map_async()
 
@@ -698,6 +708,8 @@ async def periodic_refresh(log_func=print):
             removed = old_symbols - set(new_filtered)
 
             for symbol in new_filtered:
+                if len(new_active) >= MAX_MONITORED_SYMBOLS:
+                    break
                 if symbol not in old_symbols:
                     success, saved_count = await init_order_book_async(symbol, alpha_map, log_func)
                     if success:
@@ -711,9 +723,7 @@ async def periodic_refresh(log_func=print):
             if removed:
                 async with alpha_lock:
                     for sym in removed:
-                        alpha_order_books.pop(sym, None)
-                        alpha_density_timestamps.pop(sym, None)
-                        alpha_volume_stats.pop(sym, None)
+                        remove_symbol_state('alpha', sym, 'spot')
                         last_sync_time.pop(f"scalp:spot:binance_alpha:{sym}", None)
                         alpha_first_load_done.discard(sym)
 
@@ -773,6 +783,8 @@ async def main_async(log_func=print):
         pass
 
     alpha_map = await _get_alpha_map_async() or {}
+    # Ограничение количества символов
+    initial_symbols = initial_symbols[:MAX_MONITORED_SYMBOLS]
     # Параллельная инициализация стаканов (семафор 5)
     sem = asyncio.Semaphore(5)
 
@@ -799,6 +811,30 @@ async def main_async(log_func=print):
     ]
 
     await asyncio.gather(*tasks)
+
+
+def remove_symbol_state(exchange_name, symbol, market='spot'):
+    """Полная очистка всего состояния символа из памяти монитора."""
+    prefix = f"{exchange_name}_{market}"
+    order_books = globals().get(f'{prefix}_order_books')
+    density_ts = globals().get(f'{prefix}_density_timestamps')
+    volume_stats = globals().get(f'{prefix}_volume_stats')
+    mid_history = globals().get(f'{prefix}_mid_history')
+    removed = globals().get(f'{prefix}_removed')
+    first_load_done = globals().get(f'{prefix}_first_load_done')
+
+    if order_books is not None:
+        order_books.pop(symbol, None)
+    if density_ts is not None:
+        density_ts.pop(symbol, None)
+    if volume_stats is not None:
+        volume_stats.pop(symbol, None)
+    if mid_history is not None:
+        mid_history.pop(symbol, None)
+    if removed is not None:
+        removed.pop(symbol, None)
+    if first_load_done is not None:
+        first_load_done.discard(symbol)
 
 
 def start_alpha_async_monitor(log_func=print):

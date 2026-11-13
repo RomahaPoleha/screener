@@ -19,6 +19,12 @@ import time
 from . import coin_selection
 from .models import UserProfile
 
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
+
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -567,6 +573,21 @@ def api_logo(request):
     if not filepath.exists():
         raise Http404('Логотип не найден')
     return FileResponse(open(filepath, 'rb'), content_type='image/png')
+
+
+@require_http_methods(["GET"])
+def api_health_memory(request):
+    """Эндпоинт проверки потребления памяти"""
+    if _PSUTIL_AVAILABLE:
+        import os
+        process = psutil.Process(os.getpid())
+        mem = process.memory_info()
+        return JsonResponse({
+            'rss_mb': round(mem.rss / 1024 / 1024, 2),
+            'vms_mb': round(mem.vms / 1024 / 1024, 2),
+            'percent': round(process.memory_percent(), 2),
+        })
+    return JsonResponse({'error': 'psutil not available'}, status=500)
 
 
 @login_required

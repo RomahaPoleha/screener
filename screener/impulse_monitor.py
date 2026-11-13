@@ -12,6 +12,8 @@ from logging.handlers import RotatingFileHandler
 import logging
 import os
 
+from .memory_config import MAX_CANDLE_AGE_SEC
+
 LOG_DIR = '/app/data'
 LOG_FILE = os.path.join(LOG_DIR, 'impulse_monitor.log')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -28,6 +30,7 @@ _logger.addHandler(_console)
 # Состояние свечей: "{symbol}_{window}_{window_start}" -> {...}
 candle_state = {}
 cooldowns = {}  # cooldowns keyed by same state key
+impulse_active_symbols = set()  # отслеживаемые символы (clean base symbol)
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
@@ -35,6 +38,9 @@ BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 MIN_THRESHOLD = 1.5
 # Сервер считает ОБА окна параллельно
 WINDOWS = [60, 300]
+
+# Максимальное количество отслеживаемых символов в impulse_monitor
+MAX_IMPULSE_SYMBOLS = 200
 
 # Очередь для разделения приёма и обработки
 ticker_queue = None
@@ -48,6 +54,10 @@ def process_ticker_batch(tickers, now_sec):
             continue
 
         clean = symbol[:-4]
+        if len(impulse_active_symbols) >= MAX_IMPULSE_SYMBOLS and clean not in impulse_active_symbols:
+            # Пропускаем новые символы если лимит исчерпан
+            continue
+
         try:
             price = float(ticker.get('c', 0))
             volume = float(ticker.get('q', 0))
@@ -73,6 +83,7 @@ def process_ticker_batch(tickers, now_sec):
                     'window': window,
                     'symbol': clean
                 }
+                impulse_active_symbols.add(clean)
             else:
                 if price < state['low']:
                     state['low'] = price
@@ -100,14 +111,28 @@ def detect_impulses(now_sec):
     impulses = []
 
     # 🔥 MEMORY LEAK PREVENTION: Очистка старых окон candle_state
-    MAX_CANDLE_AGE = 600  # 10 минут = 2 окна по 300с
     old_keys = [
         k for k, v in candle_state.items()
-        if now_sec - v['start_time'] > MAX_CANDLE_AGE
+        if now_sec - v['start_time'] > MAX_CANDLE_AGE_SEC
     ]
     for k in old_keys:
         candle_state.pop(k, None)
         cooldowns.pop(k, None)
+
+    # Очистка impulse_active_symbols: убираем символы, у которых не осталось окон
+    symbols_in_state = set()
+    for state_key in candle_state.keys():
+        base = state_key.split('_')[0]
+        symbols_in_state.add(base)
+    for s in list(impulse_active_symbols):
+        if s not in symbols_in_state:
+            impulse_active_symbols.discard(s)
+
+    # Жёсткий лимит на cooldowns
+    if len(cooldowns) > MAX_IMPULSE_SYMBOLS * len(WINDOWS):
+        oldest = sorted(cooldowns.items(), key=lambda kv: kv[1])[:len(cooldowns) - MAX_IMPULSE_SYMBOLS * len(WINDOWS)]
+        for k, _ in oldest:
+            cooldowns.pop(k, None)
 
     for window in WINDOWS:
         cooldown_ms = max(30000, window * 1000)  # 1 мин → 60с, 5 мин → 300с

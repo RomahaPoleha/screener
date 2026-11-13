@@ -14,6 +14,8 @@ import threading
 from collections import deque
 from django.core.cache import cache
 
+from .memory_config import MAX_VOLUME_HISTORY_DEQUE
+
 # ==========================================
 # КОНСТАНТЫ
 # ==========================================
@@ -29,6 +31,9 @@ PCT_WEIGHT = 0.2
 POLL_INTERVAL = 60                   # лёгкий скан каждые 60 сек
 
 STABLECOINS = {'USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD', 'BUSD', 'USDP', 'EURC'}
+
+# Глобальный лимит на количество символов в volume_history
+MAX_VOLUME_HISTORY_SYMBOLS = 500
 
 # ==========================================
 # ИСТОРИЯ ОБЪЁМА (для RVOL)
@@ -98,8 +103,19 @@ def update_volume_history(tickers, clean_fn):
             if not clean:
                 continue
             qv = float(data.get('quoteVolume') or 0)
-            dq = volume_history.setdefault(clean, deque(maxlen=120))
+            dq = volume_history.setdefault(clean, deque(maxlen=MAX_VOLUME_HISTORY_DEQUE))
             dq.append((now, qv))
+
+        # Ограничение количества символов в volume_history
+        if len(volume_history) > MAX_VOLUME_HISTORY_SYMBOLS:
+            # Удаляем самые старые записи (по последнему timestamp)
+            sorted_symbols = sorted(
+                volume_history.items(),
+                key=lambda kv: kv[1][-1][0] if kv[1] else 0
+            )
+            for symbol, _ in sorted_symbols[:len(volume_history) - MAX_VOLUME_HISTORY_SYMBOLS]:
+                del volume_history[symbol]
+
     _cleanup_old_entries()
 
 def get_rvol(clean, quote_vol_24h):

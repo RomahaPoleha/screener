@@ -39,6 +39,7 @@ urlpatterns = [
     path('api/admin-stats/', views.api_admin_stats, name='api_admin_stats'),
     path('api/exchange-alpha-map/', views.api_exchange_alpha_map, name='api_exchange_alpha_map'),
     path('api/densities/', views.api_densities_table, name='api_densities_table'),
+    path('api/health/memory/', views.api_health_memory, name='api_health_memory'),
 
 
 ]
