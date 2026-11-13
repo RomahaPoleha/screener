@@ -887,21 +887,6 @@ def api_impulse_alerts(request):
 
 @login_required
 @require_http_methods(["GET"])
-def api_online_users(request):
-    """API: количество пользователей онлайн (по требованию, без постоянного опроса БД).
-    Данные берутся из кэша, куда OnlineCacheMiddleware пишет ключи online:<user_id>
-    при каждом запросе аутентифицированного пользователя.
-    """
-    try:
-        keys = cache.keys("online:*")
-        count = len(keys) if keys else 0
-    except Exception:
-        count = 0
-    return JsonResponse({'online': count})
-
-
-@login_required
-@require_http_methods(["GET"])
 def api_exchanges(request, symbol):
     """API: проверка доступности символа на биржах"""
     symbol = symbol.upper().strip()
@@ -1509,18 +1494,23 @@ def api_densities_table(request):
 @login_required
 @require_http_methods(["GET"])
 def api_admin_stats(request):
-    """Статистика для админа: всего пользователей и онлайн (активны за последние 15 мин)"""
+    """Статистика для админа: всего пользователей и онлайн (из кэша, без БД)"""
     profile = getattr(request.user, 'profile', None)
     if not (request.user.is_staff or (profile and profile.can_view_stats)):
         return JsonResponse({'error': 'forbidden'}, status=403)
 
-    from django.utils import timezone
-    from datetime import timedelta
-    from .models import UserProfile
+    # Все значения из кэша — без обращений к PostgreSQL
+    try:
+        total = cache.get('admin_stats:total_users')
+        if total is None:
+            total = User.objects.count()
+            cache.set('admin_stats:total_users', total, 300)
 
-    total = User.objects.count()
-    online_cutoff = timezone.now() - timedelta(minutes=15)
-    online = UserProfile.objects.filter(last_activity__gte=online_cutoff).count()
+        keys = cache.keys("online:*")
+        online = len(keys) if keys else 0
+    except Exception:
+        total = 0
+        online = 0
 
     return JsonResponse({
         'total_users': total,

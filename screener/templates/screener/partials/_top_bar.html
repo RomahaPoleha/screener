@@ -17,17 +17,6 @@
     <div style="flex:1;"></div>
 
     <div style="display:flex; gap:8px; align-items:center;">
-        <!-- Онлайн пользователи (кнопка по требованию) -->
-        <div style="position:relative; display:inline-block;">
-            <button class="sound-toggle" id="onlineUsersBtn" onclick="toggleOnlineUsersPopup()" style="font-size:14px;">👥 Онлайн</button>
-            <div id="onlineUsersPopup" class="online-users-popup" style="display:none;">
-                <div style="padding:8px 12px; font-size:12px; color:#e5e7eb;">
-                    <span id="onlineUsersCount">–</span> пользователей онлайн
-                </div>
-                <div style="padding:4px 12px; font-size:10px; color:#9ca3af;">обновить снова</div>
-            </div>
-        </div>
-
         <!-- История алертов (крайняя слева из трёх, видна только когда включена) -->
         <div id="alertHistoryWrap" style="position:relative; display:none;">
             <button class="sound-toggle" id="alertHistoryBtn" onclick="toggleAlertHistory()">
@@ -54,29 +43,6 @@
   </div>
 </div>
 
-<style>
-.online-users-popup {
-    position: absolute;
-    top: 120%;
-    left: 50%;
-    transform: translateX(-50%);
-    min-width: 160px;
-    background: #1f2937;
-    border: 1px solid #374151;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    z-index: 1000;
-    text-align: center;
-}
-.online-users-popup div:last-child {
-    cursor: pointer;
-    margin-top: 2px;
-}
-.online-users-popup div:last-child:hover {
-    color: #22d3ee;
-}
-</style>
-
 <script>
 (function() {
     if (!document.getElementById('adminOnlineWrap')) return;
@@ -95,45 +61,5 @@
     }
     fetchAdminStats();
     setInterval(fetchAdminStats, 60000);
-})();
-
-// Онлайн пользователи — попап по требованию
-(function() {
-    const btn = document.getElementById('onlineUsersBtn');
-    const popup = document.getElementById('onlineUsersPopup');
-    const countEl = document.getElementById('onlineUsersCount');
-    if (!btn || !popup) return;
-
-    async function fetchOnline() {
-        try {
-            const res = await fetch('/api/online-users/');
-            if (!res.ok) return;
-            const data = await res.json();
-            if (countEl) countEl.textContent = data.online ?? '–';
-        } catch (e) {
-            console.warn('Failed to fetch online users:', e);
-        }
-    }
-
-    function toggleOnlineUsersPopup() {
-        const isOpen = popup.style.display === 'block';
-        if (isOpen) {
-            popup.style.display = 'none';
-            return;
-        }
-        fetchOnline();
-        popup.style.display = 'block';
-        // Автозакрытие через 3 секунды
-        setTimeout(() => { popup.style.display = 'none'; }, 3000);
-    }
-
-    window.toggleOnlineUsersPopup = toggleOnlineUsersPopup;
-
-    // Закрыть при клике вне попапа
-    document.addEventListener('click', (e) => {
-        if (!btn.contains(e.target) && !popup.contains(e.target)) {
-            popup.style.display = 'none';
-        }
-    });
 })();
 </script>
