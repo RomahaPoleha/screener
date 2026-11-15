@@ -203,7 +203,7 @@
 
     async function fetchMasterList() {
         try {
-            const res = await fetch('/api/binance-market/?market=all');
+            const res = await fetch('/api/binance-master/?market=all');
             if (!res.ok) {
                 container.innerHTML = '<div style="color:#ef4444; padding:8px;">Ошибка загрузки мастер-листа</div>';
                 return;
