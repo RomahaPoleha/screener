@@ -136,16 +136,10 @@ document.addEventListener('click', (e) => {
     dropdown.classList.remove('active');
 });
 
-document.addEventListener('click', (e) => {
-    console.log('GLOBAL CLICK:', e.target.tagName, e.target.id, e.target.className);
-    if (e.target.id === 'columnGearBtn' || e.target.closest('#columnGearBtn')) {
-        console.log('GEAR BUTTON CLICKED via global handler!');
-    }
-}, true);
+document.addEventListener('DOMContentLoaded', () => {
     // Ensure overlays are closed on load
     document.querySelectorAll('.trades-overlay, .densities-overlay').forEach(el => el.classList.remove('active'));
     applyGridColumnLayout();
-    
 });
 
 function resetFilters() {
