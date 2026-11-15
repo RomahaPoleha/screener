@@ -1536,7 +1536,11 @@ def api_densities_table(request):
 @login_required
 @require_http_methods(["GET"])
 def api_binance_master(request):
-    """API: мастер-лист Binance — монеты, которые сейчас мониторятся"""
+    """API: мастер-лист Binance — монеты, которые сейчас мониторятся (только для персонала)"""
+    profile = getattr(request.user, 'profile', None)
+    if not (request.user.is_staff or (profile and profile.can_view_stats)):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+
     import time
     from django.core.cache import cache
 

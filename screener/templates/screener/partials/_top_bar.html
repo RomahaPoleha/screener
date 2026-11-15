@@ -12,6 +12,11 @@
         <span style="font-weight:700;">👥 Онлайн: <span id="adminOnlineCount">–</span></span>
         <span style="opacity:0.7; font-size:10px;">/ <span id="adminTotalCount">–</span></span>
     </div>
+
+    <!-- Кнопка открытия таблицы мастер-листа (мастер-список мониторинга Binance) -->
+    <button id="masterListBtn" class="sound-toggle" onclick="toggleMasterListModal()" style="font-size:11px; padding:3px 8px; background:rgba(34,211,238,0.1); border:1px solid #22d3ee; color:#22d3ee; border-radius:4px; cursor:pointer; font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:0.5px;">
+        📋 Мастер-лист
+    </button>
     {% endif %}
 
     <div style="flex:1;"></div>
@@ -61,5 +66,242 @@
     }
     fetchAdminStats();
     setInterval(fetchAdminStats, 60000);
+})();
+
+// ---------- Мастер-лист мониторинга Binance ----------
+(function() {
+    const btn = document.getElementById('masterListBtn');
+    if (!btn) return;
+
+    // Создаём модальное окно
+    const modal = document.createElement('div');
+    modal.id = 'masterListModal';
+    modal.style.display = 'none';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.background = 'rgba(0,0,0,0.7)';
+    modal.style.zIndex = '9999';
+    modal.style.backdropFilter = 'blur(4px)';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.fontFamily = "'JetBrains Mono', monospace";
+
+    const content = document.createElement('div');
+    content.style.background = '#111827';
+    content.style.border = '1px solid #22d3ee';
+    content.style.borderRadius = '8px';
+    content.style.width = 'min(95vw, 900px)';
+    content.style.maxHeight = '85vh';
+    content.style.overflow = 'hidden';
+    content.style.display = 'flex';
+    content.style.flexDirection = 'column';
+
+    const header = document.createElement('div');
+    header.style.padding = '12px 16px';
+    header.style.borderBottom = '1px solid #22d3ee';
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+
+    const title = document.createElement('div');
+    title.textContent = 'Мастер-лист мониторинга Binance';
+    title.style.color = '#22d3ee';
+    title.style.fontWeight = '700';
+    title.style.fontSize = '14px';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Закрыть';
+    closeBtn.style.background = 'transparent';
+    closeBtn.style.border = '1px solid #22d3ee';
+    closeBtn.style.color = '#22d3ee';
+    closeBtn.style.padding = '4px 10px';
+    closeBtn.style.borderRadius = '4px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.fontSize = '11px';
+    closeBtn.onclick = () => { modal.style.display = 'none'; };
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    const body = document.createElement('div');
+    body.style.padding = '16px';
+    body.style.overflowY = 'auto';
+    body.style.display = 'flex';
+    body.style.flexDirection = 'column';
+    body.style.gap = '16px';
+
+    const tabsWrap = document.createElement('div');
+    tabsWrap.style.display = 'flex';
+    tabsWrap.style.gap = '8px';
+    tabsWrap.style.marginBottom = '8px';
+
+    const tabFutures = document.createElement('button');
+    tabFutures.textContent = 'Futures';
+    tabFutures.style.background = '#22d3ee';
+    tabFutures.style.color = '#000';
+    tabFutures.style.border = 'none';
+    tabFutures.style.padding = '6px 12px';
+    tabFutures.style.borderRadius = '4px';
+    tabFutures.style.cursor = 'pointer';
+    tabFutures.style.fontSize = '11px';
+    tabFutures.style.fontWeight = '700';
+    tabFutures.onclick = () => { showTab('futures'); };
+
+    const tabSpot = document.createElement('button');
+    tabSpot.textContent = 'Spot';
+    tabSpot.style.background = 'transparent';
+    tabSpot.style.border = '1px solid #22d3ee';
+    tabSpot.style.color = '#22d3ee';
+    tabSpot.style.padding = '6px 12px';
+    tabSpot.style.borderRadius = '4px';
+    tabSpot.style.cursor = 'pointer';
+    tabSpot.style.fontSize = '11px';
+    tabSpot.style.fontWeight = '700';
+    tabSpot.onclick = () => { showTab('spot'); };
+
+    tabsWrap.appendChild(tabFutures);
+    tabsWrap.appendChild(tabSpot);
+
+    const container = document.createElement('div');
+    container.id = 'masterListContainer';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '12px';
+
+    body.appendChild(tabsWrap);
+    body.appendChild(container);
+    content.appendChild(header);
+    content.appendChild(body);
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+
+    // Закрытие по клику вне окна
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+
+    // Закрытие по ESC
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.style.display = 'none'; });
+
+    window.toggleMasterListModal = function() {
+        if (modal.style.display === 'block') {
+            modal.style.display = 'none';
+        } else {
+            modal.style.display = 'block';
+            fetchMasterList();
+        }
+    };
+
+    function showTab(market) {
+        tabFutures.style.background = market === 'futures' ? '#22d3ee' : 'transparent';
+        tabFutures.style.color = market === 'futures' ? '#000' : '#22d3ee';
+        tabSpot.style.background = market === 'spot' ? '#22d3ee' : 'transparent';
+        tabSpot.style.color = market === 'spot' ? '#000' : '#22d3ee';
+        renderMarket(market);
+    }
+
+    async function fetchMasterList() {
+        try {
+            const res = await fetch('/api/binance-market/?market=all');
+            if (!res.ok) {
+                container.innerHTML = '<div style="color:#ef4444; padding:8px;">Ошибка загрузки мастер-листа</div>';
+                return;
+            }
+            const data = await res.json();
+            window._masterData = data;
+            showTab('futures');
+        } catch (e) {
+            container.innerHTML = '<div style="color:#ef4444; padding:8px;">Ошибка сети при загрузке мастер-листа</div>';
+            console.error(e);
+        }
+    }
+
+    function renderMarket(market) {
+        const data = window._masterData;
+        if (!data) return;
+        const marketData = data.markets[market];
+        if (!marketData) {
+            container.innerHTML = `<div style="color:#94a3b8;">Нет данных для ${market}</div>`;
+            return;
+        }
+
+        const symbols = marketData.symbols || [];
+        const withData = new Set(marketData.symbols_with_data || []);
+
+        // Таблица
+        const tableWrap = document.createElement('div');
+        tableWrap.style.overflowX = 'auto';
+
+        const table = document.createElement('table');
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.style.fontSize = '11px';
+        table.style.color = '#e2e8f0';
+
+        const thead = document.createElement('thead');
+        const trHead = document.createElement('tr');
+        ['#', 'Символ', 'В мониторинге', 'Есть данные в Redis'].forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            th.style.textAlign = 'left';
+            th.style.padding = '6px 8px';
+            th.style.borderBottom = '1px solid #22d3ee';
+            th.style.color = '#22d3ee';
+            th.style.fontWeight = '700';
+            trHead.appendChild(th);
+        });
+        thead.appendChild(trHead);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        symbols.forEach((sym, i) => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+            tr.style.padding = '4px 8px';
+
+            const tdNum = document.createElement('td');
+            tdNum.textContent = i + 1;
+            tdNum.style.padding = '6px 8px';
+            tdNum.style.color = '#94a3b8';
+
+            const tdSym = document.createElement('td');
+            tdSym.textContent = sym;
+            tdSym.style.padding = '6px 8px';
+            tdSym.style.color = '#e2e8f0';
+            tdSym.style.fontWeight = '700';
+
+            const tdMon = document.createElement('td');
+            tdMon.textContent = '✅ Да';
+            tdMon.style.padding = '6px 8px';
+            tdMon.style.color = '#22c55e';
+
+            const tdData = document.createElement('td');
+            tdData.textContent = withData.has(sym) ? '✅ Да' : '⚪ Нет';
+            tdData.style.padding = '6px 8px';
+            tdData.style.color = withData.has(sym) ? '#22c55e' : '#94a3b8';
+
+            tr.appendChild(tdNum);
+            tr.appendChild(tdSym);
+            tr.appendChild(tdMon);
+            tr.appendChild(tdData);
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+
+        const info = document.createElement('div');
+        info.style.marginTop = '8px';
+        info.style.color = '#94a3b8';
+        info.style.fontSize = '10px';
+        info.textContent = `Всего: ${marketData.count} | С данными: ${marketData.with_data} | Сервер: ${new Date(data.server_time * 1000).toLocaleString()}`;
+
+        container.innerHTML = '';
+        container.appendChild(tableWrap);
+        tableWrap.appendChild(table);
+        container.appendChild(info);
+    }
+
+    // По умолчанию открываем futures
+    showTab('futures');
 })();
 </script>
