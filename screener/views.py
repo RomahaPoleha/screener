@@ -1559,16 +1559,26 @@ def api_binance_master(request):
         if not isinstance(symbols, list):
             symbols = []
 
-        # Сколько из мастер-листа имеют реальные данные в Redis прямо сейчас
+        # Сколько плотностей у каждого символа в Redis прямо сейчас
         check_keys = [f"scalp:{m}:binance:{s}" for s in symbols]
         cached_data = cache.get_many(check_keys) if check_keys else {}
-        with_data = [s for s in symbols if cached_data.get(f"scalp:{m}:binance:{s}")]
+        density_counts = {}
+        with_data = []
+        for s in symbols:
+            key = f"scalp:{m}:binance:{s}"
+            data = cached_data.get(key)
+            if data and isinstance(data, list):
+                density_counts[s] = len(data)
+                with_data.append(s)
+            else:
+                density_counts[s] = 0
 
         result[m] = {
             'symbols': symbols,
             'count': len(symbols),
             'with_data': len(with_data),
             'symbols_with_data': with_data,
+            'density_counts': density_counts,
         }
         total += len(symbols)
 

@@ -227,7 +227,7 @@
         }
 
         const symbols = marketData.symbols || [];
-        const withData = new Set(marketData.symbols_with_data || []);
+        const densityCounts = marketData.density_counts || {};
 
         // Таблица
         const tableWrap = document.createElement('div');
@@ -241,7 +241,7 @@
 
         const thead = document.createElement('thead');
         const trHead = document.createElement('tr');
-        ['#', 'Символ', 'В мониторинге', 'Есть данные в Redis'].forEach(h => {
+        ['#', 'Символ', 'В мониторинге', 'Кол-во плотностей'].forEach(h => {
             const th = document.createElement('th');
             th.textContent = h;
             th.style.textAlign = 'left';
@@ -276,15 +276,17 @@
             tdMon.style.padding = '6px 8px';
             tdMon.style.color = '#22c55e';
 
-            const tdData = document.createElement('td');
-            tdData.textContent = withData.has(sym) ? '✅ Да' : '⚪ Нет';
-            tdData.style.padding = '6px 8px';
-            tdData.style.color = withData.has(sym) ? '#22c55e' : '#94a3b8';
+            const tdCnt = document.createElement('td');
+            const cnt = densityCounts[sym] || 0;
+            tdCnt.textContent = cnt;
+            tdCnt.style.padding = '6px 8px';
+            tdCnt.style.color = cnt > 0 ? '#22c55e' : '#94a3b8';
+            tdCnt.style.fontWeight = '700';
 
             tr.appendChild(tdNum);
             tr.appendChild(tdSym);
             tr.appendChild(tdMon);
-            tr.appendChild(tdData);
+            tr.appendChild(tdCnt);
             tbody.appendChild(tr);
         });
         table.appendChild(tbody);
@@ -293,7 +295,7 @@
         info.style.marginTop = '8px';
         info.style.color = '#94a3b8';
         info.style.fontSize = '10px';
-        info.textContent = `Всего: ${marketData.count} | С данными: ${marketData.with_data} | Сервер: ${new Date(data.server_time * 1000).toLocaleString()}`;
+        info.textContent = `Всего: ${marketData.count} | Сервер: ${new Date(data.server_time * 1000).toLocaleString()}`;
 
         container.innerHTML = '';
         container.appendChild(tableWrap);
