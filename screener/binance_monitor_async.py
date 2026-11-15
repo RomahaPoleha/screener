@@ -410,6 +410,12 @@ def _detect_layering(book, mid, log_func=print, symbol=None, market='futures'):
     return suspicious
 
 
+def _trim_book(book, limit):
+    for side in ('bids', 'asks'):
+        items = sorted(book[side].items(), key=lambda kv: kv[0] * kv[1], reverse=True)
+        book[side] = dict(items[:limit])
+
+
 async def sync_to_cache_async(symbol, market='futures', log_func=print):
     try:
         if market == 'futures':
@@ -760,6 +766,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
             if changed:
                 binance_futures_density_timestamps[symbol] = ts
+                _trim_book(book, MAX_ORDER_BOOK_LEVELS)
     else:
         async with binance_spot_lock:
             if symbol not in binance_spot_order_books:
@@ -822,6 +829,7 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
 
             if changed:
                 binance_spot_density_timestamps[symbol] = ts
+                _trim_book(book, MAX_ORDER_BOOK_LEVELS)
 
     if changed:
         key = f"binance:{market}:{symbol}"
