@@ -984,18 +984,15 @@ async def periodic_refresh(log_func=print):
             else:
                 pass
 
-            # 🔥 Фильтруем master-лист: оставляем только символы с реальными данными в Redis
-            # Это ускоряет api_densities_table, который иначе перебирает пустые символы
-            try:
-                loop = asyncio.get_running_loop()
-                # Формируем ключи для проверки: scalp:{market}:binance:{symbol}
-                check_keys = [f"scalp:futures:binance:{sym}" for sym in new_active]
-                # batch get - один round-trip вместо N
-                cached_data = await loop.run_in_executor(None, cache.get_many, check_keys)
-                # Оставляем только те, у кого есть данные
-                new_active = [sym for sym in new_active if cached_data.get(f"scalp:futures:binance:{sym}")]
-            except Exception as e:
-                log_func(f"⚠️ binance futures: ошибка фильтрации master-листа: {e}")
+            # 🔥 Фильтрация по Redis отключена: оставим все 50 символов (10 по объёму + 40 по натру),
+            # даже если у кого-то ещё нет плотностей. Монитор будет смотреть стаканы всех символов.
+            #try:
+            #    loop = asyncio.get_running_loop()
+            #    check_keys = [f"scalp:futures:binance:{sym}" for sym in new_active]
+            #    cached_data = await loop.run_in_executor(None, cache.get_many, check_keys)
+            #    new_active = [sym for sym in new_active if cached_data.get(f"scalp:futures:binance:{sym}")]
+            #except Exception as e:
+            #    log_func(f"⚠️ binance futures: ошибка фильтрации master-листа: {e}")
 
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
@@ -1054,14 +1051,14 @@ async def periodic_refresh(log_func=print):
             else:
                 pass
 
-            # 🔥 Фильтруем master-лист spot: оставляем только символы с реальными данными
-            try:
-                loop = asyncio.get_running_loop()
-                check_keys = [f"scalp:spot:binance:{sym}" for sym in new_active]
-                cached_data = await loop.run_in_executor(None, cache.get_many, check_keys)
-                new_active = [sym for sym in new_active if cached_data.get(f"scalp:spot:binance:{sym}")]
-            except Exception as e:
-                log_func(f"⚠️ binance spot: ошибка фильтрации master-листа: {e}")
+            # 🔥 Фильтрация по Redis отключена (spot): оставим все символы, даже без плотностей.
+            #try:
+            #    loop = asyncio.get_running_loop()
+            #    check_keys = [f"scalp:spot:binance:{sym}" for sym in new_active]
+            #    cached_data = await loop.run_in_executor(None, cache.get_many, check_keys)
+            #    new_active = [sym for sym in new_active if cached_data.get(f"scalp:spot:binance:{sym}")]
+            #except Exception as e:
+            #    log_func(f"⚠️ binance spot: ошибка фильтрации master-листа: {e}")
 
             # 🔥 НОВОЕ: Публикуем master-список в Redis
             try:
