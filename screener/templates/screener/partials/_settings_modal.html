@@ -2,9 +2,9 @@
 <!-- Модальное окно настроек -->
 <div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
 <div class="modal-dialog modal-dialog-centered" style="max-width: 1000px;">
-<div class="modal-content" style="background:#1a1a1a; border:1px solid #333333; color:#e5e5e5;">
-<div class="modal-header" style="border-bottom:1px solid #333333;">
-<h5 class="modal-title" style="color:#ffffff; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;">Настройки</h5>
+<div class="modal-content" style="background:var(--bg-glass); border:1px solid var(--border); color:var(--text);">
+<div class="modal-header" style="border-bottom:1px solid var(--border-soft);">
+<h5 class="modal-title" style="color:var(--text); font-weight:700; letter-spacing:0.5px; text-transform:uppercase;">Настройки</h5>
 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
 </div>
 <div class="modal-body" style="padding:0; display:flex; min-height:440px;">
@@ -22,59 +22,59 @@
 <div class="settings-tab-content active" id="tab-display">
 <div class="modal-section">
 <div class="modal-section-title">График</div>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="showVolumeHistogram" checked style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="showVolumeHistogram" checked style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Гистограмма объёма</span>
 <span class="help-tip" data-tip="Отображает столбики объёма под графиком свечей. Помогает оценить активность торгов и подтвердить движения цены.">?</span>
 </label>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Инструменты рисования</div>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="showDrawingTools" checked onchange="toggleDrawingToolsVisibility()" style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Панель инструментов</span>
 <span class="help-tip" data-tip="Показывает или скрывает панель инструментов рисования на графике.">?</span>
 </label>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5;">
-<input type="checkbox" id="showGrid" checked style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text);">
+<input type="checkbox" id="showGrid" checked style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Сетка</span>
 <span class="help-tip" data-tip="Отображает сетку на графике для удобства чтения уровней цены.">?</span>
 </label>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Интеграция с Tiger x</div>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="tigerLinkEnabled" checked style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="tigerLinkEnabled" checked style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Включить линковку с терминалом Tiger</span>
 <span class="help-tip" data-tip="Позволяет открывать монету из скринера в терминале Tiger.com по клику на F/S биржи.">?</span>
 </label>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="tigerAutoLinkEnabled" style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="tigerAutoLinkEnabled" style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Авто-линковка при импульсе</span>
 <span class="help-tip" data-tip="При импульсе (амплитуда >= порога) автоматически переключает окна Tiger по списку групп (round-robin, до 5).">?</span>
 </label>
 <div id="tigerAutoLinkGroupsWrap" style="margin-bottom:10px;">
-    <div style="font-size:11px; color:#999; margin-bottom:6px;">Группы для авто-линковки (до 5):</div>
+    <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">Группы для авто-линковки (до 5):</div>
     <div id="tigerAutoLinkGroups" style="display:flex; flex-direction:column; gap:6px;"></div>
-    <button type="button" id="tigerAutoLinkAdd" style="margin-top:6px; background:#2a2a2a; border:1px solid #444; color:#fff; padding:4px 10px; cursor:pointer; font-size:12px;">+ Добавить группу</button>
+    <button type="button" id="tigerAutoLinkAdd" style="margin-top:6px; background:var(--bg-glass); border:1px solid var(--border-soft); color:var(--text); padding:4px 10px; cursor:pointer; font-size:12px;">+ Добавить группу</button>
   </div>
-  <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-    <span style="color:#999; min-width:170px;">Кулдаун стакана (сек):</span>
+  <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+    <span style="color:var(--text-muted); min-width:170px;">Кулдаун стакана (сек):</span>
     <input type="number" id="tigerGroupCooldown" min="1" max="180" step="1" value="60"
-      style="width:60px; background:#0f0f0f; border:1px solid #444; color:#fff; padding:4px 8px; border-radius:0; font-size:12px; text-align:center;"
+      style="width:60px; background:var(--bg-glass-strong); border:1px solid var(--border-soft); color:var(--text); padding:4px 8px; border-radius:0; font-size:12px; text-align:center;"
       onchange="const v=parseInt(this.value); if(isNaN(v)) this.value=60; else if(v<1) this.value=1; else if(v>180) this.value=180;">
     <span class="help-tip" data-tip="Минимальное время в секундах перед повторным использованием той же группы (стакана). Если группа в кулдауне, она пропускается и берётся следующая свободная.">?</span>
   </label>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Кнопки меню</div>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="showTradesBtnToggle" checked style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="showTradesBtnToggle" checked style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Блок-сделки</span>
 <span class="help-tip" data-tip="Показывает или скрывает кнопку «Блок-сделки» в верхнем меню.">?</span>
 </label>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="showDensitiesBtnToggle" checked style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="showDensitiesBtnToggle" checked style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Карта плотностей</span>
 <span class="help-tip" data-tip="Показывает или скрывает кнопку «Карта плотностей» в верхнем меню.">?</span>
 </label>
@@ -87,12 +87,12 @@
 <div style="flex:1; min-width:0;">
 <div class="modal-section" style="margin-bottom:12px; padding-bottom:12px;">
 <div class="modal-section-title" style="margin-bottom:8px;">Recon</div>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="reconPanelToggle" style="accent-color:#f59e0b; width:14px; height:14px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="reconPanelToggle" style="accent-color:var(--accent); width:14px; height:14px;">
 <span>Панель Recon</span>
 <span class="help-tip" data-tip="Показывает панель с плотностями ордеров с бирж прямо на графике.">?</span>
 </label>
-<div class="modal-section-title" style="font-size:10px; color:#999999; margin-bottom:8px;">Мин. объём (USDT)</div>
+<div class="modal-section-title" style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">Мин. объём (USDT)</div>
 <div id="reconSettingsContainer" style="display:flex; flex-direction:column; gap:6px;"></div>
 </div>
 </div>
@@ -101,7 +101,7 @@
 <div class="modal-section" style="margin-bottom:0;">
 <div class="modal-section-title" style="margin-bottom:8px;">Scalp</div>
 <div style="height:26px;"></div>
-<div class="modal-section-title" style="font-size:10px; color:#999999; margin-bottom:8px;">Мин. объём (USDT)</div>
+<div class="modal-section-title" style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">Мин. объём (USDT)</div>
 <div id="scalpExchangesContainer" style="display:flex; flex-direction:column; gap:6px;"></div>
 </div>
 </div>
@@ -111,42 +111,42 @@
 <div class="settings-tab-content" id="tab-alerts">
 <div class="modal-section">
     <div class="modal-section-title">Импульс</div>
-    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:12px;">
-        <input type="checkbox" id="volumeAlertToggle" style="accent-color:#f59e0b; width:16px; height:16px;">
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:12px;">
+        <input type="checkbox" id="volumeAlertToggle" style="accent-color:var(--accent); width:16px; height:16px;">
         <span>Импульс</span>
 <span class="help-tip" data-tip="Отслеживает резкие движения цены (импульсы) и оповещает о них звуком.">?</span>
     </label>
-    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-        <span style="color:#999999; min-width:170px;">Таймфрейм:</span>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); margin-bottom:10px;">
+        <span style="color:var(--text-muted); min-width:170px;">Таймфрейм:</span>
 <span class="help-tip" data-tip="Период, за который измеряется амплитуда свечи.">?</span>
-        <select id="priceImpulseWindow" style="width:100px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 8px; border-radius:0; font-size:12px;">
+        <select id="priceImpulseWindow" style="width:100px; background:var(--bg-glass-strong); border:1px solid var(--border-soft); color:var(--text); padding:4px 8px; border-radius:0; font-size:12px;">
             <option value="60">1 минута</option>
             <option value="300">5 минут</option>
         </select>
     </label>
-    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-        <span style="color:#999999; min-width:170px;">Мин. амплитуда (%):</span>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); margin-bottom:10px;">
+        <span style="color:var(--text-muted); min-width:170px;">Мин. амплитуда (%):</span>
 <span class="help-tip" data-tip="Минимальный процент изменения цены для срабатывания оповещения.">?</span>
         <input type="number" id="priceImpulseThreshold" value="1.5" min="1.5" max="20" step="0.1"
-            style="width:70px; background:#0f0f0f; border:1px solid #444444; color:#ffffff; padding:4px 8px; border-radius:0; font-size:12px;">
+            style="width:70px; background:var(--bg-glass-strong); border:1px solid var(--border-soft); color:var(--text); padding:4px 8px; border-radius:0; font-size:12px;">
     </label>
-    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-        <span style="color:#999999; min-width:170px;">Громкость оповещения:</span>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); margin-bottom:10px;">
+        <span style="color:var(--text-muted); min-width:170px;">Громкость оповещения:</span>
 <span class="help-tip" data-tip="Громкость звукового сигнала при импульсе.">?</span>
-        <input type="range" id="alertBeepVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
+        <input type="range" id="alertBeepVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:var(--accent);">
     </label>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Часовые звуки</div>
-<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:#e5e5e5; margin-bottom:10px;">
-<input type="checkbox" id="soundToggleModal" onchange="toggleSound()" style="accent-color:#f59e0b; width:16px; height:16px;">
+<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+<input type="checkbox" id="soundToggleModal" onchange="toggleSound()" style="accent-color:var(--accent); width:16px; height:16px;">
 <span>Оповещения</span>
 <span class="help-tip" data-tip="Звуковые сигналы за 5 и 1 минуту до начала нового часа.">?</span>
 </label>
-<label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#e5e5e5;">
-<span style="color:#999999; min-width:170px;">Громкость звука:</span>
+<label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text);">
+<span style="color:var(--text-muted); min-width:170px;">Громкость звука:</span>
 <span class="help-tip" data-tip="Громкость часовых звуковых сигналов.">?</span>
-<input type="range" id="hourSoundVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:#f59e0b;">
+<input type="range" id="hourSoundVolume" min="0" max="1" step="0.05" style="flex:1; accent-color:var(--accent);">
 </label>
 </div>
 </div>
@@ -154,31 +154,31 @@
 <div class="settings-tab-content" id="tab-help">
 <div class="modal-section">
 <div class="modal-section-title">Блок сделок</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Показывает крупные сделки на рынке в реальном времени. Помогает видеть, где концентрируются большие объёмы и в какую сторону движется крупный капитал.
 </p>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Карта плотностей</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Компактная таблица по всем биржам в одном окне. Отображает уровни цен с большими скоплениями ордеров (плотностями) на биржах. Плотности — это «стены» заявок, которые могут сдерживать или ускорять движение цены.
 </p>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Recon</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Отображает плотности ордеров в реальном времени прямо на графике с разных бирж. Позволяет визуально оценить, где находятся крупные заявки относительно текущей цены.
 </p>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Scalp</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Технология отслеживания плотностей ордеров. Обнаруживает устойчивые уровни с крупными заявками, которые могут влиять на цену.
 </p>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Торговые площадки</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Показывает, на каких биржах торгуется монета (Binance, Bybit, OKX, Gate.io, MEXC, Bitget, Binance Alpha)
     и в каких рынках (Futures / Spot). Открывается при зажатом <b>Ctrl</b> + наведении на монету в таблице.
     Клик по <b>F</b> или <b>S</b> отправляет символ в терминал Tiger.com (если линковка включена).
@@ -186,7 +186,7 @@
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Интеграция с Tiger x</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Открывает монету из скринера прямо в терминале Tiger.com в выбранной группе линковки. Требуется установленный терминал Tiger.com для Windows.
     Включите: <b>Настройки → Локальный сервер сигналов → «Включить сервер сигналов»</b> (порт 7819).
     Ручное использование: «Торговые площадки» → клик по F или S нужной биржи.
@@ -195,7 +195,7 @@
 </p>
 <p style="font-size:13px; margin:0;">
     <a href="https://www.tiger.com/ru/terminal/download" target="_blank" rel="noopener"
-       style="color:#f59e0b; text-decoration:underline;">Скачать Tiger.com для Windows</a>
+       style="color:var(--accent); text-decoration:underline;">Скачать Tiger.com для Windows</a>
 </p>
 </div>
 </div>
@@ -203,64 +203,64 @@
 <div class="settings-tab-content" id="tab-about">
 <div class="modal-section">
 <div class="modal-section-title">О скринере</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Друзья, наш скринер остаётся бесплатным для всех пользователей. Но за его стабильной работой стоят реальные расходы:
     мы — небольшая независимая команда и пока сами оплачиваем серверы и платные API, чтобы инструмент был доступен каждому.
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Если наш продукт приносит вам пользу, мы будем рады вашей поддержке. Это можно сделать двумя удобными способами:
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     <b>🤝 Взаимовыгодный (бесплатно для вас)</b>
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 8px 0;">
-    1. Перейдите на сайт Tiger.com по ссылке <a href="https://account.tiger.com/auth" target="_blank" rel="noopener" style="color:#f59e0b; text-decoration:underline;">ссылка</a>
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 8px 0;">
+    1. Перейдите на сайт Tiger.com по ссылке <a href="https://account.tiger.com/auth" target="_blank" rel="noopener" style="color:var(--accent); text-decoration:underline;">ссылка</a>
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 8px 0; padding-left:16px;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 8px 0; padding-left:16px;">
     2. Зарегистрируйте аккаунт.
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 8px 0; padding-left:16px;">
-    3. Перейдите в настройки своего профиля или воспользуйтесь ссылкой <a href="https://account.tiger.com/auth?returnTo=%2Freferrals" target="_blank" rel="noopener" style="color:#f59e0b; text-decoration:underline;">реферальная программа</a>. В поле ввода "реферальный код" введите <code style="background:#f59e0b; color:#000; padding:2px 8px; border-radius:4px; font-size:14px; font-weight:700; letter-spacing:0.5px;">r-boc-rai-yea</code> <button onclick="navigator.clipboard.writeText('r-boc-rai-yea'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1000);" style="background:none;border:none;color:#f59e0b;cursor:pointer;font-size:14px;margin-left:6px;padding:2px 4px;border-radius:4px;" title="Скопировать">📋</button>
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 8px 0; padding-left:16px;">
+    3. Перейдите в настройки своего профиля или воспользуйтесь ссылкой <a href="https://account.tiger.com/auth?returnTo=%2Freferrals" target="_blank" rel="noopener" style="color:var(--accent); text-decoration:underline;">реферальная программа</a>. В поле ввода "реферальный код" введите <code style="background:var(--accent); color:#000; padding:2px 8px; border-radius:4px; font-size:14px; font-weight:700; letter-spacing:0.5px;">r-boc-rai-yea</code> <button onclick="navigator.clipboard.writeText('r-boc-rai-yea'); this.textContent='✓'; setTimeout(()=>this.textContent='📋',1000);" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;margin-left:6px;padding:2px 4px;border-radius:4px;" title="Скопировать">📋</button>
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 8px 0; padding-left:16px;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 8px 0; padding-left:16px;">
     4. Пополните счёт и начните торговать.
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0; padding-left:16px;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0; padding-left:16px;">
     Биржа начислит вам кэшбэк, а мы получим вознаграждение на инфраструктуру и новые идеи.
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     <b>☕ Прямая поддержка</b><br>
     Если вы уже торгуете на другой площадке, но хотите просто сказать «спасибо», вы можете поддержать нас донатом.
     Любая сумма имеет значение и помогает проекту развиваться:
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0; text-align:center;">
-    <img src="{% static 'screener/qr.jpg' %}" alt="QR" style="max-width:200px; height:auto; border:1px solid #333; border-radius:4px;" title="QR">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0; text-align:center;">
+    <img src="{% static 'screener/qr.jpg' %}" alt="QR" style="max-width:200px; height:auto; border:1px solid var(--border-soft); border-radius:4px;" title="QR">
 </p>
-<p style="font-size:12px; color:#999999; line-height:1.6; margin:8px 0 12px 0; text-align:center;">
+<p style="font-size:12px; color:var(--text-muted); line-height:1.6; margin:8px 0 12px 0; text-align:center;">
     Отсканируйте QR-код любым удобным приложением.<br>
     Вы будете перенаправлены на платёжную платформу pay.cloudtips.ru (агрегатор Т‑банка) — безопасный и надёжный способ поддержки проекта.
 </p>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Спасибо, что остаетесь с нами и делаете наше сообщество сильнее!
 </p>
 </div>
 <div class="modal-section">
 <div class="modal-section-title">Telegram</div>
-<p style="font-size:13px; color:#e5e5e5; line-height:1.6; margin:0 0 12px 0;">
+<p style="font-size:13px; color:var(--text); line-height:1.6; margin:0 0 12px 0;">
     Новости, обновления и поддержка:
     <a href="https://t.me/+1jL7QhsDDaRmZTEy" target="_blank" rel="noopener"
-       style="color:#f59e0b; text-decoration:underline;">наш Telegram-канал</a>
+       style="color:var(--accent); text-decoration:underline;">наш Telegram-канал</a>
 </p>
 </div>
 </div>
 </div>
 </div>
-<div class="modal-footer" style="border-top:1px solid #333333;">
+<div class="modal-footer" style="border-top:1px solid var(--border-soft);">
 <div style="display:flex; width:100%; justify-content:space-between; align-items:center;">
-    <a href="{% url 'logout' %}" class="btn btn-danger" style="background:#dc3545; border:none; color:#ffffff; border-radius:0; text-transform:uppercase; letter-spacing:0.5px; text-decoration:none;">Выйти из аккаунта</a>
+    <a href="{% url 'logout' %}" class="btn btn-danger" style="background:linear-gradient(135deg,#dc2626,#b91c1c); border:none; color:#fff; border-radius:var(--radius-sm); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; text-decoration:none; padding:8px 16px;">Выйти из аккаунта</a>
     <div style="display:flex; gap:8px;">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:#2a2a2a; border:none; color:#ffffff; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Закрыть</button>
-        <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:#f59e0b; border:none; color:#000000; font-weight:700; border-radius:0; text-transform:uppercase; letter-spacing:0.5px;">Применить</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="background:var(--bg-glass); border:1px solid var(--border-soft); color:var(--text); border-radius:var(--radius-sm); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; padding:8px 16px;">Закрыть</button>
+        <button type="button" class="btn btn-primary" onclick="applySettings()" style="background:linear-gradient(135deg,#ff8c00,#ff6600); border:none; color:#000; font-weight:700; border-radius:var(--radius-sm); text-transform:uppercase; letter-spacing:0.5px; padding:8px 16px;">Применить</button>
     </div>
 </div>
 </div>
@@ -270,9 +270,9 @@
 <!-- Модалка групп монет -->
 <div class="modal fade" id="coinGroupsModal" tabindex="-1" aria-hidden="true">
 <div class="modal-dialog modal-dialog-centered">
-<div class="modal-content" style="background:#1a1a1a; border:1px solid #333333; color:#e5e5e5;">
-<div class="modal-header" style="border-bottom:1px solid #333333;">
-<h5 class="modal-title" style="color:#ffffff; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Группы монет</h5>
+<div class="modal-content" style="background:var(--bg-glass); border:1px solid var(--border); color:var(--text);">
+<div class="modal-header" style="border-bottom:1px solid var(--border-soft);">
+<h5 class="modal-title" style="color:var(--text); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Группы монет</h5>
 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
 </div>
 <div class="modal-body" id="coinGroupsBody" style="max-height:400px; overflow-y:auto;"></div>

@@ -577,7 +577,7 @@ def api_sound(request, filename):
 @csrf_exempt
 @require_http_methods(["GET"])
 def api_logo(request):
-    """Отдаёт картинку логотипа"""
+    """Отдаёт логотип (PNG)"""
     filepath = BASE_DIR / 'logo.png'
     if not filepath.exists():
         raise Http404('Логотип не найден')

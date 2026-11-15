@@ -400,19 +400,19 @@ function removeReconPanel() {
 function renderReconPanel() {
     if (!reconPanelEl) return;
     const allEnabled = reconAllEnabled;
-    const masterHtml = `<div style="display:flex;align-items:center;gap:6px;padding-right:8px;border-right:1px solid #475569;">
-        <span style="font-weight:700;font-size:11px;color:#f59e0b;">Мастер выключатель</span>
-        <div class="recon-toggle recon-toggle-all" data-all="1" title="Включить/выключить все биржи" style="position:relative;width:40px;height:20px;border-radius:10px;background:${allEnabled ? '#f59e0b' : '#475569'};cursor:pointer;user-select:none;transition:background .2s;">
+const masterHtml = `<div style="display:flex;align-items:center;gap:6px;padding-right:8px;border-right:1px solid var(--border-soft);">
+        <span style="font-weight:700;font-size:11px;color:var(--accent);">Мастер выключатель</span>
+        <div class="recon-toggle recon-toggle-all" data-all="1" title="Включить/выключить все биржи" style="position:relative;width:40px;height:20px;border-radius:10px;background:${allEnabled ? 'var(--accent)' : 'var(--bg-glass)'};border:1px solid var(--accent);cursor:pointer;user-select:none;transition:background .2s;box-shadow:0 0 6px rgba(255,140,0,0.2);">
             <span style="position:absolute;top:2px;left:${allEnabled ? '22px' : '2px'};width:16px;height:16px;border-radius:50%;background:#ffffff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></span>
         </div>
     </div>`;
     reconPanelEl.innerHTML = masterHtml + RECON_EXCHANGES.map(ex => {
         const mkToggle = (market, letter) => {
             const on = reconMarkets[ex.id][market];
-            const bg = on ? 'rgba(59, 130, 246, 0.2)' : 'transparent';
-            const border = on ? `1px solid ${ex.color}` : '1px solid #475569';
-            const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:11px;font-weight:bold;">✓</span>` : '';
-            return `<span style="font-size:10px;color:#94a3b8;">${letter}</span>
+            const bg = on ? 'rgba(255, 140, 0, 0.25)' : 'transparent';
+            const border = on ? `2px solid ${ex.color}` : '1px solid var(--accent)';
+            const checkmark = on ? `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${ex.color};font-size:12px;font-weight:800;">✓</span>` : '';
+            return `<span style="font-size:11px;font-weight:700;color:var(--accent);">${letter}</span>
                 <div class="recon-toggle" data-ex="${ex.id}" data-market="${market}" title="Click: toggle ${letter} ${ex.label}" style="position:relative;width:20px;height:20px;border-radius:3px;background:${bg};border:${border};cursor:pointer;user-select:none;${on ? '' : 'opacity:0.45;'}">
                     ${checkmark}
                 </div>`;

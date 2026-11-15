@@ -1,52 +1,62 @@
-<div class="top-bar">
-  <div style="display:flex; align-items:center; gap:12px; padding:8px 16px; border-radius:0; position:relative; width:100%;">
-    <!-- Логотип -->
-    <a href="/" style="display:flex; align-items:center; gap:8px; text-decoration:none;">
-      <img src="/api/logo/" alt="Recon&Scalp" class="logo-img" style="width:64px; height:64px; object-fit:cover;">
-    </a>
-    <button class="sound-toggle" id="supportBtn" onclick="openSupportModal()" style="font-size:12px; opacity:0.85;">Стать частью команды <span style="color:#22d3ee; font-size:11px;">&#10084;</span></button>
-
-    <!-- Статистика онлайн (для админов и пользователей с правом просмотра статистики) -->
-    {% if request.user.is_staff or request.user.profile.can_view_stats %}
-    <div id="adminOnlineWrap" style="display:flex; align-items:center; gap:6px; padding:4px 10px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#22d3ee;">
-        <span style="font-weight:700;">👥 Онлайн: <span id="adminOnlineCount">–</span></span>
-        <span style="opacity:0.7; font-size:10px;">/ <span id="adminTotalCount">–</span></span>
-    </div>
-
-    <!-- Кнопка открытия таблицы мастер-листа (мастер-список мониторинга Binance) -->
-    <button id="masterListBtn" class="sound-toggle" onclick="toggleMasterListModal()" style="font-size:11px; padding:3px 8px; background:rgba(34,211,238,0.1); border:1px solid #22d3ee; color:#22d3ee; border-radius:4px; cursor:pointer; font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:0.5px;">
-        📋 Мастер-лист
-    </button>
-    {% endif %}
-
-    <div style="flex:1;"></div>
-
-    <div style="display:flex; gap:8px; align-items:center;">
-        <!-- История алертов (крайняя слева из трёх, видна только когда включена) -->
-        <div id="alertHistoryWrap" style="position:relative; display:none;">
-            <button class="sound-toggle" id="alertHistoryBtn" onclick="toggleAlertHistory()">
-                История импульсов <span id="alertBadge" class="alert-badge">0</span>
-            </button>
-            <div id="alertHistoryPanel" class="alert-history-panel">
-                <div class="alert-history-header" style="display:flex; justify-content:space-between; align-items:center;">
-                    <span>Список импульсов</span>
-                    <button onclick="clearAlertHistory()" style="background:transparent; border:1px solid #444444; color:#999999; font-size:10px; padding:2px 8px; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;" onmouseover="this.style.color='#f59e0b'; this.style.borderColor='#f59e0b';" onmouseout="this.style.color='#999999'; this.style.borderColor='#444444';">Очистить</button>
-                </div>
-                <div id="alertHistoryBody" class="alert-history-body"></div>
-            </div>
-        </div>
-
-        <!-- Блок-сделки -->
-        <button class="sound-toggle" id="tradesBtn" onclick="toggleTradesOverlay()" style="font-size:14px;">Блок-сделки</button>
-
-        <!-- Таблица плотностей -->
-        <button class="sound-toggle" id="densitiesBtn" onclick="toggleDensitiesOverlay()" style="font-size:14px;">Карта плотностей</button>
-
-        <!-- Настройки (крайняя справа) -->
-        <button class="sound-toggle" id="settingsBtn" onclick="openSettingsModal()" style="font-size:14px;">Настройки</button>
+{% load static %}
+<nav class="navbar">
+  <div class="nav-left">
+    <div class="logo">
+      <img src="/api/logo/" alt="Recon&Scalp" class="logo-img" style="width:40px; height:40px;">
+      <span class="logo-text">Recon<span class="logo-amp">&</span>Scalp</span>
     </div>
   </div>
-</div>
+
+  <div class="nav-center">
+    <!-- Статистика онлайн (для админов и пользователей с правом просмотра статистики) -->
+    {% if request.user.is_staff or request.user.profile.can_view_stats %}
+    <a href="#" class="nav-link" style="cursor:default;" onclick="return false;">
+      <span style="font-weight:700;">👥 Онлайн: <span id="adminOnlineCount">–</span></span>
+      <span style="opacity:0.7; font-size:10px; margin-left:4px;">/ <span id="adminTotalCount">–</span></span>
+    </a>
+    {% endif %}
+
+    <!-- Кнопка открытия таблицы мастер-листа (мастер-список мониторинга Binance) -->
+    {% if request.user.is_staff or request.user.profile.can_view_stats %}
+    <a href="#" class="nav-link" id="masterListBtn" onclick="toggleMasterListModal(); return false;">
+      📋 Мастер-лист
+    </a>
+    {% endif %}
+
+    <!-- История импульсов -->
+    <div id="alertHistoryWrap" style="position:relative; display:none;">
+      <a href="#" class="nav-link" id="alertHistoryBtn" onclick="toggleAlertHistory(); return false;">
+        История импульсов <span id="alertBadge" class="alert-badge">0</span>
+      </a>
+      <div id="alertHistoryPanel" class="alert-history-panel">
+        <div class="alert-history-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Список импульсов</span>
+          <button onclick="clearAlertHistory()" style="background:transparent; border:1px solid var(--border-soft); color:var(--text-muted); font-size:10px; padding:2px 8px; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;" onmouseover="this.style.color='var(--accent)'; this.style.borderColor='var(--accent)';" onmouseout="this.style.color='var(--text-muted)'; this.style.borderColor='var(--border-soft)';">Очистить</button>
+        </div>
+        <div id="alertHistoryBody" class="alert-history-body"></div>
+      </div>
+    </div>
+
+    <!-- Блок-сделки -->
+    <a href="#" class="nav-link" id="tradesBtn" onclick="toggleTradesOverlay(); return false;">Блок-сделки</a>
+
+    <!-- Таблица плотностей -->
+    <a href="#" class="nav-link" id="densitiesBtn" onclick="toggleDensitiesOverlay(); return false;">Карта плотностей</a>
+
+    <!-- Настройки -->
+    <a href="#" class="nav-link" id="settingsBtn" onclick="openSettingsModal(); return false;">Настройки</a>
+  </div>
+
+  <div class="nav-right">
+    <a class="support-btn" onclick="openSupportModal(); return false;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M22 2L11 13" />
+        <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+      </svg>
+      Стать частью команды <span style="color:var(--accent); font-size:11px;">&#10084;</span>
+    </a>
+  </div>
+</nav>
 
 <script>
 (function() {
@@ -69,7 +79,7 @@
 })();
 
 // ---------- Мастер-лист мониторинга Binance ----------
-(function() {
+document.addEventListener('DOMContentLoaded', function() {
     const btn = document.getElementById('masterListBtn');
     if (!btn) return;
 
@@ -84,15 +94,14 @@
     modal.style.height = '100%';
     modal.style.background = 'rgba(0,0,0,0.7)';
     modal.style.zIndex = '9999';
-    modal.style.backdropFilter = 'blur(4px)';
+    modal.style.backdropFilter = 'blur(8px)';
     modal.style.alignItems = 'center';
     modal.style.justifyContent = 'center';
-    modal.style.fontFamily = "'JetBrains Mono', monospace";
+    modal.style.fontFamily = "'Inter', system-ui, sans-serif";
 
     const content = document.createElement('div');
-    content.style.background = '#111827';
-    content.style.border = '1px solid #22d3ee';
-    content.style.borderRadius = '8px';
+    content.className = 'glass-panel-strong';
+    content.style.border = '1px solid var(--border)';
     content.style.width = 'min(95vw, 900px)';
     content.style.maxHeight = '85vh';
     content.style.overflow = 'hidden';
@@ -100,66 +109,77 @@
     content.style.flexDirection = 'column';
 
     const header = document.createElement('div');
-    header.style.padding = '12px 16px';
-    header.style.borderBottom = '1px solid #22d3ee';
+    header.style.padding = '16px 20px';
+    header.style.borderBottom = '1px solid var(--border-soft)';
     header.style.display = 'flex';
     header.style.justifyContent = 'space-between';
     header.style.alignItems = 'center';
 
     const title = document.createElement('div');
     title.textContent = 'Мастер-лист мониторинга Binance';
-    title.style.color = '#22d3ee';
+    title.style.color = 'var(--accent)';
     title.style.fontWeight = '700';
     title.style.fontSize = '14px';
+    title.style.letterSpacing = '1px';
+    title.style.textTransform = 'uppercase';
 
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'Закрыть';
     closeBtn.style.background = 'transparent';
-    closeBtn.style.border = '1px solid #22d3ee';
-    closeBtn.style.color = '#22d3ee';
-    closeBtn.style.padding = '4px 10px';
-    closeBtn.style.borderRadius = '4px';
+    closeBtn.style.border = '1px solid var(--border-soft)';
+    closeBtn.style.color = 'var(--text-muted)';
+    closeBtn.style.padding = '6px 14px';
+    closeBtn.style.borderRadius = 'var(--radius-sm)';
     closeBtn.style.cursor = 'pointer';
     closeBtn.style.fontSize = '11px';
+    closeBtn.style.fontFamily = "'Inter', system-ui, sans-serif";
+    closeBtn.style.textTransform = 'uppercase';
+    closeBtn.style.letterSpacing = '0.5px';
     closeBtn.onclick = () => { modal.style.display = 'none'; };
+    closeBtn.onmouseover = () => { closeBtn.style.borderColor = 'var(--accent)'; closeBtn.style.color = 'var(--accent)'; };
+    closeBtn.onmouseout = () => { closeBtn.style.borderColor = 'var(--border-soft)'; closeBtn.style.color = 'var(--text-muted)'; };
 
     header.appendChild(title);
     header.appendChild(closeBtn);
 
     const body = document.createElement('div');
-    body.style.padding = '16px';
+    body.style.padding = '20px';
     body.style.overflowY = 'auto';
     body.style.display = 'flex';
     body.style.flexDirection = 'column';
-    body.style.gap = '16px';
+    body.style.gap = '20px';
 
     const tabsWrap = document.createElement('div');
     tabsWrap.style.display = 'flex';
     tabsWrap.style.gap = '8px';
-    tabsWrap.style.marginBottom = '8px';
+    tabsWrap.style.marginBottom = '4px';
 
     const tabFutures = document.createElement('button');
     tabFutures.textContent = 'Futures';
-    tabFutures.style.background = '#22d3ee';
+    tabFutures.style.background = 'var(--accent)';
     tabFutures.style.color = '#000';
     tabFutures.style.border = 'none';
-    tabFutures.style.padding = '6px 12px';
-    tabFutures.style.borderRadius = '4px';
+    tabFutures.style.padding = '8px 16px';
+    tabFutures.style.borderRadius = 'var(--radius-sm)';
     tabFutures.style.cursor = 'pointer';
     tabFutures.style.fontSize = '11px';
     tabFutures.style.fontWeight = '700';
+    tabFutures.style.textTransform = 'uppercase';
+    tabFutures.style.fontFamily = "'Inter', system-ui, sans-serif";
     tabFutures.onclick = () => { showTab('futures'); };
 
     const tabSpot = document.createElement('button');
     tabSpot.textContent = 'Spot';
     tabSpot.style.background = 'transparent';
-    tabSpot.style.border = '1px solid #22d3ee';
-    tabSpot.style.color = '#22d3ee';
-    tabSpot.style.padding = '6px 12px';
-    tabSpot.style.borderRadius = '4px';
+    tabSpot.style.border = '1px solid var(--border-soft)';
+    tabSpot.style.color = '#cccccc';
+    tabSpot.style.padding = '8px 16px';
+    tabSpot.style.borderRadius = 'var(--radius-sm)';
     tabSpot.style.cursor = 'pointer';
     tabSpot.style.fontSize = '11px';
     tabSpot.style.fontWeight = '700';
+    tabSpot.style.textTransform = 'uppercase';
+    tabSpot.style.fontFamily = "'Inter', system-ui, sans-serif";
     tabSpot.onclick = () => { showTab('spot'); };
 
     tabsWrap.appendChild(tabFutures);
@@ -169,7 +189,7 @@
     container.id = 'masterListContainer';
     container.style.display = 'flex';
     container.style.flexDirection = 'column';
-    container.style.gap = '12px';
+    container.style.gap = '16px';
 
     body.appendChild(tabsWrap);
     body.appendChild(container);
@@ -194,10 +214,11 @@
     };
 
     function showTab(market) {
-        tabFutures.style.background = market === 'futures' ? '#22d3ee' : 'transparent';
-        tabFutures.style.color = market === 'futures' ? '#000' : '#22d3ee';
-        tabSpot.style.background = market === 'spot' ? '#22d3ee' : 'transparent';
-        tabSpot.style.color = market === 'spot' ? '#000' : '#22d3ee';
+        tabFutures.style.background = market === 'futures' ? 'var(--accent)' : 'transparent';
+        tabFutures.style.color = market === 'futures' ? '#000' : '#cccccc';
+        tabSpot.style.background = market === 'spot' ? 'var(--accent)' : 'transparent';
+        tabSpot.style.color = market === 'spot' ? '#000' : '#cccccc';
+        tabSpot.style.borderColor = market === 'spot' ? 'var(--accent)' : 'var(--border-soft)';
         renderMarket(market);
     }
 
@@ -205,14 +226,14 @@
         try {
             const res = await fetch('/api/binance-master/?market=all');
             if (!res.ok) {
-                container.innerHTML = '<div style="color:#ef4444; padding:8px;">Ошибка загрузки мастер-листа</div>';
+                container.innerHTML = '<div style="color:var(--danger); padding:16px;">Ошибка загрузки мастер-листа</div>';
                 return;
             }
             const data = await res.json();
             window._masterData = data;
             showTab('futures');
         } catch (e) {
-            container.innerHTML = '<div style="color:#ef4444; padding:8px;">Ошибка сети при загрузке мастер-листа</div>';
+            container.innerHTML = '<div style="color:var(--danger); padding:16px;">Ошибка сети при загрузке мастер-листа</div>';
             console.error(e);
         }
     }
@@ -222,22 +243,22 @@
         if (!data) return;
         const marketData = data.markets[market];
         if (!marketData) {
-            container.innerHTML = `<div style="color:#94a3b8;">Нет данных для ${market}</div>`;
+            container.innerHTML = `<div style="color:var(--text-muted); padding:16px;">Нет данных для ${market}</div>`;
             return;
         }
 
         const symbols = marketData.symbols || [];
         const densityCounts = marketData.density_counts || {};
 
-        // Таблица
         const tableWrap = document.createElement('div');
         tableWrap.style.overflowX = 'auto';
 
         const table = document.createElement('table');
         table.style.width = '100%';
         table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '11px';
-        table.style.color = '#e2e8f0';
+        table.style.fontSize = '12px';
+        table.style.color = 'var(--text)';
+        table.style.fontFamily = "'JetBrains Mono', 'Consolas', monospace";
 
         const thead = document.createElement('thead');
         const trHead = document.createElement('tr');
@@ -245,10 +266,13 @@
             const th = document.createElement('th');
             th.textContent = h;
             th.style.textAlign = 'left';
-            th.style.padding = '6px 8px';
-            th.style.borderBottom = '1px solid #22d3ee';
-            th.style.color = '#22d3ee';
+            th.style.padding = '10px 12px';
+            th.style.borderBottom = '1px solid var(--border-soft)';
+            th.style.color = 'var(--accent)';
             th.style.fontWeight = '700';
+            th.style.fontSize = '11px';
+            th.style.textTransform = 'uppercase';
+            th.style.letterSpacing = '0.5px';
             trHead.appendChild(th);
         });
         thead.appendChild(trHead);
@@ -257,30 +281,30 @@
         const tbody = document.createElement('tbody');
         symbols.forEach((sym, i) => {
             const tr = document.createElement('tr');
-            tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-            tr.style.padding = '4px 8px';
+            tr.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
+            tr.style.padding = '8px 12px';
 
             const tdNum = document.createElement('td');
             tdNum.textContent = i + 1;
-            tdNum.style.padding = '6px 8px';
-            tdNum.style.color = '#94a3b8';
+            tdNum.style.padding = '10px 12px';
+            tdNum.style.color = 'var(--text-muted)';
 
             const tdSym = document.createElement('td');
             tdSym.textContent = sym;
-            tdSym.style.padding = '6px 8px';
-            tdSym.style.color = '#e2e8f0';
+            tdSym.style.padding = '10px 12px';
+            tdSym.style.color = 'var(--text)';
             tdSym.style.fontWeight = '700';
 
             const tdMon = document.createElement('td');
             tdMon.textContent = '✅ Да';
-            tdMon.style.padding = '6px 8px';
-            tdMon.style.color = '#22c55e';
+            tdMon.style.padding = '10px 12px';
+            tdMon.style.color = 'var(--success)';
 
             const tdCnt = document.createElement('td');
             const cnt = densityCounts[sym] || 0;
             tdCnt.textContent = cnt;
-            tdCnt.style.padding = '6px 8px';
-            tdCnt.style.color = cnt > 0 ? '#22c55e' : '#94a3b8';
+            tdCnt.style.padding = '10px 12px';
+            tdCnt.style.color = cnt > 0 ? 'var(--success)' : 'var(--text-muted)';
             tdCnt.style.fontWeight = '700';
 
             tr.appendChild(tdNum);
@@ -292,9 +316,9 @@
         table.appendChild(tbody);
 
         const info = document.createElement('div');
-        info.style.marginTop = '8px';
-        info.style.color = '#94a3b8';
-        info.style.fontSize = '10px';
+        info.style.marginTop = '12px';
+        info.style.color = 'var(--text-muted)';
+        info.style.fontSize = '11px';
         info.textContent = `Всего: ${marketData.count} | Сервер: ${new Date(data.server_time * 1000).toLocaleString()}`;
 
         container.innerHTML = '';
@@ -305,5 +329,5 @@
 
     // По умолчанию открываем futures
     showTab('futures');
-})();
+});
 </script>
