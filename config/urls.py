@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.contrib.auth import views as auth_views
 from screener import views
 
 urlpatterns = [
@@ -39,6 +40,7 @@ urlpatterns = [
     path('api/admin-stats/', views.api_admin_stats, name='api_admin_stats'),
     path('api/exchange-alpha-map/', views.api_exchange_alpha_map, name='api_exchange_alpha_map'),
     path('api/densities/', views.api_densities_table, name='api_densities_table'),
+    path('api/binance-master/', views.api_binance_master, name='api_binance_master'),
     path('api/health/memory/', views.api_health_memory, name='api_health_memory'),
 
 

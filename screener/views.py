@@ -258,6 +258,7 @@ def get_symbols_from_tickers():
         return []
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_data(request):
@@ -286,6 +287,7 @@ def api_data(request):
     return JsonResponse(coins, safe=False)
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_trades_count(request):
@@ -327,6 +329,7 @@ def api_trades_count(request):
 # ==========================================
 # API ФУНКЦИЯ
 # ==========================================
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_candles(request, symbol):
@@ -382,6 +385,7 @@ def api_candles(request, symbol):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_natr(request):
@@ -456,6 +460,7 @@ def api_natr(request):
     return JsonResponse(response_data)
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_scalp(request, symbol):
@@ -550,6 +555,8 @@ def api_scalp(request, symbol):
 SOUNDS_DIR = BASE_DIR / 'sounds'
 
 
+@csrf_exempt
+@require_http_methods(["GET"])
 def api_sound(request, filename):
     """Отдаёт аудиофайл из папки sounds"""
     # Защита от path traversal
@@ -567,6 +574,8 @@ def api_sound(request, filename):
         as_attachment=False
     )
 
+@csrf_exempt
+@require_http_methods(["GET"])
 def api_logo(request):
     """Отдаёт картинку логотипа"""
     filepath = BASE_DIR / 'logo.png'
@@ -575,6 +584,7 @@ def api_logo(request):
     return FileResponse(open(filepath, 'rb'), content_type='image/png')
 
 
+@csrf_exempt
 @require_http_methods(["GET"])
 def api_health_memory(request):
     """Эндпоинт проверки потребления памяти"""
@@ -590,11 +600,13 @@ def api_health_memory(request):
     return JsonResponse({'error': 'psutil not available'}, status=500)
 
 
+@csrf_exempt
 @login_required
 def index(request):
     """Главная страница"""
     return render(request, 'screener/index.html')
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_candles_history(request, symbol):
@@ -701,6 +713,7 @@ def api_candles_history(request, symbol):
         return JsonResponse({'error': str(e)}, status=500)
             
             
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_scalp_active(request):
@@ -750,6 +763,7 @@ def api_scalp_active(request):
     return JsonResponse({'active': active})
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_mexc_depth(request):
@@ -817,6 +831,7 @@ def api_mexc_depth(request):
     return JsonResponse(result)
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_gate_depth(request):
@@ -882,6 +897,7 @@ def api_gate_depth(request):
     return JsonResponse(result)
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_impulse_alerts(request):
@@ -906,6 +922,7 @@ def api_impulse_alerts(request):
     })
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_exchanges(request, symbol):
@@ -1232,6 +1249,7 @@ def check_symbol_all_exchanges(symbol):
     }
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_binance_check_symbol(request, symbol):
@@ -1249,6 +1267,7 @@ def api_binance_check_symbol(request, symbol):
     })
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_exchanges(request, symbol):
@@ -1258,6 +1277,7 @@ def api_exchanges(request, symbol):
     return JsonResponse(result)
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_exchange_alpha_map(request):
@@ -1265,6 +1285,7 @@ def api_exchange_alpha_map(request):
     return JsonResponse({'map': get_alpha_symbol_map()})
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["GET"])
 def api_densities_table(request):
@@ -1509,6 +1530,50 @@ def api_densities_table(request):
     cache.set(cache_key, response_data, 2)
 
     return JsonResponse(response_data)
+
+
+@csrf_exempt
+@login_required
+@require_http_methods(["GET"])
+def api_binance_master(request):
+    """API: мастер-лист Binance — монеты, которые сейчас мониторятся"""
+    import time
+    from django.core.cache import cache
+
+    market = request.GET.get('market', 'all')
+    if market not in ['futures', 'spot', 'all']:
+        market = 'all'
+
+    now = time.time()
+    markets = ['futures', 'spot'] if market == 'all' else [market]
+    result = {}
+    total = 0
+
+    for m in markets:
+        master_key = f'scalp:master:{m}'
+        symbols = cache.get(master_key) or []
+        if not isinstance(symbols, list):
+            symbols = []
+
+        # Сколько из мастер-листа имеют реальные данные в Redis прямо сейчас
+        check_keys = [f"scalp:{m}:binance:{s}" for s in symbols]
+        cached_data = cache.get_many(check_keys) if check_keys else {}
+        with_data = [s for s in symbols if cached_data.get(f"scalp:{m}:binance:{s}")]
+
+        result[m] = {
+            'symbols': symbols,
+            'count': len(symbols),
+            'with_data': len(with_data),
+            'symbols_with_data': with_data,
+        }
+        total += len(symbols)
+
+    return JsonResponse({
+        'market': market,
+        'server_time': now,
+        'total': total,
+        'markets': result,
+    })
 
 
 @csrf_exempt
