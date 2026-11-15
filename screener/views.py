@@ -1606,8 +1606,11 @@ def api_admin_stats(request):
             total = User.objects.count()
             cache.set('admin_stats:total_users', total, 300)
 
-        keys = cache.keys("online:*")
-        online = len(keys) if keys else 0
+        now = time.time()
+        online_dict = cache.get('online_users', {})
+        # Фильтруем устаревшие (старше 5 минут)
+        online_dict = {uid: ts for uid, ts in online_dict.items() if now - ts < 300}
+        online = len(online_dict)
     except Exception:
         total = 0
         online = 0

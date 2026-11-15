@@ -74,14 +74,19 @@ class RateLimitMiddleware:
 
 class OnlineCacheMiddleware:
     """Отмечает онлайн-пользователей в кэше (без обращения к БД).
-    Каждый аутентифицированный запрос ставит ключ online:<user_id> на 5 минут.
-    Эндпоинт api_online_users читает эти ключи по требованию.
+    Хранит словарь {user_id: timestamp} в одном ключе online_users.
+    Работает с любым бэкендом кэша (Redis, file, db).
     """
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         if request.user.is_authenticated:
-            cache.set(f"online:{request.user.id}", time.time(), 300)
+            now = time.time()
+            online = cache.get('online_users', {})
+            online[request.user.id] = now
+            # Удаляем устаревшие записи (старше 5 минут)
+            online = {uid: ts for uid, ts in online.items() if now - ts < 300}
+            cache.set('online_users', online, 300)
         response = self.get_response(request)
         return response

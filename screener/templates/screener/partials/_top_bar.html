@@ -11,7 +11,7 @@
     <!-- Статистика онлайн (для админов и пользователей с правом просмотра статистики) -->
     {% if request.user.is_staff or request.user.profile.can_view_stats %}
     <a href="#" class="nav-link" style="cursor:default;" onclick="return false;">
-      <span style="font-weight:700;">👥 Онлайн: <span id="adminOnlineCount">–</span></span>
+      <span style="font-weight:700;">Онлайн: <span id="adminOnlineCount">–</span></span>
       <span style="opacity:0.7; font-size:10px; margin-left:4px;">/ <span id="adminTotalCount">–</span></span>
     </a>
     {% endif %}
@@ -19,7 +19,7 @@
     <!-- Кнопка открытия таблицы мастер-листа (мастер-список мониторинга Binance) -->
     {% if request.user.is_staff or request.user.profile.can_view_stats %}
     <a href="#" class="nav-link" id="masterListBtn" onclick="toggleMasterListModal(); return false;">
-      📋 Мастер-лист
+      Мастер-лист
     </a>
     {% endif %}
 
@@ -53,14 +53,14 @@
         <path d="M22 2L11 13" />
         <path d="M22 2L15 22L11 13L2 9L22 2Z" />
       </svg>
-      Стать частью команды <span style="color:var(--accent); font-size:11px;">&#10084;</span>
+      Стать частью команды
     </a>
   </div>
 </nav>
 
 <script>
 (function() {
-    if (!document.getElementById('adminOnlineWrap')) return;
+    if (!document.getElementById('adminOnlineCount')) return;
     async function fetchAdminStats() {
         try {
             const res = await fetch('/api/admin-stats/');
@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tdSym.style.fontWeight = '700';
 
             const tdMon = document.createElement('td');
-            tdMon.textContent = '✅ Да';
+            tdMon.textContent = 'Да';
             tdMon.style.padding = '10px 12px';
             tdMon.style.color = 'var(--success)';
 
