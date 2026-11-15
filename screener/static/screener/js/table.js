@@ -90,18 +90,25 @@ function applyGridColumnLayout() {
 
 function toggleColumnSettings() {
     const dropdown = document.getElementById('columnSettingsDropdown');
-    const btn = document.getElementById('columnGearBtn');
     if (!dropdown) return;
     if (dropdown.classList.contains('active')) {
         dropdown.classList.remove('active');
         return;
     }
     renderColumnSettings();
-    // Position dropdown relative to gear button (fixed positioning)
-    const rect = btn.getBoundingClientRect();
-    dropdown.style.top = (rect.bottom + 4) + 'px';
-    dropdown.style.left = (rect.left + rect.width / 2) + 'px';
-    dropdown.style.transform = 'translateX(-50%)';
+    const btn = document.getElementById('columnGearBtn');
+    if (btn) {
+        const rect = btn.getBoundingClientRect();
+        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.left = (rect.left + rect.width / 2) + 'px';
+        dropdown.style.transform = 'translateX(-50%)';
+    } else {
+        dropdown.style.top = '80px';
+        dropdown.style.left = '50%';
+        dropdown.style.transform = 'translateX(-50%)';
+    }
+    dropdown.style.display = 'block';
+    dropdown.style.visibility = 'visible';
     dropdown.classList.add('active');
 }
 window.toggleColumnSettings = toggleColumnSettings;
@@ -131,7 +138,7 @@ document.addEventListener('click', (e) => {
     const dropdown = document.getElementById('columnSettingsDropdown');
     const btn = document.getElementById('columnGearBtn');
     if (!dropdown || !dropdown.classList.contains('active')) return;
-    if (e.target === btn || btn?.contains(e.target)) return;
+    if (btn && (e.target === btn || btn.contains(e.target))) return;
     if (dropdown.contains(e.target)) return;
     dropdown.classList.remove('active');
 });
