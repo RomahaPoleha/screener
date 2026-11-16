@@ -217,9 +217,10 @@ function showVolumeAlertToast(symbol, volume, direction, priceChange) {
     toast.className = 'volume-alert-toast';
     toast.style.cssText = `
         position:fixed; right:20px; bottom:${20 + offset}px;
-        background:#1a1a1a; border:2px solid ${color};
-        color:#ffffff; padding:14px 18px; border-radius:0;
-        box-shadow:0 4px 16px rgba(0,0,0,0.5); z-index:10000;
+        background:var(--bg-glass); backdrop-filter:var(--blur);
+        border:2px solid ${color};
+        color:var(--text); padding:14px 18px; border-radius:0;
+        box-shadow:var(--shadow-sm); z-index:10000;
         cursor:pointer; transition:all 0.3s ease;
         opacity:0; transform:translateX(400px); display:flex; align-items:center; gap:12px;
     `;
@@ -232,7 +233,7 @@ function showVolumeAlertToast(symbol, volume, direction, priceChange) {
             <div style="font-size:12px;">
                 Цена: ${direction} ${priceChange.toFixed(2)}% за ${windowText}
             </div>
-            <div style="font-size:10px; color:#999999;">Клик — открыть график</div>
+            <div style="font-size:10px; color:var(--text-muted);">Клик — открыть график</div>
         </div>
     `;
     toast.onclick = () => {

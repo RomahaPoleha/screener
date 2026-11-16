@@ -96,19 +96,11 @@ function toggleColumnSettings() {
         return;
     }
     renderColumnSettings();
-    const btn = document.getElementById('columnGearBtn');
-    if (btn) {
-        const rect = btn.getBoundingClientRect();
-        dropdown.style.top = (rect.bottom + 4) + 'px';
-        dropdown.style.left = (rect.left + rect.width / 2) + 'px';
-        dropdown.style.transform = 'translateX(-50%)';
-    } else {
-        dropdown.style.top = '80px';
-        dropdown.style.left = '50%';
-        dropdown.style.transform = 'translateX(-50%)';
-    }
-    dropdown.style.display = 'block';
-    dropdown.style.visibility = 'visible';
+    dropdown.style.top = '';
+    dropdown.style.left = '';
+    dropdown.style.transform = '';
+    dropdown.style.display = '';
+    dropdown.style.visibility = '';
     dropdown.classList.add('active');
 }
 window.toggleColumnSettings = toggleColumnSettings;

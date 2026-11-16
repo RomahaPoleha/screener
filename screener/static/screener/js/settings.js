@@ -206,16 +206,6 @@ if (hourSlider) {
     localStorage.setItem('hourSoundVolume', hourSoundVolume);
 }
 updateAlertHistoryVisibility();
-const btn = document.getElementById('settingsBtn');
-if (btn) {
-    if (densityEnabled || scalpEnabled || reconEnabled) {
-        btn.style.background = '#f59e0b';
-        btn.style.color = '#000000';
-    } else {
-        btn.style.background = '#2a2a2a';
-        btn.style.color = '#ffffff';
-    }
-}
 if (currentSymbol) {
     if (reconEnabled) startReconUpdates(currentSymbol);
     else stopReconUpdates();
@@ -348,17 +338,6 @@ function applyScalpSettingsSilent() {
         if (scalpEnabled) startScalpUpdates(currentSymbol);
         else {
             if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
-        }
-    }
-
-    const btn = document.getElementById('settingsBtn');
-    if (btn) {
-        if (densityEnabled || scalpEnabled || reconEnabled) {
-            btn.style.background = '#f59e0b';
-            btn.style.color = '#000000';
-        } else {
-            btn.style.background = '#2a2a2a';
-            btn.style.color = '#ffffff';
         }
     }
 }

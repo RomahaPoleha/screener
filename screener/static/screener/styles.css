@@ -924,7 +924,7 @@ a:hover { color: #FFA500; }
 .column-gear-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
 .column-settings-dropdown {
-  position: fixed; top: -9999px; left: -9999px;
+  position: absolute; top: 100%; right: 0;
   background: var(--bg-glass); backdrop-filter: var(--blur);
   border: 1px solid var(--border); border-radius: var(--radius-md);
   padding: 10px 14px; z-index: 10001; display: none; visibility: hidden;
