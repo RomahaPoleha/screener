@@ -376,7 +376,7 @@ async def sync_to_cache_async(symbol, log_func=print):
         mh = alpha_mid_history
         mhl = mh.setdefault(symbol, [])
         mhl.append((now, mid))
-        if len(mhl) > 20:
+        if len(mhl) > MAX_MID_HISTORY:
             mhl.pop(0)
 
         old_mid = None
@@ -674,6 +674,8 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, log_func):
         if _omid is not None:
             for p in (set(old_ts) - set(new_ts)):
                 alpha_removed.setdefault(symbol, []).append((p, time.time(), (p - _omid) / _omid))
+                if len(alpha_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                    alpha_removed[symbol] = alpha_removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
 
         alpha_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
         alpha_density_timestamps[symbol] = new_ts

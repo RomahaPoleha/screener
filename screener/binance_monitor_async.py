@@ -456,7 +456,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         mh = binance_futures_mid_history if market == 'futures' else binance_spot_mid_history
         mhl = mh.setdefault(symbol, [])
         mhl.append((now, mid))
-        if len(mhl) > 20:
+        if len(mhl) > MAX_MID_HISTORY:
             mhl.pop(0)
 
         old_mid = None
@@ -727,6 +727,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = binance_futures_removed if market == 'futures' else binance_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['bids'][price]
                             ts.pop(price, None)
                             changed = True
@@ -753,6 +755,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = binance_futures_removed if market == 'futures' else binance_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['asks'][price]
                             ts.pop(price, None)
                             changed = True
@@ -790,6 +794,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = binance_futures_removed if market == 'futures' else binance_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['bids'][price]
                             ts.pop(price, None)
                             changed = True
@@ -816,6 +822,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = binance_futures_removed if market == 'futures' else binance_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['asks'][price]
                             ts.pop(price, None)
                             changed = True
@@ -1193,6 +1201,7 @@ def remove_symbol_state(exchange_name, symbol, market='futures'):
         mid_history.pop(symbol, None)
     if removed is not None:
         removed.pop(symbol, None)
+    last_sync_time.pop(f"{exchange_name}:{market}:{symbol}", None)
     if first_load_done is not None:
         first_load_done.discard(symbol)
 

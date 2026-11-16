@@ -360,7 +360,7 @@ async def sync_to_cache_async(symbol, market='futures', log_func=print):
         mh = bybit_futures_mid_history if market == 'futures' else bybit_spot_mid_history
         mhl = mh.setdefault(symbol, [])
         mhl.append((now, mid))
-        if len(mhl) > 20:
+        if len(mhl) > MAX_MID_HISTORY:
             mhl.pop(0)
 
         old_mid = None
@@ -668,6 +668,8 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             if _omid is not None:
                 for p in (set(old_ts) - set(new_ts)):
                     bybit_futures_removed.setdefault(symbol, []).append((p, time.time(), (p - _omid) / _omid))
+                    if len(bybit_futures_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                        bybit_futures_removed[symbol] = bybit_futures_removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
 
             bybit_futures_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bybit_futures_density_timestamps[symbol] = new_ts
@@ -689,6 +691,8 @@ async def handle_snapshot_async(symbol, raw_bids, raw_asks, market, log_func):
             if _omid is not None:
                 for p in (set(old_ts) - set(new_ts)):
                     bybit_spot_removed.setdefault(symbol, []).append((p, time.time(), (p - _omid) / _omid))
+                    if len(bybit_spot_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                        bybit_spot_removed[symbol] = bybit_spot_removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
 
             bybit_spot_order_books[symbol] = {'bids': new_bids, 'asks': new_asks}
             bybit_spot_density_timestamps[symbol] = new_ts
@@ -721,6 +725,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = bybit_futures_removed if market == 'futures' else bybit_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['bids'][price]
                             ts.pop(price, None)
                             changed = True
@@ -746,6 +752,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = bybit_futures_removed if market == 'futures' else bybit_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['asks'][price]
                             ts.pop(price, None)
                             changed = True
@@ -781,6 +789,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = bybit_futures_removed if market == 'futures' else bybit_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['bids'][price]
                             ts.pop(price, None)
                             changed = True
@@ -806,6 +816,8 @@ async def handle_update_async(symbol, bids_delta, asks_delta, market, log_func):
                             _removed = bybit_futures_removed if market == 'futures' else bybit_spot_removed
                             if _mid is not None:
                                 _removed.setdefault(symbol, []).append((price, time.time(), (price - _mid) / _mid))
+                                if len(_removed[symbol]) > MAX_REMOVED_PER_SYMBOL:
+                                    _removed[symbol] = _removed[symbol][-MAX_REMOVED_PER_SYMBOL:]
                             del book['asks'][price]
                             ts.pop(price, None)
                             changed = True
