@@ -41,7 +41,8 @@ urlpatterns = [
     path('api/exchange-alpha-map/', views.api_exchange_alpha_map, name='api_exchange_alpha_map'),
     path('api/densities/', views.api_densities_table, name='api_densities_table'),
     path('api/binance-master/', views.api_binance_master, name='api_binance_master'),
-    path('api/health/memory/', views.api_health_memory, name='api_health_memory'),
+    path('privacy/', views.privacy_policy, name='privacy_policy'),
+    path('terms/', views.terms_of_service, name='terms_of_service'),
 
 
 ]

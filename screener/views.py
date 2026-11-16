@@ -112,8 +112,11 @@ def verify_email(request, token):
     return render(request, 'screener/verify_failed.html')
 
 
-@require_http_methods(["POST"])
-def resend_verification(request):
+def privacy_policy(request):
+    return render(request, 'screener/privacy.html')
+
+def terms_of_service(request):
+    return render(request, 'screener/terms.html')
     """Повторная отправка письма подтверждения"""
     email = request.POST.get('email')
     try:

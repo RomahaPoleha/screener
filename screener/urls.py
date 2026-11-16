@@ -13,5 +13,6 @@ urlpatterns = [
     path('logout/', LogoutGetView.as_view(next_page='login'), name='logout'),
     path('register/', views.register, name='register'),
     path('verify/<str:token>/', views.verify_email, name='verify_email'),
-    path('resend-verification/', views.resend_verification, name='resend_verification'),
+    path('privacy/', views.privacy_policy, name='privacy_policy'),
+    path('terms/', views.terms_of_service, name='terms_of_service'),
 ]
