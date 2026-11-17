@@ -4,7 +4,7 @@
 MAX_MONITORED_SYMBOLS = 50
 
 # Максимум ценовых уровней на сторону (bids/asks) при инициализации стакана
-MAX_ORDER_BOOK_LEVELS = 500
+MAX_ORDER_BOOK_LEVELS = 200
 
 # Максимум записей в *_volume_stats на символ
 MAX_STATS_PER_SYMBOL = 100
