@@ -43,6 +43,9 @@ last_update_times = {
 # TTL кэша (20 минут)
 CACHE_TTL = 1200
 
+# Лок для безопасной записи кэша из параллельных потоков таймфреймов
+_natr_cache_lock = threading.Lock()
+
 # Настройка ротации логов
 LOG_DIR = '/app/data'
 LOG_FILE = os.path.join(LOG_DIR, 'natr_updater.log')
@@ -155,9 +158,6 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
         error_count = 0
         total = len(symbols)
 
-        # 🔥 BATCH: собираем все обновления в памяти
-        batch_updates = {}
-
         for idx, symbol in enumerate(symbols, 1):
             try:
                 pair = f"{symbol}/USDT:USDT"
@@ -174,12 +174,13 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
 
                 if natr_value is not None:
                     cache_key = f"natr_{symbol}_future"
-                    # Читаем существующие данные (если есть)
-                    old_data = cache.get(cache_key) or {'ts': current_time}
-                    old_data[f'natr_{natr_key}'] = natr_value
-                    old_data['ts'] = current_time
-                    # Накапливаем в батч
-                    batch_updates[cache_key] = old_data
+                    # Записываем по мере расчёта, мержим с текущими данными под локом,
+                    # чтобы параллельный таймфрейм (1m30/5m14) не затёр поле другого
+                    with _natr_cache_lock:
+                        existing = cache.get(cache_key) or {'ts': current_time}
+                        existing[f'natr_{natr_key}'] = natr_value
+                        existing['ts'] = current_time
+                        cache.set(cache_key, existing, CACHE_TTL)
                     success_count += 1
                 else:
                     error_count += 1
@@ -202,35 +203,6 @@ def update_natr_for_timeframe(symbols, natr_key, config, current_time):
                     time.sleep(300)
                     return
                 continue
-
-        # 🔥 ATOMIC BATCH WRITE: пишем все обновления за один раз
-        # Важно: перечитываем текущие значения из Redis перед записью,
-        # чтобы не затереть параллельный поток (1m30 vs 5m14)
-        if batch_updates:
-            try:
-                # Перечитываем актуальные данные для всех затронутых ключей
-                current_data = cache.get_many(list(batch_updates.keys()))
-                
-                # Мержим: наши обновления имеют приоритет, но сохраняем другие поля
-                merged_updates = {}
-                for key, our_data in batch_updates.items():
-                    existing = current_data.get(key, {})
-                    # Мержим: существующие поля + наши новые
-                    merged = {**existing, **our_data}
-                    merged_updates[key] = merged
-                
-                cache.set_many(merged_updates, CACHE_TTL)
-                log(f"  [{natr_key}] Batch write: {len(merged_updates)} symbols (merged)")
-            except Exception as e:
-                # Fallback: по одному с перечитыванием
-                log(f"  [{natr_key}] set_many failed, fallback to individual: {e}")
-                for key, our_data in batch_updates.items():
-                    try:
-                        existing = cache.get(key) or {}
-                        merged = {**existing, **our_data}
-                        cache.set(key, merged, CACHE_TTL)
-                    except Exception:
-                        pass
 
         last_update_times[natr_key] = time.time()
 
