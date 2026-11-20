@@ -2,15 +2,29 @@
 {% load static %}
 
 {% block content %}
-<div style="display:flex; align-items:center; justify-content:center; min-height:calc(100vh - 70px); padding:40px 20px;">
-  <div class="login-card">
-    <div class="login-logo">
+<style>body { overflow: auto !important; height: auto !important; min-height: 100vh !important; }</style>
+{% if form.errors %}
+<div id="registerToast" style="position:fixed; top:20px; right:20px; z-index:1000; max-width:360px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); color:#fca5a5; padding:12px 16px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.4); font-size:12px;">
+  <div style="font-weight:700; margin-bottom:6px;">Ошибка регистрации</div>
+  <ul style="margin:0; padding-left:18px;">
+    {% for field, errors in form.errors.items %}
+      {% for error in errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    {% endfor %}
+  </ul>
+</div>
+<script>setTimeout(function(){ var t=document.getElementById('registerToast'); if(t){ t.style.transition='opacity .4s'; t.style.opacity='0'; setTimeout(function(){ t.remove(); },400); } }, 6000);</script>
+{% endif %}
+<div style="display:flex; align-items:flex-start; justify-content:center; min-height:auto; padding:20px 20px 40px;">
+  <div class="login-card" style="width: 640px; padding: 28px 36px;">
+    <div class="login-logo" style="margin-bottom: 10px;">
       <img src="{% url 'api_logo' %}" alt="Logo" style="width:48px; height:48px; object-fit:cover; filter:drop-shadow(0 0 8px rgba(255,140,0,0.6));">
     </div>
-    <h2 class="login-title">Recon<span class="title-amp">&</span>Scalp</h2>
+    <h2 class="login-title">Recon<span class="title-amp">Ave</span></h2>
     <p class="login-subtitle">Создайте аккаунт</p>
 
-    <form method="post" novalidate class="login-form">
+    <form method="post" novalidate class="login-form" style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
       {% csrf_token %}
 
       {% if form.non_field_errors %}
@@ -27,12 +41,9 @@
             <circle cx="12" cy="7" r="4" />
           </svg>
           {{ form.username }}
-          {% if form.username.errors %}
-            <div style="color:#fca5a5; font-size:11px; margin-top:4px;">{{ form.username.errors }}</div>
-          {% endif %}
-          {% if form.username.help_text %}
-            <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">{{ form.username.help_text }}</div>
-          {% endif %}
+          
+          
+            <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">Только буквы, цифры и символы @/./+/-/_</div>
         </div>
       </div>
 
@@ -44,9 +55,7 @@
             <polyline points="22,6 12,13 2,6" />
           </svg>
           {{ form.email }}
-          {% if form.email.errors %}
-            <div style="color:#fca5a5; font-size:11px; margin-top:4px;">{{ form.email.errors }}</div>
-          {% endif %}
+          
         </div>
       </div>
 
@@ -58,12 +67,9 @@
             <path d="M7 11V7a5 5 0 0110 0v4" />
           </svg>
           {{ form.password1 }}
-          {% if form.password1.errors %}
-            <div style="color:#fca5a5; font-size:11px; margin-top:4px;">{{ form.password1.errors }}</div>
-          {% endif %}
-          {% if form.password1.help_text %}
-            <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">{{ form.password1.help_text }}</div>
-          {% endif %}
+          
+          
+            <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">Не менее 8 символов, не слишком простой и не похожий на логин</div>
         </div>
       </div>
 
@@ -75,13 +81,18 @@
             <path d="M7 11V7a5 5 0 0110 0v4" />
           </svg>
           {{ form.password2 }}
-          {% if form.password2.errors %}
-            <div style="color:#fca5a5; font-size:11px; margin-top:4px;">{{ form.password2.errors }}</div>
-          {% endif %}
+          
         </div>
       </div>
 
-      <button type="submit" class="login-btn">
+      <div class="form-group" style="grid-column: 1 / -1; display:flex; align-items:center; gap:8px; margin-bottom:0;">
+        {{ form.agree_terms }}
+        <label for="{{ form.agree_terms.id_for_label }}" style="font-size:12px; color:var(--text-muted); margin:0;">
+          Согласен с <a href="{% url 'terms_of_service' %}" target="_blank" style="color:var(--accent);">пользовательским соглашением</a>
+        </label>
+      </div>
+
+      <button type="submit" class="login-btn" style="grid-column: 1 / -1;">
         Зарегистрироваться
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />

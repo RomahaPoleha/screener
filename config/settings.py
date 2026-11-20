@@ -10,13 +10,19 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
+# Local overrides (optional, not committed)
+load_dotenv(BASE_DIR / '.env.local', override=True)
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
-ALLOWED_HOSTS = [h for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h]
-CSRF_TRUSTED_ORIGINS = [o for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o]
+ALLOWED_HOSTS = [h for h in (os.getenv('ALLOWED_HOSTS') or '*').split(',') if h]
+CSRF_TRUSTED_ORIGINS = [o for o in (os.getenv('CSRF_TRUSTED_ORIGINS') or '').split(',') if o]
+if not CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h and h != '*']
+
+CSRF_COOKIE_NAME = 'csrftoken_screener'
+SESSION_COOKIE_NAME = 'sessionid_screener'
 
 # ==========================================
 # AUTH & SECURITY
@@ -110,14 +116,28 @@ AUTH_PASSWORD_VALIDATORS = [
 # ==========================================
 # EMAIL (Email verification)
 # ==========================================
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv('EMAIL_HOST')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
-EMAIL_TIMEOUT = 10
+def _env_bool(name, default='True'):
+    value = os.getenv(name)
+    if value is None:
+        value = default
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+EMAIL_BACKEND = 'screener.smtp_backend.DiagnosticEmailBackend'
+EMAIL_HOST = (os.getenv('EMAIL_HOST') or 'smtp.gmail.com').strip()
+EMAIL_PORT = int((os.getenv('EMAIL_PORT') or '587').strip())
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', 'True')
+EMAIL_USE_SSL = _env_bool('EMAIL_USE_SSL', 'False')
+# Gmail standard ports: 465 = implicit SSL, 587 = STARTTLS
+if EMAIL_PORT == 465:
+    EMAIL_USE_SSL = True
+    EMAIL_USE_TLS = False
+elif EMAIL_PORT == 587:
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
+EMAIL_HOST_USER = (os.getenv('EMAIL_HOST_USER') or '').strip() or None
+EMAIL_HOST_PASSWORD = ((os.getenv('EMAIL_HOST_PASSWORD') or '').replace(' ', '').strip()) or None
+DEFAULT_FROM_EMAIL = (os.getenv('DEFAULT_FROM_EMAIL') or EMAIL_HOST_USER or 'noreply@localhost').strip()
+EMAIL_TIMEOUT = int((os.getenv('EMAIL_TIMEOUT') or '30').strip())
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
@@ -211,3 +231,9 @@ if not REDIS_URL:
         },
     }
     print("Redis not available, using file cache + DB sessions + in-memory channels")
+# SMTP diagnostics deliberately exclude recipients, credentials and server replies.
+LOGGING = {
+    'version': 1, 'disable_existing_loggers': False,
+    'handlers': {'smtp_console': {'class': 'logging.StreamHandler'}},
+    'loggers': {'screener.mail': {'handlers': ['smtp_console'], 'level': 'INFO', 'propagate': False}},
+}

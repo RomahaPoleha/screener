@@ -9,8 +9,8 @@ build:
   useCache: true
 
 run:
-  # ВАЖНО: Миграции -> статика -> сервер
-  command: python manage.py migrate --noinput && python manage.py collectstatic --noinput && daphne -b 0.0.0.0 -p 8000 config.asgi:application
+  # start.py selects web/worker using PROCESS_TYPE.
+  command: python start.py
   containerPort: 8000
   persistenceMount: /app/data
 

@@ -6,12 +6,14 @@ from django.core.cache import cache
 from django.shortcuts import render, redirect
 from django.http import FileResponse, Http404
 from django.contrib.auth import login
+from django.contrib.auth import password_validation
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django import forms
 from django.core import signing
 from django.core.mail import send_mail
+from .verification_mail import send_verification, DeliveryError
 from django.template.loader import render_to_string
 from django.conf import settings
 from pathlib import Path
@@ -32,16 +34,78 @@ from urllib3.util.retry import Retry
 
 
 class RegisterForm(UserCreationForm):
-    """Форма регистрации с email"""
+    """Р¤РѕСЂРјР° СЂРµРіРёСЃС‚СЂР°С†РёРё СЃ email"""
     email = forms.EmailField(
         required=True,
         label='Email',
-        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'email@example.com'})
+        widget=forms.EmailInput(attrs={'class': 'form-input', 'placeholder': 'email@example.com'})
+    )
+    agree_terms = forms.BooleanField(
+        required=True,
+        label='Согласен с пользовательским соглашением',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        error_messages={'required': 'Необходимо принять пользовательское соглашение'},
     )
 
     class Meta:
         model = User
         fields = ('username', 'email', 'password1', 'password2')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'form-input')
+
+        self.fields['username'].label = 'Логин'
+        self.fields['username'].help_text = 'Только буквы, цифры и символы @/./+/-/_'
+        self.fields['username'].error_messages.update({
+            'required': 'Введите логин',
+            'invalid': 'Недопустимые символы в логине',
+            'unique': 'Пользователь с таким логином уже существует',
+        })
+
+        self.fields['email'].label = 'Email'
+        self.fields['email'].help_text = 'На этот адрес придёт ссылка для подтверждения'
+        self.fields['email'].error_messages.update({
+            'required': 'Введите email',
+            'invalid': 'Введите корректный email',
+        })
+
+        self.fields['password1'].label = 'Пароль'
+        self.fields['password1'].help_text = 'Не менее 8 символов, не слишком простой и не похожий на логин'
+        self.fields['password1'].error_messages.update({
+            'required': 'Введите пароль',
+        })
+
+        self.fields['password2'].label = 'Подтверждение пароля'
+        self.fields['password2'].help_text = 'Повторите пароль'
+        self.fields['password2'].error_messages.update({
+            'required': 'Повторите пароль',
+        })
+
+        self.fields['password1'].widget.render_value = True
+        self.fields['password2'].widget.render_value = True
+
+    def validate_password_for_user(self, user, password_field_name='password2'):
+        password = self.cleaned_data.get(password_field_name)
+        if password:
+            try:
+                password_validation.validate_password(password, user)
+            except forms.ValidationError as error:
+                translated = []
+                for message in error.messages:
+                    low = str(message).lower()
+                    if 'too short' in low:
+                        translated.append('Пароль слишком короткий.')
+                    elif 'too common' in low:
+                        translated.append('Пароль слишком простой.')
+                    elif 'too similar' in low or 'too close' in low:
+                        translated.append('Пароль слишком похож на логин или email.')
+                    elif 'entirely numeric' in low or 'only numeric' in low:
+                        translated.append('Пароль не может состоять только из цифр.')
+                    else:
+                        translated.append(str(message))
+                self.add_error(password_field_name, forms.ValidationError(translated))
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -71,29 +135,13 @@ def register(request):
             # Формируем ссылку для подтверждения
             verify_url = request.build_absolute_uri(f'/accounts/verify/{token}/')
 
-            # Отправляем email
             try:
-                html_message = render_to_string('screener/email/verify_email.html', {
-                    'username': user.username,
-                    'verify_url': verify_url,
-                })
-                send_mail(
-                    subject='Подтверждение email — Recon&Scalp',
-                    message=f'Привет, {user.username}!\n\nПодтверди email: {verify_url}\n\nСсылка действительна 24 часа.',
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[user.email],
-                    html_message=html_message,
-                    fail_silently=False,
-                )
-            except Exception as e:
-                print(f"Email send error: {e}")
-                # В dev режиме показываем ссылку прямо на странице
-                if settings.DEBUG:
-                    return render(request, 'screener/check_email.html', {
-                        'email': user.email,
-                        'debug_verify_url': verify_url,
-                    })
-
+                send_verification(user, verify_url)
+            except DeliveryError as error:
+                return render(request, 'screener/check_email.html', {
+                    'email': user.email, 'send_failed': True,
+                    'error_id': error.reference,
+                }, status=503)
             return render(request, 'screener/check_email.html', {'email': user.email})
     else:
         form = RegisterForm()
@@ -101,7 +149,7 @@ def register(request):
 
 
 def verify_email(request, token):
-    """Подтверждение email по токену"""
+    """РџРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ email РїРѕ С‚РѕРєРµРЅСѓ"""
     user = UserProfile.verify_token(token)
     if user:
         user.is_active = True
@@ -110,6 +158,31 @@ def verify_email(request, token):
         login(request, user)
         return render(request, 'screener/verify_success.html')
     return render(request, 'screener/verify_failed.html')
+
+
+@require_http_methods(["POST"])
+def resend_verification(request):
+    email = request.POST.get('email', '').strip()
+    # Same neutral response for unknown and already active addresses.
+    user = User.objects.filter(email__iexact=email, is_active=False).first()
+    if user:
+        # Limit outbound mail without exposing whether an account exists.
+        import hashlib
+        key = 'verification-resend:' + hashlib.sha256(email.lower().encode()).hexdigest()
+        if cache.add(key, True, 60):
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            # Reuse a valid token: a failed resend must not invalidate an earlier email.
+            token = profile.verification_token
+            if not token or UserProfile.verify_token(token) is None:
+                token = profile.generate_verification_token()
+            verify_url = request.build_absolute_uri(f'/accounts/verify/{token}/')
+            try:
+                send_verification(user, verify_url)
+            except DeliveryError as error:
+                return render(request, 'screener/check_email.html', {
+                    'email': email, 'send_failed': True, 'error_id': error.reference,
+                }, status=503)
+    return render(request, 'screener/check_email.html', {'email': email, 'resend_requested': True})
 
 
 def privacy_policy(request):
@@ -140,7 +213,7 @@ def terms_of_service(request):
                 'verify_url': verify_url,
             })
             send_mail(
-                subject='Подтверждение email — Recon&Scalp',
+                subject='Подтверждение email — ReconAve',
                 message=f'Привет, {user.username}!\n\nПодтверди email: {verify_url}\n\nСсылка действительна 24 часа.',
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[user.email],

@@ -8,7 +8,7 @@ class UniOneEmailService:
     def __init__(self):
         self.api_key = os.getenv('UNIONE_API_KEY')
         self.sender_email = os.getenv('UNIONE_SENDER_EMAIL', 'noreply@yourdomain.com')
-        self.sender_name = os.getenv('UNIONE_SENDER_NAME', 'Recon&Scalp')
+        self.sender_name = os.getenv('UNIONE_SENDER_NAME', 'ReconAve')
         self.base_url = 'https://api.unione.io/ru/transactional/api/v1/email/send'
 
     def is_configured(self):
@@ -45,7 +45,7 @@ class UniOneEmailService:
             return False, str(e)
 
     def send_verification_email(self, user, verify_url, request=None):
-        subject = "Подтвердите ваш email — Recon&Scalp"
+        subject = "Подтвердите ваш email — ReconAve"
         
         if request:
             logo_url = request.build_absolute_uri('/api/logo/')
@@ -59,7 +59,7 @@ class UniOneEmailService:
         })
         text_content = (
             f"Привет, {user.username}!\n\n"
-            f"Чтобы завершить регистрацию в Recon&Scalp, перейдите по ссылке:\n{verify_url}\n\n"
+            f"Чтобы завершить регистрацию в ReconAve, перейдите по ссылке:\n{verify_url}\n\n"
             f"Ссылка действительна 24 часа.\n"
             f"Если вы не регистрировались — просто проигнорируйте это письмо."
         )
