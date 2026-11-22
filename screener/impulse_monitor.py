@@ -1,11 +1,14 @@
 """
 Impulse Monitor — детекция амплитуды свечи (Scalp Board logic)
 Сервер ловит ВСЕ импульсы >= 0.5% для обоих окон (60с и 300с).
+Окна СКОЛЬЗЯЩИЕ (последние N секунд от «сейчас»), чтобы не резать
+движение на границах фиксированных окон — так боты и дают больший %.
 Клиент фильтрует по своим настройкам из localStorage.
 """
 import asyncio
 import json
 import time
+from collections import deque
 import websockets
 from django.core.cache import cache
 from logging.handlers import RotatingFileHandler
@@ -27,23 +30,37 @@ _console = logging.StreamHandler()
 _console.setFormatter(logging.Formatter('%(message)s'))
 _logger.addHandler(_console)
 
-# Состояние свечей: "{symbol}_{window}_{window_start}" -> {...}
+# Состояние: "{symbol}_{window}" -> {...}
 candle_state = {}
 cooldowns = {}  # cooldowns keyed by same state key
-impulse_active_symbols = set()  # отслеживаемые символы (clean base symbol)
+impulse_active_symbols = set()
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
-# Жёсткий минимальный порог для защиты от коллапса
 MIN_THRESHOLD = 1.5
-# Сервер считает ОБА окна параллельно
 WINDOWS = [60, 300]
 
-# Максимальное количество отслеживаемых символов в impulse_monitor
 MAX_IMPULSE_SYMBOLS = 200
 
-# Очередь для разделения приёма и обработки
 ticker_queue = None
+
+
+def _prune(state, now_sec):
+    window = state['window']
+    cutoff = now_sec - window
+    # prune price history
+    was_empty = not state['price_history']
+    while state['price_history'] and state['price_history'][0][0] < cutoff:
+        state['price_history'].popleft()
+    # reset reported extremes if window fully expired
+    if not state['price_history'] and not was_empty:
+        state['last_reported_high'] = None
+        state['last_reported_low'] = None
+    # prune min/max deques
+    while state['min_deque'] and state['min_deque'][0][0] < cutoff:
+        state['min_deque'].popleft()
+    while state['max_deque'] and state['max_deque'][0][0] < cutoff:
+        state['max_deque'].popleft()
 
 
 def process_ticker_batch(tickers, now_sec):
@@ -55,7 +72,6 @@ def process_ticker_batch(tickers, now_sec):
 
         clean = symbol[:-4]
         if len(impulse_active_symbols) >= MAX_IMPULSE_SYMBOLS and clean not in impulse_active_symbols:
-            # Пропускаем новые символы если лимит исчерпан
             continue
 
         try:
@@ -66,35 +82,47 @@ def process_ticker_batch(tickers, now_sec):
         if not price:
             continue
 
-        # Обновляем состояние для КАЖДОГО окна независимо
         for window in WINDOWS:
-            current_window_start = int(now_sec // window) * window
-            state_key = f"{clean}_{window}_{current_window_start}"
+            state_key = f"{clean}_{window}"
 
             state = candle_state.get(state_key)
             if state is None:
-                candle_state[state_key] = {
-                    'start_time': current_window_start,
-                    'low': price,
-                    'high': price,
-                    'current': price,
-                    'open': price,
-                    'volume': volume,
+                state = {
+                    'symbol': clean,
                     'window': window,
-                    'symbol': clean
+                    'price_history': deque(),
+                    'min_deque': deque(),
+                    'max_deque': deque(),
+                    'current': price,
+                    'volume': volume,
+                    'last_ts': now_sec,
+                    'last_reported_high': None,
+                    'last_reported_low': None,
                 }
+                candle_state[state_key] = state
                 impulse_active_symbols.add(clean)
-            else:
-                if price < state['low']:
-                    state['low'] = price
-                if price > state['high']:
-                    state['high'] = price
-                state['current'] = price
-                state['volume'] = volume
+
+            # reset extremes if window expired before this tick
+            if not state['price_history']:
+                state['last_reported_high'] = None
+                state['last_reported_low'] = None
+
+            _prune(state, now_sec)
+
+            state['current'] = price
+            state['volume'] = volume
+            state['last_ts'] = now_sec
+
+            state['price_history'].append((now_sec, price))
+            while state['min_deque'] and state['min_deque'][-1][1] >= price:
+                state['min_deque'].pop()
+            state['min_deque'].append((now_sec, price))
+            while state['max_deque'] and state['max_deque'][-1][1] <= price:
+                state['max_deque'].pop()
+            state['max_deque'].append((now_sec, price))
 
 
 async def ticker_processor():
-    """Фоновая задача — обрабатывает тикеры из очереди"""
     global ticker_queue
     while True:
         try:
@@ -106,20 +134,19 @@ async def ticker_processor():
 
 
 def detect_impulses(now_sec):
-    """Детектирует импульсы для ВСЕХ окон параллельно"""
+    """Детектирует импульсы для ВСЕХ окон параллельно (скользящие окна)"""
     now_ms = now_sec * 1000
     impulses = []
 
-    # 🔥 MEMORY LEAK PREVENTION: Очистка старых окон candle_state
+    # Очистка старых состояний
     old_keys = [
         k for k, v in candle_state.items()
-        if now_sec - v['start_time'] > MAX_CANDLE_AGE_SEC
+        if now_sec - v.get('last_ts', 0) > MAX_CANDLE_AGE_SEC
     ]
     for k in old_keys:
         candle_state.pop(k, None)
         cooldowns.pop(k, None)
 
-    # Очистка impulse_active_symbols: убираем символы, у которых не осталось окон
     symbols_in_state = set()
     for state_key in candle_state.keys():
         base = state_key.split('_')[0]
@@ -128,25 +155,24 @@ def detect_impulses(now_sec):
         if s not in symbols_in_state:
             impulse_active_symbols.discard(s)
 
-    # Жёсткий лимит на cooldowns
     if len(cooldowns) > MAX_IMPULSE_SYMBOLS * len(WINDOWS):
         oldest = sorted(cooldowns.items(), key=lambda kv: kv[1])[:len(cooldowns) - MAX_IMPULSE_SYMBOLS * len(WINDOWS)]
         for k, _ in oldest:
             cooldowns.pop(k, None)
 
     for window in WINDOWS:
-        cooldown_ms = max(30000, window * 1000)  # 1 мин → 60с, 5 мин → 300с
-        current_window_start = int(now_sec // window) * window
+        cooldown_ms = max(30000, window * 1000)
 
         for state_key, state in list(candle_state.items()):
             if state.get('window') != window:
                 continue
-            if state['start_time'] < current_window_start:
-                if state.get('is_reported'):
-                    continue
-                state['is_reported'] = True
-            low = state.get('low', 0)
-            high = state.get('high', 0)
+
+            _prune(state, now_sec)
+
+            if not state['min_deque'] or not state['max_deque']:
+                continue
+            low = state['min_deque'][0][1]
+            high = state['max_deque'][0][1]
             if low == 0 or high == 0:
                 continue
 
@@ -154,12 +180,21 @@ def detect_impulses(now_sec):
             if amplitude < MIN_THRESHOLD:
                 continue
 
+            # не репортим, если нет нового экстремума
+            lrh = state.get('last_reported_high')
+            lrl = state.get('last_reported_low')
+            if lrh is not None and high <= lrh and low >= lrl:
+                continue
+
             last_alert = cooldowns.get(state_key, 0)
             if now_ms - last_alert < cooldown_ms:
                 continue
 
             cooldowns[state_key] = now_ms
-            open_price = state.get('open', 0)
+            state['last_reported_high'] = high
+            state['last_reported_low'] = low
+
+            open_price = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
             direction = 'up' if state.get('current', 0) >= open_price else 'down'
 
             impulses.append({
@@ -176,36 +211,32 @@ def detect_impulses(now_sec):
 
 async def impulse_ws_listener():
     global ticker_queue
-    # Очередь с ограничением размера — защита от переполнения памяти
     ticker_queue = asyncio.Queue(maxsize=1000)
 
     while True:
         try:
             _logger.info("🔌 Impulse WS: подключение к Binance...")
-            
+
             async with websockets.connect(
                 BINANCE_TICKER_WS,
                 ping_interval=30,
                 ping_timeout=30,
                 close_timeout=10
             ) as ws:
-                
+
                 while True:
                     try:
-                        
+
                         msg = await asyncio.wait_for(ws.recv(), timeout=20)
                         tickers = json.loads(msg)
                         now_sec = time.time()
 
-                        
                         try:
                             ticker_queue.put_nowait((tickers, now_sec))
                         except asyncio.QueueFull:
-                            # Если очередь переполнена — пропускаем (лучше потерять данные, чем уронить WS)
                             pass
 
                     except asyncio.TimeoutError:
-                        # Таймаут приёма — нормальная ситуация, продолжаем
                         continue
                     except websockets.exceptions.ConnectionClosed as e:
                         _logger.warning(f"⚠️ WS connection closed: {e}")
@@ -233,8 +264,7 @@ async def impulse_checker():
 
 
 async def main():
-    _logger.info("🚀 Запуск Impulse Monitor (Amplitude Mode)...")
-    
+    _logger.info("🚀 Запуск Impulse Monitor (Sliding Window Mode)...")
     await asyncio.gather(
         impulse_ws_listener(),
         ticker_processor(),
