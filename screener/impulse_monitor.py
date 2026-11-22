@@ -40,7 +40,7 @@ BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 MIN_THRESHOLD = 1.5
 WINDOWS = [60, 300]
 
-MAX_IMPULSE_SYMBOLS = 200
+MAX_IMPULSE_SYMBOLS = 100000
 
 ticker_queue = None
 
@@ -56,6 +56,7 @@ def _prune(state, now_sec):
     if not state['price_history'] and not was_empty:
         state['last_reported_high'] = None
         state['last_reported_low'] = None
+        state['peak_amplitude'] = 0.0
     # prune min/max deques
     while state['min_deque'] and state['min_deque'][0][0] < cutoff:
         state['min_deque'].popleft()
@@ -71,8 +72,9 @@ def process_ticker_batch(tickers, now_sec):
             continue
 
         clean = symbol[:-4]
-        if len(impulse_active_symbols) >= MAX_IMPULSE_SYMBOLS and clean not in impulse_active_symbols:
-            continue
+        # Отслеживаем ВСЕ монеты без ограничения и без фильтра по NATR
+        if clean not in impulse_active_symbols:
+            impulse_active_symbols.add(clean)
 
         try:
             price = float(ticker.get('c', 0))
@@ -98,6 +100,7 @@ def process_ticker_batch(tickers, now_sec):
                     'last_ts': now_sec,
                     'last_reported_high': None,
                     'last_reported_low': None,
+                    'peak_amplitude': 0.0,
                 }
                 candle_state[state_key] = state
                 impulse_active_symbols.add(clean)
@@ -106,6 +109,7 @@ def process_ticker_batch(tickers, now_sec):
             if not state['price_history']:
                 state['last_reported_high'] = None
                 state['last_reported_low'] = None
+                state['peak_amplitude'] = 0.0
 
             _prune(state, now_sec)
 
@@ -178,7 +182,12 @@ def detect_impulses(now_sec):
 
             amplitude = ((high - low) / low) * 100
             if amplitude < MIN_THRESHOLD:
+                state['peak_amplitude'] = 0.0
                 continue
+
+            # обновляем пик амплитуды за период
+            if amplitude > state.get('peak_amplitude', 0):
+                state['peak_amplitude'] = amplitude
 
             # не репортим, если нет нового экстремума
             lrh = state.get('last_reported_high')
@@ -197,9 +206,14 @@ def detect_impulses(now_sec):
             open_price = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
             direction = 'up' if state.get('current', 0) >= open_price else 'down'
 
+            report_amp = state.get('peak_amplitude', amplitude) or amplitude
+            if report_amp < amplitude:
+                report_amp = amplitude
+            state['peak_amplitude'] = 0.0
+
             impulses.append({
                 'symbol': state.get('symbol', ''),
-                'price_change': round(amplitude, 2),
+                'price_change': round(report_amp, 2),
                 'direction': direction,
                 'current_price': state.get('current', 0),
                 'window': window,
