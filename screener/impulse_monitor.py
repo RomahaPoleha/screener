@@ -33,7 +33,7 @@ _logger.addHandler(_console)
 # Состояние: "{symbol}_{window}" -> {...}
 candle_state = {}
 cooldowns = {}  # cooldowns keyed by same state key
-impulse_active_symbols = set()
+impulse_active_symbols = {}  # {symbol: last_seen_timestamp}
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
@@ -73,8 +73,7 @@ def process_ticker_batch(tickers, now_sec):
 
         clean = symbol[:-4]
         # Отслеживаем ВСЕ монеты без ограничения и без фильтра по NATR
-        if clean not in impulse_active_symbols:
-            impulse_active_symbols.add(clean)
+        impulse_active_symbols[clean] = now_sec
 
         try:
             price = float(ticker.get('c', 0))
@@ -103,7 +102,7 @@ def process_ticker_batch(tickers, now_sec):
                     'peak_amplitude': 0.0,
                 }
                 candle_state[state_key] = state
-                impulse_active_symbols.add(clean)
+                impulse_active_symbols[clean] = now_sec
 
             # reset extremes if window expired before this tick
             if not state['price_history']:
@@ -155,12 +154,20 @@ def detect_impulses(now_sec):
     for state_key in candle_state.keys():
         base = state_key.split('_')[0]
         symbols_in_state.add(base)
-    for s in list(impulse_active_symbols):
-        if s not in symbols_in_state:
-            impulse_active_symbols.discard(s)
+    # Очистка неактивных символов: удаляем если нет в state ИЛИ не видели > 2 * MAX_CANDLE_AGE_SEC
+    stale_threshold = MAX_CANDLE_AGE_SEC * 2
+    for s in list(impulse_active_symbols.keys()):
+        if s not in symbols_in_state or (now_sec - impulse_active_symbols.get(s, 0)) > stale_threshold:
+            impulse_active_symbols.pop(s, None)
 
-    if len(cooldowns) > MAX_IMPULSE_SYMBOLS * len(WINDOWS):
-        oldest = sorted(cooldowns.items(), key=lambda kv: kv[1])[:len(cooldowns) - MAX_IMPULSE_SYMBOLS * len(WINDOWS)]
+    # Очистка устаревших cooldown-ов (старше 1 часа)
+    cooldown_ttl_ms = 3_600_000
+    expired_cooldowns = [k for k, v in cooldowns.items() if now_ms - v > cooldown_ttl_ms]
+    for k in expired_cooldowns:
+        cooldowns.pop(k, None)
+
+    if len(cooldowns) > 5000:
+        oldest = sorted(cooldowns.items(), key=lambda kv: kv[1])[:len(cooldowns) - 5000]
         for k, _ in oldest:
             cooldowns.pop(k, None)
 

@@ -30,7 +30,7 @@ except ImportError:
 bitget_futures_order_books = {}
 bitget_futures_density_timestamps = {}
 bitget_futures_symbols = []
-bitget_futures_message_queue = asyncio.Queue(maxsize=50000)
+bitget_futures_message_queue = asyncio.Queue(maxsize=10000)
 bitget_futures_lock = asyncio.Lock()
 bitget_futures_reconnect_event = asyncio.Event()
 bitget_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
@@ -41,7 +41,7 @@ bitget_futures_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
 bitget_spot_order_books = {}
 bitget_spot_density_timestamps = {}
 bitget_spot_symbols = []
-bitget_spot_message_queue = asyncio.Queue(maxsize=50000)
+bitget_spot_message_queue = asyncio.Queue(maxsize=10000)
 bitget_spot_lock = asyncio.Lock()
 bitget_spot_reconnect_event = asyncio.Event()
 bitget_spot_volume_stats = {}  # symbol -> {price: {min, max, sum, count}}
@@ -86,12 +86,20 @@ TOUCH_PULL_DISTANCE = 0.005
 async def get_http_client():
     """Ленивая инициализация aiohttp клиента"""
     global _http_client
-    if _http_client is None:
+    if _http_client is None or _http_client.closed:
         _http_client = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(connect=5, sock_read=10, total=30),
             headers={'User-Agent': 'Mozilla/5.0'}
         )
     return _http_client
+
+
+async def close_http_client():
+    """Явное закрытие сессии (для graceful shutdown)"""
+    global _http_client
+    if _http_client and not _http_client.closed:
+        await _http_client.close()
+        _http_client = None
 
 
 # ==========================================
@@ -886,6 +894,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('bitget', sym, 'futures')
                             last_sync_time.pop(f"bitget:futures:{sym}", None)
+                import gc
+                gc.collect()
                     
 
 
@@ -899,6 +909,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('bitget', sym, 'spot')
                             last_sync_time.pop(f"bitget:spot:{sym}", None)
+                import gc
+                gc.collect()
                     
 
 
@@ -1021,4 +1033,8 @@ def start_bitget_async_monitor(log_func=print):
         import traceback
         log_func(traceback.format_exc())
     finally:
-        pass
+        try:
+            loop.run_until_complete(close_http_client())
+        except Exception:
+            pass
+        loop.close()

@@ -886,6 +886,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('bybit', sym, 'futures')
                             last_sync_time.pop(f"bybit:futures:{sym}", None)
+                import gc
+                gc.collect()
                 
 
                 if added or removed:
@@ -898,6 +900,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('bybit', sym, 'spot')
                             last_sync_time.pop(f"bybit:spot:{sym}", None)
+                import gc
+                gc.collect()
                 
 
                 if added or removed:
@@ -1021,4 +1025,8 @@ def start_bybit_async_monitor(log_func=print):
         import traceback
         log_func(traceback.format_exc())
     finally:
-        pass
+        try:
+            loop.run_until_complete(close_http_client())
+        except Exception:
+            pass
+        loop.close()

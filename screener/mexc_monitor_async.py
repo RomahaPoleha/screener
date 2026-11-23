@@ -86,12 +86,20 @@ TOUCH_PULL_DISTANCE = 0.005
 async def get_http_client():
     """Ленивая инициализация aiohttp клиента"""
     global _http_client
-    if _http_client is None:
+    if _http_client is None or _http_client.closed:
         _http_client = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(connect=5, sock_read=10, total=30),
             headers={'User-Agent': 'Mozilla/5.0'}
         )
     return _http_client
+
+
+async def close_http_client():
+    """Явное закрытие сессии (для graceful shutdown)"""
+    global _http_client
+    if _http_client and not _http_client.closed:
+        await _http_client.close()
+        _http_client = None
 
 
 # ==========================================
@@ -846,6 +854,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('mexc', sym, 'futures')
                             last_sync_time.pop(f"mexc:futures:{sym}", None)
+                import gc
+                gc.collect()
                     
 
 
@@ -859,6 +869,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('mexc', sym, 'spot')
                             last_sync_time.pop(f"mexc:spot:{sym}", None)
+                import gc
+                gc.collect()
                     
 
 
@@ -981,4 +993,8 @@ def start_mexc_async_monitor(log_func=print):
         import traceback
         log_func(traceback.format_exc())
     finally:
-        pass
+        try:
+            loop.run_until_complete(close_http_client())
+        except Exception:
+            pass
+        loop.close()

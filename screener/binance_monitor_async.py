@@ -985,6 +985,8 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         remove_symbol_state('binance', sym, 'futures')
                         last_sync_time.pop(f"binance:futures:{sym}", None)
+                import gc
+                gc.collect()
                 
 
             if removed or added:
@@ -1052,6 +1054,8 @@ async def periodic_refresh(log_func=print):
                     for sym in removed:
                         remove_symbol_state('binance', sym, 'spot')
                         last_sync_time.pop(f"binance:spot:{sym}", None)
+                import gc
+                gc.collect()
                 
 
             if removed or added:

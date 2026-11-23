@@ -904,6 +904,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('okx', sym, 'futures')
                             last_sync_time.pop(f"okx:futures:{sym}", None)
+                import gc
+                gc.collect()
                     
 
 
@@ -917,6 +919,8 @@ async def periodic_refresh(market='futures', log_func=print):
                         for sym in removed:
                             remove_symbol_state('okx', sym, 'spot')
                             last_sync_time.pop(f"okx:spot:{sym}", None)
+                import gc
+                gc.collect()
                     
 
 
@@ -1039,4 +1043,8 @@ def start_okx_async_monitor(log_func=print):
         import traceback
         log_func(traceback.format_exc())
     finally:
-        pass
+        try:
+            loop.run_until_complete(close_http_client())
+        except Exception:
+            pass
+        loop.close()

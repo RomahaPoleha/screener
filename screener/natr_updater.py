@@ -43,8 +43,9 @@ last_update_times = {
 # TTL кэша (20 минут)
 CACHE_TTL = 1200
 
-# Лок для безопасной записи кэша из параллельных потоков таймфреймов
-_natr_cache_lock = threading.Lock()
+# Переиспользуемый пул потоков для NATR
+from concurrent.futures import ThreadPoolExecutor
+_natr_executor = ThreadPoolExecutor(max_workers=2)
 
 # Настройка ротации логов
 LOG_DIR = '/app/data'
@@ -251,22 +252,19 @@ def update_natr_futures():
             'last_update': datetime.now().isoformat()
         }, CACHE_TTL)
 
-        # Запускаем параллельные потоки для каждого таймфрейма
-        threads = []
+        # Запускаем параллельные задачи через пул потоков
+        futures = []
         for tf_key in timeframes_to_update:
             config = NATR_TIMEFRAMES[tf_key]
-            thread = threading.Thread(
-                target=update_natr_for_timeframe,
-                args=(symbols, tf_key, config, current_time),
-                name=f'NATR-{tf_key}',
-                daemon=True
-            )
-            threads.append(thread)
-            thread.start()
+            future = _natr_executor.submit(update_natr_for_timeframe, symbols, tf_key, config, current_time)
+            futures.append(future)
 
-        # Ждём завершения всех потоков
-        for thread in threads:
-            thread.join()
+        # Ждём завершения всех задач
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                log(f"❌ Ошибка в задаче NATR: {e}")
 
         log(f"🎉 Все таймфреймы обновлены!")
 
@@ -327,3 +325,7 @@ def start_natr_updater():
 def stop_natr_updater():
     log("📤 Отправка сигнала остановки NATR Updater...")
     shutdown_event.set()
+    try:
+        _natr_executor.shutdown(wait=False)
+    except Exception:
+        pass

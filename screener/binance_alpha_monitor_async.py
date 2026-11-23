@@ -742,6 +742,8 @@ async def periodic_refresh(log_func=print):
                         remove_symbol_state('alpha', sym, 'spot')
                         last_sync_time.pop(f"scalp:spot:binance_alpha:{sym}", None)
                         alpha_first_load_done.discard(sym)
+                import gc
+                gc.collect()
 
             if added or removed:
                 alpha_reconnect_event.set()
