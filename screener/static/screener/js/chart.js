@@ -114,7 +114,7 @@ async function openChart(symbol) {
         historyBtn.textContent = 'Загрузить историю';
         historyBtn.title = 'Загрузить глубокую историю свечей';
     }
-    if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
+    if (!chart) {
     try {
         chart = LightweightCharts.createChart(els.chartWrapper, {
             width: els.chartWrapper.clientWidth,
@@ -129,11 +129,6 @@ async function openChart(symbol) {
         volumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'volume', scaleMargins: { top: 0.85, bottom: 0 } });
         chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
         if (volumeSeries) volumeSeries.applyOptions({ visible: volumeHistogramEnabled });
-        
-        // Восстановить рисунки для текущего символа
-        if (typeof restoreDrawingsForSymbol === 'function') {
-            restoreDrawingsForSymbol(symbol);
-        }
 
         chart.subscribeCrosshairMove((param) => {
             if (isMagnetEnabled) updateMagnetIndicator(param);
@@ -380,10 +375,19 @@ async function openChart(symbol) {
             }
         });
     } catch (e) { console.error('Chart init error:', e); return; }
+    } else {
+        if (candleSeries) candleSeries.setData([]);
+        if (volumeSeries) volumeSeries.setData([]);
+    }
 
+    // Восстановить рисунки для текущего символа
+    if (typeof restoreDrawingsForSymbol === 'function') {
+        restoreDrawingsForSymbol(symbol);
+    }
+    // Запускаем WS параллельно с загрузкой данных (не ждём)
+    startCandleWebSocket(symbol, currentTF);
     await loadChartData(symbol, currentTF);
     AlertManager.restoreLines(symbol);
-    startCandleWebSocket(symbol, currentTF);
     updateWatermark();
     updateChartStats();
     if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);
@@ -409,7 +413,7 @@ async function loadChartData(symbol, tf) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const history = await res.json();
         if (!history || history.length === 0) throw new Error('Пустая история');
-        const limitedHistory = history.slice(-500);
+        const limitedHistory = history.slice(-300);
         candlesCache.set(cacheKey, {
             data: limitedHistory,
             timestamp: Date.now()

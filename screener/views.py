@@ -433,7 +433,7 @@ def api_candles(request, symbol):
     try:
         exchange = get_binance_exchange()
         pair = f"{symbol}/USDT:USDT"
-        ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=500)
+        ohlcv = exchange.fetch_ohlcv(pair, timeframe=tf, limit=300)
 
         candles = [
             {
@@ -447,7 +447,7 @@ def api_candles(request, symbol):
             for ts, o, h, l, c, v in ohlcv
         ]
 
-        cache.set(cache_key, candles, 300)
+        cache.set(cache_key, candles, 600)
         return JsonResponse(candles, safe=False)
 
     except ccxt.BadSymbol as e:
