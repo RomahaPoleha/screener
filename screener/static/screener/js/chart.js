@@ -376,8 +376,7 @@ async function openChart(symbol) {
         });
     } catch (e) { console.error('Chart init error:', e); return; }
     } else {
-        if (candleSeries) candleSeries.setData([]);
-        if (volumeSeries) volumeSeries.setData([]);
+        // Не очищаем данные — applyCandlesToChart перезапишет их
     }
 
     // Восстановить рисунки для текущего символа
@@ -445,7 +444,12 @@ function applyCandlesToChart(history) {
         })));
     }
     chart.timeScale().fitContent();
-    chart.timeScale().scrollToPosition(12, false);
+    // Принудительный re-fit через кадр, чтобы график не уезжал за пределы окна
+    setTimeout(() => {
+        if (chart) {
+            chart.timeScale().fitContent();
+        }
+    }, 50);
 }
 // ==========================================
 // ЗАГРУЗКА ГЛУБОКОЙ ИСТОРИИ
