@@ -384,15 +384,15 @@ async function openChart(symbol) {
     if (typeof restoreDrawingsForSymbol === 'function') {
         restoreDrawingsForSymbol(symbol);
     }
-    // Запускаем WS параллельно с загрузкой данных (не ждём)
+    // Запускаем WS и плотности параллельно с загрузкой данных (не ждём)
     startCandleWebSocket(symbol, currentTF);
+    if (densityEnabled) startDensityUpdates(symbol);
+    if (scalpEnabled && !scalpSettingsPending) startScalpUpdates(symbol);
     await loadChartData(symbol, currentTF);
     AlertManager.restoreLines(symbol);
     updateWatermark();
     updateChartStats();
     if (els.tradesOverlay.classList.contains('active')) startTradesStream(symbol);
-    if (densityEnabled) startDensityUpdates(symbol);
-    if (scalpEnabled && !scalpSettingsPending) startScalpUpdates(symbol);
     if (reconEnabled) startReconUpdates(symbol);
 }
 
