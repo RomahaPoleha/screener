@@ -99,7 +99,15 @@ function closeChart() {
 // ОТКРЫТИЕ ГРАФИКА
 // ==========================================
 async function openChart(symbol) {
-    if (collageState && !window.collageOverlayMode) exitCollage();
+    if (collageState && !window.collageOverlayMode) {
+        try { exitCollage(); } catch(e) { console.error('exitCollage error:', e); }
+        window.collageState = null;
+        const _wrap = document.getElementById('collageWrap');
+        if (_wrap) { _wrap.style.display = 'none'; }
+        const _controls = document.getElementById('collageControls');
+        if (_controls) _controls.style.display = 'none';
+        if (els.chartWrapper) els.chartWrapper.style.display = '';
+    }
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     if (typeof clearDensityLines === 'function') clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
