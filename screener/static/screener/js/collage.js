@@ -73,7 +73,7 @@ function exitCollage() {
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'flex';
     const resetBtn = document.querySelector('.chart-reset-btn');
-    if (resetBtn) resetBtn.style.display = '';
+    if (resetBtn) resetBtn.style.display = ''; resetBtn.style.zIndex = '20'; resetBtn.style.position = 'relative';;
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
     els.pencilCanvas.style.display = '';
 
@@ -103,7 +103,7 @@ function openChartOverlay(symbol) {
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'flex';
     const resetBtn = document.querySelector('.chart-reset-btn');
-    if (resetBtn) { resetBtn.style.display = ''; resetBtn.textContent = '✕ Закрыть'; resetBtn.onclick = closeChartOverlay; }
+    if (resetBtn) { resetBtn.style.display = ''; resetBtn.style.zIndex = '20'; resetBtn.style.position = 'relative';; resetBtn.textContent = '✕ Закрыть'; resetBtn.onclick = closeChartOverlay; }
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
     els.chartWatermark.style.display = '';
     els.pencilCanvas.style.display = '';
