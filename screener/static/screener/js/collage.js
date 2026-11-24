@@ -103,7 +103,7 @@ function openChartOverlay(symbol) {
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'flex';
     const resetBtn = document.querySelector('.chart-reset-btn');
-    if (resetBtn) { resetBtn.style.display = ''; resetBtn.style.zIndex = '20'; resetBtn.style.position = 'absolute'; resetBtn.style.top = '8px'; resetBtn.style.right = '12px';; resetBtn.textContent = '✕ Закрыть'; resetBtn.onclick = closeChartOverlay; }
+    if (resetBtn) { resetBtn.style.display = ''; resetBtn.style.zIndex = '20'; resetBtn.style.position = 'absolute'; resetBtn.style.top = '8px'; resetBtn.style.right = '12px';; resetBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14h6v6M20 10h-6V4M4 20l7-7M20 4l-7 7"/></svg>'; resetBtn.onclick = closeChartOverlay; }
     els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
     els.chartWatermark.style.display = '';
     els.pencilCanvas.style.display = '';
@@ -129,7 +129,7 @@ function closeChartOverlay() {
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'none';
     const resetBtn = document.querySelector('.chart-reset-btn');
-    if (resetBtn) { resetBtn.style.display = 'none'; resetBtn.textContent = '✕ Сброс'; resetBtn.onclick = function() { closeChart(); }; }
+    if (resetBtn) { resetBtn.style.display = 'none'; resetBtn.innerHTML = '✕ Сброс'; resetBtn.onclick = function() { closeChart(); }; }
     els.drawingToolsPanel.style.display = 'none';
     els.chartWatermark.style.display = 'none';
     els.pencilCanvas.style.display = 'none';
