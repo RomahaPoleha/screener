@@ -92,7 +92,8 @@ const marketsToLoad = [];
 if (densityMarkets.future) marketsToLoad.push('future');
 if (densityMarkets.spot) marketsToLoad.push('spot');
 const allNewData = {};
-for (const market of marketsToLoad) {
+// Параллельная загрузка всех рынков
+const marketPromises = marketsToLoad.map(market => (async () => {
 if (currentSymbol !== requestSymbol) return;
 try {
 const url = market === 'future'
@@ -100,7 +101,7 @@ const url = market === 'future'
 : 'https://api.binance.com/api/v3/depth?symbol=' + symbol + 'USDT&limit=1000';
 const res = await fetch(url, { signal });
 if (currentSymbol !== requestSymbol) return;
-if (!res.ok) continue;
+if (!res.ok) return;
 const data = await res.json();
 if (currentSymbol !== requestSymbol) return;
 const densities = [];
@@ -122,7 +123,9 @@ if (e.name === 'AbortError') return;
 console.error('Densities error (' + market + '):', e);
 allNewData[market] = previousDensities[market] || [];
 }
-}
+})());
+await Promise.all(marketPromises);
+if (currentSymbol !== requestSymbol) return;
 if (currentSymbol !== requestSymbol) return;
 let hasChanges = false;
 for (const market of marketsToLoad) {

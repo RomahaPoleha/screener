@@ -87,13 +87,15 @@ if (!activeKeys.has(key)) delete previousScalpData[key];
 }
 const allNewData = {};
 let hasChanges = false;
-for (const item of loadList) {
-if (currentSymbol !== requestSymbol) return;
+// Параллельная загрузка всех бирж/рынков
+const fetchPromises = loadList.map(item => {
 const key = `${item.exchange}|${item.market}`;
+return (async () => {
+if (currentSymbol !== requestSymbol) return;
 try {
 const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`, { signal });
 if (currentSymbol !== requestSymbol) return;
-if (!res.ok) continue;
+if (!res.ok) return;
 const data = await res.json();
 if (currentSymbol !== requestSymbol) return;
 const exchangeData = data.by_exchange?.[item.exchange] || [];
@@ -104,7 +106,10 @@ if (e.name === 'AbortError') return;
 console.error(`Scalp load error (${key}):`, e);
 allNewData[key] = previousScalpData[key] || [];
 }
-}
+})();
+});
+await Promise.all(fetchPromises);
+if (currentSymbol !== requestSymbol) return;
 if (currentSymbol !== requestSymbol) return;
 for (const key in allNewData) {
 const newData = allNewData[key];
