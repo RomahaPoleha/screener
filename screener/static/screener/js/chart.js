@@ -114,7 +114,7 @@ async function openChart(symbol) {
         historyBtn.textContent = 'Загрузить историю';
         historyBtn.title = 'Загрузить глубокую историю свечей';
     }
-    if (!chart) {
+    if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
     try {
         chart = LightweightCharts.createChart(els.chartWrapper, {
             width: els.chartWrapper.clientWidth,
@@ -375,9 +375,6 @@ async function openChart(symbol) {
             }
         });
     } catch (e) { console.error('Chart init error:', e); return; }
-    } else {
-        // Не очищаем данные — applyCandlesToChart перезапишет их
-    }
 
     // Восстановить рисунки для текущего символа
     if (typeof restoreDrawingsForSymbol === 'function') {
@@ -444,12 +441,18 @@ function applyCandlesToChart(history) {
         })));
     }
     chart.timeScale().fitContent();
-    // Принудительный re-fit через кадр, чтобы график не уезжал за пределы окна
-    setTimeout(() => {
-        if (chart) {
-            chart.timeScale().fitContent();
-        }
-    }, 50);
+    // Двойной RAF + setTimeout для гарантированного re-fit после рендера
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                if (chart) {
+                    chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
+                    chart.timeScale().fitContent();
+                    chart.timeScale().scrollToPosition(12, false);
+                }
+            }, 200);
+        });
+    });
 }
 // ==========================================
 // ЗАГРУЗКА ГЛУБОКОЙ ИСТОРИИ
