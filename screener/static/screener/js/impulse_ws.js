@@ -1,5 +1,5 @@
 // ==========================================
-// impulse_ws.js — POLLING (WebSocket отключён из-за нестабильного Redis)
+// impulse_ws.js — POLLING С КЛИЕНТСКОЙ ФИЛЬТРАЦИЕЙ
 // ==========================================
 
 window.impulsePollingEnabled = false;
@@ -10,7 +10,7 @@ const seenImpulses = new Set();
 function startImpulseWebSocket() {
     if (window.impulsePollingEnabled) return;
     window.impulsePollingEnabled = true;
-    console.log('Impulse: polling запущен');
+    console.log('✅ Impulse: серверный polling запущен');
     pollImpulseAlerts();
     impulsePollingTimer = setInterval(pollImpulseAlerts, 1000);
 }
@@ -21,7 +21,7 @@ function stopImpulseWebSocket() {
         clearInterval(impulsePollingTimer);
         impulsePollingTimer = null;
     }
-    console.log('Impulse: остановлено');
+    console.log('⏹️ Impulse: polling остановлен');
 }
 
 Object.defineProperty(window, 'impulseWsEnabled', {
@@ -63,10 +63,12 @@ async function pollImpulseAlerts() {
                 alert.price_change
             );
 
+            // Авто-линковка в Tiger при импульсе
             if (typeof tigerAutoLink === 'function' && typeof tigerIsAutoLinkEnabled === 'function' && tigerIsAutoLinkEnabled()) {
                 tigerAutoLink(alert.symbol);
             }
         }
+        // Обновить историю импульсов, если панель открыта
         const _hp = document.getElementById('alertHistoryPanel');
         if (_hp && (_hp.classList.contains('active') || _hp.offsetParent !== null) && typeof renderAlertHistory === 'function') {
             renderAlertHistory();

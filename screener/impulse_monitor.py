@@ -15,6 +15,7 @@ from logging.handlers import RotatingFileHandler
 import logging
 import os
 
+from .memory_config import MAX_CANDLE_AGE_SEC
 
 LOG_DIR = '/app/data'
 LOG_FILE = os.path.join(LOG_DIR, 'impulse_monitor.log')
