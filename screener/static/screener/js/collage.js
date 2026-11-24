@@ -5,6 +5,22 @@
 window.collageState = null;
 let collageCharts = [];
 
+// Layout: rows x cols
+let collageLayout = localStorage.getItem('collageLayout') || '2x2';
+
+function getCollageRowsCols() {
+    const parts = collageLayout.split('x');
+    return { rows: parseInt(parts[0]) || 2, cols: parseInt(parts[1]) || 2 };
+}
+
+function changeCollageLayout(value) {
+    collageLayout = value;
+    localStorage.setItem('collageLayout', value);
+    const sel = document.getElementById('collageLayoutSelect');
+    if (sel) sel.value = value;
+    if (window.collageState) renderCollagePage();
+}
+
 // Переменные для умного обновления скальпа в коллаже
 let collageScalpTimer = null;
 let collageScalpCache = {};
@@ -30,6 +46,10 @@ function openCollage(colorId) {
 
     const wrap = document.getElementById('collageWrap');
     if (wrap) wrap.style.display = 'grid';
+
+    // Установить значение dropdown
+    const sel = document.getElementById('collageLayoutSelect');
+    if (sel) sel.value = collageLayout;
 
     renderCollagePage();
 }
@@ -84,7 +104,9 @@ function collagePrevPage() {
 
 function collageNextPage() {
     if (!window.collageState) return;
-    const pages = Math.ceil(window.collageState.symbols.length / 4);
+    const { rows, cols } = getCollageRowsCols();
+    const perPage = rows * cols;
+    const pages = Math.ceil(window.collageState.symbols.length / perPage);
     if (window.collageState.page < pages - 1) {
         window.collageState.page++;
         renderCollagePage();
@@ -123,15 +145,15 @@ function renderCollagePage() {
     if (!wrap || !window.collageState) return;
     wrap.innerHTML = '';
 
-    const perPage = 4;
+    const { rows: gridRows, cols: gridCols } = getCollageRowsCols();
+    const perPage = gridRows * gridCols;
     const pages = Math.ceil(window.collageState.symbols.length / perPage);
     const pageSymbols = window.collageState.symbols.slice(window.collageState.page * perPage, window.collageState.page * perPage + perPage);
     const count = pageSymbols.length;
 
     let cols, rows;
-    if (count === 1) { cols = 1; rows = 1; }
-    else if (count === 2) { cols = 2; rows = 1; }
-    else { cols = 2; rows = 2; }
+    cols = gridCols;
+    rows = gridRows;
 
     wrap.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     wrap.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
@@ -160,7 +182,7 @@ function renderCollagePage() {
                 openChart(sym);
             });
         } else {
-            cell.innerHTML = '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#333333; font-size:11px; text-transform:uppercase; letter-spacing:1px;">—</div>';
+            cell.innerHTML = '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#555555; font-size:12px; text-transform:uppercase; letter-spacing:1px;">Пусто</div>';
         }
         wrap.appendChild(cell);
         if (sym) initCollageChart(i, sym);

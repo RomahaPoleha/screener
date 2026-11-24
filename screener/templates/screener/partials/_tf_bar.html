@@ -9,13 +9,19 @@
     <div id="reconPanelContainer" style="display:none; flex-direction:row; gap:8px; align-items:center; margin-left:12px; padding:4px 8px; background:var(--bg-glass); border:1px solid var(--accent); border-radius:var(--radius-sm); backdrop-filter:var(--blur); box-shadow:0 0 8px rgba(255,140,0,0.15);"></div>
 
     <div style="margin-left:auto; display:flex; align-items:center; gap:16px;">
-        <div id="collageControls" style="display:none; align-items:center; gap:6px;">
-            <button class="tf-btn" id="collagePrev" onclick="collagePrevPage()">‹</button>
-            <span id="collagePageInfo" style="font-size:11px; color:#999999; font-weight:700; letter-spacing:0.5px;">1/1</span>
-            <button class="tf-btn" id="collageNext" onclick="collageNextPage()">›</button>
-            <button class="tf-btn" onclick="exitCollage()" style="color:#ef4444; border-color:#7f1d1d;">✕ Коллаж</button>
-            <div style="width:1px; height:16px; background:#333333;"></div>
-        </div>
+<div id="collageControls" style="display:none; align-items:center; gap:6px;">
+    <button class="tf-btn" id="collagePrev" onclick="collagePrevPage()">‹</button>
+    <span id="collagePageInfo" style="font-size:11px; color:#999999; font-weight:700; letter-spacing:0.5px;">1/1</span>
+    <button class="tf-btn" id="collageNext" onclick="collageNextPage()">›</button>
+    <select id="collageLayoutSelect" onchange="changeCollageLayout(this.value)" style="background:#2a2a2a; border:1px solid #444444; color:#ffffff; font-size:10px; font-weight:700; padding:2px 4px; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">
+        <option value="2x2">2×2 (4)</option>
+        <option value="4x2">4×2 (8)</option>
+        <option value="2x1">2×1 (2)</option>
+        <option value="4x4">4×4 (16)</option>
+    </select>
+    <button class="tf-btn" onclick="exitCollage()" style="color:#ef4444; border-color:#7f1d1d;">✕ Коллаж</button>
+    <div style="width:1px; height:16px; background:#333333;"></div>
+</div>
 
         <!-- МИН. ОБЪЁМ -->
         <div style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; color:#999999; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;">
