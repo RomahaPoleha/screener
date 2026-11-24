@@ -1,134 +1,27 @@
 // ==========================================
-// impulse_ws.js — WebSocket + POLLING FALLBACK
+// impulse_ws.js — POLLING (WebSocket отключён из-за нестабильного Redis)
 // ==========================================
 
 window.impulsePollingEnabled = false;
 let impulsePollingTimer = null;
-let impulseWs = null;
-let impulseWsReconnectTimer = null;
-let wsFailCount = 0;
-const WS_MAX_FAILS = 3;
 let impulseLastTimestamp = parseFloat(localStorage.getItem('impulseLastTimestamp') || '0');
 const seenImpulses = new Set();
-
-function getImpulseWsUrl() {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${location.host}/ws/impulses/`;
-}
 
 function startImpulseWebSocket() {
     if (window.impulsePollingEnabled) return;
     window.impulsePollingEnabled = true;
-    console.log('✅ Impulse: WebSocket подключение...');
-    connectImpulseWs();
-}
-
-function connectImpulseWs() {
-    if (impulseWs && (impulseWs.readyState === WebSocket.OPEN || impulseWs.readyState === WebSocket.CONNECTING)) return;
-    try {
-        impulseWs = new WebSocket(getImpulseWsUrl());
-    } catch (e) {
-        console.warn('Impulse WS creation error:', e);
-        startPollingFallback();
-        return;
-    }
-
-    impulseWs.onopen = () => {
-        console.log('✅ Impulse WS подключен');
-        wsFailCount = 0;
-        stopPollingFallback();
-        // При подключении — запросить пропущенные импульсы через polling
-        pollImpulseAlerts();
-    };
-
-    impulseWs.onmessage = (e) => {
-        try {
-            const alert = JSON.parse(e.data);
-            handleImpulseAlert(alert);
-        } catch (err) {
-            console.warn('Impulse WS parse error:', err);
-        }
-    };
-
-    impulseWs.onclose = () => {
-        console.warn('Impulse WS закрыт');
-        impulseWs = null;
-        wsFailCount++;
-        if (window.impulsePollingEnabled) {
-            startPollingFallback();
-            if (wsFailCount < WS_MAX_FAILS) {
-                const delay = Math.min(3000 * wsFailCount, 15000);
-                console.log('Impulse WS reconnect delay=' + delay + 'ms attempt=' + wsFailCount + '/' + WS_MAX_FAILS);
-                impulseWsReconnectTimer = setTimeout(connectImpulseWs, delay);
-            } else {
-                console.log('Impulse WS: too many failures, using polling');
-            }
-        }
-    };
-
-    impulseWs.onerror = (e) => {
-        console.warn('Impulse WS ошибка:', e);
-        if (impulseWs) { try { impulseWs.close(); } catch (err) {} }
-    };
-}
-
-function startPollingFallback() {
-    if (impulsePollingTimer) return;
-    console.log('📡 Impulse: polling fallback запущен');
+    console.log('Impulse: polling запущен');
     pollImpulseAlerts();
-    impulsePollingTimer = setInterval(pollImpulseAlerts, 2000);
-}
-
-function stopPollingFallback() {
-    if (impulsePollingTimer) {
-        clearInterval(impulsePollingTimer);
-        impulsePollingTimer = null;
-    }
-}
-
-function handleImpulseAlert(alert) {
-    const key = `${alert.symbol}_${alert.window}_${alert.timestamp}`;
-    if (seenImpulses.has(key)) return;
-    seenImpulses.add(key);
-
-    const userThreshold = parseFloat(localStorage.getItem('priceImpulseThreshold') || '1.0');
-    const userWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
-
-    if (alert.window !== userWindow) return;
-    if (alert.price_change < userThreshold) return;
-
-    const direction = alert.direction === 'up' ? '↑' : '↓';
-
-    showVolumeAlertToast(
-        alert.symbol,
-        alert.volume || 0,
-        direction,
-        alert.price_change
-    );
-
-    if (typeof tigerAutoLink === 'function' && typeof tigerIsAutoLinkEnabled === 'function' && tigerIsAutoLinkEnabled()) {
-        tigerAutoLink(alert.symbol);
-    }
-
-    const _hp = document.getElementById('alertHistoryPanel');
-    if (_hp && (_hp.classList.contains('active') || _hp.offsetParent !== null) && typeof renderAlertHistory === 'function') {
-        renderAlertHistory();
-    }
+    impulsePollingTimer = setInterval(pollImpulseAlerts, 1000);
 }
 
 function stopImpulseWebSocket() {
     window.impulsePollingEnabled = false;
-    stopPollingFallback();
-    if (impulseWsReconnectTimer) {
-        clearTimeout(impulseWsReconnectTimer);
-        impulseWsReconnectTimer = null;
+    if (impulsePollingTimer) {
+        clearInterval(impulsePollingTimer);
+        impulsePollingTimer = null;
     }
-    if (impulseWs) {
-        impulseWs.onclose = null;
-        try { impulseWs.close(); } catch (e) {}
-        impulseWs = null;
-    }
-    console.log('⏹️ Impulse: остановлено');
+    console.log('Impulse: остановлено');
 }
 
 Object.defineProperty(window, 'impulseWsEnabled', {
@@ -136,7 +29,6 @@ Object.defineProperty(window, 'impulseWsEnabled', {
     set: (v) => { window.impulsePollingEnabled = v; }
 });
 
-// Polling fallback (оставляем для обратной совместимости)
 async function pollImpulseAlerts() {
     if (!window.impulsePollingEnabled) return;
     try {
@@ -151,8 +43,29 @@ async function pollImpulseAlerts() {
         impulseLastTimestamp = Math.max(impulseLastTimestamp, data.server_time || 0, maxAlertTs);
         localStorage.setItem('impulseLastTimestamp', String(impulseLastTimestamp));
 
+        const userThreshold = parseFloat(localStorage.getItem('priceImpulseThreshold') || '1.0');
+        const userWindow = parseInt(localStorage.getItem('priceImpulseWindow') || '60');
+
         for (const alert of alerts) {
-            handleImpulseAlert(alert);
+            const key = `${alert.symbol}_${alert.window}_${alert.timestamp}`;
+            if (seenImpulses.has(key)) continue;
+            seenImpulses.add(key);
+
+            if (alert.window !== userWindow) continue;
+            if (alert.price_change < userThreshold) continue;
+
+            const direction = alert.direction === 'up' ? '↑' : '↓';
+
+            showVolumeAlertToast(
+                alert.symbol,
+                alert.volume || 0,
+                direction,
+                alert.price_change
+            );
+
+            if (typeof tigerAutoLink === 'function' && typeof tigerIsAutoLinkEnabled === 'function' && tigerIsAutoLinkEnabled()) {
+                tigerAutoLink(alert.symbol);
+            }
         }
         const _hp = document.getElementById('alertHistoryPanel');
         if (_hp && (_hp.classList.contains('active') || _hp.offsetParent !== null) && typeof renderAlertHistory === 'function') {

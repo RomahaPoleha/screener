@@ -15,7 +15,6 @@ from logging.handlers import RotatingFileHandler
 import logging
 import os
 
-from channels.layers import get_channel_layer
 
 LOG_DIR = '/app/data'
 LOG_FILE = os.path.join(LOG_DIR, 'impulse_monitor.log')
@@ -270,7 +269,6 @@ async def impulse_ws_listener():
 
 
 async def impulse_checker():
-    channel_layer = get_channel_layer()
     while True:
         try:
             await asyncio.sleep(1)
@@ -281,17 +279,6 @@ async def impulse_checker():
                 cache.set('impulse:recent', existing[:50], 300)
                 for imp in impulses:
                     _logger.info(f"🔥 IMPULSE: {imp['symbol']} {imp['direction']} {imp['price_change']}% (V: ${imp['volume']}, {imp['window']}s)")
-                    if channel_layer:
-                        try:
-                            await asyncio.wait_for(
-                                channel_layer.group_send(
-                                    "impulses",
-                                    {"type": "impulse.message", "data": imp}
-                                ),
-                                timeout=3.0
-                            )
-                        except Exception as e:
-                            _logger.warning(f"⚠️ Channel send error: {e}")
         except Exception as e:
             _logger.error(f"❌ Impulse checker ошибка: {e}")
 
