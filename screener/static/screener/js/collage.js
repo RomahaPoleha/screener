@@ -3,6 +3,7 @@
 // ==========================================
 
 window.collageState = null;
+window.collageOverlayMode = false;
 let collageCharts = [];
 
 // Layout: rows x cols
@@ -88,6 +89,52 @@ function exitCollage() {
             if (typeof redrawAllPersistentDrawings === 'function') redrawAllPersistentDrawings();
         });
     }
+}
+
+
+function openChartOverlay(symbol) {
+    window.collageOverlayMode = true;
+    els.chartWrapper.style.display = '';
+    els.chartWrapper.classList.add('active');
+    els.chartWrapper.style.position = 'absolute';
+    els.chartWrapper.style.inset = '0';
+    els.chartWrapper.style.zIndex = '10';
+
+    const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
+    if (titleWrap) titleWrap.style.display = 'flex';
+    const resetBtn = document.querySelector('.chart-reset-btn');
+    if (resetBtn) { resetBtn.style.display = ''; resetBtn.textContent = '✕ Закрыть'; resetBtn.onclick = closeChartOverlay; }
+    els.drawingToolsPanel.style.display = showDrawingTools ? 'flex' : 'none';
+    els.chartWatermark.style.display = '';
+    els.pencilCanvas.style.display = '';
+    const historyBtn = document.getElementById('loadHistoryBtn');
+    if (historyBtn) historyBtn.style.display = '';
+
+    openChart(symbol);
+}
+
+function closeChartOverlay() {
+    window.collageOverlayMode = false;
+    // Очистить график
+    if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
+    if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
+    stopReconUpdates();
+    if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
+    if (scalpUpdateTimer) { clearInterval(scalpUpdateTimer); scalpUpdateTimer = null; }
+
+    els.chartWrapper.style.display = 'none';
+    els.chartWrapper.style.position = '';
+    els.chartWrapper.style.inset = '';
+    els.chartWrapper.style.zIndex = '';
+    const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
+    if (titleWrap) titleWrap.style.display = 'none';
+    const resetBtn = document.querySelector('.chart-reset-btn');
+    if (resetBtn) { resetBtn.style.display = 'none'; resetBtn.textContent = '✕ Сброс'; resetBtn.onclick = function() { closeChart(); }; }
+    els.drawingToolsPanel.style.display = 'none';
+    els.chartWatermark.style.display = 'none';
+    els.pencilCanvas.style.display = 'none';
+    const historyBtn = document.getElementById('loadHistoryBtn');
+    if (historyBtn) historyBtn.style.display = 'none';
 }
 
 function openCollageFromModal(colorId) {
@@ -178,8 +225,7 @@ function renderCollagePage() {
             const expandBtn = cell.querySelector('.collage-expand-btn');
             expandBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                exitCollage();
-                openChart(sym);
+                openChartOverlay(sym);
             });
         } else {
             cell.innerHTML = '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#555555; font-size:12px; text-transform:uppercase; letter-spacing:1px;">Пусто</div>';

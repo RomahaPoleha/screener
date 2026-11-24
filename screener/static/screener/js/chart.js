@@ -60,6 +60,7 @@ function updateChartStats() {
 // ЗАКРЫТИЕ ГРАФИКА
 // ==========================================
 function closeChart() {
+    if (window.collageOverlayMode) { closeChartOverlay(); return; }
     // Сохранить рисунки текущего символа перед закрытием
     if (currentSymbol) {
         if (typeof saveCurrentDrawings === 'function') {
@@ -98,7 +99,7 @@ function closeChart() {
 // ОТКРЫТИЕ ГРАФИКА
 // ==========================================
 async function openChart(symbol) {
-    if (collageState) exitCollage();
+    if (collageState && !window.collageOverlayMode) exitCollage();
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
     if (typeof clearDensityLines === 'function') clearDensityLines(); if (densityUpdateTimer) { clearInterval(densityUpdateTimer); densityUpdateTimer = null; }
