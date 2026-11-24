@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 logger = logging.getLogger(__name__)
@@ -7,19 +8,23 @@ logger = logging.getLogger(__name__)
 
 class ImpulseConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        # Сначала принимаем соединение, потом пытаемся добавить в группу
+        await self.accept()
+        logger.info("Impulse WS client connected")
         try:
-            await self.channel_layer.group_add("impulses", self.channel_name)
+            await asyncio.wait_for(
+                self.channel_layer.group_add("impulses", self.channel_name),
+                timeout=5.0
+            )
         except Exception as e:
-            logger.warning(f"Impulse WS group_add error (continuing): {e}")
-        try:
-            await self.accept()
-            logger.info("Impulse WS client connected")
-        except Exception as e:
-            logger.error(f"Impulse WS accept error: {e}")
+            logger.warning(f"Impulse WS group_add failed (continuing without group): {e}")
 
     async def disconnect(self, close_code):
         try:
-            await self.channel_layer.group_discard("impulses", self.channel_name)
+            await asyncio.wait_for(
+                self.channel_layer.group_discard("impulses", self.channel_name),
+                timeout=5.0
+            )
         except Exception:
             pass
         logger.info(f"Impulse WS client disconnected: {close_code}")

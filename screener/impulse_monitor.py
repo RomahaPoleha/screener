@@ -283,9 +283,12 @@ async def impulse_checker():
                     _logger.info(f"🔥 IMPULSE: {imp['symbol']} {imp['direction']} {imp['price_change']}% (V: ${imp['volume']}, {imp['window']}s)")
                     if channel_layer:
                         try:
-                            await channel_layer.group_send(
-                                "impulses",
-                                {"type": "impulse.message", "data": imp}
+                            await asyncio.wait_for(
+                                channel_layer.group_send(
+                                    "impulses",
+                                    {"type": "impulse.message", "data": imp}
+                                ),
+                                timeout=3.0
                             )
                         except Exception as e:
                             _logger.warning(f"⚠️ Channel send error: {e}")
