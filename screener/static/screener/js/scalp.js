@@ -7,6 +7,7 @@ let scalpLines = [];
 let scalpEnabled = false;
 let scalpUpdateTimer = null;
 let previousScalpData = {};
+let scalpAbortController = null;
 // Конфигурация бирж — берётся из densities.js (загружается раньше, доступна глобально)
 // Текущие настройки каждой биржи
 let scalpExchanges = {
@@ -45,58 +46,66 @@ scalpEnabled = Object.values(scalpExchanges).some(cfg => cfg.enabled && (cfg.mar
 // ЗАГРУЗКА ПЛОТНОСТЕЙ
 // ==========================================
 async function loadScalpDensities(symbol) {
-if (!candleSeries ||  isScalpLoading) return;
-// Если скальп выключен — очищаем линии и выходим
+const requestSymbol = symbol;
+if (!candleSeries || isScalpLoading) return;
 if (!scalpEnabled) {
-if (scalpLines.length  > 0) clearScalpLines();
+if (scalpLines.length > 0) clearScalpLines();
 previousScalpData = {};
 return;
 }
+// Отменяем предыдущий in-flight запрос
+if (scalpAbortController) {
+scalpAbortController.abort();
+}
+scalpAbortController = new AbortController();
+const signal = scalpAbortController.signal;
 isScalpLoading = true;
 try {
+if (currentSymbol !== requestSymbol) return;
 const loadList = [];
 const activeKeys = new Set();
 for (const exId in scalpExchanges) {
-const  ex = scalpExchanges[exId];
+const ex = scalpExchanges[exId];
 if (!ex.enabled) continue;
 if (ex.markets.futures) {
 loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
-activeKeys.add( `${exId}|futures` );
+activeKeys.add(${exId}|futures);
 }
 if (ex.markets.spot) {
 loadList.push({ exchange: exId, market: 'spot', minVol: ex.minVolumeSpot });
-activeKeys.add( `${exId}|spot` );
+activeKeys.add(${exId}|spot);
 }
 }
-// Если нет включённых бирж/рынков — очищаем линии и выходим
 if (loadList.length === 0) {
-if (scalpLines.length  > 0) clearScalpLines();
+if (scalpLines.length > 0) clearScalpLines();
 previousScalpData = {};
 return;
 }
-// Удаляем кэш для выключенных бирж/рынков
+if (currentSymbol !== requestSymbol) return;
 for (const key in previousScalpData) {
 if (!activeKeys.has(key)) delete previousScalpData[key];
 }
 const allNewData = {};
 let hasChanges = false;
 for (const item of loadList) {
-const key =  `${item.exchange}|${item.market}` ;
+if (currentSymbol !== requestSymbol) return;
+const key = ${item.exchange}|;
 try {
-        const res = await fetch( `/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50` );
-        if (!res.ok) continue;
-        const data = await res.json();
-        // Фильтруем по бирже И по возрасту  >= 180 сек
-        // Используем data.by_exchange[exchange] — там уже отфильтровано по бирже
-        const exchangeData = data.by_exchange?.[item.exchange] || [];
-        const filtered = exchangeData.filter(d => (d.age_seconds || 0) >= 180);
-        allNewData[key] = filtered;
+const res = await fetch(/api/scalp//?min_volume=&market=&limit=50, { signal });
+if (currentSymbol !== requestSymbol) return;
+if (!res.ok) continue;
+const data = await res.json();
+if (currentSymbol !== requestSymbol) return;
+const exchangeData = data.by_exchange?.[item.exchange] || [];
+const filtered = exchangeData.filter(d => (d.age_seconds || 0) >= 180);
+allNewData[key] = filtered;
 } catch (e) {
-console.error( `Scalp load error (${key}):` , e);
+if (e.name === 'AbortError') return;
+console.error(Scalp load error ():, e);
 allNewData[key] = previousScalpData[key] || [];
 }
 }
-// Проверяем изменения
+if (currentSymbol !== requestSymbol) return;
 for (const key in allNewData) {
 const newData = allNewData[key];
 const prevData = previousScalpData[key] || [];
@@ -107,38 +116,39 @@ hasChanges = true;
 previousScalpData[key] = newData;
 }
 }
-// Проверяем удалённые ключи (были изменения)
 if (Object.keys(previousScalpData).length !== activeKeys.size) hasChanges = true;
 if (!hasChanges) return;
-// Очищаем ВСЕ линии перед перерисовкой
+if (currentSymbol !== requestSymbol) return;
 clearScalpLines();
-for  (const key in allNewData) {
+for (const key in allNewData) {
 const [exchange, market] = key.split('|');
 const densities = allNewData[key];
 const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG', binance_alpha: 'S' };
 const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
-const marketSuffix = exchange === 'binance_alpha' ? 'A' : ( market === 'futures' ? 'F' : 'S');
-const prefix =  `${exchangePrefix}-${marketSuffix}` ;
+const marketSuffix = exchange === 'binance_alpha' ? 'A' : (market === 'futures' ? 'F' : 'S');
+const prefix = ${exchangePrefix}-;
 densities.forEach(d => {
 const ageSeconds = d.age_seconds || 0;
 const ageText = formatAge(ageSeconds);
 const volumeText = formatVolumeText(d.volume);
 const volumeNum = parseFloat(d.volume) || 0;
-const  lineColor = volumeNum  < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
+const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85, 211, 0.9)';
 const line = candleSeries.createPriceLine({
 price: d.price, color: lineColor, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid,
 axisLabelVisible: true, axisLabelColor: '#000000', axisLabelBackgroundColor: lineColor,
-title:  `${prefix} ${volumeText} ${ageText}`
+title: ${prefix}  
 });
 scalpLines.push(line);
 });
 }
 } catch (err) {
+if (err.name === 'AbortError') return;
 console.error('Scalp load error:', err);
 } finally {
 isScalpLoading = false;
 }
 }
+
 function clearScalpLines() {
 scalpLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
 scalpLines = [];

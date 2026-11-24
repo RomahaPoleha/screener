@@ -81,59 +81,71 @@ const RECON_EXCHANGES = [
 // СТАРЫЙ DENSITY (legacy, оставлен для совместимости)
 // ==========================================
 async function loadDensities(symbol) {
-    if (!densityEnabled || !candleSeries) return;
-    let hasChanges = false;
-    const marketsToLoad = [];
-    if (densityMarkets.future) marketsToLoad.push('future');
-    if (densityMarkets.spot) marketsToLoad.push('spot');
-    const allNewData = {};
-    for (const market of marketsToLoad) {
-        try {
-            const url = market === 'future'
-                ? `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}USDT&limit=1000`
-                : `https://api.binance.com/api/v3/depth?symbol=${symbol}USDT&limit=1000`;
-            const res = await fetch(url);
-            if (!res.ok) continue;
-            const data = await res.json();
-            const densities = [];
-            const minVolume = market === 'future' ? densityMinVolumeFuture : densityMinVolumeSpot;
-            const processSide = (sideArr, sideType) => {
-                for (const [priceStr, qtyStr] of sideArr) {
-                    const price = parseFloat(priceStr);
-                    const qty = parseFloat(qtyStr);
-                    const val = price * qty;
-                    if (val >= minVolume) densities.push({ price, volume: val, side: sideType });
-                }
-            };
-            if (data.bids) processSide(data.bids, 'buy');
-            if (data.asks) processSide(data.asks, 'sell');
-            densities.sort((a, b) => b.volume - a.volume);
-            allNewData[market] = densities.slice(0, 30);
-        } catch (e) {
-            console.error(`Densities error (${market}):`, e);
-            allNewData[market] = previousDensities[market] || [];
-        }
-    }
-    for (const market of marketsToLoad) {
-        const newData = allNewData[market] || [];
-        const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
-        const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
-        if (currentData !== prevData) { hasChanges = true; previousDensities[market] = newData; }
-    }
-    if (!hasChanges) return;
-    clearDensityLines();
-    for (const market of marketsToLoad) {
-        const data = previousDensities[market] || [];
-        data.forEach(d => {
-            const line = candleSeries.createPriceLine({
-                price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
-                lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
-                axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
-                title: `${market === 'future' ? 'BI-F' : 'BI-S'} ${d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume}`
-            });
-            densityLines.push(line);
-        });
-    }
+const requestSymbol = symbol;
+if (!densityEnabled || !candleSeries) return;
+if (reconAbortController) {
+reconAbortController.abort();
+}
+reconAbortController = new AbortController();
+const signal = reconAbortController.signal;
+const marketsToLoad = [];
+if (densityMarkets.future) marketsToLoad.push('future');
+if (densityMarkets.spot) marketsToLoad.push('spot');
+const allNewData = {};
+for (const market of marketsToLoad) {
+if (currentSymbol !== requestSymbol) return;
+try {
+const url = market === 'future'
+? 'https://fapi.binance.com/fapi/v1/depth?symbol=' + symbol + 'USDT&limit=1000'
+: 'https://api.binance.com/api/v3/depth?symbol=' + symbol + 'USDT&limit=1000';
+const res = await fetch(url, { signal });
+if (currentSymbol !== requestSymbol) return;
+if (!res.ok) continue;
+const data = await res.json();
+if (currentSymbol !== requestSymbol) return;
+const densities = [];
+const minVolume = market === 'future' ? densityMinVolumeFuture : densityMinVolumeSpot;
+const processSide = (sideArr, sideType) => {
+for (const [priceStr, qtyStr] of sideArr) {
+const price = parseFloat(priceStr);
+const qty = parseFloat(qtyStr);
+const val = price * qty;
+if (val >= minVolume) densities.push({ price, volume: val, side: sideType });
+}
+};
+if (data.bids) processSide(data.bids, 'buy');
+if (data.asks) processSide(data.asks, 'sell');
+densities.sort((a, b) => b.volume - a.volume);
+allNewData[market] = densities.slice(0, 30);
+} catch (e) {
+if (e.name === 'AbortError') return;
+console.error('Densities error (' + market + '):', e);
+allNewData[market] = previousDensities[market] || [];
+}
+}
+if (currentSymbol !== requestSymbol) return;
+let hasChanges = false;
+for (const market of marketsToLoad) {
+const newData = allNewData[market] || [];
+const currentData = JSON.stringify(newData.map(d => ({price: d.price, volume: d.volume, side: d.side})));
+const prevData = JSON.stringify((previousDensities[market] || []).map(d => ({price: d.price, volume: d.volume, side: d.side})));
+if (currentData !== prevData) { hasChanges = true; previousDensities[market] = newData; }
+}
+if (!hasChanges) return;
+if (currentSymbol !== requestSymbol) return;
+clearDensityLines();
+for (const market of marketsToLoad) {
+const data = previousDensities[market] || [];
+data.forEach(d => {
+const line = candleSeries.createPriceLine({
+price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+title: (market === 'future' ? 'BI-F' : 'BI-S') + ' ' + (d.volume >= 1000 ? (d.volume/1000).toFixed(1)+'K' : d.volume)
+});
+densityLines.push(line);
+});
+}
 }
 
 function clearDensityLines() {
