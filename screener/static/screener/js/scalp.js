@@ -69,11 +69,11 @@ const ex = scalpExchanges[exId];
 if (!ex.enabled) continue;
 if (ex.markets.futures) {
 loadList.push({ exchange: exId, market: 'futures', minVol: ex.minVolumeFutures });
-activeKeys.add(${exId}|futures);
+activeKeys.add(`${exId}|futures`);
 }
 if (ex.markets.spot) {
 loadList.push({ exchange: exId, market: 'spot', minVol: ex.minVolumeSpot });
-activeKeys.add(${exId}|spot);
+activeKeys.add(`${exId}|spot`);
 }
 }
 if (loadList.length === 0) {
@@ -89,9 +89,9 @@ const allNewData = {};
 let hasChanges = false;
 for (const item of loadList) {
 if (currentSymbol !== requestSymbol) return;
-const key = ${item.exchange}|;
+const key = `${item.exchange}|${item.market}`;
 try {
-const res = await fetch(/api/scalp//?min_volume=&market=&limit=50, { signal });
+const res = await fetch(`/api/scalp/${symbol}/?min_volume=${item.minVol}&market=${item.market}&limit=50`, { signal });
 if (currentSymbol !== requestSymbol) return;
 if (!res.ok) continue;
 const data = await res.json();
@@ -101,7 +101,7 @@ const filtered = exchangeData.filter(d => (d.age_seconds || 0) >= 180);
 allNewData[key] = filtered;
 } catch (e) {
 if (e.name === 'AbortError') return;
-console.error(Scalp load error ():, e);
+console.error(`Scalp load error (${key}):`, e);
 allNewData[key] = previousScalpData[key] || [];
 }
 }
@@ -126,7 +126,7 @@ const densities = allNewData[key];
 const PREFIX = { binance: 'BI', bybit: 'BY', okx: 'OK', gate: 'G', mexc: 'MX', bitget: 'BG', binance_alpha: 'S' };
 const exchangePrefix = PREFIX[exchange] || exchange.slice(0, 2).toUpperCase();
 const marketSuffix = exchange === 'binance_alpha' ? 'A' : (market === 'futures' ? 'F' : 'S');
-const prefix = ${exchangePrefix}-;
+const prefix = `${exchangePrefix}-${marketSuffix}`;
 densities.forEach(d => {
 const ageSeconds = d.age_seconds || 0;
 const ageText = formatAge(ageSeconds);
@@ -136,7 +136,7 @@ const lineColor = volumeNum < 500000 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(186, 85
 const line = candleSeries.createPriceLine({
 price: d.price, color: lineColor, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Solid,
 axisLabelVisible: true, axisLabelColor: '#000000', axisLabelBackgroundColor: lineColor,
-title: ${prefix}  
+title: `${prefix} ${volumeText} ${ageText}`
 });
 scalpLines.push(line);
 });
