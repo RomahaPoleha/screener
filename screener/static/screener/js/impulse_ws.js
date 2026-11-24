@@ -58,10 +58,10 @@ function connectImpulseWs() {
             startPollingFallback();
             if (wsFailCount < WS_MAX_FAILS) {
                 const delay = Math.min(3000 * wsFailCount, 15000);
-                console.log(Impulse WS reconnect через мс (попытка /));
+                console.log('Impulse WS reconnect delay=' + delay + 'ms attempt=' + wsFailCount + '/' + WS_MAX_FAILS);
                 impulseWsReconnectTimer = setTimeout(connectImpulseWs, delay);
             } else {
-                console.log('Impulse WS: слишком много ошибок, используем polling');
+                console.log('Impulse WS: too many failures, using polling');
             }
         }
     };
