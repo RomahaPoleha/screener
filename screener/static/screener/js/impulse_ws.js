@@ -6,6 +6,8 @@ window.impulsePollingEnabled = false;
 let impulsePollingTimer = null;
 let impulseWs = null;
 let impulseWsReconnectTimer = null;
+let wsFailCount = 0;
+const WS_MAX_FAILS = 3;
 let impulseLastTimestamp = parseFloat(localStorage.getItem('impulseLastTimestamp') || '0');
 const seenImpulses = new Set();
 
@@ -33,6 +35,8 @@ function connectImpulseWs() {
 
     impulseWs.onopen = () => {
         console.log('✅ Impulse WS подключен');
+        wsFailCount = 0;
+        stopPollingFallback();
         // При подключении — запросить пропущенные импульсы через polling
         pollImpulseAlerts();
     };
@@ -47,12 +51,18 @@ function connectImpulseWs() {
     };
 
     impulseWs.onclose = () => {
-        console.warn('Impulse WS закрыт, reconnect через 3с');
+        console.warn('Impulse WS закрыт');
         impulseWs = null;
+        wsFailCount++;
         if (window.impulsePollingEnabled) {
-            // Fallback на polling пока WS не восстановится
             startPollingFallback();
-            impulseWsReconnectTimer = setTimeout(connectImpulseWs, 3000);
+            if (wsFailCount < WS_MAX_FAILS) {
+                const delay = Math.min(3000 * wsFailCount, 15000);
+                console.log(Impulse WS reconnect через мс (попытка /));
+                impulseWsReconnectTimer = setTimeout(connectImpulseWs, delay);
+            } else {
+                console.log('Impulse WS: слишком много ошибок, используем polling');
+            }
         }
     };
 
