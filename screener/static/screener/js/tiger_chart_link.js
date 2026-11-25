@@ -9,8 +9,7 @@ function openTigerLinkPopup() {
     const symbol = currentSymbol;
     // Проверяем, включён ли Tiger
     if (typeof tigerIsEnabled === 'function' && !tigerIsEnabled()) {
-        if (typeof showVolumeAlertToast === 'function') showVolumeAlertToast('Tiger', 0, '⚠', 0);
-        else alert('Tiger не включён. Включите в настройках.');
+        console.warn('Tiger не включён');
         return;
     }
     // Проверяем, подключён ли Tiger
@@ -20,14 +19,11 @@ function openTigerLinkPopup() {
         setTimeout(() => {
             if (typeof tigerIsConnected === 'function' && tigerIsConnected()) {
                 if (typeof tigerSendFromMenu === 'function') tigerSendFromMenu(symbol, 'binance', 'futures');
-            } else {
-                if (typeof showVolumeAlertToast === 'function') showVolumeAlertToast('Tiger', 0, '⚠', 0);
-                else alert('Tiger не подключён');
             }
         }, 1000);
         return;
     }
-    // Tiger подключён — отправляем сразу
+    // Tiger подключён — отправляем сразу (1 клик = 1 отправка)
     if (typeof tigerSendFromMenu === 'function') {
         tigerSendFromMenu(symbol, 'binance', 'futures');
     }
