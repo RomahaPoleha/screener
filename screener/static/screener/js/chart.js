@@ -118,7 +118,7 @@ async function openChart(symbol) {
     updateActiveCoinHighlight();
     els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
     const resetBtn = document.querySelector('.chart-reset-btn');
-    if (resetBtn) { resetBtn.style.display = ''; resetBtn.textContent = '✕ Сброс'; resetBtn.onclick = function() { closeChart(); }; }
+    if (resetBtn && !window.collageOverlayMode) { resetBtn.style.display = ''; resetBtn.textContent = '✕ Сброс'; resetBtn.onclick = function() { closeChart(); }; }
     tradeBuffer = []; lastCandlePrice = null;
     // Сбрасываем текст кнопки истории при открытии новой монеты
     const historyBtn = document.getElementById('loadHistoryBtn');
@@ -126,6 +126,11 @@ async function openChart(symbol) {
         historyBtn.style.display = '';
         historyBtn.textContent = 'Загрузить историю';
         historyBtn.title = 'Загрузить глубокую историю свечей';
+    }
+    const tigerLinkBtn = document.getElementById('tigerLinkBtn');
+    if (tigerLinkBtn) {
+        tigerLinkBtn.style.display = '';
+    }
     }
     if (els.chartWrapper) els.chartWrapper.style.display = '';
     if (chart) { try { chart.remove(); } catch(e) {} chart = null; candleSeries = null; volumeSeries = null; }
