@@ -117,10 +117,13 @@ async function openChart(symbol) {
     currentSymbol = symbol;
     updateActiveCoinHighlight();
     els.chartHint.style.display = 'none'; els.chartWrapper.classList.add('active');
+    const resetBtn = document.querySelector('.chart-reset-btn');
+    if (resetBtn) { resetBtn.style.display = ''; resetBtn.textContent = '✕ Сброс'; resetBtn.onclick = function() { closeChart(); }; }
     tradeBuffer = []; lastCandlePrice = null;
     // Сбрасываем текст кнопки истории при открытии новой монеты
     const historyBtn = document.getElementById('loadHistoryBtn');
     if (historyBtn) {
+        historyBtn.style.display = '';
         historyBtn.textContent = 'Загрузить историю';
         historyBtn.title = 'Загрузить глубокую историю свечей';
     }
