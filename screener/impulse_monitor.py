@@ -196,19 +196,11 @@ def detect_impulses(now_sec):
             if amplitude > state.get('peak_amplitude', 0):
                 state['peak_amplitude'] = amplitude
 
-            # не репортим, если нет нового экстремума
-            lrh = state.get('last_reported_high')
-            lrl = state.get('last_reported_low')
-            if lrh is not None and high <= lrh and low >= lrl:
-                continue
-
             last_alert = cooldowns.get(state_key, 0)
             if now_ms - last_alert < cooldown_ms:
                 continue
 
             cooldowns[state_key] = now_ms
-            state['last_reported_high'] = high
-            state['last_reported_low'] = low
 
             open_price = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
             direction = 'up' if state.get('current', 0) >= open_price else 'down'
