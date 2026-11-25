@@ -131,7 +131,6 @@ async function openChart(symbol) {
     if (tigerLinkBtn) {
         tigerLinkBtn.style.display = '';
     }
-    }
     if (els.chartWrapper) els.chartWrapper.style.display = '';
     if (chart) { try { chart.remove(); } catch(e) {} chart = null; candleSeries = null; volumeSeries = null; }
     try {
