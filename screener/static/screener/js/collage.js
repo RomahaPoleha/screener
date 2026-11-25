@@ -60,6 +60,7 @@ function exitCollage() {
 
     // 🔹 Останавливаем умное обновление скальпа
     stopCollageScalpUpdates();
+    stopCollageReconUpdates();
 
     destroyCollageCharts();
     window.collageState = null;
@@ -250,6 +251,7 @@ function renderCollagePage() {
     // 🔹 ЗАПУСК УМНОГО ОБНОВЛЕНИЯ СКАЛЬПА ТОЛЬКО ДЛЯ ТЕКУЩИХ ВИДИМЫХ МОНЕТ
     const activeSymbols = collageCharts.map(e => e.symbol);
     startCollageScalpUpdates(activeSymbols);
+    if (typeof reconEnabled !== 'undefined' && reconEnabled) startCollageReconUpdates(activeSymbols);
 }
 
 function initCollageChart(index, symbol) {
@@ -276,7 +278,7 @@ function initCollageChart(index, symbol) {
     chart.priceScale('volume').applyOptions({ visible: false, scaleMargins: { top: 0.85, bottom: 0 } });
 
     // 🔹 Добавлен массив scalpLines для отслеживания и очистки линий
-    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null, scalpLinesMap: new Map() };
+    const entry = { chart, candleSeries, volumeSeries, ws: null, symbol, container, data: null, scalpLinesMap: new Map(), reconLinesMap: new Map() };
     collageCharts.push(entry);
 
     const coin = allCoins.find(c => c.symbol === symbol);
@@ -306,6 +308,9 @@ function initCollageChart(index, symbol) {
 
             // 🔹 1. Загрузка плотностей скальпа
             drawScalpOnCollageChart(symbol, candleSeries, entry);
+
+            // 🔹 1b. Загрузка Recon-плотностей
+            if (typeof reconEnabled !== 'undefined' && reconEnabled) drawReconOnCollageChart(symbol, candleSeries, entry);
 
             // 🔹 2. Горизонтальные линии
             const hLines = (window.savedHorizontalLines && window.savedHorizontalLines[symbol]) || [];
@@ -388,6 +393,7 @@ function startCollageScalpUpdates(symbols) {
     collageScalpTimer = setInterval(async () => {
         if (!window.collageState) {
             stopCollageScalpUpdates();
+    stopCollageReconUpdates();
             return;
         }
 
@@ -461,8 +467,274 @@ function stopCollageScalpUpdates() {
 }
 
 // ==========================================
+// ОТРИСОВКА RECON-ПЛОТНОСТЕЙ НА МИНИ-ГРАФИКЕ
+// ==========================================
+async function drawReconOnCollageChart(symbol, candleSeries, entry) {
+    if (typeof reconEnabled === 'undefined' || !reconEnabled || !entry || !entry.reconLinesMap) return;
+    if (typeof RECON_EXCHANGES === 'undefined') return;
+
+    // Очистить старые recon-линии
+    entry.reconLinesMap.forEach((line) => { try { candleSeries.removePriceLine(line); } catch(e) {} });
+    entry.reconLinesMap.clear();
+
+    const allDensities = [];
+    const tasks = [];
+    for (const ex of RECON_EXCHANGES) {
+        for (const market of ['spot', 'futures']) {
+            if (typeof reconMarkets !== 'undefined' && reconMarkets[ex.id] && !reconMarkets[ex.id][market]) continue;
+            tasks.push(
+                (typeof fetchReconMarket === 'function' ? fetchReconMarket(ex.id, symbol, market) : Promise.resolve([]))
+                    .then(d => ({ ex: ex.id, market, data: d }))
+                    .catch(() => ({ ex: ex.id, market, data: null }))
+            );
+        }
+    }
+    if (tasks.length === 0) return;
+
+    const results = await Promise.all(tasks);
+    for (const r of results) {
+        if (!r.data || !Array.isArray(r.data)) continue;
+        const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
+        if (!ex) continue;
+        const isAlpha = r.ex === 'binance_alpha';
+        const suffix = isAlpha ? 'A' : (r.market === 'futures' ? 'F' : 'S');
+        const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+        top.forEach(d => {
+            try {
+                const line = candleSeries.createPriceLine({
+                    price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+                    axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                    title: `${ex.label}-${suffix} ${typeof formatVolumeText === 'function' ? formatVolumeText(d.volume) : d.volume}`
+                });
+                entry.reconLinesMap.set(`${r.ex}-${r.market}-${d.price}`, line);
+            } catch (e) {}
+        });
+    }
+}
+
+// ==========================================
+// УМНОЕ ОБНОВЛЕНИЕ RECON В КОЛЛАЖЕ
+// ==========================================
+let collageReconTimer = null;
+let collageReconCache = {};
+
+function startCollageReconUpdates(symbols) {
+    if (collageReconTimer) clearInterval(collageReconTimer);
+    collageReconCache = {};
+
+    collageReconTimer = setInterval(async () => {
+        if (!window.collageState) { stopCollageReconUpdates(); return; }
+        if (typeof reconEnabled === 'undefined' || !reconEnabled) return;
+
+        for (const sym of symbols) {
+            try {
+                const entry = collageCharts.find(e => e.symbol === sym);
+                if (!entry || !entry.candleSeries || !entry.reconLinesMap) continue;
+
+                const allDensities = [];
+                const tasks = [];
+                for (const ex of (typeof RECON_EXCHANGES !== 'undefined' ? RECON_EXCHANGES : [])) {
+                    for (const market of ['spot', 'futures']) {
+                        if (typeof reconMarkets !== 'undefined' && reconMarkets[ex.id] && !reconMarkets[ex.id][market]) continue;
+                        tasks.push(
+                            (typeof fetchReconMarket === 'function' ? fetchReconMarket(ex.id, sym, market) : Promise.resolve([]))
+                                .then(d => ({ ex: ex.id, market, data: d }))
+                                .catch(() => ({ ex: ex.id, market, data: null }))
+                        );
+                    }
+                }
+                if (tasks.length === 0) continue;
+
+                const results = await Promise.all(tasks);
+                for (const r of results) {
+                    if (!r.data || !Array.isArray(r.data)) continue;
+                    const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+                    top.forEach(d => allDensities.push({ ...d, exchange: r.ex, market: r.market }));
+                }
+
+                const signature = allDensities.map(d => `${d.exchange}-${d.price}-${d.volume}`).join('|');
+                if (collageReconCache[sym] === signature) continue;
+                collageReconCache[sym] = signature;
+
+                // Обновить линии (без мерцания)
+                const newKeys = new Set();
+                const newDataMap = new Map();
+                allDensities.forEach(d => {
+                    const key = `${d.exchange}-${d.market}-${d.price}`;
+                    newKeys.add(key);
+                    newDataMap.set(key, d);
+                });
+
+                for (const [key, line] of entry.reconLinesMap) {
+                    if (!newKeys.has(key)) {
+                        try { entry.candleSeries.removePriceLine(line); } catch(e) {}
+                        entry.reconLinesMap.delete(key);
+                    }
+                }
+
+                for (const [key, d] of newDataMap) {
+                    if (entry.reconLinesMap.has(key)) continue;
+                    const ex = (typeof RECON_EXCHANGES !== 'undefined' ? RECON_EXCHANGES : []).find(e => e.id === d.exchange);
+                    const isAlpha = d.exchange === 'binance_alpha';
+                    const suffix = isAlpha ? 'A' : (d.market === 'futures' ? 'F' : 'S');
+                    const volumeText = typeof formatVolumeText === 'function' ? formatVolumeText(d.volume) : d.volume;
+                    try {
+                        const line = entry.candleSeries.createPriceLine({
+                            price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+                            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+                            axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                            title: `${ex ? ex.label : d.exchange}-${suffix} ${volumeText}`
+                        });
+                        entry.reconLinesMap.set(key, line);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
+    }, 5000);
+}
+
+function stopCollageReconUpdates() {
+    if (collageReconTimer) { clearInterval(collageReconTimer); collageReconTimer = null; }
+    collageReconCache = {};
+}
+
+// ==========================================
 // ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ
 // ==========================================
+// ==========================================
+// ОТРИСОВКА RECON-ПЛОТНОСТЕЙ НА МИНИ-ГРАФИКЕ
+// ==========================================
+async function drawReconOnCollageChart(symbol, candleSeries, entry) {
+    if (typeof reconEnabled === 'undefined' || !reconEnabled || !entry || !entry.reconLinesMap) return;
+    if (typeof RECON_EXCHANGES === 'undefined') return;
+
+    // Очистить старые recon-линии
+    entry.reconLinesMap.forEach((line) => { try { candleSeries.removePriceLine(line); } catch(e) {} });
+    entry.reconLinesMap.clear();
+
+    const allDensities = [];
+    const tasks = [];
+    for (const ex of RECON_EXCHANGES) {
+        for (const market of ['spot', 'futures']) {
+            if (typeof reconMarkets !== 'undefined' && reconMarkets[ex.id] && !reconMarkets[ex.id][market]) continue;
+            tasks.push(
+                (typeof fetchReconMarket === 'function' ? fetchReconMarket(ex.id, symbol, market) : Promise.resolve([]))
+                    .then(d => ({ ex: ex.id, market, data: d }))
+                    .catch(() => ({ ex: ex.id, market, data: null }))
+            );
+        }
+    }
+    if (tasks.length === 0) return;
+
+    const results = await Promise.all(tasks);
+    for (const r of results) {
+        if (!r.data || !Array.isArray(r.data)) continue;
+        const ex = RECON_EXCHANGES.find(e => e.id === r.ex);
+        if (!ex) continue;
+        const isAlpha = r.ex === 'binance_alpha';
+        const suffix = isAlpha ? 'A' : (r.market === 'futures' ? 'F' : 'S');
+        const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+        top.forEach(d => {
+            try {
+                const line = candleSeries.createPriceLine({
+                    price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+                    axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                    title: `${ex.label}-${suffix} ${typeof formatVolumeText === 'function' ? formatVolumeText(d.volume) : d.volume}`
+                });
+                entry.reconLinesMap.set(`${r.ex}-${r.market}-${d.price}`, line);
+            } catch (e) {}
+        });
+    }
+}
+
+// ==========================================
+// УМНОЕ ОБНОВЛЕНИЕ RECON В КОЛЛАЖЕ
+// ==========================================
+let collageReconTimer = null;
+let collageReconCache = {};
+
+function startCollageReconUpdates(symbols) {
+    if (collageReconTimer) clearInterval(collageReconTimer);
+    collageReconCache = {};
+
+    collageReconTimer = setInterval(async () => {
+        if (!window.collageState) { stopCollageReconUpdates(); return; }
+        if (typeof reconEnabled === 'undefined' || !reconEnabled) return;
+
+        for (const sym of symbols) {
+            try {
+                const entry = collageCharts.find(e => e.symbol === sym);
+                if (!entry || !entry.candleSeries || !entry.reconLinesMap) continue;
+
+                const allDensities = [];
+                const tasks = [];
+                for (const ex of (typeof RECON_EXCHANGES !== 'undefined' ? RECON_EXCHANGES : [])) {
+                    for (const market of ['spot', 'futures']) {
+                        if (typeof reconMarkets !== 'undefined' && reconMarkets[ex.id] && !reconMarkets[ex.id][market]) continue;
+                        tasks.push(
+                            (typeof fetchReconMarket === 'function' ? fetchReconMarket(ex.id, sym, market) : Promise.resolve([]))
+                                .then(d => ({ ex: ex.id, market, data: d }))
+                                .catch(() => ({ ex: ex.id, market, data: null }))
+                        );
+                    }
+                }
+                if (tasks.length === 0) continue;
+
+                const results = await Promise.all(tasks);
+                for (const r of results) {
+                    if (!r.data || !Array.isArray(r.data)) continue;
+                    const top = r.data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+                    top.forEach(d => allDensities.push({ ...d, exchange: r.ex, market: r.market }));
+                }
+
+                const signature = allDensities.map(d => `${d.exchange}-${d.price}-${d.volume}`).join('|');
+                if (collageReconCache[sym] === signature) continue;
+                collageReconCache[sym] = signature;
+
+                // Обновить линии (без мерцания)
+                const newKeys = new Set();
+                const newDataMap = new Map();
+                allDensities.forEach(d => {
+                    const key = `${d.exchange}-${d.market}-${d.price}`;
+                    newKeys.add(key);
+                    newDataMap.set(key, d);
+                });
+
+                for (const [key, line] of entry.reconLinesMap) {
+                    if (!newKeys.has(key)) {
+                        try { entry.candleSeries.removePriceLine(line); } catch(e) {}
+                        entry.reconLinesMap.delete(key);
+                    }
+                }
+
+                for (const [key, d] of newDataMap) {
+                    if (entry.reconLinesMap.has(key)) continue;
+                    const ex = (typeof RECON_EXCHANGES !== 'undefined' ? RECON_EXCHANGES : []).find(e => e.id === d.exchange);
+                    const isAlpha = d.exchange === 'binance_alpha';
+                    const suffix = isAlpha ? 'A' : (d.market === 'futures' ? 'F' : 'S');
+                    const volumeText = typeof formatVolumeText === 'function' ? formatVolumeText(d.volume) : d.volume;
+                    try {
+                        const line = entry.candleSeries.createPriceLine({
+                            price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+                            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+                            axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+                            title: `${ex ? ex.label : d.exchange}-${suffix} ${volumeText}`
+                        });
+                        entry.reconLinesMap.set(key, line);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
+    }, 5000);
+}
+
+function stopCollageReconUpdates() {
+    if (collageReconTimer) { clearInterval(collageReconTimer); collageReconTimer = null; }
+    collageReconCache = {};
+}
+
 // ==========================================
 // ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ (БЕЗ МЕРЦАНИЯ)
 // ==========================================
