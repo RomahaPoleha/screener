@@ -7,6 +7,27 @@ let tigerLinkPopup = null;
 function openTigerLinkPopup() {
     if (!currentSymbol) return;
     const symbol = currentSymbol;
+    // Проверяем, включён ли Tiger
+    if (typeof tigerIsEnabled === 'function' && !tigerIsEnabled()) {
+        if (typeof showVolumeAlertToast === 'function') showVolumeAlertToast('Tiger', 0, '⚠', 0);
+        else alert('Tiger не включён. Включите в настройках.');
+        return;
+    }
+    // Проверяем, подключён ли Tiger
+    if (typeof tigerIsConnected === 'function' && !tigerIsConnected()) {
+        if (typeof tigerConnect === 'function') tigerConnect();
+        // Одна попытка через 1 секунду
+        setTimeout(() => {
+            if (typeof tigerIsConnected === 'function' && tigerIsConnected()) {
+                if (typeof tigerSendFromMenu === 'function') tigerSendFromMenu(symbol, 'binance', 'futures');
+            } else {
+                if (typeof showVolumeAlertToast === 'function') showVolumeAlertToast('Tiger', 0, '⚠', 0);
+                else alert('Tiger не подключён');
+            }
+        }, 1000);
+        return;
+    }
+    // Tiger подключён — отправляем сразу
     if (typeof tigerSendFromMenu === 'function') {
         tigerSendFromMenu(symbol, 'binance', 'futures');
     }
