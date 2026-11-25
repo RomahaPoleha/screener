@@ -133,6 +133,11 @@ function closeChartOverlay() {
     if (_wrap) { _wrap.style.display = 'none'; _wrap.innerHTML = ''; }
     const _controls = document.getElementById('collageControls');
     if (_controls) _controls.style.display = 'none';
+
+    // Восстановить обычный пустой вид (как при загрузке страницы)
+    els.chartWrapper.style.display = '';
+    els.chartWrapper.classList.remove('active');
+    els.chartHint.style.display = '';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'none';
     const resetBtn = document.querySelector('.chart-reset-btn');
