@@ -453,6 +453,7 @@ function toggleReconMarket(exId, market) {
     reconMarkets[exId][market] = !reconMarkets[exId][market];
     localStorage.setItem('reconMarkets', JSON.stringify(reconMarkets));
     renderReconPanel();
+    if (typeof syncCollageReconState === 'function' && window.collageState) syncCollageReconState();
     const hasEnabled = RECON_EXCHANGES.some(ex =>
         reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
     );
@@ -476,6 +477,8 @@ function toggleReconAll() {
     } else {
         clearReconLines();
     }
+    // Синхронизировать коллаж
+    if (typeof syncCollageReconState === 'function') syncCollageReconState();
 }
 
 function startReconUpdates(symbol) {

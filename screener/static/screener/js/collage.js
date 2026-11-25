@@ -32,6 +32,16 @@ function openCollage(colorId) {
     window.collageState = { colorId, symbols, page: 0 };
     els.chartWrapper.style.display = 'none';
 
+    // Показать Recon-панель в коллаже
+    try {
+        const reconContainer = document.getElementById('reconPanelContainer');
+        if (reconContainer) { reconContainer.style.display = 'flex'; reconContainer.style.visibility = 'visible'; }
+        if (typeof ensureReconPanel === 'function') ensureReconPanel();
+        if (typeof renderReconPanel === 'function') renderReconPanel();
+    } catch (e) {
+        console.error('Recon panel error in collage:', e);
+    }
+
     const historyBtn = document.getElementById('loadHistoryBtn');
     if (historyBtn) historyBtn.style.display = 'none';
 
@@ -67,6 +77,8 @@ function exitCollage() {
 
     const wrap = document.getElementById('collageWrap');
     if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
+    const reconContainer = document.getElementById('reconPanelContainer');
+    if (reconContainer) reconContainer.style.display = 'none';
     const controls = document.getElementById('collageControls');
     if (controls) controls.style.display = 'none';
 
@@ -132,6 +144,8 @@ function closeChartOverlay() {
     window.collageState = null;
     const _wrap = document.getElementById('collageWrap');
     if (_wrap) { _wrap.style.display = 'none'; _wrap.innerHTML = ''; }
+    const _reconContainer = document.getElementById('reconPanelContainer');
+    if (_reconContainer) _reconContainer.style.display = 'none';
     const _controls = document.getElementById('collageControls');
     if (_controls) _controls.style.display = 'none';
 
@@ -470,7 +484,7 @@ function stopCollageScalpUpdates() {
 // ОТРИСОВКА RECON-ПЛОТНОСТЕЙ НА МИНИ-ГРАФИКЕ
 // ==========================================
 async function drawReconOnCollageChart(symbol, candleSeries, entry) {
-    if (typeof reconEnabled === 'undefined' || !reconEnabled || !entry || !entry.reconLinesMap) return;
+    if (typeof reconEnabled === 'undefined' || !reconEnabled || (typeof reconAllEnabled !== 'undefined' && !reconAllEnabled) || !entry || !entry.reconLinesMap) return;
     if (typeof RECON_EXCHANGES === 'undefined') return;
 
     // Очистить старые recon-линии
@@ -525,7 +539,17 @@ function startCollageReconUpdates(symbols) {
 
     collageReconTimer = setInterval(async () => {
         if (!window.collageState) { stopCollageReconUpdates(); return; }
-        if (typeof reconEnabled === 'undefined' || !reconEnabled) return;
+        if (typeof reconEnabled === 'undefined' || !reconEnabled || (typeof reconAllEnabled !== 'undefined' && !reconAllEnabled)) {
+            // Recon выключен — очистить все линии
+            for (const entry of collageCharts) {
+                if (entry.reconLinesMap) {
+                    entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
+                    entry.reconLinesMap.clear();
+                }
+            }
+            collageReconCache = {};
+            return;
+        }
 
         for (const sym of symbols) {
             try {
@@ -599,6 +623,29 @@ function stopCollageReconUpdates() {
     collageReconCache = {};
 }
 
+// Синхронизация Recon-состояния с коллажем (вызывается при переключении в панели Recon)
+function syncCollageReconState() {
+    if (!window.collageState) return;
+    const enabled = (typeof reconEnabled !== 'undefined' && reconEnabled) && (typeof reconAllEnabled === 'undefined' || reconAllEnabled);
+    if (!enabled) {
+        // Очистить все recon-линии
+        for (const entry of collageCharts) {
+            if (entry.reconLinesMap) {
+                entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
+                entry.reconLinesMap.clear();
+            }
+        }
+        collageReconCache = {};
+    } else {
+        // Перерисовать на всех графиках
+        const symbols = collageCharts.map(e => e.symbol);
+        for (const sym of symbols) {
+            const entry = collageCharts.find(e => e.symbol === sym);
+            if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
+        }
+    }
+}
+
 // ==========================================
 // ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ
 // ==========================================
@@ -606,7 +653,7 @@ function stopCollageReconUpdates() {
 // ОТРИСОВКА RECON-ПЛОТНОСТЕЙ НА МИНИ-ГРАФИКЕ
 // ==========================================
 async function drawReconOnCollageChart(symbol, candleSeries, entry) {
-    if (typeof reconEnabled === 'undefined' || !reconEnabled || !entry || !entry.reconLinesMap) return;
+    if (typeof reconEnabled === 'undefined' || !reconEnabled || (typeof reconAllEnabled !== 'undefined' && !reconAllEnabled) || !entry || !entry.reconLinesMap) return;
     if (typeof RECON_EXCHANGES === 'undefined') return;
 
     // Очистить старые recon-линии
@@ -659,7 +706,17 @@ function startCollageReconUpdates(symbols) {
 
     collageReconTimer = setInterval(async () => {
         if (!window.collageState) { stopCollageReconUpdates(); return; }
-        if (typeof reconEnabled === 'undefined' || !reconEnabled) return;
+        if (typeof reconEnabled === 'undefined' || !reconEnabled || (typeof reconAllEnabled !== 'undefined' && !reconAllEnabled)) {
+            // Recon выключен — очистить все линии
+            for (const entry of collageCharts) {
+                if (entry.reconLinesMap) {
+                    entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
+                    entry.reconLinesMap.clear();
+                }
+            }
+            collageReconCache = {};
+            return;
+        }
 
         for (const sym of symbols) {
             try {
@@ -731,6 +788,29 @@ function startCollageReconUpdates(symbols) {
 function stopCollageReconUpdates() {
     if (collageReconTimer) { clearInterval(collageReconTimer); collageReconTimer = null; }
     collageReconCache = {};
+}
+
+// Синхронизация Recon-состояния с коллажем (вызывается при переключении в панели Recon)
+function syncCollageReconState() {
+    if (!window.collageState) return;
+    const enabled = (typeof reconEnabled !== 'undefined' && reconEnabled) && (typeof reconAllEnabled === 'undefined' || reconAllEnabled);
+    if (!enabled) {
+        // Очистить все recon-линии
+        for (const entry of collageCharts) {
+            if (entry.reconLinesMap) {
+                entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
+                entry.reconLinesMap.clear();
+            }
+        }
+        collageReconCache = {};
+    } else {
+        // Перерисовать на всех графиках
+        const symbols = collageCharts.map(e => e.symbol);
+        for (const sym of symbols) {
+            const entry = collageCharts.find(e => e.symbol === sym);
+            if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
+        }
+    }
 }
 
 // ==========================================
