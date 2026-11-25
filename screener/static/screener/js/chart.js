@@ -82,7 +82,8 @@ function closeChart() {
     stopReconUpdates();
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
     if (wsTrades) { wsTrades.onclose = null; wsTrades.onmessage = null; wsTrades.onerror = null; wsTrades.close(); wsTrades = null; }
-    if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
+    if (els.chartWrapper) els.chartWrapper.style.display = '';
+    if (chart) { try { chart.remove(); } catch(e) {} chart = null; candleSeries = null; volumeSeries = null; }
     chartAlertLines = {};
     tradeBuffer = []; lastCandlePrice = null;
     els.chartTitle.textContent = '';
@@ -123,7 +124,8 @@ async function openChart(symbol) {
         historyBtn.textContent = 'Загрузить историю';
         historyBtn.title = 'Загрузить глубокую историю свечей';
     }
-    if (chart) { chart.remove(); chart = null; candleSeries = null; volumeSeries = null; }
+    if (els.chartWrapper) els.chartWrapper.style.display = '';
+    if (chart) { try { chart.remove(); } catch(e) {} chart = null; candleSeries = null; volumeSeries = null; }
     try {
         chart = LightweightCharts.createChart(els.chartWrapper, {
             width: els.chartWrapper.clientWidth,

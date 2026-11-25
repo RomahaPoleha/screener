@@ -126,6 +126,13 @@ function closeChartOverlay() {
     els.chartWrapper.style.position = '';
     els.chartWrapper.style.inset = '';
     els.chartWrapper.style.zIndex = '';
+
+    // Выход из коллажа при закрытии overlay
+    window.collageState = null;
+    const _wrap = document.getElementById('collageWrap');
+    if (_wrap) { _wrap.style.display = 'none'; _wrap.innerHTML = ''; }
+    const _controls = document.getElementById('collageControls');
+    if (_controls) _controls.style.display = 'none';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'none';
     const resetBtn = document.querySelector('.chart-reset-btn');
