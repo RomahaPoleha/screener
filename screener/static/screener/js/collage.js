@@ -652,8 +652,6 @@ async function drawReconOnCollageChart(symbol, candleSeries, entry) {
 // ==========================================
 // УМНОЕ ОБНОВЛЕНИЕ RECON В КОЛЛАЖЕ
 // ==========================================
-let collageReconTimer = null;
-let collageReconCache = {};
 
 function startCollageReconUpdates(symbols) {
     if (collageReconTimer) clearInterval(collageReconTimer);
