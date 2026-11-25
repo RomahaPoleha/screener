@@ -803,13 +803,8 @@ function syncCollageReconState() {
     for (const sym of symbols) {
         const entry = collageCharts.find(e => e.symbol === sym);
         if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
-    }рерисовать на всех графиках
-        const symbols = collageCharts.map(e => e.symbol);
-        for (const sym of symbols) {
-            const entry = collageCharts.find(e => e.symbol === sym);
-            if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
-        }
-    }
+}
+}
 
 // ==========================================
 // ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ (БЕЗ МЕРЦАНИЯ)
