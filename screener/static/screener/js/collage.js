@@ -627,28 +627,23 @@ function stopCollageReconUpdates() {
 function syncCollageReconState() {
     if (!window.collageState) return;
     const enabled = (typeof reconEnabled !== 'undefined' && reconEnabled) && (typeof reconAllEnabled === 'undefined' || reconAllEnabled);
-    if (!enabled) {
-        // Очистить все recon-линии
-        for (const entry of collageCharts) {
-            if (entry.reconLinesMap) {
-                entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
-                entry.reconLinesMap.clear();
-            }
+    // Всегда очищаем все линии сначала
+    for (const entry of collageCharts) {
+        if (entry.reconLinesMap) {
+            entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
+            entry.reconLinesMap.clear();
         }
-        collageReconCache = {};
-    } else {
-        // Перерисовать на всех графиках
-        const symbols = collageCharts.map(e => e.symbol);
-        for (const sym of symbols) {
-            const entry = collageCharts.find(e => e.symbol === sym);
-            if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
-        }
+    }
+    collageReconCache = {};
+    if (!enabled) return;
+    // Перерисовать только включённые
+    const symbols = collageCharts.map(e => e.symbol);
+    for (const sym of symbols) {
+        const entry = collageCharts.find(e => e.symbol === sym);
+        if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
     }
 }
 
-// ==========================================
-// ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ
-// ==========================================
 // ==========================================
 // ОТРИСОВКА RECON-ПЛОТНОСТЕЙ НА МИНИ-ГРАФИКЕ
 // ==========================================
@@ -794,24 +789,27 @@ function stopCollageReconUpdates() {
 function syncCollageReconState() {
     if (!window.collageState) return;
     const enabled = (typeof reconEnabled !== 'undefined' && reconEnabled) && (typeof reconAllEnabled === 'undefined' || reconAllEnabled);
-    if (!enabled) {
-        // Очистить все recon-линии
-        for (const entry of collageCharts) {
-            if (entry.reconLinesMap) {
-                entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
-                entry.reconLinesMap.clear();
-            }
+    // Всегда очищаем все линии сначала
+    for (const entry of collageCharts) {
+        if (entry.reconLinesMap) {
+            entry.reconLinesMap.forEach((line) => { try { entry.candleSeries.removePriceLine(line); } catch(e) {} });
+            entry.reconLinesMap.clear();
         }
-        collageReconCache = {};
-    } else {
-        // Перерисовать на всех графиках
+    }
+    collageReconCache = {};
+    if (!enabled) return;
+    // Перерисовать только включённые
+    const symbols = collageCharts.map(e => e.symbol);
+    for (const sym of symbols) {
+        const entry = collageCharts.find(e => e.symbol === sym);
+        if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
+    }рерисовать на всех графиках
         const symbols = collageCharts.map(e => e.symbol);
         for (const sym of symbols) {
             const entry = collageCharts.find(e => e.symbol === sym);
             if (entry) drawReconOnCollageChart(sym, entry.candleSeries, entry);
         }
     }
-}
 
 // ==========================================
 // ОТРИСОВКА СКАЛЬПА НА МИНИ-ГРАФИКЕ (БЕЗ МЕРЦАНИЯ)
