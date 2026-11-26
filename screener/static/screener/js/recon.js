@@ -14,7 +14,6 @@ if (localStorage.getItem('reconAllEnabled') !== null) {
     reconAllEnabled = localStorage.getItem('reconAllEnabled') === 'true';
 }
 let reconAbortController = null;
-let isReconLoading = false;
 let reconSavedMarkets = null;
 try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
 let reconEnabled = reconAllEnabled;
