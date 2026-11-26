@@ -198,6 +198,7 @@ def detect_impulses(now_sec):
 
             last_alert = cooldowns.get(state_key, 0)
             if now_ms - last_alert < cooldown_ms:
+                state['peak_amplitude'] = amplitude
                 continue
 
             cooldowns[state_key] = now_ms

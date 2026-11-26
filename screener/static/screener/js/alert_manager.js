@@ -8,8 +8,11 @@ let volumeAlertEnabled = localStorage.getItem('volumeAlertEnabled') === 'true';
 let volumeAlertCooldown = {};  // symbol -> timestamp последнего алерта
 let volumeAlertHistory = [];
 try {
-    volumeAlertHistory = JSON.parse(localStorage.getItem('volumeAlertHistory') || '[]');
-} catch(e) { volumeAlertHistory = []; }
+    const raw = JSON.parse(localStorage.getItem('volumeAlertHistory') || '[]');
+    volumeAlertHistory = raw.filter(a => a && a.timestamp);
+    if (volumeAlertHistory.length === 0) localStorage.removeItem('volumeAlertHistory');
+    else localStorage.setItem('volumeAlertHistory', JSON.stringify(volumeAlertHistory));
+} catch(e) { volumeAlertHistory = []; localStorage.removeItem('volumeAlertHistory'); }
 let unreadAlerts = 0;
 let rvolAlertSoundEnabled = localStorage.getItem('rvolAlertSoundEnabled') !== 'false';
 
