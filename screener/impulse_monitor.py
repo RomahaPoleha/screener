@@ -1,6 +1,6 @@
 """
-Impulse Monitor v3 — Candle-based (miniTicker WS)
-Архитектура: WebSocket -> Агрегация 1m свечей -> Детекция импульсов
+Impulse Monitor v4 — Simple Candle-based (1m)
+Архитектура: WebSocket -> Агрегация 1m свечей -> Сравнение с предыдущей
 """
 import asyncio
 import json
@@ -29,32 +29,22 @@ _logger.addHandler(_console)
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
-# Параметры импульса (из исследования)
-VOLUME_LOOKBACK = 3       # Свечей для среднего объёма
-VOLUME_MULTIPLE = 3.0     # Объём >= 3× среднего
-RISE_ATR_MULTIPLE = 2.0   # Тело свечи >= 2× ATR(14)
-ATR_PERIOD = 14            # Период ATR
-IMPULSE_NEED = 16          # Минимум свечей для детекции (15 для ATR + 1 judged)
-COOLDOWN_SEC = 60          # Не спамить одним символом чаще раза в минуту
-MAX_CANDLE_HISTORY = 30   # Хранить последние N закрытых свечей
-MAX_SYMBOLS = 100000      # Лимит отслеживаемых символов
+MIN_AMPLITUDE_PCT = 1.5       # Минимальная амплитуда свечи %
+SPIKE_MULTIPLIER = 2.0        # Текущая свеча >= 2× предыдущей
+COOLDOWN_SEC = 60             # 1 импульс в минуту на монету
 
 ticker_queue = None
-cooldowns = {}            # {symbol: last_alert_timestamp}
+cooldowns = {}
 
-# Состояние: {symbol: {current_candle, history, prev_q}}
+# Состояние: {symbol: {current candle, previous candle}}
 candle_state = {}
 
 
-# ================= АГРЕГАЦИЯ СВЕЧЕЙ =================
-
 def _get_minute(ts):
-    """Округляет timestamp до начала минуты."""
     return int(ts // 60) * 60
 
 
 def process_ticker_batch(tickers, now_sec):
-    """Агрегирует тики в 1m свечи."""
     for ticker in tickers:
         if not isinstance(ticker, dict):
             continue
@@ -65,18 +55,15 @@ def process_ticker_batch(tickers, now_sec):
         clean = symbol[:-4]
         try:
             price = float(ticker.get('c', 0))
-            q_volume = float(ticker.get('q', 0))  # 24h quote volume
         except (TypeError, ValueError):
             continue
         if not price:
             continue
 
         minute = _get_minute(now_sec)
-
         state = candle_state.get(clean)
+
         if state is None:
-            if len(candle_state) >= MAX_SYMBOLS:
-                continue
             state = {
                 'symbol': clean,
                 'current_minute': minute,
@@ -84,25 +71,21 @@ def process_ticker_batch(tickers, now_sec):
                 'high': price,
                 'low': price,
                 'close': price,
-                'volume': 0.0,
-                'prev_q': q_volume,
+                'prev_candle': None,  # предыдущая закрытая свеча
                 'last_ts': now_sec,
-                'history': deque(maxlen=MAX_CANDLE_HISTORY),
             }
             candle_state[clean] = state
 
-        # Если новая минута — закрыть текущую свечу, начать новую
+        # Новая минута — закрыть текущую свечу
         if minute != state['current_minute']:
-            # Закрыть свечу
-            closed_candle = {
+            closed = {
                 'open': state['open'],
                 'high': state['high'],
                 'low': state['low'],
                 'close': state['close'],
-                'volume': state['volume'],
                 'timestamp': state['current_minute'],
             }
-            state['history'].append(closed_candle)
+            state['prev_candle'] = closed
 
             # Начать новую свечу
             state['current_minute'] = minute
@@ -110,111 +93,73 @@ def process_ticker_batch(tickers, now_sec):
             state['high'] = price
             state['low'] = price
             state['close'] = price
-            state['volume'] = 0.0
 
         # Обновить текущую свечу
         state['high'] = max(state['high'], price)
         state['low'] = min(state['low'], price)
         state['close'] = price
-        # Объём: дельта 24h volume
-        vol_delta = q_volume - state['prev_q']
-        if 0 < vol_delta < 10_000_000:  # cap to prevent reset spikes
-            state['volume'] += vol_delta
-        state['prev_q'] = q_volume
         state['last_ts'] = now_sec
 
 
-# ================= ATR РАСЧЁТ =================
-
-def _calculate_atr(candles, period=14):
-    """Рассчитывает ATR(period) по списку закрытых свечей."""
-    if len(candles) < period + 1:
-        return None
-    trs = []
-    for i in range(1, len(candles)):
-        c = candles[i]
-        prev_close = candles[i-1]['close']
-        tr = max(c['high'] - c['low'],
-                 abs(c['high'] - prev_close),
-                 abs(c['low'] - prev_close))
-        trs.append(tr)
-    # ATR = среднее TR за последние `period` свечей
-    if len(trs) < period:
-        return None
-    return sum(trs[-period:]) / period
-
-
-# ================= ДЕТЕКЦИЯ ИМПУЛЬСОВ =================
-
 def detect_impulses(now_sec):
-    """Детектирует импульсы по закрытым свечам."""
     now_ms = int(now_sec * 1000)
     impulses = []
+
+    # Очистка устаревших состояний (нет тиков > 5 мин)
+    old_keys = [k for k, v in candle_state.items() if now_sec - v.get('last_ts', 0) > 300]
+    for k in old_keys:
+        candle_state.pop(k, None)
+        cooldowns.pop(k, None)
 
     # Очистка устаревших cooldown-ов
     expired = [k for k, v in cooldowns.items() if now_sec - v > 300]
     for k in expired:
         cooldowns.pop(k, None)
 
-    # Очистка устаревших состояний
-    old_keys = [k for k, v in candle_state.items() if now_sec - v.get('last_ts', 0) > 300]
-    for k in old_keys:
-        candle_state.pop(k, None)
-
     for symbol, state in list(candle_state.items()):
-        history = state['history']
-        if len(history) < IMPULSE_NEED:
+        prev = state.get('prev_candle')
+        if not prev:
+            continue  # нет предыдущей свечи для сравнения
+
+        # Амплитуда предыдущей свечи
+        prev_amp = ((prev['high'] - prev['low']) / prev['low']) * 100 if prev['low'] > 0 else 0
+        # Амплитуда текущей свечи
+        cur_high = state['high']
+        cur_low = state['low']
+        if cur_low == 0:
+            continue
+        cur_amp = ((cur_high - cur_low) / cur_low) * 100
+
+        # Минимальный порог 3%
+        if cur_amp < MIN_AMPLITUDE_PCT:
             continue
 
-        # Последняя закрытая свеча — judged
-        judged = history[-1]
-        # Baseline — все кроме judged
-        prior = list(history)[:-1]
-
-        # ATR(14) по prior
-        atr = _calculate_atr(prior, ATR_PERIOD)
-        if atr is None or atr <= 0:
-            continue
-
-        # Volume average по volumeLookback свечам перед judged
-        vol_candles = prior[-VOLUME_LOOKBACK:]
-        if len(vol_candles) < VOLUME_LOOKBACK:
-            continue
-        avg_volume = sum(c['volume'] for c in vol_candles) / VOLUME_LOOKBACK
-
-        # Тело свечи
-        body = judged['close'] - judged['open']
-        body_atr = body / atr
-
-        # Объём
-        volume_ratio = judged['volume'] / avg_volume if avg_volume > 0 else 0
-
-        # Проверки
-        if avg_volume > 0 and volume_ratio < VOLUME_MULTIPLE:
-            continue
-        if abs(body_atr) < RISE_ATR_MULTIPLE:
-            continue
-
-        # Cooldown
+        # Cooldown: 1 импульс в минуту
         last_alert = cooldowns.get(symbol, 0)
         if now_sec - last_alert < COOLDOWN_SEC:
             continue
 
-        cooldowns[symbol] = now_sec
+        # Опционально: всплеск (текущая >= 2× предыдущей)
+        # Если предыдущая свеча была очень маленькой, а текущая большая
+        is_spike = prev_amp > 0 and cur_amp >= prev_amp * SPIKE_MULTIPLIER
 
-        direction = 'up' if body > 0 else 'down'
+        # Срабатываем если амплитуда >= 3% (минимум) ИЛИ всплеск
+        if cur_amp >= MIN_AMPLITUDE_PCT:
+            cooldowns[symbol] = now_sec
 
-        impulses.append({
-            'symbol': symbol,
-            'price_change': round(abs(judged['close'] - judged['open']) / judged['open'] * 100, 2),
-            'direction': direction,
-            'current_price': judged['close'],
-            'window': 60,
-            'timestamp': judged['timestamp'],
-            'volume': round(judged['volume'], 2),
-            'volume_ratio': round(volume_ratio, 1),
-            'body_atr': round(body_atr, 2),
-        })
+            open_price = state['open']
+            close_price = state['close']
+            direction = 'up' if close_price >= open_price else 'down'
+
+            impulses.append({
+                'symbol': symbol,
+                'price_change': round(cur_amp, 2),
+                'direction': direction,
+                'current_price': close_price,
+                'window': 60,
+                'timestamp': now_sec,
+                'volume': 0,
+            })
 
     return impulses
 
@@ -280,15 +225,15 @@ async def impulse_checker():
                 cache.set('impulse:recent', existing[:50], 300)
                 for imp in impulses:
                     _logger.info(
-                        f"🔥 IMPULSE: {imp['symbol']} "
-                        f"{imp['direction'].upper()} {imp['price_change']}% (V: ${imp['volume']:,.0f}, body_atr: {imp['body_atr']})"
+                        f"🔥 IMPULSE: {imp['symbol']} {imp['direction'].upper()} "
+                        f"{imp['price_change']}% (window: {imp['window']}s)"
                     )
         except Exception as e:
             _logger.error(f"❌ Impulse checker ошибка: {e}")
 
 
 async def main():
-    _logger.info("🚀 Запуск Impulse Monitor v3 (Candle-based)...")
+    _logger.info("🚀 Запуск Impulse Monitor v4 (Simple Candle-based)...")
     await asyncio.gather(
         impulse_ws_listener(),
         ticker_processor(),
