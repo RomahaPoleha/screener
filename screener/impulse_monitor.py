@@ -180,9 +180,14 @@ def detect_impulses(now_sec):
 
             if not state['min_deque'] or not state['max_deque']:
                 continue
-            low = state['min_deque'][0][1]
-            high = state['max_deque'][0][1]
-            if low == 0 or high == 0:
+            low_ts, low = state['min_deque'][0]
+            high_ts, high = state['max_deque'][0]
+            if low == 0 or high == 0 or high == low:
+                continue
+
+            # Fresh extreme age: экстремум должен быть свежим (не старше 15с)
+            max_extreme_age = 15
+            if (now_sec - high_ts) > max_extreme_age and (now_sec - low_ts) > max_extreme_age:
                 continue
 
             amplitude = ((high - low) / low) * 100
@@ -195,8 +200,14 @@ def detect_impulses(now_sec):
 
             cooldowns[state_key] = now_ms
 
-            open_price = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
-            direction = 'up' if state.get('current', 0) >= open_price else 'down'
+            # Direction based on recent 15s movement, not oldest in window
+            recent_cutoff = now_sec - 15
+            recent_prices = [p for ts, p in state['price_history'] if ts >= recent_cutoff]
+            if recent_prices:
+                recent_open = recent_prices[0]
+            else:
+                recent_open = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
+            direction = 'up' if state.get('current', 0) >= recent_open else 'down'
 
             state['peak_amplitude'] = 0.0
 
