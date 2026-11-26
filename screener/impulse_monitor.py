@@ -42,7 +42,7 @@ WINDOWS = [60, 300]
 
 MAX_IMPULSE_SYMBOLS = 100000
 
-ticker_queue = asyncio.Queue(maxsize=2000)
+ticker_queue = None
 
 
 def _prune(state, now_sec):
@@ -110,8 +110,7 @@ def process_ticker_batch(tickers, now_sec):
                 state['last_reported_low'] = None
                 state['peak_amplitude'] = 0.0
 
-            if now_sec - state['last_ts'] > 5:
-                _prune(state, now_sec)
+            _prune(state, now_sec)
 
             state['current'] = price
             state['volume'] = volume
@@ -179,52 +178,38 @@ def detect_impulses(now_sec):
             if state.get('window') != window:
                 continue
 
-            if now_sec - state['last_ts'] > 5:
-                _prune(state, now_sec)
-            
+            _prune(state, now_sec)
+
             if not state['min_deque'] or not state['max_deque']:
                 continue
-            low_ts, low = state['min_deque'][0]
-            high_ts, high = state['max_deque'][0]
-            if low == 0 or high == 0 or high == low:
+            low = state['min_deque'][0][1]
+            high = state['max_deque'][0][1]
+            if low == 0 or high == 0:
                 continue
-            
-            # Fresh extreme age check
-            max_extreme_age = min(60, window / 2)
-            if (now_sec - high_ts) > max_extreme_age or (now_sec - low_ts) > max_extreme_age:
-                continue
-            
+
             amplitude = ((high - low) / low) * 100
             if amplitude < MIN_THRESHOLD:
                 state['peak_amplitude'] = 0.0
                 continue
-            
+
             # обновляем пик амплитуды за период
             if amplitude > state.get('peak_amplitude', 0):
                 state['peak_amplitude'] = amplitude
-            
-            # Position in range check
-            range_size = high - low
-            position_in_range = (state.get('current', 0) - low) / range_size
-            
-            if position_in_range > 0.75:
-                direction = 'up'
-            elif position_in_range < 0.25:
-                direction = 'down'
-            else:
-                continue  # цена в середине — импульс "сдулся"
-            
+
             last_alert = cooldowns.get(state_key, 0)
             if now_ms - last_alert < cooldown_ms:
                 continue
-            
+
             cooldowns[state_key] = now_ms
-            
+
+            open_price = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
+            direction = 'up' if state.get('current', 0) >= open_price else 'down'
+
             report_amp = state.get('peak_amplitude', amplitude) or amplitude
             if report_amp < amplitude:
                 report_amp = amplitude
             state['peak_amplitude'] = 0.0
-            
+
             impulses.append({
                 'symbol': state.get('symbol', ''),
                 'price_change': round(report_amp, 2),
@@ -233,14 +218,13 @@ def detect_impulses(now_sec):
                 'window': window,
                 'timestamp': now_sec,
                 'volume': round(state.get('volume', 0), 2),
-                'position_in_range': round(position_in_range, 2),
             })
+    return impulses
 
 
 async def impulse_ws_listener():
     global ticker_queue
-    if ticker_queue is None:
-        ticker_queue = asyncio.Queue(maxsize=2000)
+    ticker_queue = asyncio.Queue(maxsize=1000)
 
     while True:
         try:
@@ -257,8 +241,7 @@ async def impulse_ws_listener():
                     try:
 
                         msg = await asyncio.wait_for(ws.recv(), timeout=20)
-                        data = json.loads(msg)
-                        tickers = data if isinstance(data, list) else [data]
+                        tickers = json.loads(msg)
                         now_sec = time.time()
 
                         try:
@@ -281,7 +264,7 @@ async def impulse_ws_listener():
 async def impulse_checker():
     while True:
         try:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
             impulses = detect_impulses(time.time())
             if impulses:
                 existing = cache.get('impulse:recent') or []
