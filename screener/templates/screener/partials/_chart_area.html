@@ -105,7 +105,7 @@
 </div>
 <button class="chart-reset-btn" onclick="closeChart()">✕ Сброс</button>
 <button class="chart-history-btn" id="loadHistoryBtn" onclick="loadChartHistory()" title="Загрузить глубокую историю свечей">Загрузить историю</button>
-<button class="chart-tiger-btn" id="tigerLinkBtn" onclick="openTigerLinkPopup()" title="Линковка в Tiger" style="display:none;"><svg width="18" height="14" viewBox="-260 -210 520 400" fill="#FF8C00" xmlns="http://www.w3.org/2000/svg"><polygon points="-150,-200 150,-200 0,-130"/><polygon points="-150,-200 -250,-140 -250,-40 -150,-90 -80,-40 -80,-140"/><polygon points="150,-200 250,-140 250,-40 150,-90 80,-40 80,-140"/><polygon points="-250,-20 -250,60 -170,20 -170,-60"/><polygon points="250,-20 250,60 170,20 170,-60"/><polygon points="-80,-40 -80,40 0,100 0,20 -40,-20 -40,-80"/><polygon points="80,-40 80,40 0,100 0,20 40,-20 40,-80"/><polygon points="-80,120 80,120 0,180"/></svg></button>
+<button class="chart-tiger-btn" id="tigerLinkBtn" onclick="openTigerLinkPopup()" title="Линковка в Tiger" style="display:none;"><img src="{% static 'screener/img/tiger_icon.png' %}" width="18" height="14" alt="Tiger" style="display:block;"></button>
         <div id="chart-hint">Нажмите на монету, чтобы увидеть график</div>
         <div id="chart-container"></div>
         <canvas id="pencilCanvas" class="pencil-canvas"></canvas>
