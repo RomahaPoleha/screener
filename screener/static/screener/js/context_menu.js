@@ -183,11 +183,6 @@ function renderExchangesMenu(data, symbol, anchorRect) {
         'mexc': 'MEXC', 'bitget': 'Bitget', 'binance_alpha': 'BINANCE'
     };
     const lastGroup = (typeof tigerGetLastGroup === 'function') ? tigerGetLastGroup() : 'A';
-    const groupOptions = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(g =>
-        `<option value="${g}" ${g === lastGroup ? 'selected' : ''}>${g}</option>`
-    ).join('') + Array.from({length:19}, (_,i) => i).map(n =>
-        `<option value="${n}" ${String(n) === lastGroup ? 'selected' : ''}>${n}</option>`
-    ).join('');
 
     let headerHtml;
     if (tigerOn) {
@@ -200,11 +195,6 @@ function renderExchangesMenu(data, symbol, anchorRect) {
             <span>Торговые площадки: ${symbol}</span>
             <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:${statusColor};">
                 Tiger: ${statusText}
-                <span style="display:flex;align-items:center;gap:4px;color:#aaa;margin-left:6px;">grp:
-                <select id="tigerGroupSelect" style="background:#222;color:#fff;border:1px solid #444;border-radius:3px;padding:1px 4px;font-size:11px;">
-                    ${groupOptions}
-                </select>
-                </span>
             </span>
         </div>
         `;
