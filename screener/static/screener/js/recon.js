@@ -13,6 +13,8 @@ let reconAllEnabled = true;
 if (localStorage.getItem('reconAllEnabled') !== null) {
     reconAllEnabled = localStorage.getItem('reconAllEnabled') === 'true';
 }
+let reconAbortController = null;
+let isReconLoading = false;
 let reconSavedMarkets = null;
 try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
 let reconEnabled = reconAllEnabled;
@@ -327,7 +329,7 @@ async function fetchReconMarket(exId, symbol, market) {
             let vol = p * q;
             if (exId === 'gate' && market === 'futures') {
                 // Берем мультипликатор из кэша, если его нет (ошибка загрузки), используем 1 как безопасный fallback
-                const multiplier = gateFuturesMultipliers[symbol] || 1;
+                const multiplier = gateFuturesMultipliers[symbol + '_USDT'] || gateFuturesMultipliers[symbol] || 1;
                 vol = p * q * multiplier;
             }
 
@@ -486,9 +488,10 @@ function startReconUpdates(symbol) {
     if (!reconEnabled) return;
     ensureReconPanel();
     renderReconPanel();
-    // Загружаем маппинг Alpha для Recon
-    fetchAlphaSymbolMap();
-    loadReconDensities(symbol);
+    // Загружаем маппинг Alpha для Recon, затем плотности
+    fetchAlphaSymbolMap().then(() => {
+        if (currentSymbol === symbol) loadReconDensities(symbol);
+    });
     reconUpdateTimer = setInterval(() => {
         if (currentSymbol === symbol && reconEnabled && reconAllEnabled) loadReconDensities(symbol);
     }, 3000);

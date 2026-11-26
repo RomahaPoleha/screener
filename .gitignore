@@ -24,6 +24,6 @@ django_cache/
 .DS_Store
 Thumbs.db
 
-# Environment
-.env
-*.env
+# Tests
+tests/
+screener/tests/
