@@ -398,11 +398,10 @@ async function openChart(symbol) {
     if (typeof restoreDrawingsForSymbol === 'function') {
         restoreDrawingsForSymbol(symbol);
     }
-    // Запускаем WS и плотности параллельно с загрузкой данных (не ждём)
-    startCandleWebSocket(symbol, currentTF);
     if (densityEnabled) startDensityUpdates(symbol);
     if (scalpEnabled && !scalpSettingsPending) startScalpUpdates(symbol);
     await loadChartData(symbol, currentTF);
+    startCandleWebSocket(symbol, currentTF);
     AlertManager.restoreLines(symbol);
     updateWatermark();
     updateChartStats();
