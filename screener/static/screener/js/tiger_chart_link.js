@@ -7,12 +7,7 @@ let tigerLinkPopup = null;
 function openTigerLinkPopup() {
     if (!currentSymbol) return;
     const symbol = currentSymbol;
-    // Сохранить группу из поля
-    const groupInput = document.getElementById('tigerManualGroup');
-    if (groupInput && groupInput.value.trim()) {
-        localStorage.setItem('tiger_manual_link_group', groupInput.value.trim().toUpperCase());
-    }
-    const group = (groupInput && groupInput.value.trim()) || localStorage.getItem('tiger_manual_link_group') || 'A';
+    const group = localStorage.getItem('tiger_manual_link_group') || 'A';
 
     // Проверяем, включён ли Tiger
     if (typeof tigerIsEnabled === 'function' && !tigerIsEnabled()) {

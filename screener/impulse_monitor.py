@@ -190,7 +190,7 @@ def detect_impulses(now_sec):
                 continue
             
             # Fresh extreme age check
-            max_extreme_age = min(15, window / 4)
+            max_extreme_age = min(60, window / 2)
             if (now_sec - high_ts) > max_extreme_age or (now_sec - low_ts) > max_extreme_age:
                 continue
             

@@ -59,6 +59,13 @@
     <button type="button" id="tigerAutoLinkAdd" style="margin-top:6px; background:var(--bg-glass); border:1px solid var(--border-soft); color:var(--text); padding:4px 10px; cursor:pointer; font-size:12px;">+ Добавить группу</button>
   </div>
   <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
+    <span style="color:var(--text-muted); min-width:170px;">Группа для ручной линковки:</span>
+    <input type="text" id="tigerManualLinkGroup" maxlength="2" value="A"
+      style="width:60px; background:var(--bg-glass-strong); border:1px solid var(--border-soft); color:var(--text); padding:4px 8px; border-radius:0; font-size:12px; text-align:center;"
+      onchange="localStorage.setItem('tiger_manual_link_group', this.value.trim().toUpperCase() || 'A'); this.value = (localStorage.getItem('tiger_manual_link_group') || 'A');">
+    <span class="help-tip" data-tip="Группа (A-Z или 0-9), в которую будет линковаться монета при нажатии на иконку Tiger на графике.">?</span>
+  </label>
+  <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; color:var(--text); margin-bottom:10px;">
     <span style="color:var(--text-muted); min-width:170px;">Кулдаун стакана (сек):</span>
     <input type="number" id="tigerGroupCooldown" min="1" max="180" step="1" value="60"
       style="width:60px; background:var(--bg-glass-strong); border:1px solid var(--border-soft); color:var(--text); padding:4px 8px; border-radius:0; font-size:12px; text-align:center;"
