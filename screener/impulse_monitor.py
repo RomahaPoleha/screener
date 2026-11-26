@@ -42,7 +42,7 @@ WINDOWS = [60, 300]
 
 MAX_IMPULSE_SYMBOLS = 100000
 
-ticker_queue = None
+ticker_queue = asyncio.Queue(maxsize=2000)
 
 
 def _prune(state, now_sec):
@@ -239,7 +239,8 @@ def detect_impulses(now_sec):
 
 async def impulse_ws_listener():
     global ticker_queue
-    ticker_queue = asyncio.Queue(maxsize=2000)
+    if ticker_queue is None:
+        ticker_queue = asyncio.Queue(maxsize=2000)
 
     while True:
         try:
@@ -256,7 +257,8 @@ async def impulse_ws_listener():
                     try:
 
                         msg = await asyncio.wait_for(ws.recv(), timeout=20)
-                        tickers = json.loads(msg)
+                        data = json.loads(msg)
+                        tickers = data if isinstance(data, list) else [data]
                         now_sec = time.time()
 
                         try:
