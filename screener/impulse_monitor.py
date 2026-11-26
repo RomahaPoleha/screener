@@ -178,8 +178,6 @@ def detect_impulses(now_sec):
             if state.get('window') != window:
                 continue
 
-            _prune(state, now_sec)
-
             if not state['min_deque'] or not state['max_deque']:
                 continue
             low = state['min_deque'][0][1]
@@ -189,16 +187,10 @@ def detect_impulses(now_sec):
 
             amplitude = ((high - low) / low) * 100
             if amplitude < MIN_THRESHOLD:
-                state['peak_amplitude'] = 0.0
                 continue
-
-            # обновляем пик амплитуды за период
-            if amplitude > state.get('peak_amplitude', 0):
-                state['peak_amplitude'] = amplitude
 
             last_alert = cooldowns.get(state_key, 0)
             if now_ms - last_alert < cooldown_ms:
-                state['peak_amplitude'] = amplitude
                 continue
 
             cooldowns[state_key] = now_ms
@@ -206,14 +198,11 @@ def detect_impulses(now_sec):
             open_price = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
             direction = 'up' if state.get('current', 0) >= open_price else 'down'
 
-            report_amp = state.get('peak_amplitude', amplitude) or amplitude
-            if report_amp < amplitude:
-                report_amp = amplitude
             state['peak_amplitude'] = 0.0
 
             impulses.append({
                 'symbol': state.get('symbol', ''),
-                'price_change': round(report_amp, 2),
+                'price_change': round(amplitude, 2),
                 'direction': direction,
                 'current_price': state.get('current', 0),
                 'window': window,
