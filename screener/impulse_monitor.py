@@ -7,6 +7,7 @@ import json
 import time
 import logging
 import os
+import websockets
 from collections import deque
 from django.core.cache import cache
 
@@ -33,7 +34,7 @@ MIN_AMPLITUDE_PCT = 1.5       # Минимальная амплитуда све
 SPIKE_MULTIPLIER = 2.0        # Текущая свеча >= 2× предыдущей
 COOLDOWN_SEC = 60             # 1 импульс в минуту на монету
 
-ticker_queue = asyncio.Queue(maxsize=2000)
+ticker_queue = None
 cooldowns = {}
 
 # Состояние: {symbol: {current candle, previous candle}}
@@ -168,6 +169,8 @@ def detect_impulses(now_sec):
 
 async def impulse_ws_listener():
     global ticker_queue
+    if ticker_queue is None:
+        ticker_queue = asyncio.Queue(maxsize=2000)
 
     while True:
         try:
@@ -205,6 +208,9 @@ async def ticker_processor():
     global ticker_queue
     while True:
         try:
+            if ticker_queue is None:
+                await asyncio.sleep(0.1)
+                continue
             tickers, now_sec = await ticker_queue.get()
             process_ticker_batch(tickers, now_sec)
         except Exception as e:
@@ -245,4 +251,3 @@ def start_impulse_monitor():
         loop.run_until_complete(main())
     except Exception as e:
         _logger.error(f"❌ Impulse Monitor упал: {e}")
-PYEOF
