@@ -30,7 +30,7 @@ _logger.addHandler(_console)
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
-MIN_AMPLITUDE_PCT = 1.5       # Минимальная амплитуда свечи %
+MIN_AMPLITUDE_PCT = 1.5       # Минимальный процент для импульса
 SPIKE_MULTIPLIER = 2.0        # Текущая свеча >= 2× предыдущей
 COOLDOWN_SEC = 60             # 1 импульс в минуту на монету
 
@@ -122,45 +122,47 @@ def detect_impulses(now_sec):
         if not prev:
             continue  # нет предыдущей свечи для сравнения
 
-        # Амплитуда предыдущей свечи
-        prev_amp = ((prev['high'] - prev['low']) / prev['low']) * 100 if prev['low'] > 0 else 0
-        # Амплитуда текущей свечи
+        # Изменение цены от закрытой предыдущей свечи к текущей
+        prev_close = prev.get('close', 0)
+        if not prev_close:
+            continue
+        cur_close = state['close']
+        change_pct = ((cur_close - prev_close) / prev_close) * 100
+
+        # Амплитуда текущей свечи (внутри минуты)
         cur_high = state['high']
         cur_low = state['low']
         if cur_low == 0:
             continue
         cur_amp = ((cur_high - cur_low) / cur_low) * 100
 
-        # Минимальный порог 3%
-        if cur_amp < MIN_AMPLITUDE_PCT:
+        # Импульс если изменение от предыдущей >= 3% ИЛИ амплитуда текущей >= 3%
+        if abs(change_pct) < MIN_AMPLITUDE_PCT and cur_amp < MIN_AMPLITUDE_PCT:
             continue
 
-        # Cooldown: 1 импульс в минуту
+        # Cooldown: 1 импульс в минуту на монету
         last_alert = cooldowns.get(symbol, 0)
         if now_sec - last_alert < COOLDOWN_SEC:
             continue
 
-        # Опционально: всплеск (текущая >= 2× предыдущей)
-        # Если предыдущая свеча была очень маленькой, а текущая большая
-        is_spike = prev_amp > 0 and cur_amp >= prev_amp * SPIKE_MULTIPLIER
+        cooldowns[symbol] = now_sec
 
-        # Срабатываем если амплитуда >= 3% (минимум) ИЛИ всплеск
-        if cur_amp >= MIN_AMPLITUDE_PCT:
-            cooldowns[symbol] = now_sec
+        if abs(change_pct) >= MIN_AMPLITUDE_PCT:
+            direction = 'up' if change_pct >= 0 else 'down'
+            pct = abs(change_pct)
+        else:
+            direction = 'up' if cur_close >= state['open'] else 'down'
+            pct = cur_amp
 
-            open_price = state['open']
-            close_price = state['close']
-            direction = 'up' if close_price >= open_price else 'down'
-
-            impulses.append({
-                'symbol': symbol,
-                'price_change': round(cur_amp, 2),
-                'direction': direction,
-                'current_price': close_price,
-                'window': 60,
-                'timestamp': now_sec,
-                'volume': 0,
-            })
+        impulses.append({
+            'symbol': symbol,
+            'price_change': round(pct, 2),
+            'direction': direction,
+            'current_price': cur_close,
+            'window': 60,
+            'timestamp': now_sec,
+            'volume': 0,
+        })
 
     return impulses
 
