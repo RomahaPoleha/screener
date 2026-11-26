@@ -1,21 +1,14 @@
 """
-Impulse Monitor — детекция амплитуды свечи (Scalp Board logic)
-Сервер ловит ВСЕ импульсы >= 0.5% для обоих окон (60с и 300с).
-Окна СКОЛЬЗЯЩИЕ (последние N секунд от «сейчас»), чтобы не резать
-движение на границах фиксированных окон — так боты и дают больший %.
-Клиент фильтрует по своим настройкам из localStorage.
+Impulse Monitor v3 — Candle-based (miniTicker WS)
+Архитектура: WebSocket -> Агрегация 1m свечей -> Детекция импульсов
 """
 import asyncio
 import json
 import time
-from collections import deque
-import websockets
-from django.core.cache import cache
-from logging.handlers import RotatingFileHandler
 import logging
 import os
-
-from .memory_config import MAX_CANDLE_AGE_SEC
+from collections import deque
+from django.core.cache import cache
 
 LOG_DIR = '/app/data'
 LOG_FILE = os.path.join(LOG_DIR, 'impulse_monitor.log')
@@ -23,222 +16,235 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 _logger = logging.getLogger('impulse_monitor')
 _logger.setLevel(logging.INFO)
-_handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=3)
+
+import logging.handlers
+_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=3)
 _handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 _logger.addHandler(_handler)
 _console = logging.StreamHandler()
 _console.setFormatter(logging.Formatter('%(message)s'))
 _logger.addHandler(_console)
 
-# Состояние: "{symbol}_{window}" -> {...}
-candle_state = {}
-cooldowns = {}  # cooldowns keyed by same state key
-impulse_active_symbols = {}  # {symbol: last_seen_timestamp}
+# ================= КОНФИГУРАЦИЯ =================
 
 BINANCE_TICKER_WS = "wss://fstream.binance.com/market/ws/!miniTicker@arr"
 
-MIN_THRESHOLD = 1.5
-WINDOWS = [60, 300]
-
-MAX_IMPULSE_SYMBOLS = 100000
+# Параметры импульса (из исследования)
+VOLUME_LOOKBACK = 3       # Свечей для среднего объёма
+VOLUME_MULTIPLE = 3.0     # Объём >= 3× среднего
+RISE_ATR_MULTIPLE = 2.0   # Тело свечи >= 2× ATR(14)
+ATR_PERIOD = 14            # Период ATR
+IMPULSE_NEED = 16          # Минимум свечей для детекции (15 для ATR + 1 judged)
+COOLDOWN_SEC = 60          # Не спамить одним символом чаще раза в минуту
+MAX_CANDLE_HISTORY = 30   # Хранить последние N закрытых свечей
+MAX_SYMBOLS = 100000      # Лимит отслеживаемых символов
 
 ticker_queue = None
+cooldowns = {}            # {symbol: last_alert_timestamp}
+
+# Состояние: {symbol: {current_candle, history, prev_q}}
+candle_state = {}
 
 
-def _prune(state, now_sec):
-    window = state['window']
-    cutoff = now_sec - window
-    # prune price history
-    was_empty = not state['price_history']
-    while state['price_history'] and state['price_history'][0][0] < cutoff:
-        state['price_history'].popleft()
-    # reset reported extremes if window fully expired
-    if not state['price_history'] and not was_empty:
-        state['last_reported_high'] = None
-        state['last_reported_low'] = None
-        state['peak_amplitude'] = 0.0
-    # prune min/max deques
-    while state['min_deque'] and state['min_deque'][0][0] < cutoff:
-        state['min_deque'].popleft()
-    while state['max_deque'] and state['max_deque'][0][0] < cutoff:
-        state['max_deque'].popleft()
+# ================= АГРЕГАЦИЯ СВЕЧЕЙ =================
+
+def _get_minute(ts):
+    """Округляет timestamp до начала минуты."""
+    return int(ts // 60) * 60
 
 
 def process_ticker_batch(tickers, now_sec):
-    """Обработка пачки тикеров — синхронная, быстрая функция"""
+    """Агрегирует тики в 1m свечи."""
     for ticker in tickers:
+        if not isinstance(ticker, dict):
+            continue
         symbol = ticker.get('s', '')
         if not symbol.endswith('USDT'):
             continue
 
         clean = symbol[:-4]
-        # Отслеживаем ВСЕ монеты без ограничения и без фильтра по NATR
-        impulse_active_symbols[clean] = now_sec
-
         try:
             price = float(ticker.get('c', 0))
-            volume = float(ticker.get('q', 0))
+            q_volume = float(ticker.get('q', 0))  # 24h quote volume
         except (TypeError, ValueError):
             continue
         if not price:
             continue
 
-        for window in WINDOWS:
-            state_key = f"{clean}_{window}"
+        minute = _get_minute(now_sec)
 
-            state = candle_state.get(state_key)
-            if state is None:
-                state = {
-                    'symbol': clean,
-                    'window': window,
-                    'price_history': deque(),
-                    'min_deque': deque(),
-                    'max_deque': deque(),
-                    'current': price,
-                    'volume': volume,
-                    'last_ts': now_sec,
-                    'last_reported_high': None,
-                    'last_reported_low': None,
-                    'peak_amplitude': 0.0,
-                }
-                candle_state[state_key] = state
-                impulse_active_symbols[clean] = now_sec
+        state = candle_state.get(clean)
+        if state is None:
+            if len(candle_state) >= MAX_SYMBOLS:
+                continue
+            state = {
+                'symbol': clean,
+                'current_minute': minute,
+                'open': price,
+                'high': price,
+                'low': price,
+                'close': price,
+                'volume': 0.0,
+                'prev_q': q_volume,
+                'last_ts': now_sec,
+                'history': deque(maxlen=MAX_CANDLE_HISTORY),
+            }
+            candle_state[clean] = state
 
-            # reset extremes if window expired before this tick
-            if not state['price_history']:
-                state['last_reported_high'] = None
-                state['last_reported_low'] = None
-                state['peak_amplitude'] = 0.0
+        # Если новая минута — закрыть текущую свечу, начать новую
+        if minute != state['current_minute']:
+            # Закрыть свечу
+            closed_candle = {
+                'open': state['open'],
+                'high': state['high'],
+                'low': state['low'],
+                'close': state['close'],
+                'volume': state['volume'],
+                'timestamp': state['current_minute'],
+            }
+            state['history'].append(closed_candle)
 
-            _prune(state, now_sec)
+            # Начать новую свечу
+            state['current_minute'] = minute
+            state['open'] = price
+            state['high'] = price
+            state['low'] = price
+            state['close'] = price
+            state['volume'] = 0.0
 
-            state['current'] = price
-            state['volume'] = volume
-            state['last_ts'] = now_sec
+        # Обновить текущую свечу
+        state['high'] = max(state['high'], price)
+        state['low'] = min(state['low'], price)
+        state['close'] = price
+        # Объём: дельта 24h volume
+        vol_delta = q_volume - state['prev_q']
+        if 0 < vol_delta < 10_000_000:  # cap to prevent reset spikes
+            state['volume'] += vol_delta
+        state['prev_q'] = q_volume
+        state['last_ts'] = now_sec
 
-            state['price_history'].append((now_sec, price))
-            while state['min_deque'] and state['min_deque'][-1][1] >= price:
-                state['min_deque'].pop()
-            state['min_deque'].append((now_sec, price))
-            while state['max_deque'] and state['max_deque'][-1][1] <= price:
-                state['max_deque'].pop()
-            state['max_deque'].append((now_sec, price))
+
+# ================= ATR РАСЧЁТ =================
+
+def _calculate_atr(candles, period=14):
+    """Рассчитывает ATR(period) по списку закрытых свечей."""
+    if len(candles) < period + 1:
+        return None
+    trs = []
+    for i in range(1, len(candles)):
+        c = candles[i]
+        prev_close = candles[i-1]['close']
+        tr = max(c['high'] - c['low'],
+                 abs(c['high'] - prev_close),
+                 abs(c['low'] - prev_close))
+        trs.append(tr)
+    # ATR = среднее TR за последние `period` свечей
+    if len(trs) < period:
+        return None
+    return sum(trs[-period:]) / period
 
 
-async def ticker_processor():
-    global ticker_queue
-    while True:
-        try:
-            tickers, now_sec = await ticker_queue.get()
-            process_ticker_batch(tickers, now_sec)
-        except Exception as e:
-            _logger.warning(f"⚠️ Ticker processor error: {e}")
-            await asyncio.sleep(0.1)
-
+# ================= ДЕТЕКЦИЯ ИМПУЛЬСОВ =================
 
 def detect_impulses(now_sec):
-    """Детектирует импульсы для ВСЕХ окон параллельно (скользящие окна)"""
-    now_ms = now_sec * 1000
+    """Детектирует импульсы по закрытым свечам."""
+    now_ms = int(now_sec * 1000)
     impulses = []
 
-    # Очистка старых состояний
-    old_keys = [
-        k for k, v in candle_state.items()
-        if now_sec - v.get('last_ts', 0) > MAX_CANDLE_AGE_SEC
-    ]
+    # Очистка устаревших cooldown-ов
+    expired = [k for k, v in cooldowns.items() if now_sec - v > 300]
+    for k in expired:
+        cooldowns.pop(k, None)
+
+    # Очистка устаревших состояний
+    old_keys = [k for k, v in candle_state.items() if now_sec - v.get('last_ts', 0) > 300]
     for k in old_keys:
         candle_state.pop(k, None)
-        cooldowns.pop(k, None)
 
-    symbols_in_state = set()
-    for state_key in candle_state.keys():
-        base = state_key.split('_')[0]
-        symbols_in_state.add(base)
-    # Очистка неактивных символов: удаляем если нет в state ИЛИ не видели > 2 * MAX_CANDLE_AGE_SEC
-    stale_threshold = MAX_CANDLE_AGE_SEC * 2
-    for s in list(impulse_active_symbols.keys()):
-        if s not in symbols_in_state or (now_sec - impulse_active_symbols.get(s, 0)) > stale_threshold:
-            impulse_active_symbols.pop(s, None)
+    for symbol, state in list(candle_state.items()):
+        history = state['history']
+        if len(history) < IMPULSE_NEED:
+            continue
 
-    # Очистка устаревших cooldown-ов (старше 1 часа)
-    cooldown_ttl_ms = 3_600_000
-    expired_cooldowns = [k for k, v in cooldowns.items() if now_ms - v > cooldown_ttl_ms]
-    for k in expired_cooldowns:
-        cooldowns.pop(k, None)
+        # Последняя закрытая свеча — judged
+        judged = history[-1]
+        # Baseline — все кроме judged
+        prior = list(history)[:-1]
 
-    if len(cooldowns) > 5000:
-        oldest = sorted(cooldowns.items(), key=lambda kv: kv[1])[:len(cooldowns) - 5000]
-        for k, _ in oldest:
-            cooldowns.pop(k, None)
+        # ATR(14) по prior
+        atr = _calculate_atr(prior, ATR_PERIOD)
+        if atr is None or atr <= 0:
+            continue
 
-    for window in WINDOWS:
-        cooldown_ms = max(30000, window * 1000)
+        # Volume average по volumeLookback свечам перед judged
+        vol_candles = prior[-VOLUME_LOOKBACK:]
+        if len(vol_candles) < VOLUME_LOOKBACK:
+            continue
+        avg_volume = sum(c['volume'] for c in vol_candles) / VOLUME_LOOKBACK
 
-        for state_key, state in list(candle_state.items()):
-            if state.get('window') != window:
-                continue
+        # Тело свечи
+        body = judged['close'] - judged['open']
+        body_atr = body / atr
 
-            if not state['min_deque'] or not state['max_deque']:
-                continue
-            low = state['min_deque'][0][1]
-            high = state['max_deque'][0][1]
-            if low == 0 or high == 0:
-                continue
+        # Объём
+        volume_ratio = judged['volume'] / avg_volume if avg_volume > 0 else 0
 
-            amplitude = ((high - low) / low) * 100
-            if amplitude < MIN_THRESHOLD:
-                continue
+        # Проверки
+        if avg_volume > 0 and volume_ratio < VOLUME_MULTIPLE:
+            continue
+        if abs(body_atr) < RISE_ATR_MULTIPLE:
+            continue
 
-            last_alert = cooldowns.get(state_key, 0)
-            if now_ms - last_alert < cooldown_ms:
-                continue
+        # Cooldown
+        last_alert = cooldowns.get(symbol, 0)
+        if now_sec - last_alert < COOLDOWN_SEC:
+            continue
 
-            cooldowns[state_key] = now_ms
+        cooldowns[symbol] = now_sec
 
-            open_price = state['price_history'][0][1] if state['price_history'] else state.get('current', 0)
-            direction = 'up' if state.get('current', 0) >= open_price else 'down'
+        direction = 'up' if body > 0 else 'down'
 
-            state['peak_amplitude'] = 0.0
+        impulses.append({
+            'symbol': symbol,
+            'price_change': round(abs(judged['close'] - judged['open']) / judged['open'] * 100, 2),
+            'direction': direction,
+            'current_price': judged['close'],
+            'window': 60,
+            'timestamp': judged['timestamp'],
+            'volume': round(judged['volume'], 2),
+            'volume_ratio': round(volume_ratio, 1),
+            'body_atr': round(body_atr, 2),
+        })
 
-            impulses.append({
-                'symbol': state.get('symbol', ''),
-                'price_change': round(amplitude, 2),
-                'direction': direction,
-                'current_price': state.get('current', 0),
-                'window': window,
-                'timestamp': now_sec,
-                'volume': round(state.get('volume', 0), 2),
-            })
     return impulses
 
 
+# ================= WEBSOCKET КЛИЕНТ =================
+
 async def impulse_ws_listener():
     global ticker_queue
-    ticker_queue = asyncio.Queue(maxsize=1000)
+    ticker_queue = asyncio.Queue(maxsize=2000)
 
     while True:
         try:
             _logger.info("🔌 Impulse WS: подключение к Binance...")
-
             async with websockets.connect(
                 BINANCE_TICKER_WS,
                 ping_interval=30,
                 ping_timeout=30,
                 close_timeout=10
             ) as ws:
-
                 while True:
                     try:
-
                         msg = await asyncio.wait_for(ws.recv(), timeout=20)
-                        tickers = json.loads(msg)
+                        data = json.loads(msg)
+                        tickers = data if isinstance(data, list) else [data]
                         now_sec = time.time()
 
                         try:
                             ticker_queue.put_nowait((tickers, now_sec))
                         except asyncio.QueueFull:
                             pass
-
                     except asyncio.TimeoutError:
                         continue
                     except websockets.exceptions.ConnectionClosed as e:
@@ -251,6 +257,18 @@ async def impulse_ws_listener():
             await asyncio.sleep(5)
 
 
+async def ticker_processor():
+    global ticker_queue
+    while True:
+        try:
+            if ticker_queue is None:
+                ticker_queue = asyncio.Queue(maxsize=2000)
+            tickers, now_sec = await ticker_queue.get()
+            process_ticker_batch(tickers, now_sec)
+        except Exception as e:
+            _logger.error(f"❌ Ticker processor ошибка: {e}")
+
+
 async def impulse_checker():
     while True:
         try:
@@ -261,13 +279,16 @@ async def impulse_checker():
                 existing = impulses + existing
                 cache.set('impulse:recent', existing[:50], 300)
                 for imp in impulses:
-                    _logger.info(f"🔥 IMPULSE: {imp['symbol']} {imp['direction']} {imp['price_change']}% (V: ${imp['volume']}, {imp['window']}s)")
+                    _logger.info(
+                        f"🔥 IMPULSE: {imp['symbol']} "
+                        f"{imp['direction'].upper()} {imp['price_change']}% (V: ${imp['volume']:,.0f}, body_atr: {imp['body_atr']})"
+                    )
         except Exception as e:
             _logger.error(f"❌ Impulse checker ошибка: {e}")
 
 
 async def main():
-    _logger.info("🚀 Запуск Impulse Monitor (Sliding Window Mode)...")
+    _logger.info("🚀 Запуск Impulse Monitor v3 (Candle-based)...")
     await asyncio.gather(
         impulse_ws_listener(),
         ticker_processor(),
@@ -282,3 +303,4 @@ def start_impulse_monitor():
         loop.run_until_complete(main())
     except Exception as e:
         _logger.error(f"❌ Impulse Monitor упал: {e}")
+PYEOF
