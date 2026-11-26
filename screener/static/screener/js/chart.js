@@ -458,18 +458,6 @@ function applyCandlesToChart(history) {
         })));
     }
     chart.timeScale().fitContent();
-    // Двойной RAF + setTimeout для гарантированного re-fit после рендера
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            setTimeout(() => {
-                if (chart) {
-                    chart.applyOptions({ width: els.chartWrapper.clientWidth, height: els.chartWrapper.clientHeight });
-                    chart.timeScale().fitContent();
-                    chart.timeScale().scrollToPosition(12, false);
-                }
-            }, 200);
-        });
-    });
 }
 // ==========================================
 // ЗАГРУЗКА ГЛУБОКОЙ ИСТОРИИ
