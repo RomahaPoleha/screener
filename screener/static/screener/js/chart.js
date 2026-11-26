@@ -457,7 +457,9 @@ function applyCandlesToChart(history) {
             color: c.close >= c.open ? 'rgba(200, 200, 200, 0.6)' : 'rgba(80, 80, 80, 0.7)'
         })));
     }
-    chart.timeScale().fitContent();
+    requestAnimationFrame(() => {
+        if (chart) chart.timeScale().fitContent();
+    });
 }
 // ==========================================
 // ЗАГРУЗКА ГЛУБОКОЙ ИСТОРИИ

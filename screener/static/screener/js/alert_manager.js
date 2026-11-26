@@ -184,10 +184,10 @@ const AlertManager = {
 // ==========================================
 // АЛЕРТЫ ПО ОБЪЁМУ (RVOL / ИМПУЛЬС)
 // ==========================================
-function showVolumeAlertToast(symbol, volume, direction, priceChange) {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    volumeAlertHistory.unshift({ symbol, volume, time: timeStr, direction, priceChange });
+function showVolumeAlertToast(symbol, volume, direction, priceChange, timestamp) {
+    const dt = timestamp ? new Date(timestamp * 1000) : new Date();
+    const timeStr = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    volumeAlertHistory.unshift({ symbol, volume, time: timeStr, direction, priceChange, timestamp: timestamp || Math.floor(Date.now() / 1000) });
     if (volumeAlertHistory.length > 20) volumeAlertHistory.pop();
     localStorage.setItem('volumeAlertHistory', JSON.stringify(volumeAlertHistory));
 

@@ -60,7 +60,8 @@ async function pollImpulseAlerts() {
                 alert.symbol,
                 alert.volume || 0,
                 direction,
-                alert.price_change
+                alert.price_change,
+                alert.timestamp
             );
 
             // Авто-линковка в Tiger при импульсе
