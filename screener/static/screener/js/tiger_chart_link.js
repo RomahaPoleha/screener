@@ -7,6 +7,13 @@ let tigerLinkPopup = null;
 function openTigerLinkPopup() {
     if (!currentSymbol) return;
     const symbol = currentSymbol;
+    // Сохранить группу из поля
+    const groupInput = document.getElementById('tigerManualGroup');
+    if (groupInput && groupInput.value.trim()) {
+        localStorage.setItem('tiger_manual_link_group', groupInput.value.trim().toUpperCase());
+    }
+    const group = (groupInput && groupInput.value.trim()) || localStorage.getItem('tiger_manual_link_group') || 'A';
+
     // Проверяем, включён ли Tiger
     if (typeof tigerIsEnabled === 'function' && !tigerIsEnabled()) {
         console.warn('Tiger не включён');
@@ -15,15 +22,16 @@ function openTigerLinkPopup() {
     // Проверяем, подключён ли Tiger
     if (typeof tigerIsConnected === 'function' && !tigerIsConnected()) {
         if (typeof tigerConnect === 'function') tigerConnect();
-        // Одна попытка через 1 секунду
         setTimeout(() => {
             if (typeof tigerIsConnected === 'function' && tigerIsConnected()) {
+                if (typeof tigerSetLastGroup === 'function') tigerSetLastGroup(group);
                 if (typeof tigerSendFromMenu === 'function') tigerSendFromMenu(symbol, 'binance', 'futures');
             }
         }, 1000);
         return;
     }
     // Tiger подключён — отправляем сразу (1 клик = 1 отправка)
+    if (typeof tigerSetLastGroup === 'function') tigerSetLastGroup(group);
     if (typeof tigerSendFromMenu === 'function') {
         tigerSendFromMenu(symbol, 'binance', 'futures');
     }

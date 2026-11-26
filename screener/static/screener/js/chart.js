@@ -131,6 +131,11 @@ async function openChart(symbol) {
     if (tigerLinkBtn) {
         tigerLinkBtn.style.display = '';
     }
+    const tigerManualGroup = document.getElementById('tigerManualGroup');
+    if (tigerManualGroup) {
+        tigerManualGroup.style.display = '';
+        tigerManualGroup.value = localStorage.getItem('tiger_manual_link_group') || '';
+    }
     if (els.chartWrapper) els.chartWrapper.style.display = '';
     if (chart) { try { chart.remove(); } catch(e) {} chart = null; candleSeries = null; volumeSeries = null; }
     try {

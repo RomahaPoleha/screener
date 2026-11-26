@@ -46,6 +46,8 @@ function openCollage(colorId) {
     if (historyBtn) historyBtn.style.display = 'none';
     const tigerLinkBtn = document.getElementById('tigerLinkBtn');
     if (tigerLinkBtn) tigerLinkBtn.style.display = 'none';
+    const tigerManualGroup = document.getElementById('tigerManualGroup');
+    if (tigerManualGroup) tigerManualGroup.style.display = 'none';
 
     els.chartHint.style.display = 'none';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
@@ -166,6 +168,8 @@ function closeChartOverlay() {
     if (historyBtn) historyBtn.style.display = 'none';
     const tigerLinkBtn = document.getElementById('tigerLinkBtn');
     if (tigerLinkBtn) tigerLinkBtn.style.display = 'none';
+    const tigerManualGroup = document.getElementById('tigerManualGroup');
+    if (tigerManualGroup) tigerManualGroup.style.display = 'none';
 }
 
 function openCollageFromModal(colorId) {
