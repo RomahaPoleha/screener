@@ -14,6 +14,7 @@ if (localStorage.getItem('reconAllEnabled') !== null) {
     reconAllEnabled = localStorage.getItem('reconAllEnabled') === 'true';
 }
 let reconAbortController = null;
+let reconReloadPending = false;
 let reconSavedMarkets = null;
 try { reconSavedMarkets = JSON.parse(localStorage.getItem('reconSavedMarkets') || 'null'); } catch (e) {}
 let reconEnabled = reconAllEnabled;
@@ -377,7 +378,7 @@ async function loadReconDensities(symbol) {
         }
         clearReconLines();
         reconLines = newLines;
-    } finally { isReconLoading = false; }
+    } finally { isReconLoading = false; if (reconReloadPending) { reconReloadPending = false; if (currentSymbol && reconEnabled && reconAllEnabled) loadReconDensities(currentSymbol); } }
 }
 
 function clearReconLines() {
@@ -459,7 +460,11 @@ function toggleReconMarket(exId, market) {
         reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
     );
     if (currentSymbol && hasEnabled && reconEnabled) {
-        loadReconDensities(currentSymbol);
+        if (isReconLoading) {
+            reconReloadPending = true;
+        } else {
+            loadReconDensities(currentSymbol);
+        }
     } else if (!hasEnabled) {
         clearReconLines();
     }
