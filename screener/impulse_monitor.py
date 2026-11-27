@@ -79,6 +79,7 @@ def process_ticker_batch(tickers, now_sec):
             'prev_candle': None,
             'last_ts': now_sec,
             'alerted_minute': None,
+            'last_alert_price': None,
         }
                 candle_state[state_key] = state
 
@@ -100,6 +101,7 @@ def process_ticker_batch(tickers, now_sec):
                 state['close'] = price
                 state['volume'] = volume
                 state['alerted_minute'] = None
+                state['last_alert_price'] = None
 
             # Обновить текущую свечу
             state['high'] = max(state['high'], price)
@@ -123,9 +125,15 @@ def detect_impulses(now_sec):
         if not prev:
             continue
 
-        # 1 импульс на текущую свечу
+        # Повторный импульс в той же свече — только если цена ушла ещё на MIN% от последнего алерта
         if state.get('alerted_minute') == state.get('current_minute'):
-            continue
+            last_price = state.get('last_alert_price')
+            if last_price:
+                move_pct = abs((cur_close - last_price) / last_price) * 100
+                if move_pct < MIN_AMPLITUDE_PCT:
+                    continue
+            else:
+                continue
 
         prev_close = prev.get('close', 0)
         if not prev_close:
@@ -143,6 +151,7 @@ def detect_impulses(now_sec):
             continue
 
         state['alerted_minute'] = state['current_minute']
+        state['last_alert_price'] = cur_close
 
         if abs(change_pct) >= MIN_AMPLITUDE_PCT:
             direction = 'up' if change_pct >= 0 else 'down'
@@ -169,7 +178,7 @@ def detect_impulses(now_sec):
 async def impulse_ws_listener():
     global ticker_queue
     if ticker_queue is None:
-        ticker_queue = asyncio.Queue(maxsize=2000)
+        ticker_queue = asyncio.Queue(maxsize=10000)
 
     while True:
         try:
@@ -190,7 +199,7 @@ async def impulse_ws_listener():
                         try:
                             ticker_queue.put_nowait((tickers, now_sec))
                         except asyncio.QueueFull:
-                            pass
+                            _logger.warning("⚠️ Impulse queue full, tick batch dropped")
                     except asyncio.TimeoutError:
                         continue
                     except websockets.exceptions.ConnectionClosed as e:
