@@ -16,8 +16,6 @@ function initContextMenu() {
     document.addEventListener('keyup', (e) => {
         if (e.key === 'Control') {
             isCtrlPressed = false;
-            hoveredRow = null;
-            hideContextMenu();
         }
     });
     
@@ -92,6 +90,8 @@ function showContextMenu(anchorRect, symbol) {
         <div class="context-menu-header" style="color:#888;font-weight:500;font-size:12px;padding:8px 12px;border-bottom:1px solid #2a2a2a;">Торговые площадки: ${symbol}</div>
         <div class="context-menu-loading" style="color:#666;font-size:12px;padding:8px 12px;">Загрузка...</div>
     `;
+    
+    menu.classList.add('active');
     
     const padding = 8;
     const preferredLeft = anchorRect.right + padding;

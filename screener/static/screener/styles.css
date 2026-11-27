@@ -1250,7 +1250,7 @@ a:hover { color: #FFA500; }
 .collage-expand-btn svg { pointer-events: none; }
 
 #exchangesContextMenu {
-  position: fixed; z-index: 10000;
+  position: fixed; z-index: 2147483647;
   background: var(--bg-glass); backdrop-filter: var(--blur);
   border: 1px solid var(--border);
   border-radius: var(--radius-md); padding: 8px 0;
