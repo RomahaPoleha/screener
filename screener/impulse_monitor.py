@@ -76,9 +76,10 @@ def process_ticker_batch(tickers, now_sec):
                     'low': price,
                     'close': price,
                     'volume': volume,
-                    'prev_candle': None,
-                    'last_ts': now_sec,
-                }
+            'prev_candle': None,
+            'last_ts': now_sec,
+            'alerted_minute': None,
+        }
                 candle_state[state_key] = state
 
             # Новая свеча окна — закрыть текущую
@@ -98,6 +99,7 @@ def process_ticker_batch(tickers, now_sec):
                 state['low'] = price
                 state['close'] = price
                 state['volume'] = volume
+                state['alerted_minute'] = None
 
             # Обновить текущую свечу
             state['high'] = max(state['high'], price)
@@ -114,17 +116,15 @@ def detect_impulses(now_sec):
     old_keys = [k for k, v in candle_state.items() if now_sec - v.get('last_ts', 0) > 300]
     for k in old_keys:
         candle_state.pop(k, None)
-        cooldowns.pop(k, None)
-
-    # Очистка устаревших cooldown-ов
-    expired = [k for k, v in cooldowns.items() if now_sec - v > 600]
-    for k in expired:
-        cooldowns.pop(k, None)
 
     for state_key, state in list(candle_state.items()):
         window = state.get('window', 60)
         prev = state.get('prev_candle')
         if not prev:
+            continue
+
+        # 1 импульс на текущую свечу
+        if state.get('alerted_minute') == state.get('current_minute'):
             continue
 
         prev_close = prev.get('close', 0)
@@ -142,12 +142,7 @@ def detect_impulses(now_sec):
         if abs(change_pct) < MIN_AMPLITUDE_PCT and cur_amp < MIN_AMPLITUDE_PCT:
             continue
 
-        # Cooldown: 1 импульс за период окна на монету
-        last_alert = cooldowns.get(state_key, 0)
-        if now_sec - last_alert < window:
-            continue
-
-        cooldowns[state_key] = now_sec
+        state['alerted_minute'] = state['current_minute']
 
         if abs(change_pct) >= MIN_AMPLITUDE_PCT:
             direction = 'up' if change_pct >= 0 else 'down'
