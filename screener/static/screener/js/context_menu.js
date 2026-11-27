@@ -16,6 +16,8 @@ function initContextMenu() {
     document.addEventListener('keyup', (e) => {
         if (e.key === 'Control') {
             isCtrlPressed = false;
+            hoveredRow = null;
+            hideContextMenu();
         }
     });
     
