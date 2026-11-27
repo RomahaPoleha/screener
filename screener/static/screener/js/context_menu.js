@@ -14,9 +14,19 @@ function initContextMenu() {
         if (e.key === 'Control') isCtrlPressed = true;
     });
     document.addEventListener('keyup', (e) => {
-        if (e.key === 'Control') {
+        if (e.key === 'Control' || !e.ctrlKey) {
             isCtrlPressed = false;
             hoveredRow = null;
+            hideContextMenu();
+        }
+    });
+    window.addEventListener('blur', () => {
+        isCtrlPressed = false;
+        hoveredRow = null;
+        hideContextMenu();
+    });
+    document.addEventListener('mouseleave', () => {
+        if (!isCtrlPressed) {
             hideContextMenu();
         }
     });
