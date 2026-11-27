@@ -59,12 +59,12 @@ function initContextMenu() {
         if (row !== hoveredRow) return;
         
         clearTimeout(hoverTimeout);
-        hoverTimeout = setTimeout(() => {
-            if (!isMenuHovered()) {
-                hoveredRow = null;
-                hideContextMenu();
-            }
-        }, 300);
+        hoveredRow = null;
+        if (!isCtrlPressed) {
+            hoverTimeout = setTimeout(() => {
+                if (!isMenuHovered()) hideContextMenu();
+            }, 300);
+        }
     });
     
 // Не скрывать если мышь на меню
