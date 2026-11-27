@@ -344,6 +344,28 @@ async function fetchReconMarket(exId, symbol, market) {
     return out;
 }
 
+async function loadSingleRecon(exId, market, symbol) {
+    if (!reconEnabled || !reconAllEnabled || !candleSeries) return;
+    const ex = RECON_EXCHANGES.find(e => e.id === exId);
+    if (!ex) return;
+    await fetchAlphaSymbolMap();
+    if (currentSymbol !== symbol) return;
+    const data = await fetchReconMarket(exId, symbol, market);
+    if (!data || currentSymbol !== symbol) return;
+    removeReconLinesFor(exId, market);
+    const suffix = (exId === 'binance_alpha') ? 'A' : (market === 'futures' ? 'F' : 'S');
+    const top = data.slice().sort((a, b) => b.volume - a.volume).slice(0, 20);
+    top.forEach(d => {
+        const line = candleSeries.createPriceLine({
+            price: d.price, color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true,
+            axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
+            title: `${ex.label}-${suffix} ${formatVolumeText(d.volume)}`
+        });
+        reconLines.push({ line, ex: exId, market });
+    });
+}
+
 async function loadReconDensities(symbol) {
     if (!reconEnabled || !reconAllEnabled || !candleSeries || isReconLoading) return;
     isReconLoading = true;
@@ -373,7 +395,7 @@ async function loadReconDensities(symbol) {
                     axisLabelColor: '#ffffff', axisLabelBackgroundColor: 'rgba(100, 100, 100, 0.7)',
                     title: `${ex.label}-${suffix} ${formatVolumeText(d.volume)}`
                 });
-                newLines.push(line);
+                newLines.push({ line, ex: r.ex, market: r.market });
             });
         }
         clearReconLines();
@@ -383,8 +405,15 @@ async function loadReconDensities(symbol) {
 
 function clearReconLines() {
     if (!candleSeries) return;
-    reconLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
+    reconLines.forEach(item => { try { candleSeries.removePriceLine(item.line); } catch(e){} });
     reconLines = [];
+}
+
+function removeReconLinesFor(exId, market) {
+    if (!candleSeries) return;
+    const toRemove = reconLines.filter(x => x.ex === exId && x.market === market);
+    toRemove.forEach(item => { try { candleSeries.removePriceLine(item.line); } catch(e){} });
+    reconLines = reconLines.filter(x => !(x.ex === exId && x.market === market));
 }
 
 function ensureReconPanel() {
@@ -459,11 +488,13 @@ function toggleReconMarket(exId, market) {
     const hasEnabled = RECON_EXCHANGES.some(ex =>
         reconMarkets[ex.id].spot || reconMarkets[ex.id].futures
     );
-    if (currentSymbol && hasEnabled && reconEnabled) {
-        if (isReconLoading) {
-            reconReloadPending = true;
+    if (currentSymbol && reconEnabled) {
+        if (reconMarkets[exId][market]) {
+            fetchAlphaSymbolMap().then(() => {
+                if (currentSymbol === currentSymbol) loadSingleRecon(exId, market, currentSymbol);
+            });
         } else {
-            loadReconDensities(currentSymbol);
+            removeReconLinesFor(exId, market);
         }
     } else if (!hasEnabled) {
         clearReconLines();
