@@ -125,15 +125,9 @@ def detect_impulses(now_sec):
         if not prev:
             continue
 
-        # Повторный импульс в той же свече — только если цена ушла ещё на MIN% от последнего алерта
+        # 1 импульс на текущую свечу
         if state.get('alerted_minute') == state.get('current_minute'):
-            last_price = state.get('last_alert_price')
-            if last_price:
-                move_pct = abs((cur_close - last_price) / last_price) * 100
-                if move_pct < MIN_AMPLITUDE_PCT:
-                    continue
-            else:
-                continue
+            continue
 
         prev_close = prev.get('close', 0)
         if not prev_close:
@@ -151,7 +145,6 @@ def detect_impulses(now_sec):
             continue
 
         state['alerted_minute'] = state['current_minute']
-        state['last_alert_price'] = cur_close
 
         if abs(change_pct) >= MIN_AMPLITUDE_PCT:
             direction = 'up' if change_pct >= 0 else 'down'
