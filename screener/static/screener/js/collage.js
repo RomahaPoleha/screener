@@ -129,6 +129,7 @@ function openChartOverlay(symbol) {
 }
 
 function closeChartOverlay() {
+    const wasCollage = !!window.collageState;
     window.collageOverlayMode = false;
     // Очистить график
     if (wsCandles) { wsCandles.onclose = null; wsCandles.close(); wsCandles = null; }
@@ -141,8 +142,23 @@ function closeChartOverlay() {
     els.chartWrapper.style.position = '';
     els.chartWrapper.style.inset = '';
     els.chartWrapper.style.zIndex = '';
+    els.chartWrapper.classList.remove('active');
 
-    // Выход из коллажа при закрытии overlay
+    if (wasCollage) {
+        // Вернуться в режим коллажа
+        const _wrap = document.getElementById('collageWrap');
+        if (_wrap) _wrap.style.display = 'grid';
+        const _controls = document.getElementById('collageControls');
+        if (_controls) _controls.style.display = 'flex';
+        const _reconContainer = document.getElementById('reconPanelContainer');
+        if (_reconContainer && typeof reconEnabled !== 'undefined' && reconEnabled) _reconContainer.style.display = 'flex';
+        const activeSymbols = collageCharts.map(e => e.symbol);
+        if (typeof startCollageScalpUpdates === 'function') startCollageScalpUpdates(activeSymbols);
+        if (typeof reconEnabled !== 'undefined' && reconEnabled && typeof startCollageReconUpdates === 'function') startCollageReconUpdates(activeSymbols);
+        return;
+    }
+
+    // Выход из коллажа при закрытии overlay (если коллажа не было)
     window.collageState = null;
     const _wrap = document.getElementById('collageWrap');
     if (_wrap) { _wrap.style.display = 'none'; _wrap.innerHTML = ''; }
@@ -153,7 +169,6 @@ function closeChartOverlay() {
 
     // Восстановить обычный пустой вид (как при загрузке страницы)
     els.chartWrapper.style.display = '';
-    els.chartWrapper.classList.remove('active');
     els.chartHint.style.display = '';
     const titleWrap = document.getElementById('chart-title') ? document.getElementById('chart-title').parentElement : null;
     if (titleWrap) titleWrap.style.display = 'none';
