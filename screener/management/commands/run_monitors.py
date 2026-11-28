@@ -27,14 +27,17 @@ class Command(BaseCommand):
             self.stderr.write(f'Scalp monitors not started: {e}')
 
         try:
-            from screener.impulse_monitor import start_impulse_monitor
-            impulse_thread = threading.Thread(
-                target=start_impulse_monitor,
-                name='Impulse-Monitor',
-                daemon=True,
-            )
-            impulse_thread.start()
-            self.stdout.write('Impulse monitor started')
+            if os.getenv('ENABLE_IMPULSE', '1') == '1':
+                from screener.impulse_monitor import start_impulse_monitor
+                impulse_thread = threading.Thread(
+                    target=start_impulse_monitor,
+                    name='Impulse-Monitor',
+                    daemon=True,
+                )
+                impulse_thread.start()
+                self.stdout.write('Impulse monitor started')
+            else:
+                self.stdout.write('Impulse monitor disabled (ENABLE_IMPULSE=0)')
         except Exception as e:
             self.stderr.write(f'Impulse monitor not started: {e}')
 

@@ -67,17 +67,18 @@ class ScreenerConfig(AppConfig):
             except Exception as e:
                 print(f"Scalp monitor not started: {e}")
 
-            try:
-                from .impulse_monitor import start_impulse_monitor
-                impulse_thread = threading.Thread(
-                    target=start_impulse_monitor,
-                    name='Impulse-Monitor',
-                    daemon=True
-                )
-                _monitor_threads.append(impulse_thread)
-                impulse_thread.start()
+            if os.getenv('ENABLE_IMPULSE', '1') == '1':
+                try:
+                    from .impulse_monitor import start_impulse_monitor
+                    impulse_thread = threading.Thread(
+                        target=start_impulse_monitor,
+                        name='Impulse-Monitor',
+                        daemon=True
+                    )
+                    _monitor_threads.append(impulse_thread)
+                    impulse_thread.start()
 
-            except Exception as e:
-                print(f"Impulse monitor not started: {e}")
+                except Exception as e:
+                    print(f"Impulse monitor not started: {e}")
         else:
             print("Monitors disabled (set ENABLE_MONITORS=1 to enable)")

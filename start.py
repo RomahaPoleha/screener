@@ -17,6 +17,8 @@ if process_type != 'worker':
 
 if process_type == 'worker':
     os.execv(sys.executable, [sys.executable, 'manage.py', 'run_monitors'])
+elif process_type == 'impulse':
+    os.execv(sys.executable, [sys.executable, 'manage.py', 'run_impulse'])
 else:
     os.execv(
         sys.executable,
